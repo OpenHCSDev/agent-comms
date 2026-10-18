@@ -254,14 +254,18 @@ class SubclassUnion(WireValue):
     accepts_null = True
     external_json_shape = True
     _decoder: ClassVar[UnionDecoder[Self]]
+    _members: ClassVar[dict[str, type[Self]]]
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
         if SubclassUnion in cls.__bases__:
+            cls._members = {}
             return
         for base in cls.__bases__:
             if SubclassUnion in base.__bases__:
-                base._decoder = ValueDecoder.for_members(tuple(base.__subclasses__()))
+                # Slots rebuilds keep the member's name, including for nested classes.
+                base._members[cls.__name__] = cls
+                base._decoder = ValueDecoder.for_members(tuple(base._members.values()))
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
@@ -908,15 +912,16 @@ class FieldCodec(Sealed):
             if isinstance(member, Projected) and member.view == view
         })
 
+@dataclass(frozen=True, slots=True)
 class ValueDecoder[T](ABC):
     """One annotation owns its wire decoding, draft projection and choice domain."""
 
-    __slots__ = ()
+    target: object
     _by_origin: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
     _by_annotation: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
 
     def __init_subclass__(cls):
-        super().__init_subclass__()
+        super(ValueDecoder, cls).__init_subclass__()
         for origin in cls.__dict__.get("origins", ()):
             cls._by_origin[origin] = cls
         for annotation in cls.__dict__.get("annotations", ()):
@@ -939,8 +944,8 @@ class ValueDecoder[T](ABC):
     editor_annotation = str
 
     def encode_editor(self, value):
-        encoded = FieldCodec.encode(value)
-        return None if encoded is None else json.dumps(encoded)
+        encoded = FieldCodec.encode(value, self.target)
+        return json.dumps(encoded)
 
     def decode_editor(self, value):
         return None if value is None else json.loads(value)
@@ -973,8 +978,6 @@ class _ChoiceDecoder[T](ValueDecoder[T]):
 class _ScalarDecoder(ValueDecoder[Any]):
     """A plain target accepts no wire value unless a scalar below declares it."""
 
-    target: object
-
     def decode(self, data):
         if self.accepts(data):
             return data
@@ -987,6 +990,7 @@ class _ExactScalarDecoder(_ScalarDecoder):
     """A JSON scalar decoded only from its own type."""
 
     __slots__ = ()
+    annotations = (type(None),)
 
     def accepts(self, data: object) -> bool:
         return type(data) is self.target
@@ -1010,13 +1014,10 @@ class _FlagDecoder(_ExactScalarDecoder):
 
 class _NumberDecoder(_ExactScalarDecoder):
     __slots__ = ()
+    annotations = (int,)
 
     def argument_options(self) -> dict[str, object]:
         return {"type": self.target}
-
-class _IntegerDecoder(_NumberDecoder):
-    __slots__ = ()
-    annotations = (int,)
 
 class _RealDecoder(_NumberDecoder):
     """A finite number; an integer is a real number on the wire."""
@@ -1026,11 +1027,6 @@ class _RealDecoder(_NumberDecoder):
 
     def accepts(self, data: object) -> bool:
         return type(data) in (int, float) and math.isfinite(cast(float, data))
-
-class _NullDecoder(_ExactScalarDecoder):
-    __slots__ = ()
-    annotations = (type(None),)
-    editor_annotation = type(None)
 
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder(ValueDecoder[Any]):
@@ -1053,10 +1049,6 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 @dataclass(frozen=True, slots=True)
 class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
     annotations = (Any, object)
-
-    @classmethod
-    def from_annotation(cls, target, args):
-        return cls()
 
     @staticmethod
     @lru_cache(maxsize=1)
@@ -1094,11 +1086,14 @@ def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFa
 @dataclass(frozen=True, slots=True)
 class _FamilyNameDecoder(_ChoiceDecoder[Any]):
     origins = (type,)
-    family: type[DeclaredFamily]
+
+    @property
+    def family(self) -> type[DeclaredFamily]:
+        return get_args(self.target)[0]
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(args[0]) if args and issubclass(args[0], DeclaredFamily) else _member_decoder(target)
+        return cls(target) if args and issubclass(args[0], DeclaredFamily) else _member_decoder(target)
 
     def editor_choices(self):
         return tuple((name, name) for name in self.family.names())
@@ -1111,7 +1106,6 @@ class _FamilyNameDecoder(_ChoiceDecoder[Any]):
 @dataclass(frozen=True, slots=True)
 class _LiteralDecoder(_ChoiceDecoder[Any]):
     origins = (Literal,)
-    target: object
     values: tuple[object, ...]
 
     @classmethod
@@ -1129,7 +1123,6 @@ class _LiteralDecoder(_ChoiceDecoder[Any]):
 @dataclass(frozen=True, slots=True)
 class UnionDecoder[T](ValueDecoder[T]):
     origins = (Union, types.UnionType)
-    target: object
     alternatives: tuple[ValueDecoder[T], ...]
 
     @classmethod
@@ -1168,7 +1161,7 @@ class _ArrayDecoder(ValueDecoder[Any]):
 
     @classmethod
     def from_annotation(cls, target, args):
-        return cls(tuple(compile_decoder(item) for item in args))
+        return cls(target, tuple(compile_decoder(item) for item in args))
 
     def decode(self, data):
         if not isinstance(data, list):
@@ -1193,8 +1186,8 @@ class _TupleDecoder(_ArrayDecoder):
     @classmethod
     def from_annotation(cls, target, args):
         if len(args) == 2 and args[1] is Ellipsis:
-            return _VariadicTupleDecoder((compile_decoder(args[0]),))
-        return _FixedTupleDecoder(tuple(compile_decoder(item) for item in args))
+            return _VariadicTupleDecoder(target, (compile_decoder(args[0]),))
+        return _FixedTupleDecoder(target, tuple(compile_decoder(item) for item in args))
 
 class _VariadicTupleDecoder(_TupleDecoder):
     """The inherited item decoder applies to every tuple element."""
@@ -1237,7 +1230,7 @@ class _DictDecoder(ValueDecoder[Any]):
     @classmethod
     def from_annotation(cls, target, args):
         entries = _object_entries if args[0] is str else _object_or_pair_entries
-        return cls(compile_decoder(args[0]), compile_decoder(args[1]), entries)
+        return cls(target, compile_decoder(args[0]), compile_decoder(args[1]), entries)
 
     def decode(self, data):
         return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
@@ -1246,7 +1239,7 @@ class _DictDecoder(ValueDecoder[Any]):
 class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
-    family: type[Member]
+    target: type[Member]
 
     @staticmethod
     def document_member(declared: object) -> type[DeclaredFamily] | None:
@@ -1263,27 +1256,27 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         return declared
 
     def editor_choices(self):
-        return tuple((member.label, {self.family.family_discriminator: member.declared_name})
-                     for member in self.family.members_with(self.family))
+        return tuple((member.label, {self.target.family_discriminator: member.declared_name})
+                     for member in self.target.members_with(self.target))
 
     def argument_options(self) -> dict[str, object]:
         """Every member is a command-line choice, labelled or not."""
-        return {"choices": list(self.family.names())}
+        return {"choices": list(self.target.names())}
 
     def argument_text(self, encoded: object) -> object:
-        return cast(Mapping[str, object], encoded)[self.family.family_discriminator]
+        return cast(Mapping[str, object], encoded)[self.target.family_discriminator]
 
     def argument_payload(self, text: object) -> object:
-        return {self.family.family_discriminator: text}
+        return {self.target.family_discriminator: text}
 
     def member(self, data: object) -> tuple[type[Member], dict]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a family object.")
-        tag = self.family.family_discriminator
+        tag = self.target.family_discriminator
         name = data.get(tag)
         if not isinstance(name, str):
             raise MalformedRecord(f"Expected a string family {tag}.")
-        return _declared_member(self.family, name), {
+        return _declared_member(self.target, name), {
             key: value for key, value in data.items() if key != tag
         }
 
@@ -1296,10 +1289,10 @@ class _RecordDecoder(ValueDecoder[Any]):
     """A dataclass record. Its plan is looked up at decode time, so a
     record that contains itself compiles without recursion."""
 
-    record: type
+    target: type
 
     def checked(self, data: object) -> dict:
-        target = self.record
+        target = self.target
         plan = FieldCodec._record_plan(target)
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
@@ -1317,7 +1310,7 @@ class _RecordDecoder(ValueDecoder[Any]):
 
     def decode(self, data):
         data = self.checked(data)
-        target = self.record
+        target = self.target
         values = {}
         for entry in FieldCodec._record_plan(target).bindings:
             values.update(entry.decoded(data))
@@ -1325,7 +1318,7 @@ class _RecordDecoder(ValueDecoder[Any]):
 
 @dataclass(frozen=True, slots=True)
 class _EnumDecoder(_ChoiceDecoder[Any]):
-    target: object
+    target: type[Enum]
 
     def editor_choices(self):
         return tuple((str(member.value), member.value) for member in self.target)
@@ -1346,7 +1339,7 @@ def compile_decoder(annotation: object) -> ValueDecoder[object]:
     structural = _structural_decoder(target)
     if representation is None:
         return structural
-    return _RepresentedDecoder(representation, structural)
+    return _RepresentedDecoder(annotation, representation, structural)
 
 def _structural_decoder(target: object) -> ValueDecoder[object]:
     decoder = ValueDecoder._by_annotation.get(target) or ValueDecoder._by_origin.get(get_origin(target))

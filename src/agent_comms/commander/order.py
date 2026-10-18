@@ -31,6 +31,7 @@ from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
+from ..standing_rules import HuntDue
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
@@ -575,10 +576,6 @@ def hunts():
     return [h for t in todos() for h in t.hunts]
 
 
-def last_hunt():
-    return max((h.at.at for h in hunts()), default=0)
-
-
 def next_hunt():
     """Least-recently hunted file among the most-churned production files on origin/main."""
     hunted = {}
@@ -664,7 +661,7 @@ def overdue():
                         idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        if time.time() - last_hunt() > 900:
+        for _ in HuntDue.violations(COMMS, ME):
             print(HuntVerb.due(next_hunt()), flush=True)
         time.sleep(60)
 

@@ -203,8 +203,9 @@ class ChoiceTargetField(TargetField):
         return tuple((choice.name, choice.value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        options = (SessionConfigSelectOption(name=label, value=compile_decoder(self.annotation).encode_editor(value))
-                   for label, value in compile_decoder(self.annotation).editor_choices())
+        decoder = compile_decoder(self.annotation)
+        options = (SessionConfigSelectOption(name=label, value=decoder.encode_editor(decoder.decode(value)))
+                   for label, value in decoder.editor_choices())
         return replace(self, options=tuple(options))
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
@@ -221,9 +222,11 @@ class CatalogTargetField(ChoiceTargetField):
         return (self.catalog,)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
-        options = await catalogs.catalog_for(self.catalog).choices(selection)
+        catalog = catalogs.catalog_for(self.catalog)
+        options = await catalog.display_choices(selection)
+        decoder = compile_decoder(self.annotation)
         return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
-            value=compile_decoder(self.annotation).encode_editor(item.value)) for item in options))
+            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
@@ -785,7 +788,7 @@ class DeclaredOptions(Command):
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
         payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
@@ -877,7 +880,7 @@ class CliCommand(
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         """The command owns the parameters offered by its target action."""
-        hints = get_type_hints(type(self))
+        hints = get_type_hints(type(self), include_extras=True)
         return tuple(item.metadata[TargetField](item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
@@ -902,7 +905,7 @@ class CliCommand(
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         declared = {key: item for item, key in FieldCodec.record_fields(cls)}
         result = {}
         for key, text in values.items():

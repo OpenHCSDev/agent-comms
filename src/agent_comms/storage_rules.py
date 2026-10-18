@@ -18,9 +18,8 @@ from .native_tool_call import SelectedToolDenied
 from .standing_rules import StandingRule
 
 if TYPE_CHECKING:
-    from .registration import Registration
+    from .comms import Comms
     from .threads import Thread
-    from .todos import Todo
 
 StoragePath = Annotated[Path, PathText]
 
@@ -156,8 +155,10 @@ class UnitStorage(StandingRule):
         return cls(rule, thread.name, tuple(dict.fromkeys((*rule.checkouts_of(thread), *proposed))))
 
     @classmethod
-    def violations(cls, todos: Sequence[Todo], registry: Registration) -> tuple[UnitStorage, ...]:
+    def violations(cls, comms: Comms, commander: str) -> tuple[UnitStorage, ...]:
+        todos = cls.todos(comms, commander)
         units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
+        registry = comms.registry
         read = (cls.read(registry.storage_rule, registry.require(unit)) for unit in units)
         return tuple(storage for storage in read if storage.over_checkouts)
 
