@@ -19,14 +19,29 @@ from collections.abc import Coroutine
 from contextlib import ExitStack, suppress
 from contextvars import ContextVar
 from pathlib import Path
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar
 
 from acp.exceptions import RequestError
-from acp.schema import RequestPermissionResponse
+from acp.schema import (
+    DeniedOutcome,
+    PermissionOption,
+    RequestPermissionResponse,
+    ToolCallUpdate,
+)
 
 from .jsonl_stream import JsonlStreamReader
-from .field_codec import FieldCodec, MalformedRecord
-from .owner_protocol import OwnerAnnouncement, OwnerReady
+from .field_codec import MalformedRecord
+from .owner_protocol import (
+    ClientLine,
+    ClientPermissionResponse,
+    IncompatibleOwnerError,
+    OwnerFailure,
+    OwnerLine,
+    OwnerPermissionRequest,
+    OwnerReady,
+    OwnerUpdate,
+    UnannouncedOwner,
+)
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .registry_document import RegistryEntry
 from .child_process import ProcessIdentity
@@ -60,13 +75,13 @@ class SocketClient:
         send_bytes = writer.get_extra_info("socket").getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
         transport.set_write_buffer_limits(high=max(high_water, send_bytes), low=low_water)
         self.token = secrets.token_hex(32)
-        self.pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self.pending: dict[str, asyncio.Future[RequestPermissionResponse]] = {}
 
-    async def send(self, payload: dict[str, Any]) -> None:
+    async def send(self, line: OwnerLine) -> None:
         """Bound this subscriber's output without borrowing the owner turn."""
         if self.writer.is_closing():
             raise SubscriberClosed("Runtime subscriber is closed")
-        record = (json.dumps(payload) + "\n").encode()
+        record = line.wire()
         transport = self.writer.transport
         low_water, high_water = transport.get_write_buffer_limits()
         # One original saved snapshot must fit. Retain the transport's existing
@@ -82,15 +97,21 @@ class SocketClient:
                 "Runtime subscriber stopped reading; attach to canonical history again"
             )
 
-    async def permission(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    async def permission(
+        self, tool_call: dict[str, object], options: list[dict[str, object]]
+    ) -> RequestPermissionResponse | None:
         if len(self.pending) >= 4:
             return None
         request_id = secrets.token_hex(16)
-        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
+        future: asyncio.Future[RequestPermissionResponse] = (
+            asyncio.get_running_loop().create_future()
+        )
         self.pending[request_id] = future
         task = asyncio.current_task()
         try:
-            await self.send({"permissionRequest": {"id": request_id, **payload}})
+            await self.send(
+                OwnerPermissionRequest(id=request_id, tool_call=tool_call, options=options)
+            )
             # Cancellation can race completion of a fast socket handoff.
             # A pending owner cancel must not become a 15-second dialog wait.
             if task is not None and task.cancelling():
@@ -113,41 +134,17 @@ class SocketClient:
             if not future.done():
                 # Connection loss is denial, not cancellation of the *owner*
                 # turn task. Explicit ACP cancellation must still propagate.
-                future.set_result({"outcome": "cancelled"})
+                future.set_result(
+                    RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
+                )
         self.pending.clear()
 
     async def session_update(self, *, session_id: str, update: Any) -> None:
-        await self.send({"update": update.model_dump(by_alias=True, exclude_none=True)})
+        await self.send(OwnerUpdate.of(update.model_dump(by_alias=True, exclude_none=True)))
 
 
 class OwnerIdentityChangedError(RuntimeError):
     """A saved attachment must not follow a reused thread name."""
-
-
-def _owner_error(error: Exception) -> dict[str, Any]:
-    if isinstance(error, RequestError):
-        data = error.data if isinstance(error.data, dict) else {}
-        reason = data.get("details") or data.get("reason")
-        # Keep the string for already-running proxies while preserving the
-        # original JSON-RPC error for clients which understand this envelope.
-        return {
-            "error": reason if isinstance(reason, str) and reason else str(error),
-            "rpcError": error.to_error_obj(),
-        }
-    return {"error": str(error) or type(error).__name__}
-
-
-def _raise_owner_error(data: dict[str, Any]) -> None:
-    if "error" not in data:
-        return
-    rpc = data.get("rpcError")
-    if (
-        isinstance(rpc, dict)
-        and type(rpc.get("code")) is int
-        and isinstance(rpc.get("message"), str)
-    ):
-        raise RequestError(rpc["code"], rpc["message"], rpc.get("data"))
-    raise RuntimeError(data["error"])
 
 
 class RuntimeServer:
@@ -253,11 +250,15 @@ class RuntimeServer:
         return controller in self.clients.get(session_id, ()) and not controller.writer.is_closing()
 
     async def request_permission(
-        self, session_id: str, controller: SocketClient, payload: dict[str, Any]
-    ) -> dict[str, Any] | None:
+        self,
+        session_id: str,
+        controller: SocketClient,
+        tool_call: dict[str, object],
+        options: list[dict[str, object]],
+    ) -> RequestPermissionResponse | None:
         if not self.is_controller(session_id, controller):
             return None
-        reply = await controller.permission(payload)
+        reply = await controller.permission(tool_call, options)
         return reply if self.is_controller(session_id, controller) else None
 
     async def handle(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -277,7 +278,7 @@ class RuntimeServer:
             # before the socket response deliberately reduces it to text.
             _LOG.exception("Runtime request failed (session=%s)", session_id)
             with suppress(SubscriberClosed):
-                await client.send(_owner_error(error))
+                await client.send(OwnerFailure.of(error))
         finally:
             if session_id is not None:
                 self.clients.get(session_id, set()).discard(client)
@@ -296,7 +297,7 @@ class RuntimeServer:
         self._resources.close()
 
 
-def present_session(metadata: dict[str, Any], session_id: str) -> dict[str, Any]:
+def present_session(metadata: dict[str, object], session_id: str) -> dict[str, object]:
     """Rebind presentation coordinates through their declared owners."""
     from .acp_extension import decode_updates, encode_updates
 
@@ -384,7 +385,7 @@ class RuntimeConnection:
     async def _read_response(self, reader: asyncio.StreamReader) -> bytes:
         return await JsonlStreamReader(reader).readline()
 
-    async def request(self, action: str, **kwargs: Any) -> dict[str, Any]:
+    async def request(self, action: str, **kwargs: object) -> object:
         if self._closed:
             raise ConnectionError("Owner attachment was closed before request dispatch")
         task = asyncio.current_task()
@@ -409,9 +410,7 @@ class RuntimeConnection:
             line = await self._read_response(reader)
             if not line:
                 raise RuntimeError("Thread owner disconnected after request; outcome unknown.")
-            data = json.loads(line)
-            _raise_owner_error(data)
-            return cast(dict[str, Any], data["result"])
+            return OwnerLine.read(line).reply()
         finally:
             try:
                 if writer is not None:
@@ -452,12 +451,14 @@ class RuntimeProxy(RuntimeConnection):
     def controller_token(self):
         return self._controller_token
 
-    async def subscribe(self) -> dict[str, Any]:
-        reader, metadata = await self._subscribe_once()
+    async def subscribe(self) -> dict[str, object]:
+        reader, _, metadata = await self._subscribe_once()
         self.task = asyncio.create_task(self.forward(reader))
         return metadata
 
-    async def _subscribe_once(self) -> tuple[asyncio.StreamReader, dict[str, Any]]:
+    async def _subscribe_once(
+        self,
+    ) -> tuple[asyncio.StreamReader, OwnerReady, dict[str, object]]:
         reader, writer = await self._connect_current()
         self.writer = writer
         try:
@@ -475,117 +476,95 @@ class RuntimeProxy(RuntimeConnection):
             announcement = await reader.readline()
             if not announcement:
                 raise RuntimeError("Thread owner disconnected during attachment")
-            data = FieldCodec.decode(dict[str, Any], FieldCodec.parse(announcement))
-            _raise_owner_error(data)
-            OwnerAnnouncement().require_same_core(self.session_id, data)
+            try:
+                first = OwnerLine.read(announcement)
+            except MalformedRecord as error:
+                # An owner older than the declared lines writes an undeclared first line.
+                raise IncompatibleOwnerError(UnannouncedOwner(thread=self.session_id)) from error
+            first.announced(self.session_id)
             while line := await reader.readline():
-                data = FieldCodec.decode(dict[str, Any], FieldCodec.parse(line))
-                _raise_owner_error(data)
-                if "ready" in data:
-                    try:
-                        ready = FieldCodec.decode(OwnerReady, data)
-                    except MalformedRecord as error:
-                        raise MalformedRecord(
-                            "Owner subscription ready requires a valid controllerToken."
-                        ) from error
-                    presented = await Coordination.run_worker(
-                        partial(present_session, ready.ready, self.session_id)
-                    )
-                    if self._closed:
-                        raise ConnectionError("Owner attachment closed during subscription")
-                    self._controller_token = ready.controller_token
-                    return reader, presented
-                await self.update(data)
+                ready = await OwnerLine.read(line).attach(self)
+                if ready is None:
+                    continue
+                presented = await Coordination.run_worker(
+                    partial(present_session, ready.ready, self.session_id)
+                )
+                if self._closed:
+                    raise ConnectionError("Owner attachment closed during subscription")
+                self._controller_token = ready.controller_token
+                return reader, ready, {**presented, "configOptions": ready.config_options}
             raise RuntimeError("Thread owner disconnected during attachment")
         except BaseException:
             writer.close()
             raise
 
-    async def update(self, data: dict[str, Any]) -> None:
+    async def present(self, line: OwnerUpdate) -> None:
         client = self.agent.sessions.client
-        if "update" in data and client is not None:
-            metadata = await Coordination.run_worker(partial(
-                present_session, data["update"].get("_meta") or {}, self.session_id,
-            ))
-            if self._closed or self.agent.sessions.client is not client:
-                return
-            await client.session_update(
-                session_id=self.session_id,
-                update={
-                    **data["update"],
-                    "_meta": metadata,
-                },
-            )
-        if "permissionRequest" in data:
-            request = data["permissionRequest"]
-            if (
-                not isinstance(request, dict)
-                or not isinstance(request.get("id"), str)
-                or len(self._permission_tasks) >= 4
+        if client is None:
+            return
+        metadata = await Coordination.run_worker(
+            partial(present_session, line.meta, self.session_id)
+        )
+        if self._closed or self.agent.sessions.client is not client:
+            return
+        await client.session_update(
+            session_id=self.session_id, update={**line.update, "_meta": metadata}
+        )
+
+    def ask(self, request: OwnerPermissionRequest) -> None:
+        if len(self._permission_tasks) >= 4 or request.id in self._permission_tasks:
+            return
+        token = self._controller_token
+
+        async def ask() -> None:
+            response = ClientPermissionResponse.cancelled(request.id)
+            try:
+                if self.agent.sessions.client is not None and token == self._controller_token:
+                    reply = await asyncio.wait_for(
+                        self.agent.sessions.client.request_permission(
+                            session_id=self.session_id,
+                            tool_call=ToolCallUpdate.model_validate(request.tool_call),
+                            options=[
+                                PermissionOption.model_validate(option)
+                                for option in request.options
+                            ],
+                        ),
+                        timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+                    )
+                    response = ClientPermissionResponse.of(
+                        request.id, RequestPermissionResponse.model_validate(reply)
+                    )
+            except (
+                TimeoutError, ConnectionError, ValueError, RequestError, asyncio.CancelledError
             ):
-                return
-            request_id = request["id"]
-            if request_id in self._permission_tasks:
-                return
-            token = self._controller_token
-
-            async def ask() -> None:
-                outcome: dict[str, Any] = {"outcome": "cancelled"}
-                try:
-                    if self.agent.sessions.client is not None and token == self._controller_token:
-                        reply = await asyncio.wait_for(
-                            self.agent.sessions.client.request_permission(
-                                session_id=self.session_id,
-                                tool_call=request["toolCall"],
-                                options=request["options"],
-                            ),
-                            timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
-                        )
-                        outcome = RequestPermissionResponse.model_validate(reply).model_dump(
-                            by_alias=True, exclude_none=True
-                        )["outcome"]
-                except (
-                    TimeoutError, ConnectionError, ValueError, RequestError, asyncio.CancelledError
+                # An unanswered, disconnected, refused or invalid client reply
+                # is a denial; the owner never receives client exception text.
+                # Any other failure is a defect and propagates after the denial.
+                pass
+            finally:
+                if (
+                    token == self._controller_token
+                    and self.writer is not None
+                    and not self.writer.is_closing()
                 ):
-                    # An unanswered, disconnected, refused or invalid client reply
-                    # is a denial; the owner never receives client exception text.
-                    # Any other failure is a defect and propagates after the denial.
-                    pass
-                finally:
-                    if (
-                        token == self._controller_token
-                        and self.writer is not None
-                        and not self.writer.is_closing()
-                    ):
-                        self.writer.write(
-                            (
-                                json.dumps(
-                                    {
-                                        "permissionResponse": {
-                                            "id": request_id,
-                                            **outcome,
-                                        }
-                                    }
-                                )
-                                + "\n"
-                            ).encode()
-                        )
-                        with suppress(OSError, ConnectionError, TimeoutError):
-                            await asyncio.wait_for(self.writer.drain(), timeout=1)
-                    self._permission_tasks.pop(request_id, None)
+                    self.writer.write(response.wire())
+                    with suppress(OSError, ConnectionError, TimeoutError):
+                        await asyncio.wait_for(self.writer.drain(), timeout=1)
+                self._permission_tasks.pop(request.id, None)
 
-            self._permission_tasks[request_id] = asyncio.create_task(ask())
+        self._permission_tasks[request.id] = asyncio.create_task(ask())
 
     async def forward(self, reader: asyncio.StreamReader) -> None:
         while not self._closed:
             try:
                 while line := await reader.readline():
-                    await self.update(json.loads(line))
+                    await OwnerLine.read(line).deliver(self)
             except (OSError, ConnectionError):
                 pass  # A reset subscription is safe to establish again.
-            except ValueError:
-                # The owner is our component: an undecodable update is a defect,
-                # not an end of stream. Record it before this subscription dies.
+            except (ValueError, RuntimeError, RequestError):
+                # The owner is our component: an undecodable or unexpected line,
+                # or the owner's failure line, is a defect, not an end of stream.
+                # Record it before this subscription dies.
                 _LOG.exception("Owner update stream failed (session=%s)", self.session_id)
                 raise
             self._controller_token = None
@@ -594,13 +573,13 @@ class RuntimeProxy(RuntimeConnection):
                 self.writer.close()
             while not self._closed:
                 try:
-                    reader, metadata = await self._subscribe_once()
-                    if "configOptions" in metadata and self.agent.sessions.client is not None:
+                    reader, ready, _ = await self._subscribe_once()
+                    if self.agent.sessions.client is not None:
                         await self.agent.sessions.client.session_update(
                             session_id=self.session_id,
                             update={
                                 "sessionUpdate": "config_option_update",
-                                "configOptions": metadata["configOptions"],
+                                "configOptions": ready.config_options,
                             },
                         )
                     break
