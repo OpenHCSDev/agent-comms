@@ -535,8 +535,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal.require_id(goal_id)
-        current.state.require_model_resume()
+        current = comms.registry.require(name).goal.matching(goal_id).require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
             name,

@@ -145,7 +145,8 @@ async def test_origin_goal_allows_only_followup_admitted_after_activation(
         await agent.turns.run_agent_turn(
             "project", "project", "Set a goal for model", initial_display_text="Set a goal as typed"
         )
-        assert ((__observed_goal := comms.registry.require("project").goal).active().require() is __observed_goal)
+        observed_goal = (comms.registry.require("project").goal).require()
+        assert (observed_goal.active() is observed_goal)
         state = comms.goals.open_goal_store().snapshot(observed["goal"].id)
         assert state.lifecycle == ReadyGeneration() and state.number == 2
         key = "acp:" + observed["public_id"]
@@ -218,12 +219,14 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
         assert await replay(agent) == (["follow-up as typed"] if change is None else [])
         current = comms.registry.require("project").goal
         if change is None:
-            assert ((__observed_goal := current).active().require() is __observed_goal) and current.id == original_goal.id
+            observed_goal = (current).require()
+            assert (observed_goal.active() is observed_goal) and current.id == original_goal.id
             assert store.snapshot(current.id).lifecycle == ReadyGeneration()
         elif change == "clear":
             assert current is None
         else:
-            assert ((__observed_goal := current).active().require() is __observed_goal) and current.id == observed["replacement"].id
+            observed_goal = (current).require()
+            assert (observed_goal.active() is observed_goal) and current.id == observed["replacement"].id
             assert store.snapshot(current.id).lifecycle == ReadyGeneration()
     finally:
         await agent.shutdown()

@@ -47,7 +47,8 @@ def test_same_id_resume_from_paused(comms, monkeypatch):
 
     assert result["id"] == started["id"]
     assert result["text"] == started["text"]
-    assert ((__observed_goal := FieldCodec.decode(Goal, result)).active().require() is __observed_goal)
+    observed_goal = (FieldCodec.decode(Goal, result)).require()
+    assert (observed_goal.active() is observed_goal)
     assert result["progress"] == "user resumed"
     assert comms.registry.require("owner").goal.id == started["id"]
 

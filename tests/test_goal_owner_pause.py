@@ -47,7 +47,8 @@ def test_owner_pause_survives_reopen_and_explains_stale_model_report(tmp_path, m
     active = reopened.goals.update_goal(
         "worker", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id)), actor=OwnerInvocable
     )
-    assert ((__observed_goal := active).active().require() is __observed_goal) and reopened.registry.require("worker").goal.state.pause_source is None
+    observed_goal = (active).require()
+    assert (observed_goal.active() is observed_goal) and reopened.registry.require("worker").goal.state.pause_source is None
 
 
 def test_model_cannot_pause(tmp_path, monkeypatch):

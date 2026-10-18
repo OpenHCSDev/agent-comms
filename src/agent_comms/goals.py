@@ -315,10 +315,13 @@ class GoalDeclaration(WireValue):
         raise RelationViolationError("No goal is set for this thread.")
 
     def require_id(self, goal_id: str) -> Goal:
-        goal = self.require()
-        if goal.id != goal_id:
-            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
-        return goal
+        return self.matching(goal_id).require_selection()
+
+    def require_selection(self) -> Goal:
+        raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+
+    def require_model_resume(self) -> Goal:
+        raise ValueError("This goal cannot be resumed; refresh its state.")
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -341,6 +344,12 @@ class GoalDeclaration(WireValue):
 
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
         return False
+
+    def reports_turn(self, turn_id: str) -> bool:
+        return False
+
+    def capture_baseline(self, history, owner_created_at: float) -> None:
+        pass
 
     def failure_projection(self, reason):
         from .goal_attempt_identity import FailureNotObserved
@@ -500,6 +509,13 @@ class Goal(GoalDeclaration):
     accepts_null = False
 
     def require(self) -> Goal:
+        return self
+
+    def require_selection(self) -> Goal:
+        return self
+
+    def require_model_resume(self) -> Goal:
+        self.state.require_model_resume()
         return self
 
     def matching(self, goal_id: str) -> GoalDeclaration:
@@ -728,6 +744,12 @@ class Goal(GoalDeclaration):
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
         """Later revisions may describe the same failed goal, never a replacement."""
         return self.id == goal_id and self.revision >= minimum_revision
+
+    def reports_turn(self, turn_id: str) -> bool:
+        return self.reported_turn == turn_id
+
+    def capture_baseline(self, history, owner_created_at: float) -> None:
+        history.baseline(owner_created_at, self)
 
     @property
     def summary(self) -> str:

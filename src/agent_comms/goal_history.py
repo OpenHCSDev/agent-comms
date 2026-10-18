@@ -22,7 +22,7 @@ from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .goals import GoalDeclaration, NoGoal
 from .goals import Goal
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTable
 
 
 class GoalHistoryError(RuntimeError):
@@ -37,8 +37,8 @@ class GoalHistoryEntry(TypedTable):
     sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
-    before: GoalDeclaration
-    after: GoalDeclaration
+    before: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
+    after: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
     owner_created_at: float = field(kw_only=True, metadata={"history_exclude": True})
     state: Literal["pending", "committed", "aborted", "uncertain"] = field(
         kw_only=True, metadata={"history_exclude": True}
@@ -47,7 +47,7 @@ class GoalHistoryEntry(TypedTable):
 
     def reports_turn(self, turn_id: str) -> bool:
         """A committed goal revision records its original model reporting turn."""
-        return any(goal.reported_turn == turn_id for goal in self.after)
+        return self.after.reports_turn(turn_id)
 
     def to_wire(self) -> dict[str, object]:
         # Preserve nested Goal family tags while projecting only public entry fields.
@@ -244,13 +244,15 @@ class GoalHistoryStore:
                 self._set_state(row.sequence, "uncertain")
         committed = [row for row in self._rows(owner_created_at) if row.state == "committed"]
         if not committed:
-            for goal in current:
-                self._insert(owner_created_at, "baseline", "committed", NoGoal(), goal)
+            current.capture_baseline(self, owner_created_at)
             return
         last = committed[-1].after
         if last != current:
             # Known endpoints do not manufacture unobserved revisions or timing.
             self._insert(owner_created_at, "observed_gap", "committed", last, current)
+
+    def baseline(self, owner_created_at: float, goal: Goal) -> None:
+        self._insert(owner_created_at, "baseline", "committed", NoGoal(), goal)
 
     def begin(self, owner_created_at: float, before: GoalDeclaration, after: GoalDeclaration) -> int:
         self.observe(owner_created_at, before)
@@ -269,10 +271,7 @@ class GoalHistoryStore:
             if row.state == "committed"
             and (
                 goal_id is None
-                or goal_id
-                in {
-                    *(goal.id for goal in row.before),
-                    *(goal.id for goal in row.after),
-                }
+                or row.before.continues(goal_id)
+                or row.after.continues(goal_id)
             )
         )

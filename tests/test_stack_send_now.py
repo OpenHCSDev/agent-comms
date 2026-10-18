@@ -601,7 +601,8 @@ async def _mounted_send_now(
             comms = wire(root / "wire")
             await until(lambda: not view.queued_prompts and len(requests) == 3)
             goal = comms.registry.require("project").goal
-            assert goal is not None and ((__observed_goal := goal).active().require() is __observed_goal), goal
+            observed_goal = (goal).require()
+            assert goal is not None and (observed_goal.active() is observed_goal), goal
             assert "User follow-up" in json.dumps(requests[1])
             assert "URGENT_INPUT" in json.dumps(requests[1])
             await view.slash_command("/goal clear")
