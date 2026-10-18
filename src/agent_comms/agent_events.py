@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .acp_failure import (
     FailureSource, UnrecordedFailureSource, NativeTurnOutcome, ProviderRetryResult,
@@ -23,6 +23,7 @@ from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .tool_declaration import ToolDeclaration
 from .child_process import ProcessIdentity
+from .started_input import StartedInput, OriginalStartedInput, FollowingStartedInput
 
 if TYPE_CHECKING:
     from .transcript_events import SentTranscript
@@ -70,20 +71,46 @@ class ContextObserved(AgentEvent):
     context: NativeContextManifestData
 
 
-@dataclass(frozen=True)
-class InputDisposition(AgentEvent):
+class InputStarted(AgentEvent):
     id: str | None
 
-
-@dataclass(frozen=True)
-class InputStarted(InputDisposition):
-    pass
+    @abstractmethod
+    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput: ...
 
 
 @dataclass(frozen=True)
-class InputRefused(InputDisposition):
+class OriginalInputStarted(InputStarted):
+    id: ClassVar[None] = None
+
+    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
+        return OriginalStartedInput(inputs.original_sources[session_id])
+
+
+@dataclass(frozen=True)
+class FollowingInputStarted(InputStarted):
+    id: str
+
+    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
+        return FollowingStartedInput.capture(inputs, session_id, self.id)
+
+
+class InputRefused(AgentEvent):
+    @abstractmethod
+    async def apply_to(self, inputs: InputDrain, session_id: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class OriginalInputRefused(InputRefused):
     async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
-        await inputs.input_refused(session_id, self.id)
+        await inputs.input_refused(session_id, OriginalStartedInput(inputs.original_sources[session_id]))
+
+
+@dataclass(frozen=True)
+class FollowingInputRefused(InputRefused):
+    id: str
+
+    async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
+        await inputs.input_refused(session_id, FollowingStartedInput.capture(inputs, session_id, self.id))
 
 
 @dataclass(frozen=True)

@@ -47,6 +47,7 @@ from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
+from .started_input import StartedInput, FollowingStartedInput
 from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
 from .goal_presentation import GoalExecutionState
@@ -630,7 +631,7 @@ class InputDrain(InputObservation):
         self,
         session_id: str,
         text: str | None,
-        input_id: str | None = None,
+        public_id: str | None = None,
         source_scope: QueueScope | None = None,
         *,
         native_id: str | None,
@@ -645,20 +646,20 @@ class InputDrain(InputObservation):
             self.queue_revisions[session_id] = revision
         await (client or self.runtime).session_update(
             session_id=session_id,
-            update=InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk(),
+            update=InputStartedUpdate(public_id, text, scope, revision, native_id).acp_chunk(),
         )
 
     async def emit_input_disposition(
         self, session_id: str, row: InputAttempt, client: Any = None
     ) -> None:
-        await self.emit_input_delivery_changed(session_id, input_id=row.public_id, client=client)
+        await self.emit_input_delivery_changed(session_id, public_id=row.public_id, client=client)
 
     async def emit_input_delivery_changed(
-        self, session_id: str, *, input_id: str | None = None, client: Any = None
+        self, session_id: str, *, public_id: str | None = None, client: Any = None
     ) -> None:
         await (client or self.runtime).session_update(
             session_id=session_id,
-            update=InputDeliveryChangedUpdate(input_id).acp_chunk(),
+            update=InputDeliveryChangedUpdate(public_id).acp_chunk(),
         )
 
     def input_keys(self, session_id: str) -> frozenset[str]:
@@ -799,49 +800,12 @@ class InputDrain(InputObservation):
             self._repeat_private_observations.clear()
 
     async def input_started(
-        self,
-        session_id: str,
-        input_id: str | None,
-        source_scope: QueueScope,
+        self, session_id: str, started: StartedInput, source_scope: QueueScope,
     ) -> None:
-        original = self.original_sources[session_id]
-        input_id = input_id if input_id is not None else original.accepted_id
-        source = self.following_sources.get(session_id, {}).get(input_id)
-        started_keys = original.keys if input_id is None else source.keys if source else ()
-        document = await Coordination.run_worker(partial(self.dispositions.read, (*started_keys, *original.notice_keys)))
-        for key in started_keys:
-            row = document.rows.get(key)
-            if row is not None and not row.unresolved:
-                await self.emit_input_disposition(session_id, row)
-        row = document.lookup(started_keys[0] if len(started_keys) == 1 else None)
-        if input_id is None and original.notice_keys:
-            row = document.lookup(original.notice_keys[0])
-        row = row.require_started(source_scope.claimed_generation)
-        if input_id is None and original.notice_keys:
-            input_id = row.public_id
-        item = self.queued_inputs.get(session_id, {}).get(input_id or "")
-        text = await item.started(self) if item else original.notice_text if input_id == row.public_id else None
-        await self.emit_input_started(
-            session_id,
-            text,
-            input_id,
-            source_scope=source_scope,
-            native_id=row.native_id,
-        )
-        self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
-        await self.emit_queue_state(session_id)
+        await started.started(self, session_id, source_scope)
 
-    async def input_refused(self, session_id: str, input_id: str | None) -> None:
-        if input_id is None:
-            return
-        source = self.following_sources.get(session_id, {}).pop(input_id, None)
-        if source is not None:
-            # Native write was refused; keep the durable notice, never replay it.
-            await self.emit_input_delivery_changed(session_id)
-        item = self.queued_inputs.get(session_id, {}).pop(input_id, None)
-        if item is not None:
-            await item.not_started(self)
-            await self.emit_queue_state(session_id)
+    async def input_refused(self, session_id: str, started: StartedInput) -> None:
+        await started.refused(self, session_id)
 
     async def input_cleared(
         self, session_id: str, input_id: str, native_id: str, text: str,
@@ -854,7 +818,7 @@ class InputDrain(InputObservation):
                         if not self.dispositions.clear_native(key, native_id, text):
                             raise RelationViolationError("Native clear differs from its original input")
             await Coordination.run_worker(record)
-        await self.input_refused(session_id, input_id)
+        await self.input_refused(session_id, FollowingStartedInput.capture(self, session_id, input_id))
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
         """The joined retirement owns the original input and its wire cut."""

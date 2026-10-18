@@ -159,7 +159,7 @@ class InputForwarding:
 
     def refuse(self, session: TurnSession, input_ids: tuple[InputId, ...]) -> None:
         for input_id in input_ids:
-            session.rejected_commands.append(events.InputRefused(id=input_id.value))
+            session.rejected_commands.append(events.FollowingInputRefused(id=input_id.value))
             session.rejected_signal.set()
 
     def mark_started(self, session: TurnSession, payload: MessageStart) -> tuple[bool, str | None]:
