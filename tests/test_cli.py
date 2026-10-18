@@ -602,9 +602,11 @@ class TestSelectedTargetActions:
             TargetEdit(ForkCliCommand, ("alpha", "beta"), {}).apply(comms)
 
 
-def test_result_kind_decides_exit_code_and_reconnected_targets():
+def test_result_kind_decides_exit_code_and_navigation_targets():
+    from agent_comms.child_process import NoProcess
     from agent_comms.cli_commands import (
-        StartCliCommand, TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult,
+        NewThreadCliCommand, StartCliCommand, TargetBatchResult, TargetCompleted,
+        TargetFailed, ThreadCreatedResult, ThreadStoppedResult,
     )
     from agent_comms.owner_lifecycle import OwnerStartResult
 
@@ -620,3 +622,9 @@ def test_result_kind_decides_exit_code_and_reconnected_targets():
     assert batch.exit_code() == 1
     assert TargetBatchResult(batch.outcomes[:2]).exit_code() == 0
     assert ThreadStoppedResult("alpha").exit_code() == 0
+    assert not launched.open_targets() and not batch.open_targets()
+    created = ThreadCreatedResult("child", NoProcess())
+    assert created.open_targets() == ("child",)
+    command = NewThreadCliCommand(name="child", project="/project", model=None)
+    completed = TargetCompleted("/project", command, created)
+    assert TargetBatchResult((completed, batch.outcomes[-1], completed)).open_targets() == ("child",)

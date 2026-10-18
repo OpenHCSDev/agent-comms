@@ -23,8 +23,10 @@ from refactor_audit.handler_declarations import BuiltinHandlerDeclarations
 from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
+from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from cutover.carry import STEPS, Step
+from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
@@ -1040,45 +1042,57 @@ class EditedCarry(Measure):
         return {cls.__name__: 0}, {cls.__name__: edited}
 
 class UncarriedRecordFormat(Measure):
-    """A stored record's fields changed without its version, or its version without a carry.
+    """A stored record's format changed without its version, or its version without a carry.
 
-    A record read back from a file declares ``version: ClassVar[int]``. Files in the
-    old format stay on disk, so a field change bumps that version, and a bumped
-    version arrives with a new carry step that rewrites the old files.
+    Files in the old format stay on disk, so a change to a versioned record's stored form
+    bumps its version, and a bumped version arrives with a new carry step that rewrites the
+    old files. The stored form is what FieldCodec writes, not the annotation text: two
+    representations with the same wire spelling are the same format.
     """
 
+    probe: typing.ClassVar[str] = "import sys, stored_formats; stored_formats.main(sys.argv[1:])"
+
     @staticmethod
-    def formats(source: bytes) -> dict[str, tuple[object, str]]:
-        """Each versioned record class: its declared version and its stored fields."""
-        found = {}
+    def declares_version(source: bytes) -> bool:
+        """Only a module with a class declaring `version` can hold a versioned record; others
+        are never imported."""
         for node in ast.walk(ast.parse(source)):
-            if not isinstance(node, ast.ClassDef):
-                continue
-            declared = [item for item in node.body
-                        if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)]
-            version = [item.value for item in declared if item.target.id == "version"
-                       and "ClassVar" in ast.unparse(item.annotation)]
-            if version and isinstance(version[0], ast.Constant):
-                stored = [f"{item.target.id}: {ast.unparse(item.annotation)}" for item in declared
-                          if "ClassVar" not in ast.unparse(item.annotation)]
-                found[node.name] = (version[0].value, "; ".join(stored))
-        return found
+            for item in node.body if isinstance(node, ast.ClassDef) else ():
+                match item:
+                    case ast.AnnAssign(target=ast.Name(id="version")) | ast.Assign(
+                            targets=[ast.Name(id="version")]):
+                        return True
+        return False
+
+    @classmethod
+    def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, StoredForm]:
+        """Each versioned record in the changed modules, measured by that revision's own code."""
+        package = Path(root).parent
+        modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
+                   for path in sorted(changed & python_paths(repo, ref, root))
+                   if cls.declares_version(git(repo, "show", f"{ref}:{path}"))]
+        if not modules:
+            return {}
+        with tempfile.TemporaryDirectory(prefix="debt-ratchet-formats-") as scratch:
+            source = git(repo, "archive", ref, "--", str(package))
+            subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
+            # Extracted source is stamped with its commit the way a build stamps it.
+            WheelStamp(revision(repo, ref)).write(Path(scratch) / root / "package_stamp.py")
+            path = os.pathsep.join([str(Path(scratch) / package), str(Path(__file__).parent)])
+            result = subprocess.run([sys.executable, "-c", cls.probe, *modules], cwd=scratch,
+                                    env={**os.environ, "PYTHONPATH": path},
+                                    capture_output=True, text=True, check=True, timeout=300)
+        return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
     @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         added = git(repo, "diff", "--name-only", "-z", "--diff-filter=A", base, head, "--", str(STEPS))
         carried = any(Path(path).stem.startswith("carry_") and path.endswith(".py")
                       for path in added.decode().split("\0"))
-        uncarried = 0
-        for path in sorted(changed):
-            try:
-                before = cls.formats(git(repo, "show", f"{base}:{path}"))
-                after = cls.formats(git(repo, "show", f"{head}:{path}"))
-            except subprocess.CalledProcessError:
-                continue
-            for name, (version, stored) in after.items():
-                if name in before and before[name] != (version, stored):
-                    uncarried += before[name][0] == version or not carried
+        before = cls.formats(repo, base, root, changed)
+        after = cls.formats(repo, head, root, changed)
+        uncarried = sum(before[name].version == form.version or not carried
+                        for name, form in after.items() if name in before and before[name] != form)
         return {cls.__name__: 0}, {cls.__name__: uncarried}
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
