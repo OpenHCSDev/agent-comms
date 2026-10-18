@@ -18,7 +18,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import BlockedGeneration, CancelledGeneration, CompletedGeneration
-from agent_comms.goals import Goal
+from agent_comms.goals import Goal, NoGoal
 from agent_comms.threads import Thread
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller
@@ -122,7 +122,7 @@ def test_clearing_goal_releases_its_reserved_attempt(comms, monkeypatch):
 
     comms.goals.update_goal("owner", ClearGoalAction(expect=GoalPrecondition(goal_id=goal["id"])))
 
-    assert comms.registry.require("owner").goal is None
+    assert comms.registry.require("owner").goal == NoGoal()
     assert GoalAttemptStore(private).snapshot(goal["id"]).lifecycle == CancelledGeneration()
     assert store.snapshot(goal["id"]).attempt_id == reservation.attempt_id
 
@@ -146,7 +146,7 @@ def test_resume_refuses_completed_or_replaced_goal(comms, monkeypatch):
     with pytest.raises(ValueError, match="cannot be resumed"):
         invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"})
     replacement = invoke_tool(comms, "comms_set_goal", {"text": "new goal"})["goal"]
-    with pytest.raises(ValueError, match="cannot be resumed"):
+    with pytest.raises(ValueError, match="replaced or cleared"):
         invoke_tool(comms, "comms_resume_goal", {"goal_id": started["id"], "progress": "no"})
     assert comms.registry.require("owner").goal.id == replacement["id"]
 

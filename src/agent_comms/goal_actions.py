@@ -12,6 +12,7 @@ from .change_report import FileLine
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
+from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_states import (
     ActiveGoal,
@@ -24,14 +25,14 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
-from .threads import Thread
+from .goals import Goal, GoalDeclaration, GoalOrder, NoGoal, ProblemGoalOrder, UnorderedGoalOrder
 from .recorded_time import EventTime
+from .threads import Thread
 from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
-    from .goal_presentation import GoalSnapshot
     from .goal_management import Goals
+    from .goal_presentation import GoalSnapshot
 
 
 class ModelInvocable:
@@ -54,7 +55,7 @@ class OwnerControlInvocable:
 class GoalPrecondition:
     goal_id: str | None = None
     expected_state: GoalState | None = None
-    expected_goal: Goal | None = None
+    expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
 
     def check(self, ctx: GoalActionContext) -> None:
@@ -64,17 +65,11 @@ class GoalPrecondition:
             or not ctx.goals.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
-        if self.expected_goal is not None and goal != self.expected_goal:
-            raise ValueError("Goal changed during resume; refresh its state.")
+        self.expected_goal.check_expected(goal)
         if self.goal_id is not None:
-            thread.require_goal(self.goal_id)
-        if self.expected_state is not None and (
-            goal is None or goal.state != self.expected_state
-        ):
-            raise ValueError(
-                goal.state.activity_refusal() if goal is not None
-                else "This goal is no longer active; refresh its state."
-            )
+            goal.require().require_id(self.goal_id)
+        if self.expected_state is not None:
+            goal.require().require_state(self.expected_state)
 
 
 @dataclass(frozen=True)
@@ -91,12 +86,10 @@ class GoalActionContext:
     def model_report(self) -> bool:
         return self.actor is ModelInvocable
 
-    def require_goal(self) -> Goal:
-        return self.thread.require_goal()
 
 
 @dataclass(frozen=True, kw_only=True)
-class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
+class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAction"):
     expect: GoalPrecondition = GoalPrecondition()
     preserve_wait: ClassVar[bool] = False
     schedules_goal: ClassVar[bool] = False
@@ -112,9 +105,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         invoke: Callable[..., Awaitable[dict]],
         text: str = "",
     ) -> dict:
-        goal = (await observe()).goal
-        if goal is None:
-            raise ValueError("The goal changed; refresh its state.")
+        goal = (await observe()).goal.require()
         return await cls.submit_checkpoint(invoke, goal)
 
     @classmethod
@@ -131,10 +122,10 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
         if not isinstance(self, actor):
             raise ValueError(f"This actor cannot take goal action {self.declared_name!r}.")
 
-    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction:
+    def prepare(self, goals: Goals, name: str, actor: type) -> GoalAction[Result]:
         return self
 
-    def apply(self, ctx: GoalActionContext) -> Goal | None:
+    def apply(self, ctx: GoalActionContext) -> Result:
         self.expect.check(ctx)
         self.require_actor(ctx.actor)
         if ctx.model_report and any(
@@ -142,7 +133,9 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
         ):
             raise ValueError("This goal was already reported in this turn.")
-        goal = self.change(ctx)
+        goal = ctx.thread.goal.project(
+            lambda current: self.change(current, ctx), lambda: self.create(ctx),
+        )
         if goal == ctx.thread.goal:
             return goal
         self.before_publish(goal, ctx)
@@ -153,39 +146,46 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
             ),
             ctx.goals.registry.status(ctx.thread.name),
         )
-        if not self.preserve_wait and ctx.thread.goal is not None:
-            ctx.goals.waits.clear(ctx.thread.goal.id)
+        if not self.preserve_wait:
+            ctx.thread.goal.clear_wait(ctx.goals.waits)
         return goal
 
     @abstractmethod
-    def change(self, ctx: GoalActionContext) -> Goal | None: ...
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Result: ...
 
-    def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
+    def create(self, ctx: GoalActionContext) -> Result:
+        raise RelationViolationError("No goal is set for this action.")
+
+    def before_publish(self, goal: GoalDeclaration, ctx: GoalActionContext) -> None:
         pass
 
 
 @dataclass(frozen=True, kw_only=True)
-class TransitionGoalAction(GoalAction):
+class TransitionGoalAction(GoalAction[Goal]):
     progress: str | None = None
 
     @abstractmethod
-    def next_state(self, ctx: GoalActionContext) -> GoalState: ...
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState: ...
 
-    def change(self, ctx: GoalActionContext) -> Goal:
-        goal = ctx.require_goal()
-        goal.require_order(ctx.goals, ctx.thread.incarnation)
-        state = self.next_state(ctx)
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        goal.order.require_order(goal, ctx.goals, ctx.thread.incarnation)
+        state = self.next_state(goal, ctx)
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
-        self.before_transition(ctx)
-        return replace(
+        self.before_transition(goal, ctx)
+        changed = replace(
             goal,
             state=state,
             revision=goal.revision + 1,
             progress=goal.progress if self.progress is None else self.progress,
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
         )
+        self.before_goal_publish(changed, ctx)
+        return changed
 
-    def before_transition(self, ctx: GoalActionContext) -> None:
+    def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
+        pass
+
+    def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         pass
 
 
@@ -195,11 +195,11 @@ class ActiveGoalAction(
 ):
     schedules_goal = True
 
-    def next_state(self, ctx: GoalActionContext) -> GoalState:
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
-    def before_transition(self, ctx: GoalActionContext) -> None:
-        goal, thread = ctx.require_goal(), ctx.thread
+    def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
+        thread = ctx.thread
         generation = ctx.goals.open_goal_store().require_generation(goal.id)
         if generation.lifecycle.failed and generation.attempt_id:
             # A status-only Resume cannot authorize an uncertain attempt.
@@ -227,11 +227,10 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
     reviewed_inputs: tuple[str, ...] = ()
     preserve_wait = True
 
-    def next_state(self, ctx: GoalActionContext) -> GoalState:
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return ActiveGoal()
 
-    def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
-        assert goal is not None
+    def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
         thread = ctx.thread
         report_turn = ctx.report_turn
         review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
@@ -331,19 +330,18 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class CompletionGoalAction(TransitionGoalAction):
-    def next_state(self, ctx: GoalActionContext) -> GoalState:
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return CompletedGoal()
 
 
 @dataclass(frozen=True, kw_only=True)
 class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
-    def before_transition(self, ctx: GoalActionContext) -> None:
-        goal = ctx.require_goal()
+    def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         goal.order.require_completion(goal, ctx.goals, ctx.thread.incarnation)
 
 
 @dataclass(frozen=True, kw_only=True)
-class HeldOrderGoalAction(GoalAction, RuntimeInvocable):
+class HeldOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     """A Todo operation on a held order and the revision of the holder's Goal, in one write."""
     problem: str
     operation: TodoOperation
@@ -354,15 +352,14 @@ class HeldOrderGoalAction(GoalAction, RuntimeInvocable):
     def prepare(self, goals, name, actor):
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
         self.expect.check(ctx)
-        goal = ctx.require_goal()
+        goal = ctx.thread.goal.require()
         todo = goals.todos.get(self.problem)
         todo.require_assignee(ctx.thread.incarnation, goal.id)
         operation = self.operation.prepare(goals, todo)
         return replace(self, operation=operation, expect=replace(self.expect, expected_goal=goal))
 
-    def change(self, ctx):
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         ctx.goals.todos.apply(self.problem, self.operation)
-        goal = ctx.require_goal()
         return replace(self.revised(goal, ctx), revision=goal.revision + 1)
 
 
@@ -388,7 +385,7 @@ class SentBackOrderGoalAction(HeldOrderGoalAction):
 class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     block_reason: str | None = None
 
-    def next_state(self, ctx: GoalActionContext) -> GoalState:
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
         return BlockedGoal(
             required_block_reason(
                 self.block_reason if self.block_reason is not None else self.progress
@@ -400,33 +397,32 @@ class BlockedGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, Ru
 class PausedGoalAction(
     TransitionGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
-    def next_state(self, ctx: GoalActionContext) -> GoalState:
-        current = ctx.require_goal().state.pause_source
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        current = goal.state.pause_source
         return PausedGoal(
             current or (OwnerPause() if ctx.actor is OwnerInvocable else RuntimePause())
         )
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReplacementGoalAction(GoalAction):
-    def before_publish(self, goal: Goal | None, ctx: GoalActionContext) -> None:
-        goal = ctx.thread.goal
-        if goal is not None:
-            # Revoke a protected goal before removing or replacing its
-            # registry identity. If the registry write then fails, the
-            # remaining visible goal is safely unlaunchable.
-            attempts = ctx.goals.open_goal_store()
-            generation = attempts.snapshot(goal.id)
-            if generation is not None and not generation.lifecycle.terminal:
-                attempts.retire_goal(
-                    goal.id,
-                    expected_generation=generation.number,
-                    attempt_id=generation.attempt_id,
-                )
+class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
+    def before_publish(self, goal: GoalDeclaration, ctx: GoalActionContext) -> None:
+        ctx.thread.goal.project(lambda previous: self.retire(previous, ctx), lambda: None)
+
+    @staticmethod
+    def retire(goal: Goal, ctx: GoalActionContext) -> None:
+        # Revoke the old protected goal before replacing its registry identity.
+        attempts = ctx.goals.open_goal_store()
+        generation = attempts.snapshot(goal.id)
+        if generation is not None and not generation.lifecycle.terminal:
+            attempts.retire_goal(
+                goal.id, expected_generation=generation.number,
+                attempt_id=generation.attempt_id,
+            )
 
 
 @dataclass(frozen=True, kw_only=True)
-class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
+class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocable):
     text: str
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
     goal_id: str = field(default_factory=lambda: uuid4().hex)
@@ -438,13 +434,15 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
-    def change(self, ctx: GoalActionContext) -> Goal:
-        current = ctx.thread.goal_for(self.goal_id)
-        if current is not None:
-            if (current.text, current.order) != (self.text.strip(), self.order):
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        if goal.id == self.goal_id:
+            if (goal.text, goal.order) != (self.text.strip(), self.order):
                 raise ValueError("Goal identity already has different instructions.")
-            return ctx.require_goal()
-        ctx.thread.require_goal_replacement(ctx.goals)
+            return goal
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
+        return self.create(ctx)
+
+    def create(self, ctx: GoalActionContext) -> Goal:
         goal = Goal(
             text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
             published_seq=ctx.goals.bus.log.latest_sequence(),
@@ -460,7 +458,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
+class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     problem: str
     order: PendingProblemOrder
     request: str
@@ -470,22 +468,30 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
 
-    def change(self, ctx: GoalActionContext) -> Goal:
-        """The order joins the unit's live Goal or starts one; its Todo names the request served.
-        Every refusal comes before the Todo is reserved, so a refused send writes nothing."""
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        """An unfinished goal accepts the assignment; a finished one is replaced."""
+        if goal.state.terminal:
+            goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
+            return self.create(ctx)
+        request = self.request_ref(ctx)
+        self.reserve(ctx, goal.id, request)
+        return replace(goal, order=ProblemGoalOrder(), revision=goal.revision + 1)
+
+    def request_ref(self, ctx: GoalActionContext) -> GoalRef:
+        """Refuse invalid orders before reserving their Todo."""
         commander = ctx.goals.registry.require(self.commander)
-        commander.require_active_goal(self.request).order.require_request()
+        commander.goal.require().require_id(self.request).require_active().order.require_request()
         self.deadline.require_deadline()
         self.order.owner.require_exists()
         self.order.check.require_directory()
         request = GoalRef(commander.name, commander.created_at, self.request)
-        current = ctx.thread.goal
-        if current is not None and not current.state.terminal:
-            goal = replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
-        else:
-            goal = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder()).change(ctx)
-        self.reserve(ctx, goal.id, request)
-        return goal
+        return request
+
+    def create(self, ctx: GoalActionContext) -> Goal:
+        request = self.request_ref(ctx)
+        fresh = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder())
+        self.reserve(ctx, fresh.goal_id, request)
+        return fresh.create(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -513,21 +519,23 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
 
 @dataclass(frozen=True, kw_only=True)
 class ClearGoalAction(
-    ReplacementGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
+    ReplacementGoalAction[NoGoal], OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
-    def change(self, ctx: GoalActionContext) -> None:
-        ctx.thread.require_goal_replacement(ctx.goals)
-        return None
+    def change(self, goal: Goal, ctx: GoalActionContext) -> NoGoal:
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
+        return self.create(ctx)
+
+    def create(self, ctx: GoalActionContext) -> NoGoal:
+        return NoGoal()
 
 
 @dataclass(frozen=True, kw_only=True)
-class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
+class EditGoalAction(GoalAction[Goal], OwnerInvocable, RuntimeInvocable):
     text: str
     preserve_wait = True
 
-    def change(self, ctx: GoalActionContext) -> Goal:
-        goal = ctx.require_goal()
-        ctx.thread.require_goal_replacement(ctx.goals)
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
         text = self.text.strip()
         if not text:
             raise ValueError("A goal requires text.")
@@ -553,7 +561,7 @@ def required_block_reason(reason: str | None) -> str:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryGoalAction(GoalAction, OwnerInvocable):
+class RetryGoalAction(GoalAction[Goal], OwnerInvocable):
     """Explicit owner retry; existing store grants still fence every attempt."""
 
     @classmethod
@@ -566,10 +574,9 @@ class RetryGoalAction(GoalAction, OwnerInvocable):
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
-    def change(self, ctx: GoalActionContext) -> Goal:
+    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         if self.expect.expected_owner is None:
             raise ValueError("Retry requires the executing owner's private goal authority.")
-        goal = ctx.require_goal()
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()

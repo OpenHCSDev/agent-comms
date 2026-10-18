@@ -267,7 +267,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
         comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
     assert comms.registry.store.path.read_bytes() == before
     fresh = Comms(comms.root)
-    assert fresh.registry.require("owner").goal is None
+    assert not fresh.registry.require("owner").goal
     assert _rows(fresh, "peer")[0] == ()
     assert not fresh.relationships.store.path.exists()
 

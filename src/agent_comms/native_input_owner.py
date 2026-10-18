@@ -175,7 +175,7 @@ class GoalLaunchOwner(RegistryOwner):
         canonical.require_snapshot(snapshot, "Goal launch owner changed")
         current = snapshot.require_active(name)
         snapshot.statuses[current.name].require_running()
-        return current.require_active_goal(goal_id)
+        return current.goal.require().require_id(goal_id).require_active()
 
 
 @dataclass(frozen=True)

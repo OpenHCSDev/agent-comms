@@ -29,13 +29,15 @@ from .goal_attempts import (
     UnresolvedAttemptError,
 )
 from .goal_presentation import GoalSnapshot
-from .goals import Goal, GoalRevision
+from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
+    from .threads import Thread
     from .comms import Comms
     from .input_drain import InputDrain
     from .session_lifecycle import SessionLifecycle
@@ -88,31 +90,38 @@ class GoalScheduler:
                     thread.turn_record.read().require_idle()
                 except RelationViolationError:
                     return
-                goal = thread.active_goal
-                if goal is None:
-                    return
-                if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
-                    return
-                if self.pending_goal_origins.get(thread.name) == goal.id:
-                    return
-                store = self.comms.goals.open_goal_store()
-                generation = store.require_generation(goal.id)
-                generation.lifecycle.require_ready()
-                self.comms.goals.ready_goal_grant_locked(thread, snapshot.claimed_generations[thread.name], generation)
+                scheduled = thread.goal.active().project(
+                    lambda goal: self._prepare_declared_goal(goal, thread, snapshot), tuple,
+                )
+                return next(iter(scheduled), None)
         except StaleAttemptError:
             return
+
+    def _prepare_declared_goal(self, goal: Goal, thread: Thread,
+                               snapshot: RegistrySnapshot) -> tuple[ScheduledTurn, ...]:
+        if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
+            return ()
+        if self.pending_goal_origins.get(thread.name) == goal.id:
+            return ()
+        try:
+            store = self.comms.goals.open_goal_store()
+            generation = store.require_generation(goal.id)
+            generation.lifecycle.require_ready()
+            self.comms.goals.ready_goal_grant_locked(thread, snapshot.claimed_generations[thread.name], generation)
+        except StaleAttemptError:
+            return ()
         except MissingGoalGenerationError as error:
             self.comms.goals.block_goal_after_failed_turn(
                 thread.name, started_goal=goal, expected_worktree=thread.worktree,
                 diagnostic=str(error),
             )
-            return
+            return ()
         except UnresolvedAttemptError:
             self.comms.goals.block_goal_after_failed_turn(
                 thread.name, started_goal=goal, expected_worktree=thread.worktree,
                 diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
             )
-            return
+            return ()
         except GoalAttemptError:
             self.comms.goals.block_goal_after_failed_turn(
                 thread.name,
@@ -120,8 +129,8 @@ class GoalScheduler:
                 expected_worktree=thread.worktree,
                 diagnostic="Goal launch grant unavailable; explicit Retry required.",
             )
-            return
-        return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
+            return ()
+        return (ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id),)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
@@ -133,7 +142,6 @@ class GoalScheduler:
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
         ))
-        assert goal is not None
         await self.schedule_goal(session_id)
         return goal
 
@@ -143,7 +151,7 @@ class GoalScheduler:
         """Edit the current objective without replacing its identity or execution state."""
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
+        goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         # update_goal owns the wire lock and atomically rechecks both this
         # snapshot and the executing owner. Do not acquire its lock twice.
         edited = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
@@ -158,19 +166,18 @@ class GoalScheduler:
             ),
             actor=OwnerInvocable,
         ))
-        assert edited is not None
         await self.sessions.config.sync_thread(session_id)
         return edited
 
     async def update_goal(
         self, session_id: str, action: type[GoalAction], goal_id: str, expected_revision: int
-    ) -> Goal | None:
+    ) -> GoalDeclaration:
         """Apply an explicit UI pause, resume, or clear through the current owner."""
         if not issubclass(action, OwnerControlInvocable):
             raise ValueError("Goal updates support only active, paused, or clear.")
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
+        goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         try:
             updated = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
                 name,
@@ -195,7 +202,7 @@ class GoalScheduler:
         """Record an explicit UI retry in the executing owner's private ledger."""
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        goal = thread.require_goal_checkpoint(GoalRevision(goal_id, expected_revision))
+        goal = thread.goal.require_checkpoint(GoalRevision(goal_id, expected_revision))
         if self.pending_goal_origins.get(name) == goal_id:
             raise ValueError("Wait for the goal origin turn to finish.")
         resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
