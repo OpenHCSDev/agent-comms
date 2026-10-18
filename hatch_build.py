@@ -10,17 +10,14 @@ class CoreBuildHook(BuildHookInterface):
     PLUGIN_NAME = "custom"
 
     def initialize(self, version, build_data):
+        if version == "editable":
+            return
         root = Path(self.root)
-        relative = "src/agent_comms/_native/core_stamp.py"
+        relative = "src/agent_comms/package_stamp.py"
         source = root / relative
-        source.with_name("core-commit").unlink(missing_ok=True)
         # These definitions need no application dependencies in the build env.
         types = run_path(str(root / "src/agent_comms/core_stamp.py"))
         checkout = types["CheckoutStamp"](str(root.resolve()))
-        if version == "editable":
-            checkout.write(source)
-            build_data["artifacts"].append(relative)
-            return
         # Never overwrite a source checkout's stamp while building its wheel.
         path = Path(self.directory) / ".core_stamp.py"
         if (root / ".git").exists():
@@ -32,6 +29,7 @@ class CoreBuildHook(BuildHookInterface):
             path.parent.mkdir(parents=True, exist_ok=True)
             copyfile(source, path)
         destination = relative.removeprefix("src/") if self.target_name == "wheel" else relative
+        self.build_config.build_reserved_paths.add(destination)
         build_data["force_include"][str(path)] = destination
 
     def finalize(self, version, build_data, artifact_path):
