@@ -825,6 +825,21 @@ class CostState(MetadataRecord):
     wire_tag = 'cost-state'
 
 
+class ApiRequest(MetadataRecord):
+    """The parameters of one model request the harness sent."""
+    wire_tag = 'api-request'
+
+
+class ApiRequestShape(MetadataRecord):
+    """The system prompt and tools a request was sent with, stored once by hash."""
+    wire_tag = 'api-request-shape'
+
+
+class ApiRequestBlob(MetadataRecord):
+    """One message a request carried, stored once by hash."""
+    wire_tag = 'api-request-blob'
+
+
 class LocalCommandOutput(MetadataRecord):
     """A terminal-only slash command and its output."""
     wire_tag = 'local-command'
