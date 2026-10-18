@@ -1,8 +1,9 @@
 """One identity and encoding for exact UTF-8 text content."""
 
 import hashlib
-import re
 from dataclasses import dataclass
+
+from .field_codec import Sha256Text
 
 
 @dataclass(frozen=True, slots=True)
@@ -10,8 +11,7 @@ class TextDigest:
     value: str
 
     def __post_init__(self) -> None:
-        if not isinstance(self.value, str) or re.fullmatch(r"[0-9a-f]{64}", self.value) is None:
-            raise ValueError("Text digest must be a SHA-256 hex value")
+        Sha256Text.decode(self.value)
 
     @classmethod
     def of(cls, text: str) -> "TextDigest":

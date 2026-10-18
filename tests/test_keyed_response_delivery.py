@@ -1,6 +1,7 @@
 """Real bus/SQL reply delivery, awareness and missing-native-proof boundaries."""
 
 from agent_comms.wake_candidate_index import RebuildIndex
+from agent_comms.wire_record import WireRecord
 
 from pathlib import Path
 
@@ -94,7 +95,6 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
 def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, value, reader):
     import json
 
-    from agent_comms.bus_publication import CommittedDelivery
     from agent_comms.errors import RelationViolationError
     from agent_comms.private_bus_checkpoint import (
         install_private_bus_checkpoint,
@@ -111,7 +111,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         rows[-1]["_agent_comms_private_v1"]["response"][field] = value
         # The semantic decoder shared by both readers rejects each invalid acknowledgement.
         with pytest.raises((ValueError, TypeError)):
-            CommittedDelivery.from_wire(rows[-1], case.root_id)
+            WireRecord.from_wire(rows[-1], case.root_id)
         case.bus.log.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
         if reader == "certified":
             # A real certified index refuses tampered bytes at its earlier prefix
@@ -181,7 +181,7 @@ def test_duplicate_response_bytes_cannot_recertify_a_missing_checkpoint(tmp_path
 def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
     import json
 
-    from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, CommittedDelivery
+    from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
 
     case = _ready(tmp_path, direct=True)
     try:
@@ -196,7 +196,7 @@ def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
         else:
             private["kind"] = kind
         with pytest.raises(ValueError):
-            CommittedDelivery.from_wire(record, case.root_id)
+            WireRecord.from_wire(record, case.root_id)
     finally:
         case.close()
 
