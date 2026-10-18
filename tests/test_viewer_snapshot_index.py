@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from agent_comms.read_basis import NamedViewer
 import asyncio
 import json
 import os
@@ -383,7 +384,7 @@ def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_pat
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     before = comms.views.viewer_snapshot(str(tmp_path))
     # The real page owner builds the already-existing disposable offset index.
-    page = comms.views.presentation.channel_page("#team", viewer=viewer)
+    page = comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer))
     assert len(page.messages) == 100
     comms.bus.reads.mark_displayed(
         viewer, comms.bus.reads.capture(viewer, (messages[1], messages[90]),
@@ -454,7 +455,7 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     message = comms.messaging.send_message("bob", "#team", "retained")
     viewer = comms.messaging.user_identity(str(tmp_path))
-    comms.views.presentation.channel_page("#team", viewer=viewer.name)
+    comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer.name))
     comms.views.viewer_snapshot(str(tmp_path))
     comms.bus.reads.mark_displayed(
         viewer.name, comms.bus.reads.capture(viewer.name, (message,),

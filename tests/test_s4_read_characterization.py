@@ -1,5 +1,6 @@
 """Current S4 Part B: authority lifetime and disposable-index recovery."""
 
+from agent_comms.presentation import ReadThrough
 from dataclasses import replace
 
 import pytest
@@ -18,8 +19,8 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     message = comms.messaging.send_message("worker", "#team", "painted")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=page.newest_seq,
-        expected_scope=page.display_scope,
+        "#team", worktree=str(tmp_path),
+        mark=ReadThrough(page.newest_seq, page.display_scope),
     )
     assert message.seq in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
     original = comms.registry.require(viewer)
@@ -29,13 +30,13 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     assert message.seq not in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
     with pytest.raises(ValueError):
         comms.views.mark_channel_view_read(
-            "#team", worktree=str(tmp_path), through=page.newest_seq,
-            expected_scope=page.display_scope,
+            "#team", worktree=str(tmp_path),
+            mark=ReadThrough(page.newest_seq, page.display_scope),
         )
     refreshed = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=refreshed.newest_seq,
-        expected_scope=refreshed.display_scope,
+        "#team", worktree=str(tmp_path),
+        mark=ReadThrough(refreshed.newest_seq, refreshed.display_scope),
     )
     assert message.seq in comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot())
 
@@ -65,8 +66,8 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
         assert comms.bus.reads.read() == document
         assert comms.bus.pending_count("receiver", "#team") == 1
         comms.views.mark_channel_view_read(
-            "#team", worktree=str(tmp_path), through=page.newest_seq,
-            expected_scope=page.display_scope,
+            "#team", worktree=str(tmp_path),
+            mark=ReadThrough(page.newest_seq, page.display_scope),
         )
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.pending_count("receiver", "#team") == 1

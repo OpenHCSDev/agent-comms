@@ -14,7 +14,7 @@ from collections.abc import Callable, Collection, Iterable
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, TextIO
+from typing import TYPE_CHECKING, ClassVar, TextIO
 
 from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
@@ -22,6 +22,64 @@ from .errors import UnregisteredThreadError
 from .private_path import FileRevision
 from .store_files import _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+
+class DisplayViewer(ABC):
+    """The reader owns read evidence, aliases and cursor selection."""
+
+    name: str | None
+
+    @classmethod
+    def named_or_anonymous(cls, name: str | None) -> DisplayViewer:
+        return AnonymousViewer() if name is None else NamedViewer(name)
+
+    @abstractmethod
+    def cursor(self, reads, snapshot, document) -> ReadCursor: ...
+
+    @abstractmethod
+    def names(self, snapshot) -> frozenset[str]: ...
+
+    @abstractmethod
+    def require_name(self, snapshot) -> str: ...
+
+    @abstractmethod
+    def displayed_scope(self, scope, page, basis, presentation): ...
+
+
+@dataclass(frozen=True, slots=True)
+class AnonymousViewer(DisplayViewer):
+    name: ClassVar[None] = None
+
+    def cursor(self, reads, snapshot, document) -> ReadCursor:
+        return ReadCursor()
+
+    def names(self, snapshot) -> frozenset[str]:
+        return frozenset()
+
+    def require_name(self, snapshot) -> str:
+        raise ValueError("Viewer metrics require a named viewer")
+
+    def displayed_scope(self, scope, page, basis, presentation):
+        return scope
+
+
+@dataclass(frozen=True, slots=True)
+class NamedViewer(DisplayViewer):
+    name: str
+
+    def cursor(self, reads, snapshot, document) -> ReadCursor:
+        return reads.cursor(self.name, snapshot, document=document)
+
+    def names(self, snapshot) -> frozenset[str]:
+        return snapshot.names_for(self.name)
+
+    def require_name(self, snapshot) -> str:
+        return snapshot.canonical_name(self.name)
+
+    def displayed_scope(self, scope, page, basis, presentation):
+        return replace(scope, displayed=presentation.bus.reads.capture(
+            self.name, page.messages, basis.registry, presentation.bus.log.path,
+        ))
+
 
 class DisplaySelection(ABC):
     """The conversation selected by an original page or store observation."""

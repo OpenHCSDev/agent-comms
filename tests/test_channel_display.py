@@ -1,5 +1,6 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
+from agent_comms.presentation import ReadThrough
 import json
 from contextlib import contextmanager
 from dataclasses import replace
@@ -414,8 +415,8 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
             page = comms.views.channel_display_page("#api", worktree=str(tmp_path))
             if page.newest_seq is not None:
                 comms.views.mark_channel_view_read(
-                    "#api", worktree=str(tmp_path), through=page.newest_seq,
-                    expected_scope=page.display_scope,
+                    "#api", worktree=str(tmp_path),
+                    mark=ReadThrough(page.newest_seq, page.display_scope),
                 )
             dm = comms.views.dm_display_page("alice", worktree=str(tmp_path))
             assert bodies(dm) == ["DM original"]

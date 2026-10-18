@@ -26,7 +26,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
-    ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection,
+    AnonymousViewer, ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection, DisplayViewer,
     DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope,
 )
 from .registration import Registration
@@ -142,7 +142,11 @@ class ChannelHistory(HistoryView):
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
-    viewer: str | None = None
+    reader: DisplayViewer = AnonymousViewer()
+
+    @property
+    def viewer(self) -> str | None:
+        return self.reader.name
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
@@ -156,7 +160,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
         )
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
+        return presentation.channel_page(self.channel.name, viewer=self.reader, **paging)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope.capture(self.channel, snapshot)

@@ -47,7 +47,8 @@ from .presentation import (
     ThreadView,
     WireRevision,
 )
-from .read_basis import ChannelDisplayScope, DMDisplayBasis
+from .read_basis import DisplayViewer, DMDisplayBasis
+from .presentation import ChannelReadMark, ReadAll
 from .store_files import _store_lock
 from .thread_presentation import ThreadPresentation
 from .threads import current_thread
@@ -191,7 +192,7 @@ class HistoryViews:
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name if worktree is not None else None
         channel = self.channels.catalog.read().require_channel(target, self.registry.snapshot().threads)
-        return ChannelDisplayHistory(channel, viewer).page(
+        return ChannelDisplayHistory(channel, DisplayViewer.named_or_anonymous(viewer)).page(
             self.presentation,
             before=before,
             after=after,
@@ -394,14 +395,12 @@ class HistoryViews:
         target: str,
         *,
         worktree: str,
-        through: int | None = None,
-        expected_scope: ChannelDisplayScope | None = None,
+        mark: ChannelReadMark = ReadAll(),
     ) -> None:
         self.presentation.mark_channel_read(
             target,
             viewer=self.messaging.user_identity(worktree).name,
-            through=through,
-            expected_scope=expected_scope,
+            mark=mark,
         )
 
     def mark_dm_view_read(

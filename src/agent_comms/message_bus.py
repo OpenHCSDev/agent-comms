@@ -109,6 +109,7 @@ class MessageBus:
         of reconstructing it from independently sampled path revisions.
         """
         from .presentation import DisplaySelection
+        from .read_basis import DisplayViewer
 
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
@@ -117,7 +118,7 @@ class MessageBus:
                     prepared_indexes=prepared,
                 ))
                 with DisplaySelection.reading(
-                    self._registry, self._channels, self.reads, viewer
+                    self._registry, self._channels, self.reads, DisplayViewer.named_or_anonymous(viewer)
                 ) as basis:
                     pass
             yield basis, source

@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.presentation import ReadThrough
 
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
@@ -88,8 +89,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
         comms.views.mark_channel_view_read(
             "#team",
             worktree=str(tmp_path),
-            through=painted.newest_seq,
-            expected_scope=painted.display_scope,
+            mark=ReadThrough(painted.newest_seq, painted.display_scope),
         )
     assert (
         wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join

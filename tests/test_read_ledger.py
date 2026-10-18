@@ -1,5 +1,6 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
+from agent_comms.presentation import ReadThrough
 import random
 from dataclasses import replace
 
@@ -55,7 +56,7 @@ def test_bounded_page_marks_only_shown_messages(tmp_path):
         comms.messaging.send("alice", "#team", f"message {i}")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path), limit=2)
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
+        "#team", worktree=str(tmp_path), mark=ReadThrough(page.newest_seq, page.display_scope)
     )
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
 
@@ -65,7 +66,7 @@ def test_displayed_message_is_read_in_every_projection(tmp_path):
     comms.messaging.send("alice", "#team", "visible in both views")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
+        "#team", worktree=str(tmp_path), mark=ReadThrough(page.newest_seq, page.display_scope)
     )
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
 
@@ -79,7 +80,7 @@ def test_any_mode_expansion_cannot_read_unshown_message_in_same_conversation(tmp
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     assert [message.seq for message in page.messages] == [shown.seq]
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=shown.seq, expected_scope=page.display_scope
+        "#team", worktree=str(tmp_path), mark=ReadThrough(shown.seq, page.display_scope)
     )
     comms.channels.update_tags("bob", add=frozenset({"team"}))
     reopened = wire(tmp_path)
@@ -204,8 +205,7 @@ def test_shown_only_property_across_pages_modes_and_reopen(tmp_path, seed):
             comms.views.mark_channel_view_read(
                 scope.channel,
                 worktree=str(tmp_path),
-                through=through,
-                expected_scope=scope,
+                mark=ReadThrough(through, scope),
             )
         comms = wire(tmp_path)
         seen = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
@@ -239,7 +239,7 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     comms.messaging.send_message("alice", "#team", "painted")
     page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=page.newest_seq, expected_scope=page.display_scope
+        "#team", worktree=str(tmp_path), mark=ReadThrough(page.newest_seq, page.display_scope)
     )
     replacement = tmp_path / "replacement.jsonl"
     replacement.write_bytes(comms.bus.log.path.read_bytes())
@@ -262,8 +262,7 @@ def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
         comms.views.mark_channel_view_read(
             "#team",
             worktree=str(tmp_path),
-            through=page.newest_seq,
-            expected_scope=replace(scope, displayed=selected),
+            mark=ReadThrough(page.newest_seq, replace(scope, displayed=selected)),
         )
         # Unrelated registry changes and previous ACKs do not invalidate the
         # remaining captured proof; participant identity still does.
@@ -344,7 +343,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                     )
                 else:
                     comms.views.mark_channel_view_read(
-                        target, worktree=str(tmp_path), through=through, expected_scope=proof
+                        target, worktree=str(tmp_path), mark=ReadThrough(through, proof)
                     )
             except ValueError as error:
                 # A stale incarnation is a refused paint, not permission to
