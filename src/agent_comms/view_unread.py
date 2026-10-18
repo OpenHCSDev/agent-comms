@@ -269,7 +269,7 @@ class ReplyIndexBatch:
     @classmethod
     def prepare(cls, reads: tuple[tuple[ReplyIndex, FileRevision], ...]) -> ReplyIndexBatch:
         budget = IndexSlice.worker_slice()
-        updates = []
+        updates: list[ReplyIndexUpdate] = []
         last_source = None
         for index, revision in reads:
             if not budget.available:
