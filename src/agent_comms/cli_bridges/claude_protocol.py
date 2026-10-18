@@ -30,6 +30,7 @@ from .shared import (
     FinishedItem,
     ToolCall,
     TranscriptUpdate,
+    StatusUpdate,
     TurnEnded,
     TurnStarted,
     IncomingFrame,
@@ -109,26 +110,73 @@ class ClaudeMonitorFrame(IncomingFrame):
         return tuple(cls.decode_line(line) for line in event.splitlines())
 
 
+class ClaudeReaderPhase(ABC):
+    """The initial bounded window and live tail have different guarantees."""
+
+    @abstractmethod
+    def status(self, update: StatusUpdate) -> tuple[TranscriptUpdate, ...]: ...
+
+    @abstractmethod
+    def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
+
+    @abstractmethod
+    def missing_tool(self, tool_id: str) -> ToolCall | None: ...
+
+    @abstractmethod
+    def unturned_finish(self) -> tuple[TranscriptUpdate, ...]: ...
+
+
+@dataclass
+class CatchUp(ClaudeReaderPhase):
+    pending: tuple[StatusUpdate, ...] = ()
+
+    def status(self, update: StatusUpdate) -> tuple[TranscriptUpdate, ...]:
+        self.pending = (update,)
+        return ()
+
+    def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        session.phase = Live()
+        return self.pending
+
+    def missing_tool(self, tool_id: str) -> ToolCall | None:
+        return None
+
+    def unturned_finish(self) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+
+class Live(ClaudeReaderPhase):
+    def status(self, update: StatusUpdate) -> tuple[TranscriptUpdate, ...]:
+        return (update,)
+
+    def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return ()
+
+    def missing_tool(self, tool_id: str) -> ToolCall | None:
+        raise ValueError(f'Claude result has no tool start: {tool_id}')
+
+    def unturned_finish(self) -> tuple[TranscriptUpdate, ...]:
+        raise ValueError('Claude completed an item before identifying its turn')
+
+
 @dataclass
 class ClaudeSession:
     turn: str = ''
     tools: dict[str, ToolCall] = field(default_factory=dict)
-    catching_up: bool = True
+    phase: ClaudeReaderPhase = field(default_factory=CatchUp)
 
     def started(self, call: ToolCall) -> None:
         self.tools[call.id] = call
 
     def result_for(self, tool_id: str) -> ToolCall | None:
-        call = self.tools.pop(tool_id, None)
-        if call is None and not self.catching_up:
-            raise ValueError(f'Claude result has no tool start: {tool_id}')
-        return call
+        try:
+            return self.tools.pop(tool_id)
+        except KeyError:
+            return self.phase.missing_tool(tool_id)
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[TranscriptUpdate, ...]:
         if not self.turn:
-            if self.catching_up:
-                return ()  # Its prompt lies before the bounded initial window.
-            raise ValueError('Claude completed an item before identifying its turn')
+            return self.phase.unturned_finish()
         return (FinishedItem(self.turn, item, events),)
 
 
@@ -466,7 +514,7 @@ class ToolResult(UserBlock, ContentBlocks):
         if call is None:
             return ()  # Only an initial window may lack the original tool start.
         text = '\n'.join(part.result_text() for part in self.content)
-        return (FinishedItem(session.turn, self.tool_use_id, call.finished(text, not self.is_error)),
+        return (*session.finished(self.tool_use_id, call.finished(text, not self.is_error)),
                 ActiveItem(session.turn, self.tool_use_id, ActivityState.WORKING, ''))
 
 
