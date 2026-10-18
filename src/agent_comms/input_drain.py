@@ -706,7 +706,7 @@ class InputDrain(InputObservation):
         inbox = self.backend_inboxes.get(session_id)
         if inbox is not None:
             async with self.comms.owners.maintenance.ingress_async() as status:
-                with status.phase.send(None) as outcome:
+                with status.phase.send_running(None) as outcome:
                     outcome.resume(inbox)
         private_root = self.effects.configured_root_id
         pushed = await self._drain_private_if_changed(session_id, private_root)
