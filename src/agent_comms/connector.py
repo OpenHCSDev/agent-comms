@@ -1,7 +1,7 @@
 """agent-comms-connector: the claude.ai connector, a Streamable HTTP MCP server beside Core.
 
 The server is a transport over the ToolRequest family: ``tools/list`` reports every member
-and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the registered thread claude-ai.
+and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the bus thread claude-ai.
 OAuth stands in front of every MCP request. The owner approves each authorization on this
 machine with ``agent-comms-connector approve REQUEST``, and tokens are kept only as digests
 under ``~/.local/state/agent-comms/connector/``.
@@ -559,7 +559,7 @@ class ServeVerb(ConnectorVerb):
         try:
             app = connector.application()
         except UnregisteredThreadError:
-            return f"Register the connector's thread first: agent-comms register --name {CALLER.name} --worktree DIR --tags comms"
+            return f"First run agent-comms register --name {CALLER.name} --worktree DIR --tags comms"
         web.run_app(app, host=LOOPBACK, port=PORT, access_log=None)
         return 0
 
