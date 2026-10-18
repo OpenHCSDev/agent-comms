@@ -1,6 +1,6 @@
 """Claude's decoder publishes the shared native tool preview, not a UI special case."""
 import pytest
-from agent_comms.cli_bridges.claude_protocol import ClaudeSession, Live, TimedRecord, ToolResult, ToolUse
+from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Live, TimedRecord, ToolResult, ToolUse
 
 
 @pytest.mark.parametrize('name,arguments,native,expected,title,patch', [
@@ -17,7 +17,7 @@ from agent_comms.cli_bridges.claude_protocol import ClaudeSession, Live, TimedRe
     ('mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', {'custom':['untouched']}, 'mcp__opaque', None),
 ])
 def test_claude_tool_names_arguments_and_diff_reach_shared_events(name, arguments, native, expected, title, patch):
-    session=ClaudeSession(turn='turn', phase=Live())
+    session=ClaudeSession(turn=KnownTurn('turn'), phase=Live())
     record=TimedRecord(uuid='record',timestamp='2026-10-17T00:00:00+00:00')
     tool=ToolUse(id='call',name=name,input=arguments)
     active,=tool.updates(record,session)
@@ -47,4 +47,4 @@ def test_known_claude_tool_requires_its_actual_caption_input():
     from pydantic import ValidationError
     with pytest.raises(ValidationError):
         ToolUse(id='x',name='Bash',input={}).updates(
-            TimedRecord(uuid='r',timestamp='2026-10-17T00:00:00+00:00'),ClaudeSession(turn='t'))
+            TimedRecord(uuid='r',timestamp='2026-10-17T00:00:00+00:00'),ClaudeSession(turn=KnownTurn('t')))
