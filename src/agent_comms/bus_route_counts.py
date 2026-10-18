@@ -437,13 +437,6 @@ class BusRouteCounts:
 
 
 class OpenedRouteCounts(BusRouteCounts):
-    """Delivery projection bound to one original wire cut and namespace.
-
-    The index may lag this cut or already cover later rows. Its stored totals
-    are not the reader's source authority. Both queries and the unindexed
-    remainder belong to this reader, never to an independently supplied cap.
-    """
-
     blocking: ClassVar[bool] = False
 
     def __init__(
@@ -462,11 +455,11 @@ class OpenedRouteCounts(BusRouteCounts):
     def _decode(self, record: Mapping) -> tuple[DeliveryMessage, ...]:
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
+    def _prepare(self) -> None:
+        self._preparation = self.sync(self.source, self._decode, blocking=self.blocking)
+
     def _acquire(self) -> OpenedRouteCounts:
-        while True:
-            self._preparation = self.sync(self.source, self._decode, blocking=self.blocking)
-            if not self.blocking or self._preparation.complete:
-                break
+        self._prepare()
         super()._acquire()
         try:
             self._appended = self._appended_deliveries()
@@ -631,3 +624,8 @@ class WaitingRouteCounts(OpenedRouteCounts):
     """A stream waits for its projection writer, without replacing the stream."""
 
     blocking = True
+
+    def _prepare(self) -> None:
+        super()._prepare()
+        while not self._preparation.complete:
+            super()._prepare()
