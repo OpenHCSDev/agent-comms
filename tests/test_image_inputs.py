@@ -174,7 +174,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
             for f in decode_updates(result.field_meta)
             if isinstance(f, InputDeliveryChangedUpdate)
         )
-        pending = owner.inputs.queued_inputs["project"][input_id]
+        pending = owner.inputs.state("project").queued[input_id]
         assert pending.text == reference and pending.images == (ImageInput(PNG, "image/png"),)
         assert stored_inputs(owner.inputs.dispositions.root).rows["acp:" + input_id].declared_name == "reserved"
         await client.prompt(
@@ -185,7 +185,7 @@ async def test_busy_proxy_image_keeps_delivery_and_attachment_metadata(tmp_path,
         assert any(
             (
                 item.text == reference and item.echo
-                for item in owner.inputs.queued_inputs["project"].values()
+                for item in owner.inputs.state("project").queued.values()
             )
         )
         await owner.cancel("project")

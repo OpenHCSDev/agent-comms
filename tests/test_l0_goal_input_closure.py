@@ -191,7 +191,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
             images=(), controller=None,
         ) as reservation:
             queued = reservation.item
-            owner.inputs.following_sources[session] = {queued.input_id: queued.source()}
+            owner.inputs.state(session).following = {queued.input_id: queued.source()}
             reservation.release()
         ledger.record(
             "acp:uncertain", seq=None, owner=session, claim_scope=claim_scope,
@@ -213,7 +213,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
         assert {
             key: replace(row, notice_dismissed=False) for key, row in stored_inputs(ledger.root).rows.items()
         } == before
-        assert not owner.inputs.pending_turns and not owner.inputs.wake_tasks
+        assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not any(state.wake_task for state in owner.inputs.drained.values())
         goal = Goal(
             "Retained goal without private authority", "missing", published_seq=0, state=UnrecordedBlockGoal()
         )
@@ -222,7 +222,7 @@ async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
             await proxy.request("retry_goal", goal_id=goal.id, expected_revision=goal.revision)
         assert comms.goals.open_goal_store().snapshot(goal.id) is None
         assert comms.registry.require(session).goal == goal
-        assert not owner.turns.turn_tasks and not owner.inputs.wake_tasks
+        assert not owner.turns.turn_tasks and not any(state.wake_task for state in owner.inputs.drained.values())
     finally:
         await proxy.close()
         await owner.shutdown()

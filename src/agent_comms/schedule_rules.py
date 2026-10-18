@@ -49,7 +49,7 @@ class ProjectResumeCheck(OwnerTurnScheduleCheck):
             return
         if entry.status.running and entry.thread.owes_project_resume:
             resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
-            pending = inputs.pending_turns.setdefault(session_id, [])
+            pending = inputs.state(session_id).pending_turns
             if resume not in pending:
                 pending.append(resume)
             WakeScheduleCheck(session_id=session_id, inputs=inputs).schedule()
@@ -73,7 +73,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
 
     async def run(self) -> None:
         inputs, session_id = self.inputs, self.session_id
-        while inputs.pending_turns.get(session_id):
+        while inputs.state(session_id).pending_turns:
             if ClosingScheduleRule().violated(self):
                 return
             async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
@@ -88,9 +88,10 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 try:
                     snapshot.status(owner.name).require_running()
                 except RelationViolationError:
-                    inputs.pending_turns.pop(session_id, None)
+                    inputs.state(session_id).pending_turns = []
                     continue
-                pending = inputs.pending_turns.pop(session_id, [])
+                state = inputs.state(session_id)
+                pending, state.pending_turns = state.pending_turns, []
                 goal = owner.active_goal
                 if goal is not None:
                     pending = [turn for turn in pending if turn.goal_id == goal.id]
@@ -98,7 +99,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
                 if remaining:
-                    inputs.pending_turns[session_id] = remaining
+                    state.pending_turns = remaining
                 inputs.effects.turns.turn_tasks[session_id] = asyncio.current_task()  # type: ignore[assignment]
                 try:
                     await inputs.effects.turns.run_agent_turn(
@@ -168,7 +169,7 @@ class SelectedWakeCheck(SessionScheduleCheck):
                 # old-generation Pi evidence cannot initialize this cursor on reconnect.
                 await effects.cursors.publish(session_id, self.thread, advance=True)
                 if before == await inputs._observe_private_revision(session_id, root_id):
-                    inputs._idle_private_revisions[session_id] = before
+                    inputs.state(session_id).idle_revision = before
             if result is not None:
                 # Messages this turn could not take are still pending.
                 await inputs.drain_inbox(session_id)
@@ -195,7 +196,7 @@ class NativeInboxOwnerTurnRule(ReservationRule):
     explanation = "A live native inbox still owns pending input."
 
     def violated(self, check):
-        return check.session_id in check.inputs.backend_inboxes
+        return check.inputs.state(check.session_id).turn_open()
 
 
 class PendingWakeScheduleRule(ReservationRule):
@@ -203,8 +204,7 @@ class PendingWakeScheduleRule(ReservationRule):
     explanation = "A previously scheduled wake has not finished."
 
     def violated(self, check):
-        wake = check.inputs.wake_tasks.get(check.session_id)
-        return wake is not None and not wake.done()
+        return check.inputs.state(check.session_id).wake_pending()
 
 
 class PendingTurnOwnerTurnRule(ReservationRule):
@@ -212,7 +212,7 @@ class PendingTurnOwnerTurnRule(ReservationRule):
     explanation = "Already queued turns have priority over a turn the owner starts itself."
 
     def violated(self, check):
-        return bool(check.inputs.pending_turns.get(check.session_id))
+        return bool(check.inputs.state(check.session_id).pending_turns)
 
 
 class DisabledWakeScheduleRule(ReservationRule):
@@ -228,4 +228,4 @@ class EmptyWakeScheduleRule(ReservationRule):
     explanation = "No queued turn requires a background wake."
 
     def violated(self, check):
-        return not check.inputs.pending_turns.get(check.session_id)
+        return not check.inputs.state(check.session_id).pending_turns

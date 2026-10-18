@@ -57,7 +57,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
                     await asyncio.sleep(0.01)
             lease = comms.registry.require(session).require_turn_lease()
             assert owner.turns.owns_turn(session, lease.turn_id)
-            assert session in owner.inputs.backend_inboxes
+            assert owner.inputs.state(session).inbox is not None
             resumed = await proxy.request(
                 "retry_goal", goal_id=goal.id, expected_revision=blocked.revision,
             )
@@ -68,7 +68,7 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
                 2, ReadyGeneration(), None,
             )
             await owner.turns.goals.schedule_goal(session)
-            assert native.provider.posts == 1 and not owner.inputs.pending_turns.get(session)
+            assert native.provider.posts == 1 and not owner.inputs.state(session).pending_turns
             # The original localhost response resource supplies both gates;
             # no alternate model catalog, HTTP server or native event script.
             native.provider.response_gate = finish_goal
@@ -85,9 +85,9 @@ async def test_native_retry_waits_for_current_response_without_replaying_unknown
             )
             assert FieldCodec.decode(Goal, paused["goal"]).state.declared_name == "paused"
             finish_goal.set()
-            await owner.inputs.wake_tasks[session]
+            await owner.inputs.state(session).wake_task
             assert not owner.turns.turn_state(session).busy
-            assert not owner.inputs.backend_inboxes
+            assert not any(state.inbox for state in owner.inputs.drained.values())
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
             assert stored_inputs(owner.inputs.dispositions.root).lookup(original.key) == original
             assert all(original.source_text not in json.dumps(request) for request in native.provider.requests)

@@ -175,7 +175,7 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
         lambda _session_id: SimpleNamespace(needs_refresh=False),
     )
     agent.inputs.ensure_live_drain("owner")
-    task = agent.inputs.drain_tasks["owner"]
+    task = agent.inputs.state("owner").drain_task
     try:
         await asyncio.sleep(1.2)
         assert calls == 1  # Healthy native notification has no speculative tick.
@@ -232,7 +232,7 @@ async def test_recoverable_drain_failure_waits_for_dependency_change(
     monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
     agent.inputs.ensure_live_drain("owner")
-    task = agent.inputs.drain_tasks["owner"]
+    task = agent.inputs.state("owner").drain_task
     try:
         await asyncio.sleep(0.15)
         assert attempts == 1
@@ -271,10 +271,10 @@ async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monke
         lambda _session_id: SimpleNamespace(needs_refresh=attempts < 2),
     )
     agent.inputs.ensure_live_drain("owner")
-    task = agent.inputs.drain_tasks["owner"]
+    task = agent.inputs.state("owner").drain_task
     try:
         await asyncio.wait_for(retried.wait(), 1)
-        assert not agent.inputs.wake_tasks
+        assert not any(state.wake_task for state in agent.inputs.drained.values())
     finally:
         task.cancel()
         await asyncio.gather(task, return_exceptions=True)
