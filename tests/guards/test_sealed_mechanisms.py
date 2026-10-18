@@ -10,6 +10,7 @@ import pytest
 from agent_comms.child_process import AttachedChild, ChildProcess, SynchronousProcess
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
+from agent_comms.locked_store import LockedStore
 from agent_comms.pending_requests import PendingRequests
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.read_ledger import ReadLedger
@@ -21,9 +22,11 @@ pytestmark = pytest.mark.refactor_guard
 def test_all_mechanisms_reject_external_adapters_and_keep_owned_implementations():
     for mechanism in (FieldCodec, PendingRequests, ReadLedger, PiRpcChannel, ChildProcess):
         module = ModuleType("external_adapter")
-        module.__dict__["Alias"] = mechanism
+        namespace = {"__module__": module.__name__}
+        if issubclass(mechanism, LockedStore):
+            namespace["lock_rank"] = mechanism.lock_rank
         with pytest.raises(TypeError, match=f"sealed mechanism {mechanism.__name__}"):
-            exec("class Adapter(Alias): pass", module.__dict__)
+            type("Adapter", (mechanism,), namespace)
         owner = importlib.import_module(mechanism.__module__)
         for value in vars(owner).values():
             if isinstance(value, type) and issubclass(value, mechanism):

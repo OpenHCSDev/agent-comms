@@ -209,7 +209,7 @@ def test_owner_mode_denies_unreserved_input_before_consuming_ledger(tmp_path: Pa
         mode = broker.selected_tool_mode_for_owner(
             comms, store, claim_scope, "owner", session_dir, input_id
         )
-        with pytest.raises(SelectedToolDenied, match="exact sent FULL input"):
+        with pytest.raises(SelectedToolDenied, match="^Selected tool has no reserved FULL input$"):
             mode.action(
                 broker.SelectedToolRequest(
                     "call_1", broker.SelectedWriteArguments("notes.txt", "write")

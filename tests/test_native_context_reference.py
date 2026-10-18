@@ -71,7 +71,9 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
     assert recorded.reference == NativeInputReference(
         recorded.input_id, type(recorded.execution), recorded.session_id, 1
     )
-    for name in ("session_file", "session_entry_id", "llm_context_digest", "committed_at_ms"):
+    with pytest.raises(IdentityConflict, match="^Native input has no recorded selected session$"):
+        _ = replace(recorded, session_file=None).reference
+    for name in ("session_entry_id", "llm_context_digest", "committed_at_ms"):
         with pytest.raises(IdentityConflict, match="partial"):
             _ = replace(recorded, **{name: None}).reference
 

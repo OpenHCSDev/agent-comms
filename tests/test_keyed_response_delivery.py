@@ -138,7 +138,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         case.close()
 
 
-def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
+def test_duplicate_response_bytes_cannot_recertify_a_missing_checkpoint(tmp_path):
     import json
     from dataclasses import replace
 
@@ -169,7 +169,7 @@ def test_duplicate_valid_response_key_denied_by_cold_reader(tmp_path):
         marker.checkpoint_version = None
         marker.checkpoint_seal = None
         case.bus.log.write_metadata_unlocked(marker)
-        with pytest.raises(RelationViolationError, match="Malformed public bus row"):
+        with pytest.raises(RelationViolationError, match=r"^Private bus checkpoint is missing or redirected\.$"):
             install_private_bus_checkpoint(case.bus.log)
     finally:
         case.close()
