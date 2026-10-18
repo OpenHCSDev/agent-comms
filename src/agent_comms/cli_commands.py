@@ -30,6 +30,7 @@ from .activity import ActivityState
 from .channels import Channel
 from .channel_targets import CommandTarget, ResolvedChannel
 from .cli_result import CliResult
+from .tool_result import ToolResult
 from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -439,17 +440,17 @@ class TargetEdit(Command):
 
 
 @dataclass(frozen=True)
-class ThreadStoppedResult(CliResult):
+class ThreadStoppedResult(CliResult, ToolResult):
     stopped: str
 
 
 @dataclass(frozen=True)
-class ThreadArchivedResult(CliResult):
+class ThreadArchivedResult(CliResult, ToolResult):
     archived: str
 
 
 @dataclass(frozen=True)
-class ThreadCreatedResult(CliResult):
+class ThreadCreatedResult(CliResult, ToolResult):
     created: str
     process_identity: ProcessState
 

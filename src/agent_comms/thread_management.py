@@ -22,6 +22,7 @@ from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
+from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .cli_bridges.history import History
@@ -118,7 +119,7 @@ class ThreadDeleted(CliResult):
 
 
 @dataclass(frozen=True, slots=True)
-class RenameThreadResult:
+class RenameThreadResult(ToolResult):
     previous: str
     current: str
     changed: bool
