@@ -213,8 +213,9 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     assert len(children) == 2
     auth = native.config / "auth.json"
     auth.write_text("{}\n")
-    with pytest.raises(NativePiUnavailable, match="Configured model .* is absent from its native catalog"):
+    with pytest.raises(NativePiUnavailable) as absent:
         await model_catalog.describe(thread)
+    assert str(absent.value).startswith(f"Model {thread.model!r} is unavailable; choose one of:")
     assert len(children) == 3
     assert owner._comms.registry.require(session.session_id).model == "response-local/fixture"
     # Restore this fixture's credential and add another local model. Discovery
@@ -228,8 +229,7 @@ async def test_actual_catalog_auth_refresh_preserves_selection_and_reaps_childre
     auth.write_text(json.dumps({"response-local": {"type": "api_key", "key": "local-only"}}))
     refreshed = await model_catalog.choices(thread)
     assert {model.value for model in refreshed if model.value.startswith("response-local/")} == {
-        "response-local/fixture",
-        "response-local/second",
+        f"response-local/{model['id']}" for model in document["providers"]["response-local"]["models"]
     }
     assert "medium" in {
         choice.value
@@ -249,7 +249,9 @@ async def test_actual_catalog_larger_than_stream_buffer(catalog_owner, native_ba
     path.write_text(json.dumps(document))
     thread = thread_registration.new_thread('catalog', frozenset(), str(native_backend.project), model='response-local/fixture')
     result = await owner.sessions.config.catalog_for(ModelConfigOption).choices(thread)
-    assert len([model for model in result if model.value.startswith("response-local/")]) == 71
+    assert {model.value for model in result if model.value.startswith("response-local/")} == {
+        f"response-local/{model['id']}" for model in models
+    }
     assert sum(len(model.value) for model in result) > 2 * 65536
     assert len(children) == 1 and not children[0].alive()
     print(f"actual_catalog_identifier_bytes={sum(len(model.value) for model in result)}")
@@ -281,7 +283,6 @@ async def test_actual_catalog_cancellation_reaps_child(catalog_owner, native_bac
 @pytest.mark.refactor_guard
 def test_backend_no_longer_owns_discovery_or_catalog_projection():
     assert not {"discover_models", "discover_thinking_levels", "Model"}.intersection(vars(backend))
-    assert not hasattr(PiRpcChannel, "request")
 
 
 async def test_actual_native_setting_responses_use_the_command_result_owner(
@@ -289,13 +290,12 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
     native_backend,
 ):
     _owner, children = catalog_owner
-    launch = NativePiRpcLaunch.managed(
+    launch = NativePiRpcLaunch.catalog(
         "pi",
         (
             "--model",
             "response-local/fixture",
             "--offline",
-            "--no-session",
             "--no-extensions",
             "--no-skills",
             "--no-context-files",

@@ -135,6 +135,42 @@ def wired(comms: Comms) -> Comms:
 
 
 @pytest.fixture
+def native_launch_settings(monkeypatch, tmp_path):
+    """Declare a source-test runtime; native validation and package checks stay real.
+
+    Its CLI helpers must consume this Core, not an older installed console script.
+    These entrypoint scripts reuse the existing interpreter; this is not a venv.
+    """
+    import shlex
+    import sys
+
+    from agent_comms import native_pi
+    from agent_comms.native_arguments import NativeArguments
+    from native_backend_fixture import NativeBackendFixture
+
+    runtime = LaunchRuntime(tmp_path / "native-runtime/bin/python")
+    runtime.interpreter.parent.mkdir(parents=True)
+    source = str(Path(native_pi.__file__).parents[1])
+    runtime.interpreter.write_text(
+        "#!/bin/sh\nexec " + shlex.quote(sys.executable) + ' "$@"\n'
+    )
+    for name, module in (("pi-comms-native", "agent_comms.native_pi"),
+                         ("agent-comms", "agent_comms.cli")):
+        entrypoint = runtime.interpreter.with_name(name)
+        entrypoint.write_text(
+            f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {source!r})\n"
+            f"from {module} import main\nraise SystemExit(main())\n"
+        )
+        entrypoint.chmod(0o700)
+    runtime.interpreter.chmod(0o700)
+    monkeypatch.setattr(LaunchRuntime, "running", classmethod(lambda cls: runtime))
+    settings = NativeArguments.parse(NativeBackendFixture.native_arguments())
+    monkeypatch.setenv(NativeArguments.binary_key, NativeArguments.owner_launcher(runtime))
+    monkeypatch.setenv(NativeArguments.arguments_key, shlex.join(settings.argv))
+    return settings
+
+
+@pytest.fixture
 def native_rpc_fixture(monkeypatch):
     """Explicit executable trust for local recorded-protocol fixtures only.
 
