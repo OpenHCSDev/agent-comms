@@ -1,4 +1,6 @@
 """Claude turn identity applies equally to complete items and activity."""
+from contextlib import nullcontext
+
 import pytest
 
 from agent_comms.activity import ActivityState
@@ -11,8 +13,11 @@ from agent_comms.transcript_events import AssistantTranscript
 
 
 @pytest.mark.parametrize('question', ('finished', 'result', 'thinking', 'tool'))
-@pytest.mark.parametrize('phase', (CatchUp, Live))
-def test_unknown_turn_uses_the_reader_phase_for_every_item(question, phase):
+@pytest.mark.parametrize('phase, expectation', (
+    (CatchUp, nullcontext()),
+    (Live, pytest.raises(ValueError, match='before identifying its turn')),
+))
+def test_unknown_turn_uses_the_reader_phase_for_every_item(question, phase, expectation):
     session = ClaudeSession(phase=phase())
     record = TimedRecord(uuid='record', timestamp='2026-10-18T00:00:00Z')
     session.started(ToolCall('call', 'read', {'path': 'a.py'}))
@@ -22,10 +27,7 @@ def test_unknown_turn_uses_the_reader_phase_for_every_item(question, phase):
         'thinking': lambda: RedactedThinking().updates(record, session),
         'tool': lambda: ToolUse(id='next', name='Read', input={'file_path': 'a.py'}).updates(record, session),
     }
-    if phase is Live:
-        with pytest.raises(ValueError, match='before identifying its turn'):
-            actions[question]()
-    else:
+    with expectation:
         assert actions[question]() == ()
 
 

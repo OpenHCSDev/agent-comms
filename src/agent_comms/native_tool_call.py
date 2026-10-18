@@ -12,7 +12,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+
+if TYPE_CHECKING:
+    from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -235,3 +239,55 @@ class NativeToolCall(ABC):
 
     @abstractmethod
     def claim_failed(self) -> None: ...
+
+
+class ToolTransport:
+    @property
+    def retainable(self) -> bool:
+        return True
+
+    @property
+    def active_tools(self) -> set[str]:
+        return set()
+
+    def accept_round(self, turn, content) -> bool:
+        return False
+
+    def tool_started(self, event: ToolExecutionStart) -> None:
+        raise SelectedToolDenied("Native Pi tool preceded tracked context proof")
+
+    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
+        raise SelectedToolDenied("Native Pi tool has no owner policy")
+
+    def assert_complete(self) -> None:
+        pass
+
+
+    def bind_process(self, pid: int) -> None:
+        """Transports without a socket need no peer identity."""
+
+
+class NativeToolMode(ABC):
+    """Owner-bound native tool policy shared by selected and normal coding turns."""
+
+    @abstractmethod
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        """Return the native tool selection and reviewed extension."""
+
+    @abstractmethod
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        """Open this turn's transport in its resource lifetime."""
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return self
+
+
+class NoNativeTools(NativeToolMode):
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        return ("--no-tools",)
+
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        return ToolTransport()
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return factory()

@@ -24,10 +24,9 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
 )
-from .native_tool_call import NativeToolCall, SelectedToolDenied
+from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied
 from .native_tools import NativeExecutableTool
 from .selected_tool_broker import (
-    NativeToolMode,
     OwnerToolSocket,
     consume_selected_slot,
     record_selected_terminal,
@@ -158,8 +157,8 @@ class CodingToolMode(NativeToolMode):
         return ("--tools", ",".join(tool.declared_name for tool in declarations),
                 *(argument for extension in extensions for argument in ("-e", str(extension))))
 
-    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
-        return CodingToolSocket(directory, token, self.owner)
+    async def open_transport(self, turn, ownership) -> OwnerToolSocket:
+        return await CodingToolSocket.open(turn, ownership, self.owner)
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""

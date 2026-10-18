@@ -31,7 +31,7 @@ class StorageRoots:
 
 @dataclass(frozen=True)
 class StorageRule:
-    floor_gib: float = 30.0
+    floor_gib: float = 5.0
     unit_cap_gib: float = 3.0
     max_checkouts: int = 2
     volume: StoragePath = Path.home()
