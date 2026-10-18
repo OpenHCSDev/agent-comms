@@ -45,12 +45,23 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
 
 @dataclass(frozen=True)
-class ReasonedStandingRule(StandingRule, declared_name=None):
+class StatedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
     why: str
     since: float | None = None
     text: ClassVar[str]
+
+    def began(self) -> float | None:
+        return self.since
+
+    def line(self) -> str:
+        return self.text.format(why=self.why)
+
+
+@dataclass(frozen=True)
+class ReasonedStandingRule(StatedStandingRule, declared_name=None):
+    """A stated rule whose reason and start are read on their own."""
 
     @classmethod
     @abstractmethod
@@ -64,12 +75,6 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
         return (cls(why, cls.broken_at(comms, commander)),) if why else ()
-
-    def began(self) -> float | None:
-        return self.since
-
-    def line(self) -> str:
-        return self.text.format(why=self.why)
 
 
 @dataclass(frozen=True)
@@ -99,7 +104,7 @@ class HuntDue(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
-class RulesDue(ReasonedStandingRule):
+class RulesDue(StatedStandingRule):
     """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
     max_age: ClassVar[int] = 20 * 60
@@ -109,32 +114,18 @@ class RulesDue(ReasonedStandingRule):
     )
 
     @classmethod
-    def due(cls, comms: Comms, reviewer: str) -> tuple[str, float] | None:
-        """Why the reviewer's actions are refused and since when; None while its review is fresh."""
-        drawn = RuleReviews(comms.root).drawn(reviewer)
-        if not drawn:
-            return f"no rule review recorded for {reviewer}", 0.0
-        at = drawn[0].drawn_at
-        if missing := [rule.n for rule in drawn if not rule.answer]:
-            return (
-                f"drawn rules {missing} of the {time.strftime('%H:%M', time.localtime(at))}"
-                " review are unanswered",
-                at,
-            )
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        review = RuleReviews(comms.root).unanswered(commander)
+        if review is None:
+            return (cls(f"no rule review recorded for {commander}", 0.0),)
+        at, missing = review
+        if missing:
+            drawn = time.strftime("%H:%M", time.localtime(at))
+            return (cls(f"drawn rules {list(missing)} of the {drawn} review are unanswered", at),)
         if (age := time.time() - at) > cls.max_age:
-            return (
-                f"last rule review was {int(age // 60)} min ago (max {cls.max_age // 60})",
-                at + cls.max_age,
-            )
-        return None
-
-    @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
-        return due[0] if (due := cls.due(comms, commander)) else None
-
-    @classmethod
-    def broken_at(cls, comms: Comms, commander: str) -> float | None:
-        return due[1] if (due := cls.due(comms, commander)) else None
+            why = f"last rule review was {int(age // 60)} min ago (max {cls.max_age // 60})"
+            return (cls(why, at + cls.max_age),)
+        return ()
 
 
 @dataclass(frozen=True)

@@ -822,12 +822,10 @@ class CommsRuleReviewTool(ThreadToolRequest):
     label = "Record rule review"
     description = "Record the rules a review drew, or one drawn rule's answer; replies what is due."
     entry: RuleReviewEntry = tool_field("A drawn review, or the answer to drawn rule n")
-    reviewer: str = tool_field("Fork reviewing for itself; omit to review as yourself", default="")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
-        reviewer = self.reviewer or caller.name
-        RuleReviews(comms.root).write(reviewer, self.entry)
-        due = RulesDue.violations(comms, reviewer)
+        RuleReviews(comms.root).write(caller.name, self.entry)
+        due = RulesDue.violations(comms, caller.name)
         return StandingRulesRead(tuple(rule.line() for rule in due))
 
 

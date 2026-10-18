@@ -21,14 +21,22 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class DrawnRule(TypedTable):
-    """One rule a reviewer's latest review drew; ``answer`` stays empty until it is answered."""
+    """One rule a reviewer's latest review drew."""
 
     reviewer: str = field(metadata={"sql": Column(primary_key=True)})
     n: int = field(metadata={"sql": Column(primary_key=True, check="n>0")})
     rule: str
     cited: bool
     drawn_at: float
-    answer: str = ""
+
+
+@dataclass(frozen=True)
+class RuleAnswer(TypedTable):
+    """What a reviewer's tick does about drawn rule ``n``; a drawn rule without one is unanswered."""
+
+    reviewer: str = field(metadata={"sql": Column(primary_key=True)})
+    n: int = field(metadata={"sql": Column(primary_key=True, check="n>0")})
+    text: str
 
 
 class RuleReviewEntry(DeclaredFamily, affix="RuleReviewEntry"):
@@ -51,6 +59,7 @@ class DrawnRuleReviewEntry(RuleReviewEntry):
 
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
         DrawnRule.delete(db, reviewer=reviewer)
+        RuleAnswer.delete(db, reviewer=reviewer)
         at = time.time()
         for n, rule in enumerate(self.drawn, 1):
             DrawnRule(reviewer, n, rule, n <= self.cited, at).insert(db)
@@ -79,19 +88,23 @@ class AnsweredRuleReviewEntry(RuleReviewEntry):
             raise ValueError(
                 "A correct-maintenance answer names the file:line or P-number it was applied to."
             )
-        DrawnRule.delete(db, reviewer=reviewer, n=self.n)
-        DrawnRule(reviewer, self.n, drawn.rule, drawn.cited, drawn.drawn_at, self.text).insert(db)
+        RuleAnswer(reviewer, self.n, self.text).upsert(db)
 
 
 @dataclass(frozen=True)
 class RuleReviews(ThreadOwnedState, TypedStore):
     root: Path
     filename = "rule_reviews.sqlite3"
-    rows = (DrawnRule,)
+    rows = (DrawnRule, RuleAnswer)
 
-    def drawn(self, reviewer: str) -> tuple[DrawnRule, ...]:
+    def unanswered(self, reviewer: str) -> tuple[float, tuple[int, ...]] | None:
+        """When the reviewer's latest review drew and which drawn rules lack an answer."""
         with self.snapshot() as db:
-            return tuple(DrawnRule.select(db, reviewer=reviewer, order_by=("n",)))
+            drawn = DrawnRule.select(db, reviewer=reviewer, order_by=("n",))
+            answered = {answer.n for answer in RuleAnswer.select(db, reviewer=reviewer)}
+        if not drawn:
+            return None
+        return drawn[0].drawn_at, tuple(rule.n for rule in drawn if rule.n not in answered)
 
     def write(self, reviewer: str, entry: RuleReviewEntry) -> None:
         with self.writing() as db:
@@ -101,3 +114,4 @@ class RuleReviews(ThreadOwnedState, TypedStore):
         with self.writing() as db:
             for thread in threads:
                 DrawnRule.delete(db, reviewer=thread.name)
+                RuleAnswer.delete(db, reviewer=thread.name)

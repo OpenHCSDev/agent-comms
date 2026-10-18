@@ -16,9 +16,10 @@ import glob, os, random, re, sys
 
 from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
 from ..standing_rules import RulesDue
+from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
-from .order import COMMS, call
+from .order import COMMS
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
@@ -46,7 +47,7 @@ def rules() -> list[str]:
 
 
 def record(who: str, entry: RuleReviewEntry) -> None:
-    read: StandingRulesRead = call(CommsRuleReviewTool(entry=entry, reviewer=who))
+    read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), COMMS)
     print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
@@ -83,7 +84,7 @@ def main(a):
         elif a[:1] == ['answer'] and len(a) == 3 and a[1].isdigit():
             answer(int(a[1]), a[2], who)
         elif a == ['stale']:
-            print(RulesDue.reason(COMMS, who) or 'fresh')
+            print('\n'.join(due.why for due in RulesDue.violations(COMMS, who)) or 'fresh')
         else:
             sys.exit(__doc__)
     except ValueError as refused:  # Core owns what a review and an answer may say
