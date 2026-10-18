@@ -65,12 +65,12 @@ class ImportNames(ast.NodeVisitor):
 
     def __init__(self, package: Package, module: str, path: Path, found: list[Import]) -> None:
         self.package, self.module, self.found = package, module, found
-        self.parent = module if path.name == "__init__.py" else module.rpartition(".")[0]
+        # relative imports start at the file's own directory, a package's __init__ included
+        self.parent = ".".join(path.parent.relative_to(package.src).parts)
 
     def record(self, node: ast.stmt | ast.expr, *names: str) -> None:
         for name in names:
-            target = self.package.resolve(name)
-            if target is not None and target != PACKAGE:
+            if (target := self.package.resolve(name)) is not None:
                 self.found.append(Import(self.module, target, node.lineno))
 
     def visit_Import(self, node: ast.Import) -> None:
@@ -83,14 +83,11 @@ class ImportNames(ast.NodeVisitor):
         self.record(node, *(f"{stem}.{alias.name}" for alias in node.names))
 
     def visit_Call(self, node: ast.Call) -> None:
-        if (
-            isinstance(node.func, ast.Attribute)
-            and node.func.attr == "import_module"
-            and node.args
-            and isinstance(node.args[0], ast.Constant)
-            and isinstance(node.args[0].value, str)
-        ):
-            self.record(node, node.args[0].value)
+        match node:
+            case ast.Call(
+                func=ast.Attribute(attr="import_module"), args=[ast.Constant(str() as name), *_]
+            ):
+                self.record(node, name)
         self.generic_visit(node)
 
 
@@ -100,6 +97,7 @@ class Package:
     def __init__(self, root: Path) -> None:
         self.src = root / "src"
         self.pyproject = root / "pyproject.toml"
+        self.root = self.src / PACKAGE / "__init__.py"  # read for reachability, never a unit
 
     @cached_property
     def files(self) -> dict[str, Path]:
@@ -107,19 +105,19 @@ class Package:
             ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(
                 ".__init__"
             ): path
-            for path in sorted((self.src / PACKAGE).rglob("*.py"))
+            for path in sorted(set((self.src / PACKAGE).rglob("*.py")) - {self.root})
         }
 
     @cached_property
     def top_level(self) -> tuple[str, ...]:
         """Each top-level module and subpackage: the units the layer map assigns."""
-        return tuple(
-            sorted({".".join(name.split(".")[:2]) for name in self.files if name != PACKAGE})
-        )
+        return tuple(sorted({".".join(name.split(".")[:2]) for name in self.files}))
 
     @cached_property
     def subpackages(self) -> tuple[str, ...]:
-        return tuple(unit for unit in self.top_level if self.files[unit].name == "__init__.py")
+        return tuple(
+            unit for unit in self.top_level if self.src.joinpath(*unit.split(".")).is_dir()
+        )
 
     def unit(self, module: str) -> str:
         return ".".join(module.split(".")[:2])
@@ -133,7 +131,7 @@ class Package:
     @cached_property
     def imports(self) -> tuple[Import, ...]:
         found: list[Import] = []
-        for module, path in self.files.items():
+        for module, path in {PACKAGE: self.root, **self.files}.items():
             ImportNames(self, module, path, found).visit(ast.parse(path.read_text(), str(path)))
         return tuple(sorted(set(found), key=lambda edge: (edge.source, edge.line, edge.target)))
 
@@ -172,8 +170,10 @@ class Package:
 
     @cached_property
     def entry_points(self) -> tuple[str, ...]:
-        scripts = tomllib.loads(self.pyproject.read_text())["project"]["scripts"]
-        return tuple(sorted({target.partition(":")[0] for target in scripts.values()}))
+        match tomllib.loads(self.pyproject.read_text()):
+            case {"project": {"scripts": dict() as scripts}}:
+                return tuple(sorted({target.partition(":")[0] for target in scripts.values()}))
+        raise ValueError(f"{self.pyproject} declares no [project.scripts] table")
 
     @cached_property
     def unreached(self) -> tuple[str, ...]:
