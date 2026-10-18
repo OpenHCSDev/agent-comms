@@ -911,7 +911,7 @@ class StrikeTodo(TodoOperation):
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
-    def apply(self, current):
+    def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
@@ -961,8 +961,7 @@ class SendBackVerdict(OrderVerdict):
     def judged(self, current: Todo) -> Todo:
         strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
                             self.at)
-        struck: Todo = strike.apply(current)
-        return struck
+        return strike.apply(current)
 
     def record(self, goals: Goals, problem: str) -> Todo:
         return goals.send_back(problem, self)
