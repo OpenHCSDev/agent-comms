@@ -67,7 +67,7 @@ class FieldPlan:
     key: str
     required: bool
     reject_null: bool
-    choices: object
+    choices: Callable[[], Iterable[str]] | None
     value: ValueDecoder[object]
     annotation: object
     declared: Field
