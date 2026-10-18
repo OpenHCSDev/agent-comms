@@ -19,7 +19,7 @@ from .goals import (
     Goal, GoalDeclaration, NoGoal, GoalRevision,
 )
 from .registration_inheritance import (
-    InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel, InheritGoal,
+    InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .thread_identity import (
@@ -60,7 +60,7 @@ class Thread(ThreadProvenance):
         default=ServiceTier.PRIORITY, kw_only=True,
         metadata={"registration_inheritance": InheritPrevious},
     )
-    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": InheritGoal})
+    goal: GoalDeclaration = field(default_factory=NoGoal)
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
@@ -325,6 +325,8 @@ class Thread(ThreadProvenance):
                 for declared in fields(self)
                 if (policy := declared.metadata.get("registration_inheritance")) is not None
             }
+        if previous is not None:
+            inherited["goal"] = self.goal.registration_value(previous.goal)
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
 

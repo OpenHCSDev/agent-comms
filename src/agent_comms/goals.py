@@ -17,7 +17,6 @@ from .child_process import ExitedOutcome
 
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
-from .thread_relations import GoalDerivedContact
 from .text_digest import TextDigest
 
 from .field_codec import FieldCodec, WireValue
@@ -50,6 +49,8 @@ class UnresolvedMention:
     peer_created_at: Literal[None] = None
 
     def project(self, registry, owner, goal, source):
+        from .relationships import GoalMentionDiagnostic
+
         return (), (
             GoalMentionDiagnostic(
                 owner.name, goal.id, source.text_revision, self.token, type(self)
@@ -101,6 +102,8 @@ class ResolvedMentionBinding(GoalMentionBinding):
         return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     def project(self, registry, owner, goal, source):
+        from .relationships import GoalDerivedContact, GoalMentionDiagnostic
+
         diagnostic = GoalMentionDiagnostic(
             owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"
         )
@@ -126,40 +129,7 @@ class ResolvedMentionBinding(GoalMentionBinding):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalMentionDiagnostic:
-    owner: str
-    goal_id: str
-    text_revision: int
-    token: str
-    reason: type[GoalMentionBinding] | Literal["stale_incarnation"]
-
-
-class GoalMentionEvidence(WireValue):
-    accepts_null = True
-
-    @classmethod
-    def from_wire(cls, data):
-        return NoMentionSource() if data is None else FieldCodec.decode_record(GoalMentionSource, data)
-
-    @classmethod
-    def schema(cls):
-        return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(GoalMentionSource)]}
-
-    def matches(self, goal, owner, registry) -> bool:
-        return False
-
-    def contacts(self, goal, owner, registry):
-        return (), ()
-
-
-@dataclass(frozen=True)
-class NoMentionSource(GoalMentionEvidence):
-    def to_wire(self):
-        return None
-
-
-@dataclass(frozen=True, slots=True)
-class GoalMentionSource(GoalMentionEvidence):
+class GoalMentionSource:
     """Text-revision and owner-incarnation proof saved with its registry Goal."""
 
     goal_id: str
