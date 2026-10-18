@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
+from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadLedger
@@ -23,7 +24,7 @@ def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
     archive = HistoryArchive(tmp_path / 'bus.jsonl')
     if exists:
         archive.path.write_text('[]')
-    with pytest.raises(ValueError, match='catalogue changed'):
+    with pytest.raises(HistoricalSourceChanged, match='catalogue changed'):
         with archive.read_sources() as sources:
             assert sources == ()
             archive.path.write_text('[ ]')
@@ -199,7 +200,7 @@ def test_byte_boundaries_and_stale_cursor(migrated):
     )
     assert len(page.messages) == 1
     assert page.has_older
-    with pytest.raises(ValueError):
+    with pytest.raises(HistoricalSourceChanged):
         live.views.channel_display_page("#team", bounds=PageBounds(OlderTraversal(2, "detached")))
 
 
@@ -254,9 +255,9 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
     with pytest.raises(StaleRevision, match="original thread"):
         live.transcripts.bind_page_read("bob", read.identity)
     live.bus.history.path.write_text("[]")
-    with pytest.raises(ValueError, match="detached"):
+    with pytest.raises(HistoricalSourceChanged, match="detached"):
         read.current_identity()
-    with pytest.raises(ValueError, match="detached"):
+    with pytest.raises(HistoricalSourceChanged, match="detached"):
         live.transcripts.bind_page_read("alice", read.identity)
 
 
