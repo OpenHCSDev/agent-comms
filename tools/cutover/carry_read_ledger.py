@@ -14,6 +14,7 @@ from pathlib import Path
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadDocument, ReadLedger
+from agent_comms.recorded_bus import RecordedBusIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation, ThreadIncarnationRecord
 
 from cutover.carry import Carried, Carry
@@ -37,7 +38,7 @@ def carried(raw: dict) -> ReadDocument:
         transcripts[(viewer, source, inode)] = through
     return ReadDocument(
         messages,
-        tuple(raw["bus_identity"]) if raw["bus_identity"] is not None else None,
+        FieldCodec.decode(RecordedBusIdentity, raw["bus_identity"]),
         transcripts,
         raw["notice"],
     )
