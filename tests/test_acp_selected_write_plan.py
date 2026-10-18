@@ -94,7 +94,6 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                     name,
                     committed=True,
                 )
-        comms.owners.pin_private_nk_launch(comms.root, root_id, package)
         agent = CommsAgent(
             comms,
             runtime_enabled=True,
@@ -279,8 +278,6 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         env.update(
             AGENT_COMMS_ROOT=str(root),
             AGENT_COMMS_THREAD="beta",
-            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
             PYTHONDONTWRITEBYTECODE="1",
         )
         env.pop("PI_PROMPT", None)
@@ -329,7 +326,6 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 raise AssertionError(f"worker did not report {expected}")
 
             assert event("ready")["pid"] == process.pid
-            comms.owners.pin_private_nk_launch(comms.root, root_id, package)
             attached = CommsAgent(
                 comms,
             )

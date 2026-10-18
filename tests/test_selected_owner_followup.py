@@ -192,7 +192,6 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     import threading
     from dataclasses import replace
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from pathlib import Path
 
     package = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not package:
@@ -275,8 +274,6 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     )
     parked_goal = comms.registry.require("beta").goal
     parked_wait = comms.goals.goal_wait("beta")
-    owners = agent._comms.owners
-    owners._private_nk_launch = replace(owners.launch_authority, native_package=Path(package))
     agent.turns.agent_args = NativeArguments.parse(
         [
             "--no-extensions",
@@ -287,8 +284,6 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
         ]
     )
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", package)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     comms.messaging.send_message("sender", "beta", "First local selected instruction")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))

@@ -1384,14 +1384,12 @@ class TestWireProtocol:
         (tmp_path / "proj").mkdir()
         root = tmp_path / "wire"
         comms = wire(root)
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_initial_protocol()
         env = dict(
             __import__("os").environ,
             AGENT_COMMS_ROOT=str(root),
             PYTHONPATH=str(Path(ae.__file__).parent.parent),
             AGENT_COMMS_AGENT_BIN="pi",
-            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=os.environ["AC_NATIVE_COPIED_PACKAGE"],
             AGENT_COMMS_AGENT_ARGS="",
         )
         requests = [

@@ -1,7 +1,6 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
-from agent_comms.native_package import pinned_native_package
 
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -295,12 +294,8 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
     comms = wire(root / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    package = pinned_native_package()
+    comms.messaging.initialize_private_initial_protocol()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     owner = CommsAgent(
         comms, agent_bin=native_bin, agent_args=native_args, runtime_enabled=True,
         auto_wake=False,

@@ -110,6 +110,9 @@ def test_claude_subagent_keeps_its_task_its_commander_and_its_tools(tmp_path):
     lines(subagent, [
         {"type": "fork-context-ref", "agentId": "a1", "parentSessionId": "session"},
         claude_prompt("t", "Your task: fix the importer"),
+        {"type": "api-request-shape", "sessionId": "session", "shapeHash": "h", "shape": {"system": []}},
+        {"type": "api-request-blob", "sessionId": "session", "hash": "b", "message": {"role": "user"}},
+        {"type": "api-request", "sessionId": "session", "id": "q", "shapeHash": "h", "params": {}},
         claude_prompt("r", "<system-reminder>harness note</system-reminder>", isMeta=True),
         claude_tool("c", "g1", "Glob", {}),
         claude_result("e", "g1", "pattern is required", error=True),
