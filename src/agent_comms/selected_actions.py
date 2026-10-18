@@ -9,12 +9,12 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import ExistingFileClaim
+from .selected_tool_broker import NativeToolMode, NoNativeTools
 from .turn_context import InstructionFile
 
 if TYPE_CHECKING:
     from .channel_coding_tools import CodingToolOwner
     from .coordination_tables.assignments import WakeAssignment
-    from .selected_tool_broker import NativeToolMode
     from .selected_write_authority import BoundSelectedWriteAuthority
     from .selected_write_plan import PlannedWrite
     from .threads import Thread
@@ -25,8 +25,8 @@ class SelectedAction(ABC):
     @abstractmethod
     def instruction_files(self) -> tuple[InstructionFile, ...]: ...
 
-    def mode(self, owner: CodingToolOwner) -> NativeToolMode | None:
-        return None
+    def mode(self, owner: CodingToolOwner) -> NativeToolMode:
+        return NoNativeTools()
 
     def apply(self, owner: CodingToolOwner) -> None:
         return None
@@ -73,8 +73,12 @@ class BatchSelectedAction(SelectedAction):
         )
 
     def mode(self, owner):
-        return next((mode for assignment, action in self.originals
-                     if (mode := action.mode(owner.for_original(assignment, action.operation_id()))) is not None), None)
+        mode = NoNativeTools()
+        for assignment, action in self.originals:
+            mode = mode.or_else(
+                lambda: action.mode(owner.for_original(assignment, action.operation_id()))
+            )
+        return mode
 
     def apply(self, owner):
         for assignment, action in self.originals:

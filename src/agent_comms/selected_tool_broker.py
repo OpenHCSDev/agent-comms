@@ -90,8 +90,22 @@ class NativeToolMode(ABC):
         """Return the native tool selection and reviewed extension."""
 
     @abstractmethod
-    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
-        """Create the existing authenticated owner transport for this policy."""
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        """Open this turn's transport in its resource lifetime."""
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return self
+
+
+class NoNativeTools(NativeToolMode):
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        return ("--no-tools",)
+
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        return NoToolSocket()
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return factory()
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,8 +127,8 @@ class SelectedToolMode(NativeToolMode):
             str(selected_extension(package)),
         )
 
-    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
-        return SelectedToolSocket(directory, token, self.action)
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        return await SelectedToolSocket.open(turn, ownership, self.action)
 
 
 @dataclass(frozen=True)
@@ -491,10 +505,87 @@ class NativeToolCallTable(Generic[Call]):
         return self.rounds[0].declared[0].call_id
 
 
-class OwnerToolSocket(ABC, Generic[Call]):
+class ToolTransport(ABC):
+    """Tool events and child reuse for one turn's selected transport."""
+
+    @property
+    @abstractmethod
+    def retainable(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def active_tools(self) -> set[str]: ...
+
+    @property
+    def selected_call_id(self) -> str | None:
+        return None
+
+    @abstractmethod
+    def accept_round(self, turn, content) -> bool: ...
+
+    @abstractmethod
+    def tool_started(self, event: ToolExecutionStart) -> None: ...
+
+    @abstractmethod
+    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None: ...
+
+    @abstractmethod
+    def assert_complete(self) -> None: ...
+
+
+class NoToolSocket(ToolTransport):
+    @property
+    def retainable(self) -> bool:
+        return True
+
+    @property
+    def expected_pid(self):
+        raise SelectedToolDenied("A turn without tools has no tool process")
+
+    @expected_pid.setter
+    def expected_pid(self, pid: int) -> None:
+        pass
+
+    @property
+    def active_tools(self) -> set[str]:
+        return set()
+
+    def accept_round(self, turn, content) -> bool:
+        return False
+
+    def tool_started(self, event: ToolExecutionStart) -> None:
+        raise SelectedToolDenied("Native Pi tool preceded tracked context proof")
+
+    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
+        raise SelectedToolDenied("Native Pi tool has no owner policy")
+
+    def assert_complete(self) -> None:
+        pass
+
+
+class OwnerToolSocket(ToolTransport, Generic[Call]):
     """Authenticated native child transport; the policy decides which requests may run."""
 
     max_request = _MAX_REQUEST
+
+    @property
+    def retainable(self) -> bool:
+        return False
+
+    @classmethod
+    async def open(cls, turn, ownership, policy):
+        transport = cls(turn.launch.session.directory, os.urandom(32).hex(), policy)
+        ownership.push_async_callback(transport.close)
+        await transport.start()
+        turn.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(transport.address)
+        turn.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = transport.token
+        return transport
+
+    def accept_round(self, turn, content) -> bool:
+        self.announce(content)
+        turn.text_parts.clear()
+        turn.terminal = turn.terminal.tool_round()
+        return True
 
     def __init__(self, directory: Path, token: str) -> None:
         if type(token) is not str or not _TOKEN.fullmatch(token):
@@ -553,10 +644,6 @@ class OwnerToolSocket(ABC, Generic[Call]):
         return {
             call.call_id for call in self.calls.values() if call.observation.executing
         }
-
-    @property
-    def selected_call_id(self) -> str | None:
-        return None
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))

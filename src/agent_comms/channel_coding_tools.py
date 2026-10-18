@@ -162,8 +162,8 @@ class CodingToolMode(NativeToolMode):
         return ("--tools", ",".join(tool.declared_name for tool in declarations),
                 *(argument for extension in extensions for argument in ("-e", str(extension))))
 
-    def socket(self, directory: Path, token: str) -> OwnerToolSocket:
-        return CodingToolSocket(directory, token, self.owner)
+    async def open_transport(self, turn, ownership) -> OwnerToolSocket:
+        return await CodingToolSocket.open(turn, ownership, self.owner)
 
 class CodingToolSocket(OwnerToolSocket[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""

@@ -32,13 +32,13 @@ from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
 from .tracked_turn import TrackedTurnSession
+from .selected_tool_broker import NativeToolMode, NoNativeTools
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent
     from .native_attestation import ObservedAttestation
     from .pi_events import PiEvent
-    from .selected_tool_broker import NativeToolMode
     from .selected_session import SelectedSession
     from .selected_participant import SelectedParticipant
 from .private_registry_guard import _require_no_private_owner_rename
@@ -137,7 +137,7 @@ class PrivateSendClaim:
         execution,
         *,
         model: SelectedModel,
-        selected_tool_mode: NativeToolMode | None = None,
+        selected_tool_mode: NativeToolMode = NoNativeTools(),
         observe_event: Callable[[PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
         following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:

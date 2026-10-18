@@ -6,7 +6,6 @@ from .native_arguments import SelectedModel
 
 import asyncio
 import math
-import os
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
@@ -43,7 +42,7 @@ from .request_progress import RequestProgress
 from .native_tool_call import SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
-from .selected_tool_broker import NativeToolMode, OwnerToolSocket
+from .selected_tool_broker import NativeToolMode, NoNativeTools, ToolTransport
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
 
@@ -222,7 +221,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.prompt_send_boundary = prompt_send_boundary
         self.maintenance_root = maintenance_root
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
-        self.tool_socket: OwnerToolSocket | None = None
+        self.tool_socket: ToolTransport
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
@@ -245,7 +244,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
         prompt_send_boundary: PrivateSendClaim | None = None,
         maintenance_root: Path | None = None,
-        selected_tool_mode: NativeToolMode | None = None,
+        selected_tool_mode: NativeToolMode = NoNativeTools(),
         observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
         acquisition_measurements: PublicationMeasurements | None = None,
         request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
@@ -314,8 +313,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     self.native = await self.acquire_native(transport, reuse=True)
                     ownership.push_async_callback(self.retain_or_close)
                     await ownership.enter_async_context(self.native.failures())
-                    if self.tool_socket is not None:
-                        self.tool_socket.expected_pid = self.native.proc.pid
+                    self.tool_socket.expected_pid = self.native.proc.pid
                     self.watchdog.reading()
                     try:
                         try:
@@ -331,7 +329,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                             result = await self.result()
                             # A per-input tool socket dies with this input; only a
                             # tool-less child stays usable by the next input.
-                            self.retainable = self.tool_socket is None
+                            self.retainable = self.tool_socket.retainable
                             return result
                         except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
                             raise NativePiUnavailable(
@@ -355,18 +353,11 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         await self.native_session.close()
 
     async def open_transport(self, ownership: AsyncExitStack) -> None:
-        if self.selected_tool_mode is not None:
-            self.tool_socket = self.selected_tool_mode.socket(
-                self.launch.session.directory, os.urandom(32).hex()
-            )
-            ownership.push_async_callback(self.tool_socket.close)
-            await self.tool_socket.start()
-            self.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(self.tool_socket.address)
-            self.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = self.tool_socket.token
+        self.tool_socket = await self.selected_tool_mode.open_transport(self, ownership)
 
     @property
     def active_tools(self):
-        return self.tool_socket.active_tools if self.tool_socket is not None else set()
+        return self.tool_socket.active_tools
 
     async def apply_native_event(self, event):
         await self.dispatch(event)
@@ -539,16 +530,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         event.message.tracked_end(self)
 
     def accept_tool_round(self, message):
-        if self.tool_socket is None:
-            return False
-        self.tool_socket.announce(message.content)
-        self.text_parts.clear()
-        self.terminal = self.terminal.tool_round()
-        return True
+        return self.tool_socket.accept_round(self, message.content)
 
     def accept_final_message(self, message):
-        if self.tool_socket is not None:
-            self.tool_socket.assert_complete()
+        self.tool_socket.assert_complete()
         self.terminal = self.terminal.append(message.authoritative_text)
 
     @handles(pi.NativeRetryEnd)
@@ -571,15 +556,11 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.ToolExecutionStart)
     async def tool_started(self, event: pi.ToolExecutionStart) -> None:
-        if self.tool_socket is None:
-            raise NativePiUnavailable("Native Pi tool preceded tracked context proof")
         await self.context_proof()
         self.tool_socket.tool_started(event)
 
     @handles(pi.ToolExecutionEnd)
     async def tool_finished(self, event: pi.ToolExecutionEnd) -> None:
-        if self.tool_socket is None:
-            raise NativePiUnavailable("Native Pi tool has no owner policy")
         self.tool_socket.tool_finished(event, self.command.input_id)
 
     @handles(pi.AgentSettled)
@@ -594,11 +575,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             with self.startup.measurements.operation("native_terminal_proof"):
                 proof = await self.context_proof()
             self.output.raise_if_failed(proof, self.model)
-            if self.tool_socket is not None:
-                self.tool_socket.assert_complete()
+            self.tool_socket.assert_complete()
             response = self.terminal.require_response(self.text_parts)
             return NativeTurnResult(
                 response.strip(),
                 proof,
-                self.tool_socket.selected_call_id if self.tool_socket else None,
+                self.tool_socket.selected_call_id,
             )
