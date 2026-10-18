@@ -5,12 +5,12 @@ import json
 
 import pytest
 
-from agent_comms.bus_activity_index import BusActivityIndex
+from agent_comms.bus_activity_index import BusActivityIndex, ChannelActivity
+from agent_comms.bus_projection import NoCheckpoint
 from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, DisplaySnapshot
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ChannelDisplayScope, ReadCursor
-from agent_comms.message_bus import MessageBus
 from agent_comms.wire_log import AbsentWireSnapshot, CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
 
@@ -46,7 +46,7 @@ def test_complete_line_cut_is_not_the_physical_cut(tmp_path, data, complete):
     path = tmp_path / "bus.jsonl"
     path.write_bytes(data)
     with opened(path) as source:
-        assert source.complete_boundary == complete
+        assert source.complete_prefix.boundary == complete
         assert source.boundary == source.revision.size == len(data)
         assert source.stream.tell() == 0
 
@@ -55,7 +55,8 @@ def test_absent_bus_has_a_named_empty_display_result(tmp_path):
     source = AbsentWireSnapshot(WireMetadata(), 0)
     result = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer").snapshot(source, semantics())
     assert isinstance(result, DisplaySnapshot)
-    assert result.metrics == ({"#team": (0.0, 0.0)}, {"#team": 0})
+    assert result.activity == {"#team": ChannelActivity()}
+    assert result.counts == {"#team": 0}
 
 
 def test_unavailable_opened_source_is_not_empty_metrics(tmp_path):
@@ -86,7 +87,8 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
     monkeypatch.setattr(Message, "from_wire", measured)
     with opened(path, index) as source:
         partial = index.snapshot(source, semantics())
-        assert partial.metrics == initial.metrics
+        assert partial.activity == initial.activity
+        assert partial.counts == initial.counts
         assert partial.offset == len(first) < partial.source.size
         assert parsed == []
     with path.open("ab") as stream:
@@ -95,9 +97,7 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
         completed = index.snapshot(source, semantics())
         assert completed.counts == {"#team": 2}
         assert completed.offset == len(first) + len(second)
-        # The offset index prepares row 2, then the display materializes it.
-        # Neither consumer may reparse row 1 or the incomplete suffix.
-        assert parsed == [2, 2]
+        assert parsed == [2]
 
 
 def test_activity_uses_the_same_complete_line_cut(tmp_path):
@@ -106,22 +106,24 @@ def test_activity_uses_the_same_complete_line_cut(tmp_path):
     path.write_bytes(first)
     index = BusActivityIndex(path)
     with opened(path, index) as source:
-        initial = index.snapshot(source, MessageBus._bus_activity_fields)
+        initial = index.snapshot(source)
     with path.open("ab") as stream:
         stream.write(b'{"observation":')
     with opened(path, index) as source:
-        assert index.snapshot(source, MessageBus._bus_activity_fields) == initial
-        assert source.complete_boundary == len(first) < source.boundary
+        assert index.snapshot(source) == initial
+        assert source.complete_prefix.boundary == len(first) < source.boundary
 
 
-@pytest.mark.parametrize("activity", [False, True])
-def test_checkpoint_write_failure_is_visible_and_not_remembered(tmp_path, activity):
+@pytest.mark.parametrize("index_type,index_args,read_args", [
+    (BusDisplayIndex, ("viewer",), (semantics(),)), (BusActivityIndex, (), ()),
+])
+def test_checkpoint_write_failure_is_visible_and_not_remembered(tmp_path, index_type, index_args, read_args):
     path = tmp_path / "bus.jsonl"
     path.write_bytes(row(1))
-    index = BusActivityIndex(path) if activity else BusDisplayIndex(path, "viewer")
+    index = index_type(path, *index_args)
     with opened(path, index) as source:
         index.path.mkdir()  # Real publication failure, not a mocked write.
         with pytest.raises(OSError):
-            index.snapshot(source, MessageBus._bus_activity_fields if activity else semantics())
-        assert index._held is None
-        assert source._append_checkpoints[index] is None
+            index.snapshot(source, *read_args)
+        assert index._held == NoCheckpoint()
+        assert source._append_checkpoints[index] == NoCheckpoint()

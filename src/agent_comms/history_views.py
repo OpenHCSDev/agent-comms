@@ -361,7 +361,7 @@ class HistoryViews:
         with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
-            clocks = self.bus.activity_clocks(source)
+            clocks = self.bus.activity_index.snapshot(source)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
                 self.last_sent_timestamps(clocks.sent, registry=basis.registry), display_activity,

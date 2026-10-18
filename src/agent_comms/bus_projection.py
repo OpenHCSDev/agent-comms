@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, ClassVar, Generic, TypeVar, TYPE_CHECKING
+from abc import ABC, abstractmethod
 
 from .field_codec import FieldCodec
 from .private_path import FileRevision
@@ -15,6 +16,63 @@ from .store_files import _atomic_write_text, _store_lock
 
 if TYPE_CHECKING:
     from .wire_log import WireSnapshot
+
+
+class WirePrefix(ABC):
+    """A complete source prefix; absence has no checkpoint to publish."""
+
+    boundary: int
+
+    @abstractmethod
+    def project(self, index, opened, semantics, checkpoint): ...
+
+
+@dataclass(frozen=True)
+class EmptyWirePrefix(WirePrefix):
+    boundary: ClassVar[int] = 0
+
+    def project(self, index, opened, semantics, checkpoint):
+        return index.record_type.empty(semantics)
+
+
+@dataclass(frozen=True)
+class CompleteWirePrefix(WirePrefix):
+    boundary: int
+
+    def project(self, index, opened, semantics, checkpoint):
+        return index.record_type.from_prefix(index, opened, self.boundary, semantics, checkpoint)
+
+
+@dataclass(frozen=True)
+class NoCheckpoint:
+    """No valid saved prefix; consumers obtain their initial projection."""
+
+    def current_at(self, revision):
+        return False
+
+    def prepare(self, store):
+        return store.read()
+
+    def validated(self, revision, stream):
+        return self
+
+    def accepts(self, revision, stream):
+        return False
+
+    def ahead_of(self, record, revision, stream):
+        return False
+
+    def current_for(self, revision, semantics):
+        return False
+
+    def matches_scope(self, semantics):
+        return False
+
+    def restore_into(self, destination):
+        return 0
+
+    def publish(self, store):
+        pass
 
 
 @dataclass(frozen=True)
@@ -28,6 +86,21 @@ class AppendCheckpoint:
     source: FileRevision
     offset: int
     tail: str
+
+    def current_at(self, revision):
+        return self.source == revision
+
+    def prepare(self, store):
+        return self
+
+    def validated(self, revision, stream):
+        return self if self.accepts(revision, stream) else NoCheckpoint()
+
+    def ahead_of(self, record, revision, stream):
+        return self.accepts(revision, stream) and self.offset > record.offset
+
+    def publish(self, store):
+        store.write(self)
 
     def __post_init__(self) -> None:
         if not 0 <= self.offset <= self.source.size:
@@ -51,7 +124,7 @@ class AppendCheckpoint:
     def accepts(self, revision: FileRevision, stream: BinaryIO) -> bool:
         if not self.source.holds_cut(revision, self.offset):
             return False
-        if self.offset == revision.size and self.source != revision:
+        if self.offset == revision.size and not self.current_at(revision):
             return False
         return self.tail == self.fingerprint(stream, self.offset)
 
@@ -82,13 +155,14 @@ class AppendProjectionStore(Generic[Checkpoint]):
             raise ValueError("Damaged disposable projection")
         return FieldCodec.decode(self.record_type, payload)
 
-    def _read_unlocked(self) -> Checkpoint | None:
+    def read(self) -> Checkpoint | NoCheckpoint:
+        return self._read_unlocked()
+
+    def _read_unlocked(self) -> Checkpoint | NoCheckpoint:
         try:
             return self._decode(json.loads(self.path.read_text()))
-        except FileNotFoundError:
-            return None
-        except (ValueError, TypeError, KeyError, AttributeError):
-            return None  # Damaged disposable index: rebuilt from its source.
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            return NoCheckpoint()  # Unreadable disposable index: rebuilt from its source.
 
     def _write_unlocked(self, text: str) -> None:
         _atomic_write_text(self.path, text, fsync_parent=self.fsync_parent)
@@ -107,11 +181,7 @@ class AppendProjectionStore(Generic[Checkpoint]):
                 if not record.accepts(current, stream):
                     return
                 saved = self._read_unlocked()
-                if (
-                    saved is not None
-                    and saved.accepts(current, stream)
-                    and saved.offset > record.offset
-                ):
+                if saved.ahead_of(record, current, stream):
                     return
             self._write_unlocked(payload)
 
@@ -123,23 +193,18 @@ class BusAppendIndex(AppendProjectionStore[Checkpoint]):
         super().__init__(bus_path, path)
         # The checkpoint this process last accepted or computed. The saved file
         # is read only until there is one; it serves a cold start, not each cut.
-        self._held: Checkpoint | None = None
+        self._held: Checkpoint | NoCheckpoint = NoCheckpoint()
 
-    def prepare(self) -> Checkpoint | None:
+    def prepare(self) -> Checkpoint | NoCheckpoint:
         """A candidate before the bus cut is captured and its lock is taken."""
-        return self._held if self._held is not None else self._read_unlocked()
+        return self._held.prepare(self)
 
     def hold(self, record: Checkpoint) -> None:
         """Keep an exact-cut checkpoint as the next cut's candidate."""
         self._held = record
 
     def capture(
-        self, prepared: Checkpoint | None, opened: WireSnapshot,
-    ) -> Checkpoint | None:
-        if prepared is None:
-            return None
-        self._held = (prepared if opened.same_file(prepared.source.identity)
-                      and prepared.offset <= opened.boundary
-                      and (prepared.offset != opened.boundary or not opened.changed_since(prepared.source))
-                      and prepared.tail == opened.fingerprint(prepared.offset) else None)
+        self, prepared: Checkpoint | NoCheckpoint, opened: WireSnapshot,
+    ) -> Checkpoint | NoCheckpoint:
+        self._held = prepared.validated(opened.revision, opened.stream)
         return self._held

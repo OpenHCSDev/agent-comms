@@ -92,7 +92,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
                 pass
     with comms.views.presentation.snapshot(viewer=NamedViewer(viewer.name)) as (basis, source):
         before = {"#team": 1}
-        sent = comms.views.last_sent_timestamps(comms.bus.activity_clocks(source).sent, registry=basis.registry)
+        sent = comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent, registry=basis.registry)
         if indexed:
             assert comms.bus.pending_counts_opened(source, basis) == before
         else:
@@ -110,7 +110,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
             index_path.rmdir()
         # Repair the derived resource, not the captured source or read ledger.
         assert comms.bus.pending_counts_opened(source, basis) == before
-        assert comms.views.last_sent_timestamps(comms.bus.activity_clocks(source).sent, registry=basis.registry) == sent
+        assert comms.views.last_sent_timestamps(comms.bus.activity_index.snapshot(source).sent, registry=basis.registry) == sent
         assert "bob" in sent and "renamed-bob" not in sent
     latest = comms.views.viewer_snapshot(str(tmp_path))
     assert latest.unread == {"renamed-bob": 1}
@@ -136,7 +136,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
 
     def projection_bytes():
         paths = [
-            comms.bus.log.path.with_name("bus_activity_latest.json"),
+            comms.bus.activity_index.path,
             BusRouteCounts(comms.bus.log.path).path,
             *comms.bus.log.path.parent.glob("bus_display_*.json"),
         ]
@@ -392,8 +392,8 @@ def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_pat
     )
     with (
         patch.object(Message, "from_wire", wraps=Message.from_wire) as decode,
-        patch.object(BusPageIndex, "display_metrics", autospec=True,
-                     side_effect=BusPageIndex.display_metrics) as aggregate,
+        patch.object(BusPageIndex, "display_snapshot", autospec=True,
+                     side_effect=BusPageIndex.display_snapshot) as aggregate,
     ):
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 98
@@ -433,8 +433,8 @@ def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
     with (
         patch.object(Message, "from_wire", wraps=Message.from_wire) as decode,
         patch.object(OpenedWireSnapshot, "public_records", no_full_scan),
-        patch.object(BusPageIndex, "display_metrics", autospec=True,
-                     side_effect=BusPageIndex.display_metrics) as aggregate,
+        patch.object(BusPageIndex, "display_snapshot", autospec=True,
+                     side_effect=BusPageIndex.display_snapshot) as aggregate,
     ):
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 9

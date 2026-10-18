@@ -14,6 +14,7 @@ from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
+from .bus_projection import NoCheckpoint
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
@@ -258,16 +259,8 @@ class ObservedActivity(ActivityData):
 class ActivitySnapshot:
     """One inseparable source cut and its visible events, including a partial EOF."""
 
-    checkpoint: ActivityCheckpoint | None = None
+    checkpoint: ActivityCheckpoint | NoCheckpoint = field(default_factory=NoCheckpoint)
     latest: Mapping[str, Activity] = field(default_factory=dict)
-
-    @property
-    def revision(self) -> FileRevision | None:
-        return self.checkpoint.source if self.checkpoint is not None else None
-
-    def current_at(self, path: Path) -> bool:
-        return self.revision == FileRevision.capture(path)
-
 
 @dataclass(slots=True)
 class ActivityReadState:
@@ -312,26 +305,22 @@ class ActivityLog(ThreadOwnedState):
         events are proved current. Missing/invalid checkpoints and long suffixes
         are decoded outside that lock, as is the subsequent projection write.
         """
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        # A writer captures an actual empty source before its first append.
+        # NoCheckpoint never qualifies a missing file as a saved source cut.
+        self._path.open("ab").close()
         while True:
             snapshot = self._read_snapshot()
             with _store_lock(self._path):
-                if not snapshot.current_at(self._path):
+                if not snapshot.checkpoint.current_at(FileRevision.capture(self._path)):
                     continue
                 yield snapshot
                 after = FileRevision.capture(self._path)
                 break
-        if after != snapshot.revision:
-            self._publish_checkpoint()
-
-    def _publish_checkpoint(self) -> None:
-        checkpoint = self._read_snapshot().checkpoint
-        if checkpoint is not None:
-            # Its prefix is validated by the shared publisher; it may lag an
-            # append without claiming those later events or delaying appenders.
-            self.checkpoint.write(checkpoint)
+        if not snapshot.checkpoint.current_at(after):
+            self._read_snapshot().checkpoint.publish(self.checkpoint)
 
     def emit(self, activity: Activity) -> None:
-        self._path.parent.mkdir(parents=True, exist_ok=True)
         with self._writing():
             _append_jsonl(self._path, FieldCodec.encode(activity))
 
@@ -393,55 +382,46 @@ class ActivityLog(ThreadOwnedState):
         read = self._read
         while True:
             with read.lock:
-                revision = FileRevision.capture(self._path)
                 started_from = read.snapshot
-                if revision == started_from.revision:
-                    return started_from
-                checkpoint = None
-                if revision is not None:
-                    checkpoint = started_from.checkpoint or self.checkpoint.read()
-            latest = {}
-            captured = None
-            if revision is not None:
-                try:
-                    with self._path.open("rb") as stream:
-                        if not revision.opened_by(stream):
-                            continue
-                        if checkpoint is not None and not checkpoint.accepts(revision, stream):
-                            checkpoint = None
-                        complete = dict(checkpoint.latest) if checkpoint is not None else {}
-                        offset = checkpoint.offset if checkpoint is not None else 0
-                        latest = complete
-                        stream.seek(offset)
-                        while stream.tell() < revision.size:
-                            raw = stream.readline(revision.size - stream.tell())
-                            if not raw:
-                                break
-                            terminated = raw.endswith((b"\n", b"\r"))
-                            if line := raw.strip():
-                                try:
-                                    record = json.loads(line)
-                                except (json.JSONDecodeError, UnicodeDecodeError):
-                                    if not terminated:
-                                        break
-                                    raise
-                                if not isinstance(record, Mapping):
-                                    raise ValueError(
-                                        f"JSONL record in {self._path} must be an object."
-                                    )
-                                event = Activity.from_wire(record)
-                                if terminated:
-                                    event.fold_into(complete)
-                                else:
-                                    # The writer repairs an interrupted final row before its
-                                    # next append (store_files.py:_append_jsonl).
-                                    latest = dict(complete)
-                                    event.fold_into(latest)
+            try:
+                with self._path.open("rb") as stream:
+                    revision = FileRevision.from_stat(os.fstat(stream.fileno()))
+                    if started_from.checkpoint.current_at(revision):
+                        return started_from
+                    checkpoint = started_from.checkpoint.prepare(self.checkpoint).validated(revision, stream)
+                    complete = {}
+                    offset = checkpoint.restore_into(complete)
+                    latest = complete
+                    stream.seek(offset)
+                    while stream.tell() < revision.size:
+                        raw = stream.readline(revision.size - stream.tell())
+                        if not raw:
+                            break
+                        terminated = raw.endswith((b"\n", b"\r"))
+                        if line := raw.strip():
+                            try:
+                                record = json.loads(line)
+                            except (json.JSONDecodeError, UnicodeDecodeError):
+                                if not terminated:
+                                    break
+                                raise
+                            if not isinstance(record, Mapping):
+                                raise ValueError(
+                                    f"JSONL record in {self._path} must be an object."
+                                )
+                            event = Activity.from_wire(record)
                             if terminated:
-                                offset = stream.tell()
-                        captured = ActivityCheckpoint.capture(stream, revision, complete, offset)
-                except FileNotFoundError:
-                    continue
+                                event.fold_into(complete)
+                            else:
+                                # The writer repairs an interrupted final row before its
+                                # next append (store_files.py:_append_jsonl).
+                                latest = dict(complete)
+                                event.fold_into(latest)
+                        if terminated:
+                            offset = stream.tell()
+                    captured = ActivityCheckpoint.capture(stream, revision, complete, offset)
+            except FileNotFoundError:
+                latest, captured = {}, NoCheckpoint()
             with read.lock:
                 if read.snapshot is not started_from:
                     # Another reader may have published a cut taken before this
@@ -462,15 +442,9 @@ class ActivityLog(ThreadOwnedState):
                 self.emit(Activity(thread.name, ActivityState.DELETED))
 
     def rename_thread(self, old_name: str, new_name: str) -> None:
-        while True:
-            snapshot = self._read_snapshot()
+        with self._writing():
             events = (Activity.from_wire(record) for record in _jsonl_records(self._path))
             renamed = (replace(event, thread=new_name) if event.thread == old_name else event
                        for event in events)
             text = "".join(f"{json.dumps(FieldCodec.encode(event))}\n" for event in renamed)
-            with _store_lock(self._path):
-                if not snapshot.current_at(self._path):
-                    continue
-                _atomic_write_text(self._path, text)
-                break
-        self._publish_checkpoint()
+            _atomic_write_text(self._path, text)
