@@ -784,7 +784,7 @@ class DeclaredOptions(Command):
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
         payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
@@ -876,7 +876,7 @@ class CliCommand(
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         """The command owns the parameters offered by its target action."""
-        hints = get_type_hints(type(self))
+        hints = get_type_hints(type(self), include_extras=True)
         return tuple(item.metadata[TargetField](item, hints[item.name], getattr(self, item.name))
                      for item in fields(self) if not item.metadata['target_bound'])
 
@@ -901,7 +901,7 @@ class CliCommand(
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         declared = {key: item for item, key in FieldCodec.record_fields(cls)}
         result = {}
         for key, text in values.items():
