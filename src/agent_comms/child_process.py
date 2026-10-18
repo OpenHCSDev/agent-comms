@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from .thread_identity import ThreadIncarnation, ThreadRole
     from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
     from .thread_status import ThreadStatus
-    from .turn_lease import TurnState
+    from .turn_lease import ActiveTurn, TurnState
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -72,25 +72,21 @@ class ProcessState(WireValue):
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(ProcessIdentity | NoProcess)
+        return FieldCodec.value_schema(NoProcess | ProcessIdentity)
 
     def to_wire(self) -> object:
         return FieldCodec.encode_record(self)
 
-    def allows_owner_start(self) -> bool:
-        return False
-
-    def allows_inactive_stop(self) -> bool:
-        return self.matches_pid(os.getpid())
-
-    def allows_goal_observation(self, status: ThreadStatus) -> bool:
-        return status.active
-
-    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
-        return role.executable and status.active
-
-    def conflicts_with(self, previous: ProcessState) -> bool:
-        return self != previous
+    @abstractmethod
+    def allows_owner_start(self) -> bool: ...
+    @abstractmethod
+    def allows_inactive_stop(self) -> bool: ...
+    @abstractmethod
+    def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
+    @abstractmethod
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool: ...
+    @abstractmethod
+    def conflicts_with(self, previous: ProcessState) -> bool: ...
 
     @abstractmethod
     def registration_change(
@@ -102,22 +98,18 @@ class ProcessState(WireValue):
         self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
     ) -> RegistrationChange: ...
 
-    def offline(self) -> bool:
-        return not self.alive()
-
+    @abstractmethod
+    def offline(self) -> bool: ...
+    @abstractmethod
     def native_presentation(
         self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
-    ) -> ThreadPresentation:
-        return binding.native_presentation(ordinary)
-
+    ) -> ThreadPresentation: ...
+    @abstractmethod
     def project_activity(
         self, turn_state: TurnState, activity: ObservedActivity,
-    ) -> ObservedActivity:
-        projected: ObservedActivity = turn_state.project_activity(activity)
-        return projected
-
-    def attachment_process(self, previous: ProcessState) -> ProcessState:
-        return self
+    ) -> ObservedActivity: ...
+    @abstractmethod
+    def attachment_process(self, previous: ProcessState) -> ProcessState: ...
 
     @abstractmethod
     def require(self, message: str = "No worker process has started") -> ProcessIdentity: ...
@@ -126,7 +118,9 @@ class ProcessState(WireValue):
     def alive(self) -> bool: ...
 
     @abstractmethod
-    def matches_pid(self, pid: int) -> bool: ...
+    def runs_here(self) -> bool: ...
+    @abstractmethod
+    def owns_turn(self, turn: ActiveTurn) -> bool: ...
 
     @abstractmethod
     def signal(self, signum: int) -> None: ...
@@ -199,7 +193,10 @@ class NoProcess(ProcessState):
     def alive(self) -> bool:
         return False
 
-    def matches_pid(self, pid: int) -> bool:
+    def runs_here(self) -> bool:
+        return False
+
+    def owns_turn(self, turn: ActiveTurn) -> bool:
         return False
 
     def signal(self, signum: int) -> None:
@@ -238,14 +235,48 @@ class ProcessIdentity(ProcessState):
     def schema(cls) -> dict[str, object]:
         return FieldCodec.record_schema(cls)
 
+    def allows_owner_start(self) -> bool:
+        return False
+
+    def allows_inactive_stop(self) -> bool:
+        return self.runs_here()
+
+    def allows_goal_observation(self, status: ThreadStatus) -> bool:
+        return status.active
+
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
+        return role.executable and status.active
+
+    def conflicts_with(self, previous: ProcessState) -> bool:
+        return self != previous
+
+    def offline(self) -> bool:
+        return not self.alive()
+
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
+        return binding.native_presentation(ordinary)
+
+    def project_activity(
+        self, turn_state: TurnState, activity: ObservedActivity,
+    ) -> ObservedActivity:
+        return turn_state.project_activity(activity)
+
+    def attachment_process(self, previous: ProcessState) -> ProcessState:
+        return self
+
     def require(self, message: str = "No worker process has started") -> ProcessIdentity:
         return self
 
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
-    def matches_pid(self, pid: int) -> bool:
-        return self.pid == pid
+    def runs_here(self) -> bool:
+        return os.getpid() == self.pid
+
+    def owns_turn(self, turn: ActiveTurn) -> bool:
+        return turn.owner_pid == self.pid
 
     def signal(self, signum: int) -> None:
         Platform.current().send(self, signum)
@@ -266,6 +297,9 @@ class ProcessIdentity(ProcessState):
         self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
     ) -> RegistrationChange:
         return change.restarted() if incarnation != change.previous.incarnation else change
+
+
+NO_PROCESS = NoProcess()
 
 
 class ProcessGroups(ABC):

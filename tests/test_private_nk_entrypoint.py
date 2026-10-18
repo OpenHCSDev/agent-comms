@@ -28,16 +28,15 @@ from test_native_prompt_binding import tmp_path as private_root_fixture
 tmp_path = private_root_fixture
 
 
-def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_path, monkeypatch):
+def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_path, monkeypatch, declared_native_package):
     root, root_id, _, _, _ = _root(tmp_path)
     route_file = tmp_path / "active-route.json"
     route_file.write_text(
         json.dumps(
             {
-                "version": 1,
+                "version": 2,
                 "root": str(root),
                 "wire_root_id": root_id,
-                "native_package": str(tmp_path),
             }
         )
     )
@@ -48,14 +47,9 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
         monkeypatch.delenv(name, raising=False)
     routed = wire()
     assert routed.root == root
-    assert routed.owners.launch_authority == PrivateNkLaunch(root, root_id, tmp_path)
-    selected = PrivateNkLaunch.derive()
-    assert selected is not None
-    assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
-        root,
-        root_id,
-        tmp_path,
-    )
+    pinned = PrivateNkLaunch(root, root_id, declared_native_package)
+    assert routed.owners.launch_authority == pinned
+    assert PrivateNkLaunch.derive() == pinned
     legacy = tmp_path / "explicit-legacy"
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
     assert wire().root == legacy
@@ -124,13 +118,13 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
             child.stop_sync()
 
 
-def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, monkeypatch):
+def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, monkeypatch, declared_native_package):
     root, root_id, _, _, _ = _root(tmp_path)
     route_file = tmp_path / "route-state" / "active-route.json"
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
-    active_route.publish_active_route(active_route.ActiveRoute(root, root_id, tmp_path))
+    active_route.publish_active_route(active_route.ActiveRoute(root, root_id))
     comms = wire()
     saved = tmp_path / "saved-session.jsonl"
     saved.write_text('{"type":"session"}\n')
@@ -154,19 +148,19 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
         assert result.pid == launched[0].pid
         assert comms.registry.require("resumable").process_identity == launched[0].identity
         assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
-        # The published route's package reaches the child through the same derivation.
-        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == PrivateNkLaunch(root, root_id, tmp_path)
+        # The child derives the same launch from the root it is handed.
+        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == comms.owners.launch_authority
     finally:
         for child in launched:
             child.stop_sync()
 
 
-def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, monkeypatch):
+def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, monkeypatch, declared_native_package):
     root, root_id, _, _, _ = _root(tmp_path)
     directory = tmp_path / "route-state"
     directory.mkdir(mode=0o755)
     route_file = directory / "active-route.json"
-    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    route = active_route.ActiveRoute(root, root_id)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     for name in ("AGENT_COMMS_ROOT",):
@@ -185,12 +179,12 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     assert route_file.read_bytes() == original
 
 
-def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monkeypatch):
+def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monkeypatch, declared_native_package):
     root, root_id, _, _, _ = _root(tmp_path)
     directory = tmp_path / "route-state"
     directory.mkdir(mode=0o700)
     route_file = directory / "active-route.json"
-    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    route = active_route.ActiveRoute(root, root_id)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     rival = b'{"rival":"preserve these bytes"}\n'
     original_link = os.link
@@ -207,13 +201,13 @@ def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monk
     assert not list(directory.glob(".active-route-*.tmp"))
 
 
-def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_path, monkeypatch):
+def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_path, monkeypatch, declared_native_package):
     root, root_id, _, _, _ = _root(tmp_path)
     legacy = tmp_path / ".agent-comms"
     legacy.mkdir(mode=0o700)
     route_file = tmp_path / "route-state" / "active-route.json"
     route_file.parent.mkdir(mode=0o755)
-    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    route = active_route.ActiveRoute(root, root_id)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
@@ -251,7 +245,7 @@ def test_client_cleanup_explicit_published_root_and_cross_thread_retirement(tmp_
     root, root_id, _, _, _ = _root(tmp_path)
     route_file = tmp_path / "route-state" / "active-route.json"
     route_file.parent.mkdir(mode=0o700)
-    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    route = active_route.ActiveRoute(root, root_id)
     route_file.write_text(json.dumps(active_route.FieldCodec.encode(route)))
     route_file.chmod(0o600)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
@@ -276,7 +270,7 @@ def test_client_cleanup_explicit_published_root_and_cross_thread_retirement(tmp_
         os.close(descriptor)
 
 
-def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch):
+def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypatch, declared_native_package):
     root, root_id, _, _, _ = _root(tmp_path)
     legacy = Comms(tmp_path / ".agent-comms")
     for name in ("sender", "receiver"):
@@ -284,7 +278,7 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
             legacy.registry.new_thread(name, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
         )
     route_file = tmp_path / "route-state" / "active-route.json"
-    route = active_route.ActiveRoute(root, root_id, tmp_path)
+    route = active_route.ActiveRoute(root, root_id)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
@@ -339,11 +333,11 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
 
 
-def test_route_publication_reports_unknown_after_link(tmp_path, monkeypatch):
+def test_route_publication_reports_unknown_after_link(tmp_path, monkeypatch, declared_native_package):
     root = tmp_path / "private"
     root.mkdir(mode=0o700)
     path = tmp_path / "route-state" / "active-route.json"
-    route = active_route.ActiveRoute(root, "a" * 32, tmp_path)
+    route = active_route.ActiveRoute(root, "a" * 32)
     monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: None)
     real_fsync = os.fsync
 

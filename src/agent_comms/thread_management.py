@@ -18,7 +18,7 @@ from uuid import uuid4
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 from agent_comms.coordination_errors import CoordinationError, IdentityConflict
 
-from .child_process import NoProcess, ProcessIdentity, ProcessState
+from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
 
@@ -243,7 +243,7 @@ class ThreadManagement:
         *,
         tags: frozenset[str],
         worktree: str,
-        process: ProcessState = NoProcess(),
+        process: ProcessState = NO_PROCESS,
         model: str | None = None,
         thinking_level: str | None = None,
         auto_title_pending: bool = False,
@@ -501,7 +501,9 @@ class ThreadManagement:
         info = self.agents.agent_info_of(thread.name)
         return info.model_or(default)
 
-    def attach_session(self, original: Thread, source_path: str, *, process: ProcessState) -> Thread:
+    def attach_session(
+        self, original: Thread, source_path: str, *, process: ProcessState,
+    ) -> Thread:
         """Attach Pi state and retain its model once, outside the wire lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))

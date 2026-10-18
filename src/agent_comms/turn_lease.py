@@ -6,6 +6,7 @@ import time
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field, replace
 
+from .activity import ObservedActivity
 from .routing import TurnRouting
 from .field_codec import FieldCodec
 from .thread_identity import TurnIdentity
@@ -57,7 +58,7 @@ class TurnState:
     def phase(self) -> TurnPhase:
         return self.active.phase if self.active is not None else IdlePhase()
 
-    def project_activity(self, activity):
+    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """The turn start is activity even before its first phase observation."""
         projected = self.phase.project_activity(activity)
         if self.active is None:

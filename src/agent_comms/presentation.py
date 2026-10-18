@@ -34,6 +34,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
+from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .runtime_info import RuntimeInfo
 from .store_files import _store_lock
 from .wire_log import WireSnapshot, WireLog
@@ -50,7 +51,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
     from .comms import Comms
-    from .ui_model.observation import ThreadsObserved
+    from .ui_model.observation import ReadNotifications, ThreadsObserved
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -467,7 +468,7 @@ class BusPresentation:
             yield selected
 
     def roster(
-        self, viewer: str, *, show_stopped: bool = True, show_archived: bool = False
+        self, viewer: str, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
         with DisplaySelection.reading(
@@ -475,8 +476,8 @@ class BusPresentation:
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
-                {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
-                show_archived=show_archived, read_marker_notice=basis.document.notice,
+                {}, {}, unread={}, channel_unread={}, visibility=visibility,
+                read_marker_notice=basis.document.notice,
             )
         return replace(
             snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice),
@@ -555,14 +556,10 @@ class ChannelView:
         activity: Mapping[str, ObservedActivity],
         sent: Mapping[str, float],
         messages: Mapping[str, ChannelActivity],
-        *,
-        show_stopped: bool,
-        show_archived: bool,
+        visibility: RosterVisibility,
     ) -> tuple[ChannelView, ...]:
         index = ChannelMemberIndex(snapshot.threads.values())
-        people = {thread.name: thread for thread in snapshot.visible_threads(
-            show_stopped=show_stopped, show_archived=show_archived,
-        )}
+        people = {thread.name: thread for thread in snapshot.visible_threads(visibility)}
         views: list[ChannelView] = []
         for channel in channels:
             pinned_members = pins.get(channel.name, frozenset())
@@ -625,11 +622,9 @@ class ThreadView:
     def roster(
         cls, snapshot: RegistrySnapshot, agents: AgentActivity,
         goal_waits: GoalWaits,
-        *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
+        visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> tuple[ThreadView, ...]:
-        threads = tuple(snapshot.visible_threads(
-            names=names, show_stopped=show_stopped, show_archived=show_archived,
-        ))
+        threads = tuple(snapshot.visible_threads(visibility, names=names))
         if not threads:
             return ()
         runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
@@ -687,8 +682,6 @@ class CoordinationSnapshot:
     channel_order: type[ChannelSort] = NameChannelSort
     thread_unread: Mapping[str, int] = field(default_factory=dict)
     unread_pending: frozenset[str] = frozenset()
-    show_stopped: bool = True
-    show_archived: bool = False
     read_marker_notice: str | None = None
 
     @classmethod
@@ -697,25 +690,22 @@ class CoordinationSnapshot:
         agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
-        show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
+        visibility: RosterVisibility, read_marker_notice: str | None = None,
     ) -> CoordinationSnapshot:
         """Assemble both rosters from the caller's acquired identity and read cut."""
         threads = OrderedDict((view.thread.name, view) for view in ThreadView.roster(
-            registry, agents, GoalWaits.at(root),
-            show_stopped=show_stopped, show_archived=show_archived,
+            registry, agents, GoalWaits.at(root), visibility,
         ))
         activities = {name: view.activity for name, view in threads.items()}
         return cls(
             channels=OrderedDict((view.channel.name, view) for view in ChannelView.roster(
-                registry, declarations.visible(show_archived), catalog.pinned_members(), catalog.list_order,
-                activities, sent, messages,
-                show_stopped=show_stopped, show_archived=show_archived,
+                registry, declarations.visible(visibility), catalog.pinned_members(), catalog.list_order,
+                activities, sent, messages, visibility,
             )),
             threads=threads,
             unread=unread, last_sent=sent, channel_unread=channel_unread,
             references=DisplayReferences.capture(root, registry, declarations),
-            channel_order=catalog.list_order, show_stopped=show_stopped,
-            show_archived=show_archived, read_marker_notice=read_marker_notice,
+            channel_order=catalog.list_order, read_marker_notice=read_marker_notice,
         )
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
@@ -748,8 +738,33 @@ def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]]):
     return field(metadata={"paths": paths})
 
 
+class ReadState:
+    __slots__ = ()
+
+    def _changed_since(self, earlier: WireRevision) -> bool:
+        return True
+
+    bus_source_changed_since = _changed_since
+    _registrations_changed_from = _changed_since
+    stores_changed_since = _changed_since
+    status_changed_since = _changed_since
+    sidebar_changed_since = _changed_since
+    external_transcripts_changed_since = _changed_since
+    notifications_changed_since = _changed_since
+
+    def registrations_changed_since(self, earlier: ReadState) -> bool:
+        return True
+
+    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
+        return True
+
+
+class NoRevision(ReadState):
+    __slots__ = ()
+
+
 @dataclass(frozen=True, slots=True)
-class WireRevision:
+class WireRevision(ReadState):
     """One observation of every Comms store a view derives from, by name."""
 
     registry: tuple[FileRevision, ...] = revision_source(lambda views: (views.registry.store.path,))
@@ -771,7 +786,6 @@ class WireRevision:
 
     @classmethod
     def empty(cls) -> WireRevision:
-        """No stores have been observed yet; source groups come from their declarations."""
         return cls(**{source.name: () for source in fields(cls) if "paths" in source.metadata},
                    expiry_tick=0, through_seq=0)
 
@@ -851,8 +865,10 @@ class WireRevision:
     def expiry_period(self) -> int:
         return self.expiry_tick // self.expiry_seconds
 
-    def registrations_changed_since(self, earlier: WireRevision) -> bool:
-        """A thread registration or a channel declaration changed."""
+    def registrations_changed_since(self, earlier: ReadState) -> bool:
+        return earlier._registrations_changed_from(self)
+
+    def _registrations_changed_from(self, earlier: WireRevision) -> bool:
         return (self.registry, self.catalog) != (earlier.registry, earlier.catalog)
 
     def stores_changed_since(self, earlier: WireRevision) -> bool:
@@ -877,6 +893,9 @@ class WireRevision:
     def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
         """CLI drafts and finished items changed, independently of coordination status."""
         return self.external_transcripts != earlier.external_transcripts
+
+    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
+        return request.changed_since(current, self)
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
         """Recipient state depends on assignments, presence, bus replies and read marks."""

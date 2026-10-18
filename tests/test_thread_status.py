@@ -128,19 +128,16 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 
 
 def test_roster_and_controls_keep_archived_threads_dormant():
-    from agent_comms.tools import CommsStartTool, OwnerLifecycleControl, ToolRequest
+    from agent_comms.tools import CommsStartTool, ToolRequest
+    from agent_comms.thread_execution import OwnerLifecycleControl
     from agent_comms.child_process import NoProcess
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived
-    assert not archived.in_view()
-    assert archived.in_view(show_archived=True)
     for command in ToolRequest.members_with(OwnerLifecycleControl):
         assert not command.available_for(archived, process=ProcessIdentity(123, 1))
     stopped = StoppedThreadStatus()
-    assert stopped.in_view() and not stopped.in_view(show_stopped=False)
     assert CommsStartTool.available_for(stopped, process=ProcessIdentity(123, 1))
-    assert not DeletingThreadStatus().in_view(show_stopped=True, show_archived=True)
     for live in (RunningThreadStatus(), IdleThreadStatus()):
         assert live.restored() == stopped
         assert not CommsStartTool.available_for(live, process=ProcessIdentity(123, 1))

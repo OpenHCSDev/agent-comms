@@ -381,7 +381,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # acceptance/selection, instead of verifying history before it too.
             await self.cursors.publish(session_id, thread_name)
             return 0
-        if not owner.process_identity.matches_pid(os.getpid()):
+        if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
         bus = MessageBus(
             self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True

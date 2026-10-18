@@ -9,9 +9,17 @@ from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
+from .cli_commands import (
+    ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
+    PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
+    ThreadsCliCommand, _json_object, option,
+)
+from .thread_execution import (
+    ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
+    StartOwnerControl, ThreadCommandAvailability,
+)
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
 from .channel_targets import ChannelTarget
-from .child_process import ProcessState
 from .channels import SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
@@ -41,7 +49,6 @@ from .task_sources import (
 )
 from .turn_digests import TurnDigestRead
 from .relationships import RelationshipEdit
-from .thread_status import ThreadStatus
 from .work_branches import WorkBranches
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
@@ -87,20 +94,15 @@ def tool_field(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolRequest[Caller: ToolCaller = ToolCaller](NativeRequestTools, NativeExecutableTool):
+class ToolRequest[Caller: ToolCaller = ToolCaller](
+    ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
+):
     family_discriminator = "tool"
     description: ClassVar[str]
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
 
-    @classmethod
-    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
-        return True
-
-    @classmethod
-    def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
-        return cls.available_for(status, process=thread.process_identity)
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
@@ -209,14 +211,6 @@ def _bounded_inbox_response(
     return bounded
 
 
-class NativeOwnerCommand:
-    @classmethod
-    def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
-        return thread.execution.native_command_available(
-            cls, status, process=thread.process_identity,
-        )
-
-
 @dataclass(frozen=True, kw_only=True)
 class CommsPinChannelTool(ToolRequest):
     label = "Pin Channel"
@@ -228,8 +222,6 @@ class CommsPinChannelTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import PinChannelCliCommand
-
         return PinChannelCliCommand(name=self.name, pinned=self.pinned).apply(comms)
 
 
@@ -246,8 +238,6 @@ class CommsPinThreadTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import PinThreadCliCommand
-
         channel = self.channel
         PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
         canonical = ChannelTarget.normalize_name(channel)
@@ -414,8 +404,6 @@ class CommsDeleteViewTool(ToolRequest):
     name: str = tool_field("Saved view name")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import DeleteViewCliCommand
-
         DeleteViewCliCommand(name=self.name).apply(comms)
         return CommsChannelsTool().apply(comms, caller)
 
@@ -690,8 +678,6 @@ class CommsThreadsTool(ToolRequest):
     active_only: bool = tool_field("Exclude stopped threads", default=False)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import ThreadsCliCommand
-
         return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms))
 
 
@@ -958,21 +944,11 @@ class CommsForkTool(NativeOwnerCommand, ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import ForkCliCommand
-
         parent = comms.registry.require(self.parent)
         return ForkCliCommand(name=self.name, parent=parent.name, task=self.task,
                               project=parent.worktree, model=parent.model,
                               thinking_level=parent.thinking_level,
                               tags=_tag_set(self.tags) if self.tags is not None else None).apply(comms)
-
-
-class OwnerLifecycleControl:
-    """Commands that act on the owner lifecycle share its eligibility query."""
-
-    @classmethod
-    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
-        return status.allows_owner_control()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -985,13 +961,11 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     name: str = tool_field("Thread name", binding=SubjectBinding)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import StopCliCommand
-
         return StopCliCommand(name=self.name).apply(comms)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
+class CommsStartTool(NativeOwnerCommand, StartOwnerControl, ToolRequest):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
@@ -1003,13 +977,7 @@ class CommsStartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     action_order = 21
     name: str = tool_field("Thread to start", binding=SubjectBinding)
 
-    @classmethod
-    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
-        return status.allows_owner_start(process=process)
-
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import StartCliCommand
-
         return StartCliCommand(name=self.name).apply(comms)
 
 
@@ -1062,7 +1030,7 @@ class CommsCancelRestartTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
+class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
     label = "Archive Comms Thread"
     description = "Archive a stopped thread while retaining its messages."
     context = "thread"
@@ -1070,14 +1038,32 @@ class CommsArchiveTool(OwnerLifecycleControl, ToolRequest):
     action_order = 30
     name: str = tool_field("Stopped thread name", binding=SubjectBinding)
 
-    @classmethod
-    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
-        return status.stopped
-
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        from .cli_commands import ArchiveCliCommand
-
         return ArchiveCliCommand(name=self.name).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ToolsCliCommand(CliCommand):
+    help = "Emit the shared adapter tool catalog"
+
+    def apply(self, ctx: Comms) -> JsonObject:
+        return {"tools": tool_catalog()}
+
+
+@dataclass(frozen=True, kw_only=True)
+class InvokeCliCommand(CliCommand, declared_name="tool"):
+    help = "Invoke one declared adapter tool, as --from THREAD when given"
+    caller: str | None = option(
+        "--from", default=None, help="Calling thread; omit for tools that need no thread"
+    )
+    tool: str = option("--tool")
+    arguments: str = option(
+        "--arguments", help="Tool arguments as a JSON object", default="{}",
+    )
+
+    def apply(self, ctx: Comms) -> JsonObject:
+        return invoke_tool(ctx, self.tool, _json_object(self.arguments),
+                           caller=ToolCaller.from_actor(self.caller))
 
 
 def tool_catalog() -> list[JsonObject]:

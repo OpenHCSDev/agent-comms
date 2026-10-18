@@ -5,7 +5,6 @@ from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
-import json
 import shlex
 import sys
 import time
@@ -43,29 +42,20 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
             assert time.monotonic() < deadline, "Actual worker failed to attach runtime"
             time.sleep(0.02)
         assert comms.owners.start("worker").pid == owner.require_process().pid
-        assert not owner.process_identity.matches_pid(os.getpid())
+        assert not owner.process_identity.runs_here()
         assert owner.process_identity is not None
         from agent_comms.native_pi import NativePiUnavailable
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
-        # A published route for this root naming another package is real state
-        # a fresh lifecycle derives from; the reviewed layout refuses it.
-        from agent_comms import active_route
+        # A fresh lifecycle derives its package from the pin; the reviewed layout refuses another.
+        from agent_comms import private_nk_entrypoint
 
-        route_file = tmp_path / "routes" / "active-route.json"
-        route_file.parent.mkdir(mode=0o700)
-        route_file.write_text(json.dumps({
-            "version": 1, "root": str(tmp_path),
-            "wire_root_id": comms.bus.log.read_metadata_unlocked().wire_root_id,
-            "native_package": str(tmp_path / "other-package"),
-        }))
-        route_file.chmod(0o600)
-        monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-        mismatched = Comms(tmp_path)
-        before = comms.registry.snapshot()
-        with pytest.raises(NativePiUnavailable, match="Canonical native Pi package layout"):
-            mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
-        route_file.unlink()
+        with monkeypatch.context() as patch:
+            patch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: tmp_path / "other-package")
+            mismatched = Comms(tmp_path)
+            before = comms.registry.snapshot()
+            with pytest.raises(NativePiUnavailable, match="Canonical native Pi package layout"):
+                mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
         assert owner.process_alive
         assert comms.registry.snapshot() == before
         assert isinstance(comms.owners.releases.get("worker"), NoRelease)

@@ -158,7 +158,7 @@ class Thread(ThreadProvenance):
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
-            if not self.process_identity.matches_pid(self.active_turn.owner_pid):
+            if not self.process_identity.owns_turn(self.active_turn):
                 raise RelationViolationError("A turn must belong to the registered executor.")
             if self.active_turn.turn_generation is not None and (
                 type(self.active_turn.turn_generation) is not int

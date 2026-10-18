@@ -7,7 +7,6 @@ the durable cursor. Every observation reads NativeSourceCursor's original proof.
 from __future__ import annotations
 
 import asyncio
-import os
 import sqlite3
 from dataclasses import dataclass, field
 from functools import partial
@@ -95,7 +94,7 @@ class CursorPublication:
             owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
         except RelationViolationError:
             return NoCursorScope()  # This process has no live owner input grant.
-        if not owner.process_identity.matches_pid(os.getpid()):
+        if not owner.process_identity.runs_here():
             return NoCursorScope()
         return LiveCursorScope(
             session_id,

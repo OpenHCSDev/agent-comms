@@ -38,7 +38,7 @@ def test_unstarted_process_does_not_signal_or_supply_a_pid():
     assert not process.alive()
     assert not process.offline()
     assert process.allows_owner_start()
-    assert not process.matches_pid(123)
+    assert not process.runs_here()
     process.signal(signal.SIGTERM)
     assert process.pid_fields() == {}
     process.require_release_by(ProcessIdentity(123, 456))

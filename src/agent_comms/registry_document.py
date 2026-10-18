@@ -42,6 +42,20 @@ if TYPE_CHECKING:
     from .native_input_owner import RegistryOwner
 
 
+@dataclass(frozen=True, slots=True)
+class RosterVisibility:
+    """Which threads a roster shows: the one declaration of its defaults."""
+
+    stopped: bool = True
+    archived: bool = False
+
+    def shows(self, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.role.executable and status.in_view(self)
+
+
+DEFAULT_ROSTER = RosterVisibility()
+
+
 class RegistryPresence(RegistryNames[Thread]):
     """Presence reads shared by the acquired document and its detached cut."""
 
@@ -69,13 +83,16 @@ class RegistryPresence(RegistryNames[Thread]):
         return self.last_seen[self.require(name).name]
 
     def visible_threads(
-        self, *, show_stopped: bool, show_archived: bool, names: Iterable[str] | None = None,
+        self, visibility: RosterVisibility, *, names: Iterable[str] | None = None,
     ) -> Iterator[Thread]:
         selected = (self.threads.values() if names is None else
                     (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
-        return (thread for thread in selected if thread is not None and thread.role.executable
-                and self.statuses[thread.name].in_view(
-                    show_stopped=show_stopped, show_archived=show_archived))
+        return (thread for thread in selected
+                if thread is not None and visibility.shows(thread, self.statuses[thread.name]))
+
+    def channel_audience(self) -> Iterator[Thread]:
+        """A channel reaches the default roster: stopped owners receive, archived do not."""
+        return self.visible_threads(DEFAULT_ROSTER)
 
 
 @dataclass(slots=True)

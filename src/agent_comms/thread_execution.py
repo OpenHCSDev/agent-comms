@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-import os
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -15,6 +14,42 @@ if TYPE_CHECKING:
     from .threads import Thread
     from .registry_document import RegistrySnapshot
     from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
+
+
+class ThreadCommandAvailability:
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return True
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return cls.available_for(status, process=thread.process_identity)
+
+
+class NativeOwnerCommand(ThreadCommandAvailability):
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.execution.native_command_available(
+            cls, status, process=thread.process_identity,
+        )
+
+
+class OwnerLifecycleControl(ThreadCommandAvailability):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.allows_owner_control()
+
+
+class StartOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.allows_owner_start(process=process)
+
+
+class ArchiveOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.stopped
 
 
 class ConversationPreparation(ABC):
@@ -83,7 +118,7 @@ class NativeThreadExecution(ThreadExecution):
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
-        if thread.process_identity.matches_pid(os.getpid()):
+        if thread.process_identity.runs_here():
             return ()
         return (thread,) if thread.role.executable and status.active and thread.process_alive else ()
 
