@@ -41,6 +41,7 @@ from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
 from .private_path import FileIdentity, FileRevision
+from .private_bus_checkpoint import RecordedContextManifestSources
 from .store_files import (
     ExclusiveLock,
     LockMode,
@@ -595,14 +596,13 @@ class WireLog:
 
     def record_context(self, manifest) -> None:
         """Append the context records chosen by the certified entry owner."""
+        previous = RecordedContextManifestSources.latest(self, manifest.thread)
         with self.locked() as lock:
             marker = self.private_marker_unlocked()
-            for record in lock.certified_read().context_records(manifest):
+            for record in lock.certified_read().context_records(manifest, previous):
                 self.append_private_unlocked(marker, record.to_wire())
 
     def context_manifest_page(self, name: str, registry, *, cursor=None, previous=()):
-        from .private_bus_checkpoint import RecordedContextManifestSources
-
         return RecordedContextManifestSources.for_owner(
             self, name, registry, cursor=cursor, previous=previous)
 

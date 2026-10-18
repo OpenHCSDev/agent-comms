@@ -20,42 +20,46 @@ import json
 import secrets
 import unicodedata
 from collections.abc import (
-    AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterable, Iterator, Sequence,
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Iterable,
+    Iterator,
+    Sequence,
 )
 from contextlib import AsyncExitStack, aclosing, contextmanager
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from .agent_backend import TurnInbox
-from .child_process import ProcessIdentity
-from .request_progress import NoRequestObserver, RequestObserver, RequestProgress
-
 from . import agent_events as events
 from . import pi_commands as commands
 from . import pi_events as pi
 from . import turn_failure as failures
+from .agent_backend import TurnInbox
 from .child_process import TimedOutOutcome
+from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
 from .image_inputs import ImageInput
-from .turn_context import InputContributionCoordinates
-from .send_outcome import SendBoundary
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
-from .coordinator import Coordination
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .field_codec import MalformedRecord
 from .pi_rpc import PiRpcChannel
-from .selected_tool_broker import SelectedToolDenied
 from .prompt_state import UnwrittenPrompt
+from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
+from .selected_tool_broker import SelectedToolDenied
+from .send_outcome import SendBoundary
+from .turn_context import InputContributionCoordinates
 from .turn_inputs import InputForwarding
 from .turn_output import TurnOutput
 from .turn_phase import ShutdownPhase, TurnPhase
 from .turn_stats import StatsRequest
 from .turn_usage import UsageAccount
-from .turn_watchdog import ModelWait, ProgressWatchdog, TurnWait, TurnWaitExpired
+from .turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog, TurnWait, TurnWaitExpired
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
@@ -75,7 +79,7 @@ def compaction_summary(value: Any) -> str:
 # transport backstop must remain strictly longer so Pi can emit its authoritative
 # timeout, auto-retry, and transport evidence before agent-comms intervenes.
 _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS = 300.0
-assert ModelWait().budget > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
+assert DEFAULT_MODEL_WAIT.budget > _PI_0_85_1_PROVIDER_IDLE_TIMEOUT_SECONDS
 RPC_ABORT_GRACE_SECONDS = 2.0
 CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS = NATIVE_STARTUP_POLICY.readiness_seconds
 PROMPT_START_TIMEOUT_SECONDS = 180.0
@@ -100,7 +104,7 @@ async def stream_agent_events(
     steering_queue: TurnInbox | None = None,
     finish_event: asyncio.Event | None = None,
     images: Sequence[ImageInput] = (),
-    model_wait: TurnWait = ModelWait(),
+    model_wait: TurnWait = DEFAULT_MODEL_WAIT,
     rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
     send_boundary: SendBoundary | None = None,
     interrupt_boundary: SendBoundary | None = None,
@@ -110,7 +114,7 @@ async def stream_agent_events(
     root: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
-    request_observer: RequestObserver = NoRequestObserver(),
+    request_observer: RequestObserver = NO_REQUEST_OBSERVER,
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend; native completion ends with a ``done`` event.
 
@@ -179,7 +183,7 @@ class TurnSession:
         steering_queue: TurnInbox | None = None,
         finish_event: asyncio.Event | None = None,
         images: Sequence[ImageInput] = (),
-        model_wait: TurnWait = ModelWait(),
+        model_wait: TurnWait = DEFAULT_MODEL_WAIT,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
         send_boundary: SendBoundary | None = None,
         interrupt_boundary: SendBoundary | None = None,
@@ -188,7 +192,7 @@ class TurnSession:
         native_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
         context_contributions: tuple[InputContributionCoordinates, ...] = (),
-        request_observer: RequestObserver = NoRequestObserver(),
+        request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         *, startup: NativeStartup,
     ):
         self.launch = launch
