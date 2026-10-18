@@ -33,14 +33,15 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
 
     @classmethod
     @contextmanager
-    def send(cls, delegate, *args):
-        if cls.turn_pending:
-            yield HeldSend()
-        elif delegate is None:
-            yield GrantedSend()
-        else:
-            with delegate(*args) as outcome:
-                yield outcome
+    def send_new(cls, delegate, *args):
+        """A not-yet-started turn cannot acquire new input during maintenance."""
+        yield HeldSend()
+
+    @classmethod
+    @contextmanager
+    def send_running(cls, delegate, *args):
+        """Only READY or DRAINING can lend the original running turn's pipe."""
+        yield HeldSend()
 
     @classmethod
     def require_open(cls) -> None:
@@ -48,7 +49,32 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
             raise RelationViolationError("Maintenance ingress requires READY")
 
 
-class DrainingPhase(MaintenancePhase):
+class GrantedSends:
+    """One grant implementation shared by allowed new and running sends."""
+
+    @classmethod
+    @contextmanager
+    def grant(cls, delegate, *args):
+        if delegate is None:
+            yield GrantedSend()
+        else:
+            with delegate(*args) as outcome:
+                yield outcome
+
+
+class RunningTurnSends(GrantedSends):
+    @classmethod
+    def send_running(cls, delegate, *args):
+        return cls.grant(delegate, *args)
+
+
+class NewTurnSends(GrantedSends):
+    @classmethod
+    def send_new(cls, delegate, *args):
+        return cls.grant(delegate, *args)
+
+
+class DrainingPhase(RunningTurnSends, MaintenancePhase):
     @classmethod
     def successors(cls):
         # A wire-compatible cutover clears directly; format migrations may
@@ -68,7 +94,7 @@ class InstallingPhase(MaintenancePhase):
         return (ReadyPhase,)
 
 
-class ReadyPhase(MaintenancePhase):
+class ReadyPhase(NewTurnSends, RunningTurnSends, MaintenancePhase):
     turn_pending = False
 
     @classmethod

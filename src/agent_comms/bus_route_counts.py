@@ -176,19 +176,10 @@ class RouteSourceRow(RouteTable, TypedTable):
     revision: FileRevision | None
     tail_digest: str | None
 
-    @staticmethod
-    def tail(source: BinaryIO, offset: int) -> str:
-        start = max(0, offset - 4096)
-        source.seek(start)
-        return sha256(source.read(offset - start)).hexdigest()
-
-    def matches_file(self, source: BinaryIO) -> bool:
-        if self.revision is None:
-            return True  # The empty projection has no original bytes to retain.
-        return (
-            self.revision.identity == FileIdentity.from_stat(os.fstat(source.fileno()))
-            and self.tail(source, self.revision.size) == self.tail_digest
-        )
+    def matches_source(self, source: WireSnapshot) -> bool:
+        return self.revision is None or (
+            source.same_file(self.revision.identity)
+            and source.fingerprint(self.revision.size) == self.tail_digest)
 
 
 @dataclass(frozen=True)
@@ -326,22 +317,6 @@ class BusRouteCounts:
     def __exit__(self, _error_type, _error, _traceback) -> None:
         self.connection.close()
 
-    @staticmethod
-    def _decoded(
-        source: BinaryIO, start: int, stop: int,
-        decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
-    ):
-        """Deliveries of the complete original rows in [start, stop)."""
-        source.seek(start)
-        while source.tell() < stop:
-            raw = source.readline(stop - source.tell())
-            if not raw.endswith(b"\n"):
-                raise RelationViolationError(
-                    "Route projection source has an incomplete original row"
-                )
-            if raw.strip():
-                yield from decode(json.loads(raw))
-
     def _initialize(self) -> None:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
         if self.path.exists():
@@ -368,7 +343,7 @@ class BusRouteCounts:
             return rows[0] if rows else None
 
     def sync(
-        self, source: BinaryIO | None, revision: FileRevision | None,
+        self, source: WireSnapshot,
         decode: Callable[[Mapping], tuple[DeliveryMessage, ...]],
         *, blocking: bool = True,
     ) -> RouteIndexState:
@@ -378,44 +353,26 @@ class BusRouteCounts:
         projection lock it is committing the same bytes, so this reader
         answers from its own remainder instead of waiting.
         """
-        size = revision.size if revision is not None else 0
-        if source is not None:
-            # Touching or unlinking a retained inode does not change its cut.
-            # Read the captured open file; the stored row checks index continuity.
-            if revision.identity != FileIdentity.from_stat(os.fstat(source.fileno())):
-                raise RelationViolationError(
-                    "Route projection source changed before its captured read"
-                )
-            if size:
-                source.seek(size - 1)
-                if source.read(1) != b"\n":
-                    raise RelationViolationError(
-                        "Route projection source has an incomplete original row"
-                    )
+        size = source.boundary
         recorded = self._recorded()
         if size == 0 and recorded is not None:
             # An original empty cut cannot retire a later committed projection.
             return RouteIndexReady()
-        rebuild = recorded is None or source is None
+        rebuild = recorded is None
         offset = recorded.revision.size if recorded and recorded.revision else 0
         if not rebuild and offset:
-            if not recorded.matches_file(source):
+            if not recorded.matches_source(source):
                 rebuild, offset = True, 0
             elif size < offset:
                 return RouteIndexReady()
         if not rebuild and offset == size:
             return RouteIndexReady()
 
-        rows: list[DeliveryMessage] = []
-        through = size
-        if source is not None:
-            through = min(size, offset + self.rebuild_bytes)
-            if through < size:
-                source.seek(through)
-                through += len(source.readline(size - through))
-            rows.extend(self._decoded(source, offset, through, decode))
-        tail_digest = RouteSourceRow.tail(source, through) if source is not None else None
-        checkpoint = replace(revision, size=through) if revision is not None else None
+        through = offset
+        rows = []
+        for record, _, through in source.rows(offset, min(size, offset + self.rebuild_bytes)):
+            rows.extend(decode(record))
+        through = source.position
 
         try:
             with (
@@ -437,7 +394,8 @@ class BusRouteCounts:
                 for row in rows:
                     RouteEntryRow.record(connection, row)
                 RouteSourceRow.delete(connection)
-                RouteSourceRow(1, checkpoint, tail_digest).insert(connection)
+                if through:
+                    RouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
                 connection.commit()
         except BlockingIOError:
             return RouteIndexBlocked()
@@ -470,15 +428,8 @@ class OpenedRouteCounts(BusRouteCounts):
     def _decode(self, record: Mapping) -> tuple[DeliveryMessage, ...]:
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
-    def _sync_source(self) -> RouteIndexState:
-        return self.source.read(
-            lambda opened: self.sync(opened.stream, opened.revision, self._decode,
-                                     blocking=self.blocking),
-            absent=lambda: self.sync(None, None, self._decode, blocking=self.blocking),
-        )
-
     def _acquire(self) -> OpenedRouteCounts:
-        self._preparation = self._sync_source()
+        self._preparation = self.sync(self.source, self._decode, blocking=self.blocking)
         super()._acquire()
         try:
             self._appended = self._appended_deliveries()
@@ -500,17 +451,17 @@ class OpenedRouteCounts(BusRouteCounts):
         size = self.source.boundary
         if size == 0:
             return ()
-        stream = self.source.opened.stream
         records = RouteSourceRow.select(self.connection)
         recorded = records[0] if records else None
         through = recorded.revision.size if recorded and recorded.revision else 0
-        if recorded is not None and not recorded.matches_file(stream):
+        if recorded is not None and not recorded.matches_source(self.source):
             self._preparation.defer_read(0, size)
         if size - through > self.rebuild_bytes:
             self._preparation.defer_read(through, size)
         if through >= size:
             return ()
-        return tuple(self._decoded(stream, through, size, self._decode))
+        return tuple(row for record, _, _ in self.source.rows(through, size)
+                     for row in self._decode(record))
 
     def _recipients(self, target: str):
         direct = self.registry.canonical_name(target)

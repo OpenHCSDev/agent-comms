@@ -14,7 +14,7 @@ from .private_path import FileRevision
 from .store_files import _atomic_write_text, _store_lock
 
 if TYPE_CHECKING:
-    from .wire_log import OpenedWireSnapshot
+    from .wire_log import WireSnapshot
 
 
 @dataclass(frozen=True)
@@ -134,10 +134,12 @@ class BusAppendIndex(AppendProjectionStore[Checkpoint]):
         self._held = record
 
     def capture(
-        self, prepared: Checkpoint | None, opened: OpenedWireSnapshot,
+        self, prepared: Checkpoint | None, opened: WireSnapshot,
     ) -> Checkpoint | None:
         if prepared is None:
             return None
         self._held = (prepared if opened.same_file(prepared.source.identity)
-                      and prepared.accepts(opened.revision, opened.stream) else None)
+                      and prepared.offset <= opened.boundary
+                      and (prepared.offset != opened.boundary or not opened.changed_since(prepared.source))
+                      and prepared.tail == opened.fingerprint(prepared.offset) else None)
         return self._held
