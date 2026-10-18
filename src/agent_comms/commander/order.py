@@ -54,7 +54,7 @@ def refuse(text, *families):
 
 
 def post(recipients, body):
-    """Send one message its caller refused with OUTGOING; judge reads it back from bus history."""
+    """Send one message its caller refused with OUTGOING; judge reads it from bus history."""
     command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
     for unit in recipients:
         command += ['--to', unit]
