@@ -17,7 +17,7 @@ from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
-from .storage_rules import StorageRoots, StorageRule
+from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .thread_identity import (
     ThreadProvenance,
     ThreadRole,
@@ -62,6 +62,10 @@ class Thread(ThreadProvenance):
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
     storage_roots: StorageRoots = field(kw_only=True,
         metadata={"registration_inheritance": InheritPrevious})
+    # Projects this conversation ran in before its current one: a saved session
+    # resumes from them and a started turn finishes in one of them.
+    earlier_projects: tuple[StoragePath, ...] = field(default=(), kw_only=True,
+        metadata={"registration_inheritance": InheritPrevious, "wire_omit_default": True})
     auto_title_pending: bool = field(
         default=False, metadata={"registration_inheritance": InheritPrevious}
     )
@@ -95,14 +99,20 @@ class Thread(ThreadProvenance):
                 yield location, True
 
     def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
-        """The selected project, or this unit's physical home and extra checkouts."""
+        """A project this conversation ran in, or this unit's physical home and extra checkouts."""
+        return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
+
+    def ran_in(self, worktree: str) -> bool:
+        """The current project or one this conversation moved away from."""
         selected = Path(worktree).expanduser().resolve()
-        return selected == Path(self.worktree).expanduser().resolve() or selected in rule.checkouts_of(self)
+        return selected == Path(self.worktree).expanduser().resolve() or selected in self.earlier_projects
 
     def moved_to_project(self, project: str) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
+        earlier = Path(self.worktree).expanduser().resolve()
         return replace(
             self, worktree=project,
+            earlier_projects=tuple(dict.fromkeys((*self.earlier_projects, earlier))),
             project_resume_due=self.project_resume_due or self.executing,
         )
 

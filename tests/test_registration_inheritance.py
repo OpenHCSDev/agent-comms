@@ -113,7 +113,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         saved = str(old / 'native.jsonl')
         observed = comms.registry.attach_native_session(original, saved)
         current = comms.registry.require('owner')
-        assert current.worktree == str(new) and current.storage_roots == original.thread.storage_roots
+        assert current.worktree == str(new) and current.earlier_projects == (old,)
         assert current.session_file == observed.thread.session_file == saved
         assert observed.thread.worktree == str(old)
         assert observed.turn_lease == original.turn_lease == current.turn_lease
