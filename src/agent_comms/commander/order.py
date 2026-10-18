@@ -46,6 +46,9 @@ NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain wo
 B = str(CONFIG.root)
 CLI = str(CONFIG.cli)
 
+OUTGOING = (FairText, HierarchyText, PlainText)  # every text the commander sends passes all of these
+
+
 def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
     if refused := [r for family in families if (r := family.refused(text))]:
@@ -53,8 +56,7 @@ def refuse(text, *families):
 
 
 def post(recipients, body):
-    """Send one message from the commander; judge reads it back from the bus history."""
-    refuse(body, FairText, PlainText)
+    """Send one message the caller already passed through OUTGOING; judge reads it back from the bus history."""
     command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
     for unit in recipients:
         command += ['--to', unit]
@@ -213,7 +215,6 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
         problems.append(f'{CONFIG.disk} has {storage.free_gb():.1f} GB free, under the {storage.FLOOR_GB} GB floor, and the order asks for "{asked.group()}"')
     if quota := storage.over_quota(unit):
         problems.append(f'{quota}: it cleans up its own checkouts and scratch before it gets new work')
-    refuse(body, FairText, HierarchyText)
     Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
@@ -268,6 +269,11 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
         problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
     if problems:
         sys.exit('Refused order:\n  ' + '\n  '.join(problems))
+    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + storage.RULE.replace('<you>', unit) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.' + f'\nDue {due} {time.strftime("%Z")}. Miss it and the task is reassigned.')
+    taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.'
+             for other in holders}
+    for text in (message, *taken.values()):
+        refuse(text, *OUTGOING)  # before any Core write, so a refusal records nothing
     if not mechanical and (fired := [pid for pid in group if pid in listed and struck(listed[pid], unit) >= 2]):
         sys.exit(f'Refused: {unit} has 2 strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
     at = time.time()
@@ -286,9 +292,9 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, **common)))
-    post([unit], f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + storage.RULE.replace('<you>', unit) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.' + f'\nDue {due} {time.strftime("%Z")}. Miss it and the task is reassigned.')
-    for other in holders:
-        post([other], f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.')
+    post([unit], message)
+    for other, text in taken.items():
+        post([other], text)
     print(order.id)
     if replaces and not clean:
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
@@ -302,7 +308,7 @@ def say(units, body_file):
     # Numbered edits or a report line are an order: it needs a deadline, so it goes through send.
     if len(re.findall(r'(?m)^\s*\d+[.)] ', body)) >= 2 or re.search(r'(?mi)^\s*(report|due)\b.*:', body):
         sys.exit('Refused: a numbered edit list or a Report/Due line is an order. Use `order send` so it gets a tracked deadline.')
-    refuse(body, FairText, HierarchyText)
+    refuse(body, *OUTGOING)
     Slop.from_order(body)
     print(post(units.split(','), body.rstrip()))
 
@@ -368,6 +374,7 @@ def strike(unit, why, caught=f'{ME} at review'):
     todo = COMMS.goals.todos.get(task)
     if not todo.state.open or todo.assignment.owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
+    refuse(why, *OUTGOING)  # the strike is posted to #comms; it is refused before Core records it
     call(CommsTodoTool(id=task, operation=StrikeTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, f'{why} (caught by {caught})')))
     n = struck(COMMS.goals.todos.get(task), unit)
