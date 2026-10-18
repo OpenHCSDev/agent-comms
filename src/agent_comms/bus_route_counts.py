@@ -7,24 +7,21 @@ projections, advances across complete appended rows, and is reset at migration.
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import struct
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
-from contextlib import closing, contextmanager
+from collections.abc import Callable, Mapping
+from contextlib import closing
 from dataclasses import dataclass, field, replace
-from hashlib import sha256
 from pathlib import Path
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, NoReturn
+from typing import TYPE_CHECKING, ClassVar, NoReturn
 
 from .coordination_database import CoordinationStore
 from .coordination_errors import CoordinationReadUnavailable
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .private_path import FileRevision
 from .read_basis import ReadCursor
-from .private_path import FileIdentity, FileRevision
 from .routing import DeliveryMessage, DeliveryScope
 from .store_files import _store_lock
 from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow, TypedTable

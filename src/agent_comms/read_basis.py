@@ -26,6 +26,7 @@ from .private_path import FileRevision
 from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
+
 class DisplayViewer(ABC):
     """The reader owns read evidence, aliases and cursor selection."""
 
@@ -222,16 +223,18 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
-    from .historical_views import HistoryArchive, HistorySource
-    from .presentation import BusPresentation
+    from .bus_page_index import BusPageIndex, BusPageRow
     from .channels import Channel
+    from .historical_views import HistoryArchive, HistorySource
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
     from .messages import Message
+    from .presentation import BusPresentation
     from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
+    from .wire_log import OpenedWireSource
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,7 +248,7 @@ class ConversationCursor:
     def union(cls, cursors: Iterable[ConversationCursor]) -> ConversationCursor:
         cursors = tuple(cursors)
         through = max((cursor.high_water for cursor in cursors), default=0)
-        values = []
+        values: list[int] = []
         for sequence in merge(*(cursor.exceptions for cursor in cursors)):
             if sequence > through and (not values or values[-1] != sequence):
                 values.append(sequence)
@@ -326,6 +329,7 @@ class ReadCursor:
 
 
 class Conversation(DeclaredFamily, ABC, affix="Conversation"):
+    family_discriminator = "kind"
     participants: tuple[ThreadIncarnation, ...] = ()
 
     def current(self, snapshot: RegistryProvenance) -> bool:
@@ -400,7 +404,7 @@ class DisplayBasis:
     bus_identity: tuple[int, int] | None
 
     @property
-    def viewer_identity(self) -> ThreadIncarnation:
+    def viewer_identity(self) -> RecordedThreadIncarnation:
         return RecordedThreadIncarnation(self.viewer, self.viewer_created_at)
 
     @property
@@ -653,11 +657,14 @@ class MessageDisplayScope(ABC):
     """Captured inclusion and its sound candidate reduction for the page index."""
 
     def read_key(self, sender: str, target: str, snapshot: RegistryProvenance) -> Conversation:
-        return CommandTarget.named(target).conversation_key(sender, snapshot, ChannelConversation, DMConversation)
+        return CommandTarget.named(target).conversation_key(
+            sender, snapshot, ChannelConversation, DMConversation
+        )
 
     def has_read(self, seen: ReadCursor, message: Message | BusPageRow,
                  snapshot: RegistryProvenance) -> bool:
-        return message.seq in seen.for_conversation(self.read_key(message.sender, message.target, snapshot))
+        conversation = self.read_key(message.sender, message.target, snapshot)
+        return message.seq in seen.for_conversation(conversation)
 
     def offsets(self, index, *, lower, upper, descending, before_offset):
         return index.offsets(lower=lower, upper=upper, descending=descending,
@@ -778,7 +785,8 @@ class ChannelDisplayScope(MessageDisplayScope):
                 f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE value IN ({name_marks}))",
                 (*targets, *names, *names, *names))
 
-    def capture_all(self, reads, viewer, snapshot, source, index) -> DisplayBasis:
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex) -> DisplayBasis:
         if self.any_mode or self.targets is None:
             return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
                                          snapshot, source, index)

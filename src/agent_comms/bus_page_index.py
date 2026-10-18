@@ -7,25 +7,22 @@ is never used across a changed inode, shortened file, or changed indexed tail.
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Generator, Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager
-from functools import cached_property
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
-from .field_codec import MalformedRecord
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
-from .bus_projection import AppendCheckpoint
+from .field_codec import MalformedRecord
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
 from .store_files import SharedLock, _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
-from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -249,7 +246,7 @@ class BusPageIndex:
         descending: bool,
         targets: frozenset[str] | None,
         before_offset: int | None = None, after_offset: int | None = None,
-    ) -> Generator[BusPageRow, None, None]:
+    ) -> Generator[BusPageRow]:
         clauses: list[str] = []
         params: list[object] = []
         if after_offset is not None:
@@ -275,7 +272,7 @@ class BusPageIndex:
         self, first: frozenset[str], second: frozenset[str], *,
         lower: int | None, upper: int | None, descending: bool,
         before_offset: int | None = None,
-    ) -> Generator[BusPageRow, None, None]:
+    ) -> Generator[BusPageRow]:
         """Only the captured pair's rows, in the requested sequence order."""
         if not first or not second:
             return
@@ -289,7 +286,7 @@ class BusPageIndex:
     def _offsets(
         self, clauses: list[str], params: list[object], *, lower: int | None,
         upper: int | None, descending: bool, before_offset: int | None,
-    ) -> Generator[BusPageRow, None, None]:
+    ) -> Generator[BusPageRow]:
         """One owner for source bounds, ordering and typed offset decoding."""
         if lower is not None:
             clauses.append("seq > ?")
@@ -323,7 +320,7 @@ class BusPageIndex:
                                  descending=True, limit=1)
         return rows[0] if rows else None
 
-    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int):
+    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int) -> list[BusPageRow]:
         predicate, parameters = scope.index_predicate
         return BusPageRow.select(self.connection, where=f"offset<? AND ({predicate})",
                                  parameters=(before_offset, *parameters), order_by=("seq",))
@@ -363,17 +360,17 @@ class BusPageIndex:
 class EmptyBusPageIndex(BusPageIndex):
     """The query result of a zero-byte cut; no SQL or file is fabricated."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
     def _offsets(self, *args, **kwargs):
         yield from ()
 
-    def latest_target(self, target, before_offset):
+    def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
         return None
 
-    def scope_rows(self, scope, before_offset):
-        return ()
+    def scope_rows(self, scope: ChannelDisplayScope, before_offset: int) -> list[BusPageRow]:
+        return []
 
     def display_snapshot(self, scopes, boundary):
         return DisplaySnapshot.empty(scopes)

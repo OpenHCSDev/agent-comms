@@ -1,10 +1,10 @@
 """Named destinations own route behavior; strings are decoded at the boundary."""
 from __future__ import annotations
 
-from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar
+from dataclasses import dataclass
 from enum import StrEnum
+from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
@@ -12,6 +12,8 @@ from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, Unmention
 
 if TYPE_CHECKING:
     from .channels import Channel
+    from .read_basis import ChannelConversation, Conversation, DMConversation
+    from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
     from .threads import Thread
 
@@ -61,6 +63,14 @@ class CommandTarget(ABC):
     needs_catalog: ClassVar[bool] = False
 
     @staticmethod
+    @overload
+    def named(name: str) -> NamedTarget: ...
+
+    @staticmethod
+    @overload
+    def named(name: CommandTarget) -> CommandTarget: ...
+
+    @staticmethod
     def named(name: str | CommandTarget) -> CommandTarget:
         if isinstance(name, CommandTarget):
             return name
@@ -101,6 +111,10 @@ class NamedTarget(CommandTarget):
     @property
     def names(self) -> tuple[str, ...]:
         return (self.name,)
+
+    @abstractmethod
+    def conversation_key(self, sender: str, snapshot: RegistryProvenance,
+                         channel: type[ChannelConversation], direct: type[DMConversation]) -> Conversation: ...
 
     def canonical_name(self, canonical):
         return self.name

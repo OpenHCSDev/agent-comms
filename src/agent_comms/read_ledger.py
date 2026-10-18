@@ -15,12 +15,19 @@ from typing import TYPE_CHECKING
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
-from .private_path import FileIdentity, FileRevision, ObservedPath
-from .read_basis import ChannelConversation, Conversation, DMConversation, DisplayBasis, DisplayedConversation, ReadCursor
-from .wire_log import WireLog
+from .private_path import FileIdentity, ObservedPath
+from .read_basis import (
+    ChannelConversation,
+    Conversation,
+    DisplayBasis,
+    DisplayedConversation,
+    DMConversation,
+    ReadCursor,
+)
 from .sealed import Sealed
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
+from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -91,7 +98,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
                 conversation_snapshot=conversation_snapshot,
             ))
 
-    def capture_indexed(self, viewer, messages, snapshot, source, index, *, conversation_snapshot=None):
+    def capture_indexed(self, viewer, messages, snapshot, source, index, *, conversation_snapshot=None) -> DisplayBasis:
         viewer = snapshot.canonical_name(viewer)
         provenance = conversation_snapshot or snapshot
         grouped: dict[Conversation, set[int]] = {}
