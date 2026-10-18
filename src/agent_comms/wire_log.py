@@ -36,6 +36,7 @@ from .envelope_claim_transitions import (
 )
 from .errors import (
     RelationViolationError,
+    StoredHistoryUnreadable,
 )
 from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
@@ -709,7 +710,12 @@ class WireLog:
                 line = stream.readline(WireRecord.max_row_bytes + 1)
                 if not line:
                     break
-                record = scan.read(line)
+                try:
+                    record = scan.read(line)
+                except StoredHistoryUnreadable as error:
+                    raise StoredHistoryUnreadable(
+                        f"Unreadable bus row at {self.path}, byte offset {offset}."
+                    ) from error
                 if on_row is not None:
                     on_row(offset, line, record)
                 yield record

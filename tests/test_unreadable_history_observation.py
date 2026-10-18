@@ -234,6 +234,8 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 if failed is not None:
                     break
         assert "unavailable_future_segment" in str(failed.error)
+        assert str(comms.bus.log.path) in str(failed.error)
+        assert "byte offset 0" in str(failed.error)
         assert process.process.is_alive() and process.died is None
         process.request(ObserveThreads(frozenset({"saved"})))
         async with asyncio.timeout(30):
