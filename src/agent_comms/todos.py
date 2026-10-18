@@ -307,6 +307,8 @@ class Assignment:
 
 
 class TodoState(DeclaredFamily, affix="TodoState"):
+    open: ClassVar[bool] = True  # on the board until closed with installed evidence
+
     @classmethod
     def prepare_change(cls, goals, current):
         pass
@@ -340,6 +342,8 @@ class BlockedTodoState(TodoState):
 
 
 class DoneTodoState(TodoState):
+    open: ClassVar[bool] = False
+
     @classmethod
     def prepare_change(cls, goals, current):
         current.order.require_close()

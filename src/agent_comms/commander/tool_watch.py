@@ -3,14 +3,13 @@
 Writes one line per call to activity.log. At each turn end (or every 25 calls in a
 long turn) prints one digest of what the unit did, for the commander to judge by reading it.
 """
-import json, os, re, sys, time, glob, collections
+import json, os, time, glob, collections
 
-from . import storage
+from . import order, storage
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
 B = str(CONFIG.root)
-DEADLINES = f'{CONFIG.state}/deadlines.json'
 LOG = f'{CONFIG.state}/activity.log'
 EDITS = f'{CONFIG.state}/edits.jsonl'  # every edit in full; judge owns verdicts
 WORKTREES = {}  # thread -> cwd, from process environments
@@ -80,23 +79,18 @@ def enforce_storage(thread, name, args):
     if not isinstance(args, dict) or thread in CONFIG.storage_exempt:
         return
     if name == 'bash':
-        with open(DEADLINES) as f:
-            disk_allowed = any(o.get('disk') for o in json.load(f).get(thread) or [])
-        found = storage.command_violations(thread, str(args.get('command') or ''), disk_allowed)
+        found = storage.command_violations(thread, str(args.get('command') or ''))
     elif name in ('write', 'edit'):
         found = storage.write_violations(thread, str(args.get('path') or args.get('file_path') or ''))
     else:
         return
-    with open(DEADLINES) as f:
-        owed = json.load(f).get(thread) or []
-    task = next((o['fact'] for o in owed if o.get('fact')), None)
+    task = next((t.id for t in order.open_todos(thread)), None)
     for violation in found:
         if time.time() - STRUCK.get((thread, violation), 0) < 600:
             continue
         STRUCK[(thread, violation)] = time.time()
         print(f'VIOLATION storage {thread}: {violation}', flush=True)
         if task:
-            from . import order
             order.strike(thread, f'{task} broke the storage rule at a tool call: it {violation}; storage waste is banned outright',
                          'tool_watch at tool call')
 
