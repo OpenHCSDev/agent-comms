@@ -24,13 +24,12 @@ from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .display_order import ChannelSort, NameChannelSort
 from .display_references import DisplayReferences
 from .external_transcript import ExternalTranscript
-from .field_codec import FieldCodec, WireValue, projected
+from .field_codec import FieldCodec, projected
 from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
 from .mentions import MentionCandidate
 from .message_page import (
     NEWEST_PAGE,
-    ConversationMessagePageRequest,
     MessagePage,
     PageBounds,
 )
@@ -433,6 +432,7 @@ class ReadAll(ChannelReadMark):
                 scope = basis.scope(target)
             yield source.query_page_index(lambda index: scope.capture_all(
                 presentation.bus.reads, basis.require_viewer(), basis.registry, source, index,
+                document=basis.document,
             ))
 
 
@@ -518,8 +518,7 @@ class BusPresentation:
                     scope = basis.scope(target.name)
             # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
-            page = ConversationMessagePageRequest(scope, bounds).read_opened(source)
-            return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self))
+            return basis.viewer.read_page(scope, bounds, basis, source)
 
     def mark_channel_read(
         self,

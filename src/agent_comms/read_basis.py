@@ -34,7 +34,7 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay | None: ...
+    def display_evidence(self, page, presentation, source, index, document, snapshot) -> HistoricalDisplay | None: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document) -> ReadCursor: ...
@@ -46,7 +46,7 @@ class DisplayViewer(ABC):
     def require_name(self, snapshot) -> str: ...
 
     @abstractmethod
-    def displayed_scope(self, scope, page, basis, presentation): ...
+    def read_page(self, scope, bounds, basis, source) -> MessagePage: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,7 +54,7 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> None:
+    def display_evidence(self, page, presentation, source, index, document, snapshot) -> None:
         return None
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
@@ -66,8 +66,8 @@ class AnonymousViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         raise ValueError("Viewer metrics require a named viewer")
 
-    def displayed_scope(self, scope, page, basis, presentation):
-        return scope
+    def read_page(self, scope, bounds, basis, source) -> MessagePage:
+        return replace(bounds.conversation(scope).read_opened(source), display_scope=scope)
 
 
 @dataclass(frozen=True, slots=True)
@@ -77,18 +77,12 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay:
-        source = page.messages[0].source
-        source.validate()
-        snapshot = presentation.registry.snapshot()
-        return HistoricalDisplay(
-            source,
-            presentation.bus.reads.capture(
-                self.resolve(snapshot).name, page.messages, snapshot,
-                Path(source.root) / "bus.jsonl",
-                conversation_snapshot=source.provenance,
-            ),
-        )
+    def display_evidence(self, page, presentation, source, index, document, snapshot) -> HistoricalDisplay:
+        historical = page.messages[0].source
+        historical.validate()
+        return HistoricalDisplay(historical, presentation.bus.reads.capture_indexed(
+            self.resolve(snapshot).name, page.messages, snapshot, source, index,
+            conversation_snapshot=historical.provenance, document=document))
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return reads.cursor(self.name, snapshot, document=document)
@@ -99,11 +93,11 @@ class NamedViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         return snapshot.canonical_name(self.name)
 
-    def displayed_scope(self, scope, page, basis, presentation):
-        return replace(scope, displayed=presentation.bus.reads.capture(
-            self.name, page.messages, basis.registry, presentation.bus.log.path,
-            document=basis.document,
-        ))
+    def read_page(self, scope, bounds, basis, source) -> MessagePage:
+        result = bounds.conversation(scope).for_display(
+            basis.reads, basis.document, self.name, basis.registry, basis.registry,
+        ).read_opened(source)
+        return replace(result.page, display_scope=replace(scope, displayed=result.displayed))
 
 
 class DisplaySelection(ABC):
@@ -234,7 +228,6 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
     from .messages import Message
-    from .presentation import BusPresentation
     from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
@@ -520,12 +513,12 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
-            bus_identity = bus.reads.bus_identity(bus.log.path)
-        # Native input writes use this same wire lock. Scoped page/read queries
-        # use opened source snapshots, not live input permission.
-        page = bounds.conversation(scope).read(bus.log)
+            document = bus.reads.read()
+        result = bounds.conversation(scope).for_display(
+            bus.reads, document, viewer_name, snapshot, snapshot,
+        ).read(bus.log)
+        page, displayed = result.page, result.displayed
         with _store_lock(root / "wire", mode=SharedLock()):
-            displayed = bus.reads.capture(viewer_name, page.messages, snapshot, bus.log.path)
             kind = CoveredDMDisplayBasis if displayed.message_count else EmptyDMDisplayBasis
             root_info = root.stat()
             basis = kind(
@@ -537,7 +530,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 viewer_names=viewer_names,
                 peer_identity=peer_thread.incarnation,
                 peer_names=peer_names,
-                bus_identity=bus_identity,
+                bus_identity=displayed.bus_identity,
                 displayed=displayed,
                 fetched_through=page.newest_seq or 0,
             )
@@ -809,10 +802,10 @@ class ChannelDisplayScope(MessageDisplayScope):
                 (*targets, *names, *names, *names))
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
-                    source: OpenedWireSource, index: BusPageIndex) -> DisplayBasis:
+                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
         if self.any_mode or self.targets is None:
             return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
-                                         snapshot, source, index)
+                                         snapshot, source, index, document=document)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
             tuple(DisplayedConversation(ChannelConversation(target), (), row.seq)
                   for target in self.targets

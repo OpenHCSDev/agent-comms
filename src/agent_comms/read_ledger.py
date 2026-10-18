@@ -7,7 +7,7 @@ identity still determine whether those reads apply.
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -28,7 +28,6 @@ from .read_basis import (
 from .sealed import Sealed
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .wire_log import WireLog
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
@@ -92,38 +91,20 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, ChannelConversation, DMConversation)
 
-    def capture(
-        self,
-        viewer: str,
-        messages: Iterable[Message],
-        snapshot: RegistrySnapshot,
-        bus_path: Path,
-        *,
-        conversation_snapshot: RegistryProvenance | None = None,
-        document: ReadDocument | None = None,
-    ) -> DisplayBasis:
-        messages = tuple(messages)
-        with WireLog(bus_path).opened_wire_snapshot() as source:
-            return source.query_page_index(lambda index: self.capture_indexed(
-                viewer, messages, snapshot, source, index,
-                conversation_snapshot=conversation_snapshot, document=document,
-            ))
-
     def capture_indexed(self, viewer, messages, snapshot, source, index, *,
-                        conversation_snapshot=None, document: ReadDocument | None = None) -> DisplayBasis:
+                        document: ReadDocument, conversation_snapshot=None) -> DisplayBasis:
         viewer = snapshot.canonical_name(viewer)
         provenance = conversation_snapshot or snapshot
         grouped: dict[Conversation, set[int]] = {}
         for message in messages:
             conversation = self.conversation(message, provenance)
             grouped.setdefault(conversation, set()).add(message.seq)
-        document = self.read() if document is None else document
         return DisplayBasis(
             viewer, snapshot.threads[viewer].created_at,
             tuple(DisplayedConversation(
                 conversation, sequences := tuple(sorted(members)),
                 index.proved_read_prefix(conversation.scope(provenance),
-                    document.for_conversation(viewer, conversation, provenance, source),
+                    document.for_conversation(viewer, conversation, snapshot, source),
                     sequences, source.boundary),
             ) for conversation, members in grouped.items()),
             source.bus_identity,

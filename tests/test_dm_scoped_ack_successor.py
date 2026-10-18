@@ -1,6 +1,8 @@
 """Additional no-provider identity and lock-order probes for scoped DM basis."""
 
 from __future__ import annotations
+
+from agent_comms.wire_log import WireLog
 from agent_comms.registration import Registration
 
 import os
@@ -171,12 +173,11 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
 
     def interpose(request, log):
         page = original(request, log)
-        comms.bus.reads.mark_displayed(
-            viewer,
-            comms.bus.reads.capture(
-                viewer, (messages[marked_sender],), comms.registry.snapshot(), comms.bus.log.path,
-            ),
-        )
+        document = comms.bus.reads.read()
+        with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+            displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+                viewer, (messages[marked_sender],), comms.registry.snapshot(), opened, index, document=document))
+        comms.bus.reads.mark_displayed(viewer, displayed)
         return page
 
     monkeypatch.setattr(ConversationMessagePageRequest, "read", interpose)

@@ -1,5 +1,7 @@
 """Read evidence follows displayed messages across projections and restarts."""
 
+from agent_comms.wire_log import WireLog
+
 import random
 from dataclasses import replace
 
@@ -152,9 +154,10 @@ def test_agent_sent_dm_includes_independent_human_read(tmp_path):
     comms.registry.declare(comms.registry.new_thread('reader', frozenset(), str(tmp_path), role=UserThreadRole))
     message = comms.messaging.send_message("alice", "reader", "painted agent DM")
     snapshot = comms.registry.snapshot()
-    displayed = comms.bus.reads.capture(
-        "reader", (message,), snapshot, comms.bus.log.path
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            'reader', (message,), snapshot, opened, index, document=document))
     comms.bus.reads.mark_displayed("reader", displayed)
     sender_view = comms.views.thread_presentations(("alice",)).require("alice")
     assert sender_view is not None
@@ -260,9 +263,10 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
         comms.messaging.send("alice", "#team", str(i))
     scope = AlternateMessages("alternating", None)
     page = MessagePageRequest(scope).read(comms.bus.log)
-    basis = comms.bus.reads.capture(
-        viewer, page.messages, comms.registry.snapshot(), comms.bus.log.path
-    )
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        basis = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, page.messages, comms.registry.snapshot(), opened, index, document=document))
     comms.bus.reads.mark_displayed(viewer, basis)
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
     assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor({ChannelConversation(target="#team"): ConversationCursor(exceptions=(2, 4, 6))})

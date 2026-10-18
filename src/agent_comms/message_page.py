@@ -13,13 +13,16 @@ from .messages import Message
 from .page_traversal import NewerTraversal, OlderTraversal, PageCursor, PageTraversal
 from .private_path import FileRevision
 from .read_basis import (
-    ChannelDisplayScope, DisplaySelection, DMDisplayBasis,
+    ChannelDisplayScope, DisplayBasis, DisplaySelection, DMDisplayBasis,
     MessageDisplayScope, NoDisplaySelection,
 )
 from .wire_log import CurrentSnapshotOpening, WireSnapshot
 
 if TYPE_CHECKING:
     from .read_basis import HistoricalDisplay
+    from .read_ledger import ReadDocument, ReadLedger
+    from .registry_document import RegistrySnapshot
+    from .registry_provenance import RegistryProvenance
 
 
 @dataclass(frozen=True, slots=True)
@@ -181,22 +184,14 @@ class MessageReadRequest[T](ABC):
 
 
 @dataclass(frozen=True, slots=True)
-class MessagePageRequest(MessageReadRequest[MessagePage]):
+class PageReadRequest[T](MessageReadRequest[T]):
     """Captured membership, direction and bounds for indexed paging."""
 
     bounds: PageBounds = NEWEST_PAGE
-    empty: ClassVar[MessagePage] = MessagePage((), False, False)
+    @abstractmethod
+    def finish(self, page: MessagePage, index, source: WireSnapshot) -> T: ...
 
-    @classmethod
-    def every(cls, scope: MessageDisplayScope, *, after: int = 0) -> MessagePageRequest:
-        """All of a scope's messages after a sequence, with no count or byte bound.
-
-        The page index finds them by target, so the read costs their rows and
-        not the silent records between them.
-        """
-        return cls(scope, PageBounds(NewerTraversal(after), sys.maxsize, sys.maxsize))
-
-    def indexed(self, index, source: WireSnapshot) -> MessagePage:
+    def indexed(self, index, source: WireSnapshot) -> T:
         traversal = self.bounds.traversal
         window = PageWindow(self.bounds)
         opposite = more = False
@@ -207,11 +202,61 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
                 if not window.take(traversal, row):
                     more = True
                     break
-        return traversal.result(window, more, opposite)
+        return self.finish(traversal.result(window, more, opposite), index, source)
 
 
-class ConversationMessagePageRequest(MessagePageRequest):
-    """A presented conversation excludes declaration-owned state records."""
+class MessagePageRequest(PageReadRequest[MessagePage]):
+    empty: ClassVar[MessagePage] = MessagePage((), False, False)
 
+    @classmethod
+    def every(cls, scope: MessageDisplayScope, *, after: int = 0) -> MessagePageRequest:
+        return cls(scope, PageBounds(NewerTraversal(after), sys.maxsize, sys.maxsize))
+
+    def finish(self, page: MessagePage, index, source: WireSnapshot) -> MessagePage:
+        return page
+
+    def for_display(self, reads, document, viewer, snapshot, provenance):
+        return DisplayedMessagePageRequest(self.scope, self.bounds, reads=reads,
+            document=document, viewer=viewer, snapshot=snapshot, provenance=provenance)
+
+
+class ConversationMessages[T](MessageReadRequest[T]):
     def includes(self, message: Message) -> bool:
         return message.type.conversation_message and super().includes(message)
+
+
+class ConversationMessagePageRequest(ConversationMessages[MessagePage], MessagePageRequest):
+    """A presented conversation excludes declaration-owned state records."""
+
+    def for_display(self, reads, document, viewer, snapshot, provenance):
+        return DisplayedConversationMessagePageRequest(self.scope, self.bounds, reads=reads,
+            document=document, viewer=viewer, snapshot=snapshot, provenance=provenance)
+
+
+@dataclass(frozen=True, slots=True)
+class DisplayedMessagePage:
+    page: MessagePage
+    displayed: DisplayBasis
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class DisplayedMessagePageRequest(PageReadRequest[DisplayedMessagePage]):
+    reads: ReadLedger
+    document: ReadDocument
+    viewer: str
+    snapshot: RegistrySnapshot
+    provenance: RegistryProvenance
+
+    @property
+    def empty(self) -> DisplayedMessagePage:
+        return DisplayedMessagePage(MessagePage((), False, False), DisplayBasis(
+            self.viewer, self.snapshot.require(self.viewer).created_at, (), None))
+
+    def finish(self, page: MessagePage, index, source: WireSnapshot) -> DisplayedMessagePage:
+        return DisplayedMessagePage(page, self.reads.capture_indexed(
+            self.viewer, page.messages, self.snapshot, source, index,
+            conversation_snapshot=self.provenance, document=self.document))
+
+
+class DisplayedConversationMessagePageRequest(ConversationMessages[DisplayedMessagePage], DisplayedMessagePageRequest):
+    pass
