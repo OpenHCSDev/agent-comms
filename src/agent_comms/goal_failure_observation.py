@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import json
 import math
-import re
 import sqlite3
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -17,7 +16,7 @@ from typing import TYPE_CHECKING, Literal
 
 from .diagnostics import FailureReason
 from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Id128Text
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
 from .goals import Goal
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
@@ -72,8 +71,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
             raise ValueError("Observation turn generation must be positive")
         if not math.isfinite(self.owner_created_at):
             raise ValueError("Observation incarnation must be finite")
-        if not re.fullmatch(r"[0-9a-f]{32}", self.turn_id):
-            raise ValueError("Observation turn ID must be canonical")
+        Id128Text.from_text(self.turn_id)
         if not isinstance(self.reason, FailureReason):
             raise ValueError("Observation reason must be decoded")
 

@@ -1,7 +1,7 @@
 import pytest
 from acp.schema import SessionConfigSelectOption
 
-from agent_comms import backend
+import agent_comms.backend as backend
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import wire
 from agent_comms.config_options import InvalidConfigChoice, ModelConfigOption

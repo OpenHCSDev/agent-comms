@@ -2,7 +2,7 @@ from agent_comms.messages import NoticeRole
 import pytest
 from agent_comms.tool_caller import NoThreadCaller
 
-from agent_comms import MentionQuery
+from agent_comms.mentions import MentionQuery
 from agent_comms.comms import Comms, wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.mentions import MentionCandidate, ThreadMention
@@ -173,7 +173,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
 
 def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch):
     from functools import partial
-    from agent_comms import invoke_tool
+    from agent_comms.tools import invoke_tool
     from agent_comms.tool_caller import ThreadCaller
 
     invoke_tool = partial(invoke_tool, caller=ThreadCaller("owner"))
@@ -207,7 +207,7 @@ def test_model_tool_changes_own_and_another_thread(comms, tmp_path, monkeypatch)
 
 
 def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp_path):
-    from agent_comms import invoke_tool
+    from agent_comms.tools import invoke_tool
 
     for name in ("alpha", "beta"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
@@ -228,7 +228,7 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
 def test_inbox_rejects_an_empty_target(tmp_path):
     import pytest
 
-    from agent_comms import invoke_tool
+    from agent_comms.tools import invoke_tool
 
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path)))

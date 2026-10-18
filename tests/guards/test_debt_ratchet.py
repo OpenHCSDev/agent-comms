@@ -243,6 +243,8 @@ def test_family_flattening_cannot_offset_another_file_or_admit_a_named_facade(tm
     ("def name(value):\n return FieldCodec.decode(str, FieldCodec.encode(value.declared_name))\n", 1),
     ("def name(value):\n return FieldCodec.decode(str, value)\n", 0),
     ("class Owner:\n def name(self, other):\n  return (self.declared_name, other.declared_name)\n", 1),
+    ("if __name__ == '__main__':\n    main()\n", 0),
+    ("def name(value):\n return value.name == 'released'\n", 1),
 ])
 def test_family_name_owner_reads_and_codec_detours(source: str, expected: int):
     from tools.debt_ratchet import FamilyFlattened

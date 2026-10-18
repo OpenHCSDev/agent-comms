@@ -241,7 +241,7 @@ def test_writer_prepares_and_publishes_outside_source_lock(tmp_path, monkeypatch
 
 def test_update_reacquires_changed_cut_before_running_transition(tmp_path, monkeypatch):
     from contextlib import contextmanager
-    from agent_comms import activity as module
+    import agent_comms.activity as module
 
     path = tmp_path / "activity.jsonl"
     log = ActivityLog(path)

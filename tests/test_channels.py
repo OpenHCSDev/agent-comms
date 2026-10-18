@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import invoke_tool
+from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import ActivityState
 from agent_comms.channel_targets import BuiltinChannel

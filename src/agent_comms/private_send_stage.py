@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import secrets
 import sqlite3
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -16,6 +15,7 @@ from .coordination_errors import IdentityConflict, RetryScheduled, StaleFence
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .durable_turn import DurableTurn
+from .field_codec import Id128Text
 from .private_send_rules import (
     NativeBindingCheck,
     NativeClaimCheck,
@@ -87,7 +87,7 @@ class NativeSendStage(ABC):
         await Coordination.run_worker(lambda: owner.require_registry(bus._registry))
 
     def reserve(self, store: Coordination, owner: ParticipantOwner, token_digest: str) -> str:
-        input_id = secrets.token_hex(16)
+        input_id = Id128Text.mint()
         with store.session.transaction() as db:
             assert_native_runtime_schema(db)
             owner.require(store, self.recipient_lookup)

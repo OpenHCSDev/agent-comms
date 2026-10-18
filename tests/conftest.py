@@ -92,7 +92,7 @@ def private_directory():
 @pytest.fixture
 def declared_native_package(tmp_path_factory, monkeypatch) -> Path:
     """This test's own pin and the package directory it names; nothing is prepared."""
-    from agent_comms import native_package
+    import agent_comms.native_package as native_package
 
     manifest = tmp_path_factory.mktemp("declared-stack") / native_package.MANIFEST.name
     manifest.write_text("# a test-owned pin\n")
@@ -261,7 +261,7 @@ def selected_model(monkeypatch, tmp_path):
     import shlex
     import sys
 
-    from agent_comms import native_pi
+    import agent_comms.native_pi as native_pi
     from agent_comms.native_arguments import NativeArguments, SelectedModel
     from native_backend_fixture import NativeBackendFixture
 

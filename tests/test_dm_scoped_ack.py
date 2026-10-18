@@ -11,7 +11,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import locked_store
+import agent_comms.locked_store as locked_store
 from agent_comms.comms import wire
 from agent_comms.read_basis import DMDisplayBasis, EmptyDMDisplayBasis
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged

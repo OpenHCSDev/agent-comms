@@ -9,8 +9,8 @@ import acp
 import pytest
 from acp.schema import ToolCallStart
 
-from agent_comms import agent_events as events
-from agent_comms import backend
+import agent_comms.agent_events as events
+import agent_comms.backend as backend
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool

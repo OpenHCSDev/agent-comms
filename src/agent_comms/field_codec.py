@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import json
+import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -11,10 +12,11 @@ from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import cached_property, lru_cache, reduce
+from functools import cache, cached_property, lru_cache, reduce
 from operator import or_
 from pathlib import Path
 from typing_extensions import TypeAliasType
+from uuid import uuid4
 from typing import (
     Annotated,
     Any,
@@ -379,24 +381,48 @@ class JsonShapeFamily(WireValue):
         return self.value
 
 
-class TextRepresentation(FieldRepresentation):
-    """External text scalars share strict decoding at the canonical boundary."""
+class TextRepresentation[V](FieldRepresentation):
+    """External text scalars share strict decoding at the canonical boundary.
+
+    Its schema names the representation, so text with no declared spelling never shares a stored
+    form with plain ``str`` or with another representation; SpelledText declares one.
+    """
 
     @classmethod
-    def decode(cls, value: object) -> object:
+    def decode(cls, value: object) -> V:
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls.from_text(FieldCodec.decode(str, value))
 
     @classmethod
     @abstractmethod
-    def from_text(cls, value: str) -> object: ...
+    def from_text(cls, value: str) -> V: ...
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
-        return FieldCodec.value_schema(str)
+        return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
 
 
-class PathText(TextRepresentation):
+class SpelledText(TextRepresentation[str]):
+    """Text with one declared spelling: what decoding accepts and what its schema reports."""
+
+    spelling: ClassVar[re.Pattern[str]]
+
+    @classmethod
+    def encode(cls, value: object) -> str:
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if cls.spelling.fullmatch(value) is None:
+            raise MalformedRecord(f"{cls.__name__} is spelled {cls.spelling.pattern}")
+        return value
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
+
+
+class PathText(TextRepresentation[Path]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, Path):
@@ -408,7 +434,7 @@ class PathText(TextRepresentation):
         return Path(value)
 
 
-class TimestampText(TextRepresentation):
+class TimestampText(TextRepresentation[datetime]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, datetime):
@@ -418,6 +444,36 @@ class TimestampText(TextRepresentation):
     @classmethod
     def from_text(cls, value: str) -> datetime:
         return datetime.fromisoformat(value)
+
+
+class Id128Text(SpelledText):
+    """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
+
+    spelling = re.compile("[0-9a-f]{32}")
+
+    @classmethod
+    def mint(cls) -> str:
+        return uuid4().hex
+
+
+class Hex256Text(SpelledText):
+    """256 bits written as 64 lowercase hex digits."""
+
+    spelling = re.compile("[0-9a-f]{64}")
+
+
+class Sha256Text(Hex256Text):
+    """A SHA-256 digest."""
+
+
+class Token256Text(Hex256Text):
+    """A random 256-bit secret token."""
+
+
+class GitCommitText(SpelledText):
+    """A git commit, abbreviated to no fewer than seven digits."""
+
+    spelling = re.compile("[0-9a-f]{7,40}")
 
 
 class Projected(property):
@@ -448,7 +504,6 @@ class FieldCodec(Sealed):
     the single record codec and declaration-derived schema.
     """
 
-    _declaration_cache_capacity = 256
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
@@ -489,7 +544,7 @@ class FieldCodec(Sealed):
         return representation
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
@@ -517,7 +572,7 @@ class FieldCodec(Sealed):
         return next(key for item, key in cls.record_fields(record) if item.name == name)
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _types(declaration: type) -> dict[str, Any]:
         return get_type_hints(declaration, include_extras=True)
 
@@ -778,7 +833,7 @@ class FieldCodec(Sealed):
             return properties
 
     @classmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
         """Resolve every per-row type decision for one record declaration once."""
         declared = cls.record_fields(record)
@@ -825,7 +880,7 @@ class FieldCodec(Sealed):
         return InlineFamilyPlan if family else InlineFieldPlan
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
         # Cache immutable declarations only. Each consumer still invokes the
         # original property on the current record; projected values are never cached.
