@@ -60,7 +60,9 @@ def main(a):
         if units:
             unit = units[turn % len(units)]
             turn += 1
-            orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)}" for t in owed[unit])
+            read = order.progress()
+            orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)} ({read[t.id].line})"
+                               for t in owed[unit])
             print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {unjudged(unit)} -> read its git state and newest turn, judge, push or hunt", flush=True)
         for line in detached(owed):
             print(line, flush=True)
