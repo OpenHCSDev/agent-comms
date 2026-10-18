@@ -12,11 +12,11 @@ from .field_codec import FieldCodec, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
-    from .read_basis import MessageDisplayScope
     from .message_page import MessagePage, MessagePageRow, PageWindow
+    from .read_basis import MessageDisplayScope
 
 
-type PageOffsets = Generator[BusPageRow, None, None]
+type PageOffsets = Generator[BusPageRow]
 
 
 class PageCursor(SubclassUnion):
@@ -106,7 +106,7 @@ class PageTraversal(ABC):
 
     @staticmethod
     @abstractmethod
-    def append(rows: deque[MessagePageRow], row: MessagePageRow) -> None: ...
+    def append(rows: deque[MessagePageRow], row: MessagePageRow, /) -> None: ...
 
     @abstractmethod
     def result(self, window: PageWindow, more: bool, opposite: bool) -> MessagePage: ...
@@ -135,7 +135,7 @@ class OlderTraversal(PageTraversal):
                 index, lower=self.cursor - 1, upper=None, descending=True, before_offset=boundary
             )
 
-    append = staticmethod(deque["MessagePageRow"].appendleft)
+    append = staticmethod(deque.appendleft)
 
     def result(self, window: PageWindow, more: bool, opposite: bool) -> MessagePage:
         return window.page(more, opposite)
@@ -161,7 +161,7 @@ class NewerTraversal(PageTraversal):
     ) -> PageOffsets:
         return OlderTraversal(self.cursor + 1).offsets(index, scope, boundary)
 
-    append = staticmethod(deque["MessagePageRow"].append)
+    append = staticmethod(deque.append)
 
     def result(self, window: PageWindow, more: bool, opposite: bool) -> MessagePage:
         return window.page(opposite, more)
