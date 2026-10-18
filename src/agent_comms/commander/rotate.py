@@ -3,6 +3,7 @@ import time
 from datetime import datetime
 
 from . import capacity, judge, order, request, rules
+from ..todos import Todo
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
@@ -34,15 +35,15 @@ def broken_rules(owed):
     return lines
 
 
-def owed_orders():
+def owed_orders() -> dict[str, list[Todo]]:
     """Each unit's open orders."""
-    owed = {}
+    owed: dict[str, list[Todo]] = {}
     for todo in order.open_todos():
         owed.setdefault(todo.assignment.owner, []).append(todo)
     return owed
 
 
-def detached(owed):
+def detached(owed: dict[str, list[Todo]]) -> list[str]:
     """A unit holding orders whose status says it reads nothing now; a thread gone from the registry reads nothing."""
     statuses = order.COMMS.registry.snapshot().statuses
     away = [u for u in sorted(owed) if u not in statuses or not statuses[u].receiving]
