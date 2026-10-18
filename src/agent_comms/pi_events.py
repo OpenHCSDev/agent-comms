@@ -29,6 +29,8 @@ from .pi_payloads import (
     PiToolResult,
     PiUsage,
     ProviderRetryOutcome,
+    UnreportedUsage,
+    wire_field,
 )
 
 if TYPE_CHECKING:
@@ -713,17 +715,13 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
         default=None, metadata={"wire_name": "assistantMessageEvent"}
     )
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
-    usage: PiUsage | None = field(default=None, metadata={"wire_name": "usage"})
+    usage: PiUsage = wire_field("usage", UnreportedUsage())
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if self.message.update_context:
-            tokens = self.message.measured_tokens or (
-                self.usage.positive_tokens if self.usage is not None else None
-            )
-            if tokens is not None and not session.native.attestation.uncertain:
-                session.usage.used = tokens
-                session.usage.provisional = True
-                yield session.context_info()
+        if self.message.update_context and not session.native.attestation.uncertain:
+            tokens = self.message.measured_tokens.otherwise(self.usage.tokens)
+            for event in tokens.provisional(session):
+                yield event
 
         if self.assistant_message_event is not None:
             for event in self.assistant_message_event.emit(session):

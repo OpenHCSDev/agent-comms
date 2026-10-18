@@ -212,6 +212,46 @@ class PiCost(PiPayload):
     total: float | None = wire_field("total")
 
 
+class TokenTotal:
+    """Whether Pi reported a positive token total, decided once where its usage is decoded."""
+
+    def otherwise(self, other: TokenTotal) -> TokenTotal:
+        return other
+
+    def provisional(self, session):
+        return ()
+
+    def settle(self, session):
+        """A stop keeps only a confirmed total; an unconfirmed provisional one is withdrawn."""
+        if session.usage.provisional:
+            session.usage.rollback()
+            yield session.context_info()
+
+
+@dataclass(frozen=True)
+class UnreportedTokens(TokenTotal):
+    pass
+
+
+@dataclass(frozen=True)
+class ReportedTokens(TokenTotal):
+    count: int
+
+    def otherwise(self, other: TokenTotal) -> TokenTotal:
+        return self
+
+    def provisional(self, session):
+        session.usage.observe(self.count)
+        yield session.context_info()
+
+    def settle(self, session):
+        if not session.accepts_output:
+            yield from super().settle(session)
+            return
+        session.usage.confirm(self.count)
+        yield session.context_info()
+
+
 @dataclass(frozen=True)
 class PiUsage(PiPayload):
     @classmethod
@@ -230,10 +270,21 @@ class PiUsage(PiPayload):
     cache_write_1h: int | None = wire_field("cacheWrite1h")
 
     @property
-    def positive_tokens(self) -> int | None:
-        return (
-            self.total_tokens if self.total_tokens is not None and self.total_tokens > 0 else None
-        )
+    def tokens(self) -> TokenTotal:
+        total = self.total_tokens
+        return ReportedTokens(total) if total is not None and total > 0 else UnreportedTokens()
+
+    def charges(self, account) -> tuple:
+        """A usage Pi reported is charged once to the turn's account."""
+        return (account.charge(self),)
+
+
+@dataclass(frozen=True)
+class UnreportedUsage(PiUsage):
+    """Pi sent no usage object: nothing is charged and no token total is known."""
+
+    def charges(self, account) -> tuple:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -525,7 +576,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
-    usage: PiUsage | None = None
+    usage: PiUsage = wire_field("usage", UnreportedUsage())
     input_id: str | None = wire_field("inputId")
     input_digest: str | None = wire_field("inputDigest")
     stop_reason: type[PiStopReason] = wire_field("stopReason", UnreportedStopReason)
@@ -543,8 +594,8 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         return super().normalize_field(target, key, value, record)
 
     @property
-    def measured_tokens(self):
-        return self.usage.positive_tokens if self.usage is not None else None
+    def measured_tokens(self) -> TokenTotal:
+        return self.usage.tokens
 
     def require_failed_terminal(self):
         raise ValueError("Native recovery requires an unambiguous failed terminal")
@@ -642,8 +693,8 @@ class AssistantMessage(PiMessage):
         if reason.tool_round and session.committable_message(self.text):
             updates.append(CommittedProgress(text=self.text))
         session.output.start_message()
-        if self.usage is not None and session.accepts_output:
-            updates.append(session.usage.charge(self.usage))
+        if session.accepts_output:
+            updates.extend(self.usage.charges(session.usage))
         session.output.final_assistant_stop = reason.successful and session.started_input
         updates.extend([event async for event in reason.apply(session, self)])
         return tuple(updates)
@@ -1046,7 +1097,7 @@ class ThinkingLevelsData(PiResponseData):
 @dataclass(frozen=True)
 class CompactionData(PiResponseData):
     summary: str | None = None
-    usage: PiUsage | None = None
+    usage: PiUsage = wire_field("usage", UnreportedUsage())
     first_kept_entry_id: str | None = wire_field("firstKeptEntryId")
     tokens_before: int | None = wire_field("tokensBefore")
     estimated_tokens_after: int | None = wire_field("estimatedTokensAfter")
@@ -1058,7 +1109,7 @@ class CompactionData(PiResponseData):
         return compaction_summary(self.summary) if self.summary is not None else None
 
     def charge(self, session):
-        yield from session.usage.charge_compaction(self.usage)
+        yield from self.usage.charges(session.usage)
 
 
 @dataclass(frozen=True)
