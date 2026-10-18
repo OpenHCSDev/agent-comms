@@ -366,6 +366,11 @@ class TodoColumnCarry(Carry):
             db.rollback()
             return count
         saved = f"{table}_before_{cls.column}"
+        indexes = tuple(db.execute(
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
+            (table,)))
+        for name, in indexes:
+            db.execute(f'DROP INDEX "{name}"')
         db.execute(f'ALTER TABLE "{table}" RENAME TO "{saved}"')
         Todo.create(db)
         columns = Todo._column_list(expected)

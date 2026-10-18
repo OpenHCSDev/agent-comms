@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agent_comms.todos import Todo
 from cutover.carry import Carried, TodoRows
+
+from agent_comms.todos import Todo
 
 
 class TodoOpenIndexes(TodoRows):
