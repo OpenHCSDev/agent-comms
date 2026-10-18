@@ -16,6 +16,7 @@ import tokenize
 import typing
 from abc import abstractmethod
 from collections import Counter
+from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -114,9 +115,14 @@ class OccurrenceMeasure(CountedSource):
     def occurrences(node: ast.AST) -> int:
         """Return this node's contribution, excluding its descendants."""
 
+    @staticmethod
+    def sites(tree: ast.AST) -> Iterator[ast.AST]:
+        """The nodes this measure reads; every node unless a measure excludes some."""
+        return ast.walk(tree)
+
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        return sum(cls.occurrences(node) for node in ast.walk(ast.parse(source, filename)))
+        return sum(cls.occurrences(node) for node in cls.sites(ast.parse(source, filename)))
 
     @classmethod
     def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
@@ -277,10 +283,13 @@ class CleanChangedLines:
         return range(node.lineno, node.end_lineno + 1)
 
     @classmethod
-    def count_changed(cls, source: ChangedSource) -> int:
-        return sum(count for node in ast.walk(source.tree)
-                   if (count := cls.occurrences(node))
-                   and not source.lines.isdisjoint(cls.site_lines(node)))
+    def changed_sites(cls, source: ChangedSource) -> list[int]:
+        """The first changed line of each occurrence written on a changed line."""
+        sites = []
+        for node in cls.sites(source.tree):
+            if (count := cls.occurrences(node)) and (touched := source.lines.intersection(cls.site_lines(node))):
+                sites.extend([min(touched)] * count)
+        return sites
 
 
 class FrozenFieldWrite(CleanChangedLines, PerFileOccurrenceMeasure):
@@ -334,8 +343,58 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return sum(cls.occurrences(node) for node in ast.walk(module.tree)) + len(cls.prose_lines(module))
 
     @classmethod
-    def count_changed(cls, source: ChangedSource) -> int:
-        return super().count_changed(source) + len(cls.prose_lines(source) & source.lines)
+    def changed_sites(cls, source: ChangedSource) -> list[int]:
+        return [*super().changed_sites(source), *(cls.prose_lines(source) & source.lines)]
+
+
+class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
+    """Absence spelled as None: ``is None`` tests, annotations that allow None, ``default=None``.
+
+    Absence belongs to a declared null member that answers for itself. Only a boundary
+    decoder named here meets None from outside, and its body is not counted.
+    """
+
+    boundary_decoders: typing.ClassVar[frozenset[str]] = frozenset({
+        "FieldPlan.decoded", "ValueDecoder.decode_editor", "_RepresentedDecoder.decode",
+    })
+
+    @classmethod
+    def sites(cls, tree: ast.AST) -> Iterator[ast.AST]:
+        pending: list[tuple[ast.AST, tuple[str, ...]]] = [(tree, ())]
+        while pending:
+            node, scope = pending.pop()
+            match node:
+                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) | ast.ClassDef(name=name):
+                    scope = (*scope, name)
+                    if not isinstance(node, ast.ClassDef) and ".".join(scope) in cls.boundary_decoders:
+                        continue
+            yield node
+            pending.extend((child, scope) for child in ast.iter_child_nodes(node))
+
+    @staticmethod
+    def absent(node: ast.AST) -> bool:
+        match node:
+            case ast.Constant(value=None):
+                return True
+        return False
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        match node:
+            case ast.Compare(left=left, ops=ops, comparators=comparators):
+                operands = [left, *comparators]
+                return sum(isinstance(op, (ast.Is, ast.IsNot)) and (cls.absent(first) or cls.absent(second))
+                           for op, first, second in zip(ops, operands, operands[1:]))
+            case ast.BinOp(op=ast.BitOr(), left=left, right=right):
+                return int(cls.absent(left) or cls.absent(right))
+            case ast.Subscript(value=ast.Name(id="Optional") | ast.Attribute(attr="Optional")):
+                return 1
+            case ast.Subscript(value=ast.Name(id="Union") | ast.Attribute(attr="Union"),
+                               slice=ast.Tuple(elts=members)):
+                return int(any(cls.absent(member) for member in members))
+            case ast.keyword(arg="default", value=value):
+                return int(cls.absent(value))
+        return 0
 
 
 class FunctionLocalImport(PerFileMeasure):
@@ -1134,6 +1193,7 @@ class Comparison:
     base: dict[str, int]
     head: dict[str, int]
     introduced: dict[str, int]
+    introduced_lines: dict[str, list[int]]
 
     @projected(view="report")
     def delta(self) -> dict[str, int]:
@@ -1163,13 +1223,17 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
         measured_base, measured_head = measure.compare(repo, base, head, paths, root)
         before.update(measured_base)
         after.update(measured_head)
-    introduced = {}
+    introduced, introduced_lines = {}, {}
     strict_measures = Measure.members_with(CleanChangedLines)
     for path in sorted(paths & python_paths(repo, head, root)):
         source = ChangedSource.read(repo, base, head, path)
         for measure in strict_measures:
-            introduced[f"{measure.__name__}:{path}"] = measure.count_changed(source)
-    return Comparison(root, base, head, tuple(sorted(paths)), before, after, introduced)
+            identity = f"{measure.__name__}:{path}"
+            sites = measure.changed_sites(source)
+            introduced[identity] = len(sites)
+            if sites:
+                introduced_lines[identity] = sorted(sites)
+    return Comparison(root, base, head, tuple(sorted(paths)), before, after, introduced, introduced_lines)
 
 
 def main() -> int:
