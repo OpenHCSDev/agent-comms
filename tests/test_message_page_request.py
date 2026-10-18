@@ -35,15 +35,15 @@ def test_new_scope_preserves_indexed_progress_and_edges(
     ]
     # No consumer edit/roster entry: one declared scope is sufficient.
     request = MessagePageRequest(ReviewScope("review"), PageBounds(traversal, max_bytes=1))
-    indexed = request.read(comms.bus.log)
+    indexed = comms.bus.log.read_page(request)
     assert len(indexed.messages) == 1
     assert indexed.messages[0] == messages[first]
     assert indexed.has_newer == has_newer
     assert indexed.has_older == has_older
     continuation = type(traversal)(indexed.messages[0].seq)
-    next_page = MessagePageRequest(
+    next_page = comms.bus.log.read_page(MessagePageRequest(
         request.scope, PageBounds(continuation, max_bytes=1)
-    ).read(comms.bus.log)
+    ))
     assert next_page.messages == (messages[2],)
     assert next_page.has_older and next_page.has_newer
 

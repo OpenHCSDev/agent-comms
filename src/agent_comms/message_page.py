@@ -16,7 +16,7 @@ from .read_basis import (
     ChannelDisplayScope, DisplayBasis, DisplaySelection, DMDisplayBasis,
     MessageDisplayScope, NoDisplaySelection,
 )
-from .wire_log import CurrentSnapshotOpening, WireSnapshot
+from .wire_log import WireSnapshot
 
 if TYPE_CHECKING:
     from .read_basis import HistoricalDisplay
@@ -166,10 +166,6 @@ class MessageReadRequest[T](ABC):
 
     @abstractmethod
     def indexed(self, index, source: WireSnapshot) -> T: ...
-
-    def read(self, log) -> T:
-        with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-            return self.read_opened(source)
 
     def read_opened(self, source: WireSnapshot) -> T:
         return source.query_page_index(lambda index: self.indexed(index, source))

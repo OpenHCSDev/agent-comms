@@ -58,6 +58,9 @@ from .store_files import (
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
 
+if TYPE_CHECKING:
+    from .message_page import MessageReadRequest
+
 
 def _notify_candidates(log: WireLog, through_bytes: int) -> None:
     from .candidate_maintenance import schedule_candidate_catchup
@@ -557,6 +560,11 @@ class WireLog:
         source.require_marker(marker)
         yield source
         source.require_current()
+
+    def read_page[T](self, request: MessageReadRequest[T]) -> T:
+        """Acquire the one source borrowed by every part of a page request."""
+        with self.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+            return request.read_opened(source)
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
         """Borrow bounded pages from one original committed append-only cut.

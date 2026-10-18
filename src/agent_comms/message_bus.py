@@ -282,7 +282,7 @@ class MessageBus[Writes: Publisher]:
         """A bounded delivery stream independent of UI read acknowledgments."""
         snapshot = self._registry.snapshot()
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
-        return MessagePageRequest(delivery, PageBounds(NewerTraversal(after))).read(self.log)
+        return self.log.read_page(MessagePageRequest(delivery, PageBounds(NewerTraversal(after))))
 
     def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Return one bounded page between two threads, either possibly deleted."""
@@ -290,7 +290,7 @@ class MessageBus[Writes: Publisher]:
         scope = DMDisplayScope.capture(
             snapshot.participant(a).name, snapshot.participant(b).name, snapshot
         )
-        return MessagePageRequest(scope, bounds).read(self.log)
+        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channel_history_page(
         self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
@@ -298,12 +298,12 @@ class MessageBus[Writes: Publisher]:
         """Return one bounded page from a channel in ascending order."""
         channel = self._channels.read().resolve(target.name)
         scope = ChannelDisplayScope(channel.name, channel.history_targets)
-        return MessagePageRequest(scope, bounds).read(self.log)
+        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded combined view of explicit channel and direct wire messages."""
         scope = ChannelDisplayScope(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets)
-        return MessagePageRequest(scope, bounds).read(self.log)
+        return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:
         return list(self._channels.read().views(self._registry.all_threads()))
