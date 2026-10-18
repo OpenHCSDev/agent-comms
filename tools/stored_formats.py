@@ -1,6 +1,6 @@
 """Report the stored form of each versioned record declared in the named modules.
 
-The debt ratchet runs this once per revision with that revision's source on PYTHONPATH,
+The debt ratchet runs this once per revision with that revision's source first on sys.path,
 so each side's stored form comes from its own FieldCodec declarations and no revision's
 code is imported into another's process. A record's stored form is FieldCodec's record
 schema: each key on disk and its representation's wire spelling. Its version is the
