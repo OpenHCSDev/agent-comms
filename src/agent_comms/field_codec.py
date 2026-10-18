@@ -6,7 +6,7 @@ import math
 import json
 import types
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
@@ -711,25 +711,87 @@ class ValueDecoder[T](ABC):
     def editor_choices(self) -> tuple[tuple[str, object], ...]:
         raise TypeError("The declared decoder does not offer finite choices")
 
+    def argument_options(self) -> dict[str, object]:
+        """argparse options for this annotation's command-line text."""
+        return {}
+
+    def argument_text(self, encoded: object) -> object:
+        """The command-line spelling of an encoded value."""
+        return encoded
+
+    def argument_payload(self, text: object) -> object:
+        """The payload value that command-line text spells."""
+        return text
+
+
+class _ChoiceDecoder[T](ValueDecoder[T]):
+    """A finite domain: its command line offers exactly the editor's choices."""
+
+    __slots__ = ()
+
+    def argument_options(self) -> dict[str, object]:
+        return {"choices": [self.argument_text(value) for _, value in self.editor_choices()]}
+
 @dataclass(frozen=True, slots=True)
 class _ScalarDecoder(ValueDecoder[Any]):
+    """A plain target accepts no wire value unless a scalar below declares it."""
+
     target: object
 
     def decode(self, data):
-        target = self.target
-        if target in (str, int, bool, type(None)) and type(data) is target:
+        if self.accepts(data):
             return data
-        if target is float and type(data) in (int, float) and math.isfinite(data):
-            return data
-        raise ValueError(f"Expected {target}, received {type(data).__name__}")
+        raise ValueError(f"Expected {self.target}, received {type(data).__name__}")
+
+    def accepts(self, data: object) -> bool:
+        return False
+
+class _ExactScalarDecoder(_ScalarDecoder):
+    """A JSON scalar decoded only from its own type."""
+
+    __slots__ = ()
+
+    def accepts(self, data: object) -> bool:
+        return type(data) is self.target
+
+class _TextDecoder(_ExactScalarDecoder):
+    __slots__ = ()
+    annotations = (str,)
 
     def encode_editor(self, value):
-        return value if self.target is str else super(_ScalarDecoder, self).encode_editor(value)
+        return value
 
     def decode_editor(self, value):
-        return value if self.target is str else super(_ScalarDecoder, self).decode_editor(value)
+        return value
 
-class _NullDecoder(_ScalarDecoder):
+class _FlagDecoder(_ExactScalarDecoder):
+    __slots__ = ()
+    annotations = (bool,)
+
+    def argument_options(self) -> dict[str, object]:
+        return {"action": "store_true"}
+
+class _NumberDecoder(_ExactScalarDecoder):
+    __slots__ = ()
+
+    def argument_options(self) -> dict[str, object]:
+        return {"type": self.target}
+
+class _IntegerDecoder(_NumberDecoder):
+    __slots__ = ()
+    annotations = (int,)
+
+class _RealDecoder(_NumberDecoder):
+    """A finite number; an integer is a real number on the wire."""
+
+    __slots__ = ()
+    annotations = (float,)
+
+    def accepts(self, data: object) -> bool:
+        return type(data) in (int, float) and math.isfinite(cast(float, data))
+
+class _NullDecoder(_ExactScalarDecoder):
+    __slots__ = ()
     annotations = (type(None),)
     editor_annotation = type(None)
 
@@ -781,7 +843,7 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
         return {}
 
 @dataclass(frozen=True, slots=True)
-class _FamilyNameDecoder(ValueDecoder[Any]):
+class _FamilyNameDecoder(_ChoiceDecoder[Any]):
     origins = (type,)
     family: type[DeclaredFamily]
 
@@ -798,7 +860,7 @@ class _FamilyNameDecoder(ValueDecoder[Any]):
         return self.family.decode(data)
 
 @dataclass(frozen=True, slots=True)
-class _LiteralDecoder(ValueDecoder[Any]):
+class _LiteralDecoder(_ChoiceDecoder[Any]):
     origins = (Literal,)
     target: object
     values: tuple[object, ...]
@@ -828,6 +890,9 @@ class UnionDecoder[T](ValueDecoder[T]):
     @property
     def editor_annotation(self):
         return Union[tuple(item.editor_annotation for item in self.alternatives)]
+
+    def argument_options(self) -> dict[str, object]:
+        return self.alternatives[0].argument_options()
 
     def decode(self, data: object) -> T:
         first_error = None
@@ -930,6 +995,16 @@ class _FamilyRecordDecoder(ValueDecoder[Any]):
         return tuple((member.label, {self.family.family_discriminator: member.declared_name})
                      for member in self.family.members_with(self.family))
 
+    def argument_options(self) -> dict[str, object]:
+        """Every member is a command-line choice, labelled or not."""
+        return {"choices": list(self.family.names())}
+
+    def argument_text(self, encoded: object) -> object:
+        return cast(Mapping[str, object], encoded)[self.family.family_discriminator]
+
+    def argument_payload(self, text: object) -> object:
+        return {self.family.family_discriminator: text}
+
     def decode(self, data):
         if not isinstance(data, dict):
             raise ValueError("Expected a family object.")
@@ -976,7 +1051,7 @@ class _RecordDecoder(ValueDecoder[Any]):
         return target(**values)
 
 @dataclass(frozen=True, slots=True)
-class _EnumDecoder(ValueDecoder[Any]):
+class _EnumDecoder(_ChoiceDecoder[Any]):
     target: object
 
     def editor_choices(self):
