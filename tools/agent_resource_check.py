@@ -196,12 +196,11 @@ class DirectoryUsers:
                 data = self.command_line(data)
             paths = set().union(*(self.path_matches[match.group()] for match in self.pattern.finditer(data)))
             if paths:
-                result["matches"].append(name)
-                result["paths"].extend(paths)
+                result["matches"][name] = sorted(paths)
         return True
 
     def inspect(self, proc):
-        result = {"pid": int(proc.name), "matches": [], "paths": [], "unreadable": {}}
+        result = {"pid": int(proc.name), "matches": {}, "unreadable": {}}
         try:
             before = ProcessIdentity.read(proc)
         except (FileNotFoundError, ProcessLookupError):
@@ -234,7 +233,6 @@ class DirectoryUsers:
             result["unreadable"]["fd"] = str(error)
         if not self.still_userspace(proc, before, result):
             return None
-        result["paths"] = sorted(set(result["paths"]))
         return result if result["matches"] or result["unreadable"] else None
 
     def __iter__(self):
@@ -243,6 +241,7 @@ class DirectoryUsers:
                 continue
             result = self.inspect(proc)
             if result is not None:
+                result["paths"] = sorted({path for paths in result["matches"].values() for path in paths})
                 yield result
 
     def report(self):
