@@ -26,6 +26,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     metadata = comms.agents.runtime_info.path.read_bytes()
     collaboration = comms.ledger.path.read_bytes()
     owner = comms.owners.ensure_owner("worker", agent_bin="pi")
+    process = owner.require_process()
 
     async def ready(pid):
         async with asyncio.timeout(10):
@@ -34,16 +35,16 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
                 await asyncio.sleep(0.05)
 
     try:
-        await ready(owner.pid)
+        await ready(process.pid)
         receipts = await asyncio.to_thread(
             comms.owners.restart_owners, ["worker"], agent_bin="pi"
         )
-        assert receipts[0].previous_pid == owner.pid
-        assert receipts[0].pid != owner.pid
+        assert receipts[0].previous_pid == process.pid
+        assert receipts[0].pid != process.pid
         assert not owner.process_alive
         await ready(receipts[0].pid)
         assert comms.registry.require("worker").session_file == str(session)
-        assert not comms.registry.require("worker").active_turn.executing
+        assert not comms.registry.require("worker").turn_record.read().executing
         assert comms.agents.runtime_info.path.read_bytes() == metadata
         assert comms.ledger.path.read_bytes() == collaboration
         reopened = wire(comms.root)

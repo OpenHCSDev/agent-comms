@@ -16,10 +16,9 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .cli_result import CliResult
 from .field_codec import FieldCodec, projected
 from .tool_result import ToolResult
-from .coordination_errors import StaleRevision
+from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
-from .bus_route_counts import OpenedRouteCounts
 from .bus_display_index import BusDisplayIndex
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
@@ -445,7 +444,7 @@ class ReadThrough(ChannelReadMark):
         ) as basis:
             displayed = self.expected_scope.require_displayed()
             if basis.scope(target) != self.expected_scope:
-                raise ValueError("Channel display changed; refresh the displayed page.")
+                raise DMPaintedBoundChanged()
             displayed.validate(
                 basis.require_viewer(), basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
             )
@@ -556,56 +555,39 @@ class ChannelView(ToolResult):
     registered_agents: int = field(default=0, metadata={"wire_exclude": True})
 
     @classmethod
-    def roster(
-        cls,
-        snapshot: RegistrySnapshot,
-        channels: Iterable[Channel],
-        pins: Mapping[str, frozenset[str]],
-        order: type[ChannelSort],
-        activity: Mapping[str, ObservedActivity],
-        sent: Mapping[str, float],
-        messages: Mapping[str, ChannelActivity],
-        visibility: RosterVisibility,
+    def roster(cls, snapshot: RegistrySnapshot, channels: Iterable[Channel],
+        pins: Mapping[str, frozenset[str]], order: type[ChannelSort],
+        activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
+        messages: Mapping[str, ChannelActivity], visibility: RosterVisibility,
     ) -> tuple[ChannelView, ...]:
         index = ChannelMemberIndex(snapshot.threads.values())
-        people = {thread.name: thread for thread in snapshot.visible_threads(visibility)}
-        views: list[ChannelView] = []
-        for channel in channels:
-            pinned_members = pins.get(channel.name, frozenset())
-            registered = tuple(thread.name for thread in channel.members(index))
-            members = tuple(
-                sorted(
-                    (name for name in registered if name in people),
-                    key=lambda name: (
-                        name not in pinned_members,
-                        channel.order.key(
-                            name,
-                            people[name].created_at,
-                            activity[name].timestamp if name in activity else 0,
-                            sent.get(name, 0),
-                        ),
-                    ),
-                )
-            )
-            history = messages.get(channel.name, ChannelActivity())
-            views.append(
-                cls(
-                    channel,
-                    members,
-                    max(
-                        history.last_message,
-                        max(
-                            (activity[name].timestamp for name in members if name in activity),
-                            default=0,
-                        ),
-                    ),
-                    history.last_user_input,
-                    pinned_members & frozenset(members),
-                    sum(snapshot.statuses[name].active for name in registered),
-                    len(registered),
-                )
-            )
-        return tuple(sorted(views, key=order.key))
+        return tuple(sorted((cls.capture(
+            channel, channel.members(index), snapshot,
+            pins.get(channel.name, frozenset()), activity, sent,
+            messages.get(channel.name, ChannelActivity()), visibility,
+        ) for channel in channels), key=order.key))
+
+    @classmethod
+    def capture(
+        cls, channel: Channel, registered: tuple[Thread, ...], snapshot: RegistrySnapshot,
+        pins: frozenset[str], activity: Mapping[str, ObservedActivity], sent: Mapping[str, float],
+        history: ChannelActivity, visibility: RosterVisibility,
+    ) -> ChannelView:
+        people = {thread.name: thread for thread in registered
+                  if snapshot.statuses[thread.name].in_view(visibility)}
+        members = tuple(sorted(people, key=lambda name: (
+            name not in pins,
+            channel.order.key(name, people[name].created_at,
+                              activity[name].timestamp if name in activity else 0,
+                              sent.get(name, 0)),
+        )))
+        return cls(
+            channel, members,
+            max(history.last_message,
+                max((activity[name].timestamp for name in members if name in activity), default=0)),
+            history.last_user_input, pins & frozenset(members),
+            sum(snapshot.statuses[thread.name].active for thread in registered), len(registered),
+        )
 
 
 
@@ -693,7 +675,7 @@ class ThreadView(ThreadRecord):
         return ordinary
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        if self.thread.active_turn.executing:
+        if self.thread.turn_record.read().executing:
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 
@@ -831,14 +813,13 @@ class WireRevision(ReadState):
     notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root))
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root))
     expiry_tick: int
-    through_seq: int
 
     expiry_seconds: ClassVar[int] = 30
 
     @classmethod
     def empty(cls) -> WireRevision:
         return cls(**{source.name: () for source in fields(cls) if "paths" in source.metadata},
-                   expiry_tick=0, through_seq=0)
+                   expiry_tick=0)
 
     @classmethod
     def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
@@ -848,16 +829,13 @@ class WireRevision(ReadState):
 
     @classmethod
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
-        """Every source is a group; missing files contribute no revision."""
-        paths = cls.source_paths(views)
-        with views.bus.log.locked(mode=SharedLock()) as source:
-            through_seq = views.bus.log.committed_sequence_unlocked(source)
-            captured = {
-                name: tuple(revision for path in group
-                            if (revision := FileRevision.capture(path)) is not None)
-                for name, group in paths.items()
-            }
-        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq)
+        """Stat sources only; strict content reads belong to the requesting view."""
+        captured = {
+            name: tuple(revision for path in group
+                        if (revision := FileRevision.capture(path)) is not None)
+            for name, group in cls.source_paths(views).items()
+        }
+        return cls(**captured, expiry_tick=expiry_tick)
 
     def changed_threads(self, previous: ThreadsObserved, comms: Comms,
                         activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
@@ -868,13 +846,13 @@ class WireRevision(ReadState):
         if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
                 or not readable):
             return frozenset(names)
-        if self.through_seq > earlier.through_seq:
+        if self.bus_log != earlier.bus_log:
             snapshot = comms.registry.snapshot()
             with comms.bus.log.opened_wire_snapshot() as source:
                 if source.changed_since(self.bus_log[0]):
                     raise StaleRevision("Wire source changed before route attribution")
-                with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
-                    actors = routes.participants_between(earlier.through_seq, self.through_seq)
+                actors = {actor for message, _ in source.public_records(earlier.bus_log[0].size)
+                          for actor in (message.sender, message.target)}
             catalog = comms.channels.catalog.read()
             for actor in actors:
                 changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, catalog))
@@ -909,7 +887,7 @@ class WireRevision(ReadState):
         return frozenset(changed & names)
 
     def bus_source_changed_since(self, earlier: WireRevision) -> bool:
-        return self.through_seq < earlier.through_seq or any(
+        return any(
             FileRevision.source_changed(before, current)
             for before, current in zip_longest(earlier.bus_log, self.bus_log))
 

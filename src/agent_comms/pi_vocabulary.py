@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
+from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
@@ -10,7 +12,6 @@ from .field_codec import FieldCodec, FieldRepresentation
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .native_arguments import ThinkingArgument
 
 
 class PiStopReason(DeclaredFamily, affix="StopReason"):
@@ -199,57 +200,76 @@ class ServiceTier(StrEnum):
 SERVICE_TIER_ENVIRONMENT = "AGENT_COMMS_SERVICE_TIER"
 
 
-class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
+class ThinkingChoice(ABC):
+    @classmethod
+    @abstractmethod
+    def native_arguments[T](cls, argument: Callable[[type[ThinkingLevel]], T]) -> tuple[T, ...]: ...
+
+    @classmethod
+    def applied(cls, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
+        return cls
+
+    @classmethod
+    def observed(cls, level: type[ThinkingChoice]) -> type[ThinkingChoice]:
+        return cls
+
+    @classmethod
+    @abstractmethod
+    def wire_value(cls) -> str | None:
+        raise NotImplementedError("Abstract thinking choices have no wire value.")
+
+
+class ThinkingLevel(ThinkingChoice, DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
+    def native_arguments[T](cls, argument: Callable[[type[ThinkingLevel]], T]) -> tuple[T, ...]:
         return (argument(cls),)
 
     @classmethod
-    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
-        return cls
+    def wire_value(cls) -> str:
+        return cls.declared_name
 
+
+class NoThinkingOverride(ThinkingChoice):
     @classmethod
-    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
-        return cls
-
-
-class NoThinkingOverride(ThinkingLevel):
-    declared_name = None
-
-    @classmethod
-    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
+    def native_arguments[T](cls, argument: Callable[[type[ThinkingLevel]], T]) -> tuple[T, ...]:
         return ()
 
     @classmethod
-    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
+    def applied(cls, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
         return current
 
     @classmethod
-    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
+    def observed(cls, level: type[ThinkingChoice]) -> type[ThinkingChoice]:
         return level
+
+    @classmethod
+    def wire_value(cls) -> None:
+        return None
 
 
 class ThinkingLevelValue(FieldRepresentation):
     accepts_null = True
 
     @classmethod
-    def decode(cls, value: object) -> type[ThinkingLevel]:
+    def decode(cls, value: object) -> type[ThinkingChoice]:
         if value is None:
             return NoThinkingOverride
         return ThinkingLevel.decode(FieldCodec.decode(str, value))
 
     @classmethod
-    def encode(cls, value: object) -> object:
-        return FieldCodec.encode(value)
+    def encode(cls, value: object) -> str | None:
+        if isinstance(value, type) and issubclass(value, ThinkingChoice):
+            return value.wire_value()
+        raise ValueError("Thinking level requires a thinking choice declaration.")
 
     @classmethod
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type[ThinkingLevel] | None)
 
 
-ThinkingLevelField = Annotated[type[ThinkingLevel], ThinkingLevelValue]
+ThinkingLevelField = Annotated[type[ThinkingChoice], ThinkingLevelValue]
 
 
 class OffThinkingLevel(ThinkingLevel):

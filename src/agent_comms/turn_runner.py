@@ -128,7 +128,7 @@ class TurnRunner:
         lease = thread.turn_lease
         if lease is None:
             return
-        await CompactionObservation(self, session_id, lease, thread.active_turn.phase).dispatch(event)
+        await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""
@@ -269,17 +269,12 @@ class TurnRunner:
                 reply = await self.runtime.request_permission(
                     session_id,
                     controller,
-                    {
-                        "toolCall": tool_call.model_dump(by_alias=True, exclude_none=True),
-                        "options": [
-                            option.model_dump(by_alias=True, exclude_none=True)
-                            for option in options
-                        ],
-                    },
+                    tool_call.model_dump(by_alias=True, exclude_none=True),
+                    [option.model_dump(by_alias=True, exclude_none=True) for option in options],
                 )
-                if not isinstance(reply, dict):
+                if reply is None:
                     return pi.CancelledUiChoice()
-                outcome = reply
+                outcome = reply.outcome.model_dump(by_alias=True, exclude_none=True)
             elif controller is self.sessions.client:
                 response = await asyncio.wait_for(
                     controller.request_permission(

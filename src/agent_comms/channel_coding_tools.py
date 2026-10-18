@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field, replace
@@ -23,6 +22,7 @@ from .selected_claim import (
     verify_selected_wake,
 )
 from .comms import Comms
+from .field_codec import FieldCodec, MalformedRecord
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
@@ -64,7 +64,7 @@ class CodingCall(NativeToolCall):
             raise SelectedToolDenied("Malformed native coding call identity")
         try:
             return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
-        except (ValueError, TypeError, KeyError) as error:
+        except MalformedRecord as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
 
     def slot(self, input_id: str, round_number: int) -> str:
@@ -78,7 +78,7 @@ class ExecutableCodingCall(CodingCall):
 
     @property
     def name(self) -> str:
-        return self.tool.require_name()
+        return self.tool.declared_name
 
     def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]:
         return self.tool
@@ -205,7 +205,7 @@ class CodingToolMode(NativeToolMode):
         # The native package manifest verifies each declaration's extension bytes.
         if any(not extension.is_file() for extension in extensions):
             raise SelectedToolDenied("Native tool extension is not installed")
-        return ("--tools", ",".join(tool.require_name() for tool in declarations),
+        return ("--tools", ",".join(tool.declared_name for tool in declarations),
                 *(argument for extension in extensions for argument in ("-e", str(extension))))
 
     async def open_transport(self, turn, ownership) -> OwnerToolSocket:
@@ -226,9 +226,7 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
-        from .jsonl_stream import unique_fields
-
-        value = json.loads(raw, object_pairs_hook=unique_fields)
+        value = FieldCodec.parse(raw)
         if (
             type(value) is not dict
             or set(value) != {"token", "call_id", "name", "arguments"}

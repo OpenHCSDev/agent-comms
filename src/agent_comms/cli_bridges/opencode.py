@@ -191,8 +191,7 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
         yield await connection.status()
 
 
-class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
-    declared_name = None  # Follows a session; not one more way to read it.
+class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared_name=None):
     operations = (*TranscriptBridge.operations, Attach)
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 

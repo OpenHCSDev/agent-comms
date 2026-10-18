@@ -6,7 +6,6 @@ publication. Verified package and send authority remain required for every turn.
 
 from __future__ import annotations
 
-import json
 import hashlib
 import os
 import re
@@ -25,13 +24,13 @@ from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
 from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
-from .field_codec import FieldCodec
-from .jsonl_stream import unique_fields
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, MalformedRecord
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
-from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -43,7 +42,19 @@ CAPABILITY = "pi-native-input-v1-live-only"
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
-class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed outcome
+class NativeRequestFailure(RuntimeError):  # noqa: N818 - nominal request outcome
+    """A failed input is reported and settled without authorizing a retry."""
+
+    @property
+    def public_failure(self) -> str:
+        return str(self)
+
+    @property
+    def rejected_response(self) -> pi.Response | None:
+        return None
+
+
+class NativePiUnavailable(NativeRequestFailure):  # noqa: N818 - nominal fail-closed outcome
     """Tracked execution failed closed without committing a coordinator fact."""
 
     native_stderr = ""
@@ -56,9 +67,12 @@ class NativePiUnavailable(RuntimeError):  # noqa: N818 - nominal fail-closed out
     def public_failure(self):
         return f"{self}; the input is uncertain."
 
-    @property
-    def rejected_response(self) -> pi.Response | None:
-        return None
+
+class NativeEmptyAnswer(NativeRequestFailure):  # noqa: N818 - nominal model outcome
+    """The model completed, but supplied no answer text; the runtime is available."""
+
+    def __init__(self) -> None:
+        super().__init__("The model finished with no text")
 
 
 class NativePiInputNotSent(NativePiUnavailable):
@@ -267,7 +281,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                     raise NativePiUnavailable("Native proof requires offline durable conversion")
                 if FileIdentity.from_stat(before) != FileIdentity.from_stat(path.lstat()):
                     raise NativePiUnavailable("Native proof inode changed while opening")
-            except (OSError, sqlite3.Error, ValueError, TypeError) as error:
+            except (OSError, sqlite3.Error, RelationViolationError, MalformedRecord) as error:
                 raise NativePiUnavailable("Native proof indexed evidence is unavailable") from error
             # Consumer exceptions retain their original boundary and disposition.
             # The ExitStack closes the database and descriptor without handling caller errors.
@@ -594,7 +608,7 @@ class NativePiRpcLaunch:
         root: Path,
         session: SelectedSession,
         model: SelectedModel,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
     ) -> NativePiRpcLaunch:
@@ -859,8 +873,8 @@ class PrivateEvidenceRead:
     @staticmethod
     def _decode_row(raw):
         try:
-            row = json.loads(raw.decode("utf-8", errors="strict"), object_pairs_hook=unique_fields)
-        except (UnicodeError, ValueError) as error:
+            row = FieldCodec.parse(raw)
+        except MalformedRecord as error:
             raise NativePiUnavailable("Native Pi evidence JSON is invalid") from error
         if type(row) is not dict:
             raise NativePiUnavailable("Native Pi evidence row has wrong type")
@@ -1062,7 +1076,7 @@ def _verify_context(
 
     try:
         emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
-    except (TypeError, ValueError) as error:
+    except MalformedRecord as error:
         raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
     with NativeEvidenceRead.borrow(session_file, evidence) as evidence:
         if not emitted.corroborates_input(input_id, evidence=evidence):

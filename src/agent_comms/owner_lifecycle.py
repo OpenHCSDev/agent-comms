@@ -14,7 +14,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, ProcessState
-from .turn_lease import NoTurn
+from .turn_lease import NoTurnRecord
 from .cli_result import CliResult
 from .tool_result import ToolResult
 from .coordination_errors import PublicationActivationBlocked
@@ -193,7 +193,7 @@ class OwnerReleaseStore(ThreadOwnedState, TypedStore):
             return next(records, NoRelease())
 
     def record(self, thread: Thread, before: int, after: int) -> None:
-        thread.active_turn.require_idle()
+        thread.turn_record.read().require_idle()
         with self.writing() as db:
             OwnerReleaseEvidence(thread.name, thread.created_at, thread.process_identity, before, after).upsert(db)
 
@@ -212,7 +212,7 @@ class OwnerLifecycle:
         from .restart_refusals import OwnerBusyRefusal
 
         try:
-            thread.active_turn.require_idle()
+            thread.turn_record.read().require_idle()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
 
@@ -249,7 +249,7 @@ class OwnerLifecycle:
             )
             if thread.process_alive:
                 return thread
-            owned = replace(thread, process_identity=identity, active_turn=NoTurn())
+            owned = replace(thread, process_identity=identity, turn_record=NoTurnRecord())
             self.registry.register(owned, new_owner=True)
             return owned
 
@@ -464,7 +464,7 @@ class OwnerLifecycle:
 
         def reserve(identity: ProcessIdentity) -> None:
             nonlocal owned
-            owned = replace(thread, process_identity=identity, active_turn=NoTurn())
+            owned = replace(thread, process_identity=identity, turn_record=NoTurnRecord())
             self.registry.register(owned, new_owner=True)
 
         with owner_process_output(self.root, thread) as output:

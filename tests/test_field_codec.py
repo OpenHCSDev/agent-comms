@@ -1,10 +1,14 @@
 from dataclasses import dataclass, field
+from datetime import datetime
+from pathlib import Path
 from typing import Annotated, ClassVar
 
 import pytest
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, InlineRecord, PathText, TimestampText, TextRepresentation, WireValue
+from agent_comms.field_codec import (
+    FieldCodec, InlineRecord, MalformedRecord, PathText, TimestampText, TextRepresentation, WireValue,
+)
 from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
     MembershipNoticeRole, Message, MessageRole, NoticeRole,
@@ -23,14 +27,15 @@ def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
         for invalid in ({1: 'non-text key'}, {'nested': float('nan')}, {'nested': object()}):
             for operation in (
                 lambda: FieldCodec.encode(invalid, annotation),
-                lambda: FieldCodec.decode(annotation, invalid),
                 lambda: FieldCodec.project(invalid, 'report', annotation),
             ):
                 with pytest.raises(TypeError, match='JSON value'):
                     operation()
+            with pytest.raises(MalformedRecord, match='JSON value'):
+                FieldCodec.decode(annotation, invalid)
     assert FieldCodec.decode(dict[str, JsonValue], payload) == payload
     assert FieldCodec.decode(dict[str, object], payload) == payload
-    with pytest.raises(TypeError, match='JSON value'):
+    with pytest.raises(MalformedRecord, match='JSON value'):
         FieldCodec.decode(dict[str, object], {'nested': object()})
     assert FieldCodec.value_schema(dict[str, JsonValue]) == {
         'type': 'object', 'additionalProperties': {},
@@ -261,7 +266,7 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
     assert type(FieldCodec.decode(Literal[True, 1], 1)) is int
     with pytest.raises(ValueError):
         FieldCodec.decode(Literal[1], True)
-    with pytest.raises(TypeError):
+    with pytest.raises(MalformedRecord):
         FieldCodec.decode(Any, math.inf)
 
 
@@ -316,7 +321,7 @@ def test_nominal_class_reference_retains_owner_without_inventing_state_payload()
     assert FieldCodec.encode(record) == {"choice": "count"}
     assert FieldCodec.decode(ChoiceReference, {"choice": "count"}) == record
     # References do not fabricate CountChoice.value; instances still require it.
-    with pytest.raises(TypeError):
+    with pytest.raises(MalformedRecord, match="Missing required fields for CountChoice: value"):
         FieldCodec.decode(Choice, {"kind": "count"})
 
 
@@ -385,6 +390,30 @@ def test_family_instance_schema_tracks_decode_members_and_custom_discriminator()
     assert len(FieldCodec.value_schema(ExplicitScope)["oneOf"]) == 2
 
 
+def test_member_cannot_write_a_second_family_discriminator():
+    class Scope(DeclaredFamily, affix="Scope"):
+        family_discriminator = "selection"
+
+    with pytest.raises(TypeError, match="Only the family root"):
+        class BrokenScope(Scope):
+            family_discriminator = "another"
+
+
+def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
+    from agent_comms.tool_declaration import ToolDeclaration
+    from agent_comms.transcript_events import ToolStartTranscript
+
+    arguments = {"from": "sender", "to": "receiver", "body": "hello"}
+    event = ToolStartTranscript(
+        tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
+        tool=ToolDeclaration.record("comms_send", arguments),
+    )
+    encoded = FieldCodec.encode(event)
+    assert encoded["tool"]["tool"] == "comms_send"
+    assert "kind" not in encoded["tool"]
+    assert FieldCodec.decode(ToolStartTranscript, encoded) == event
+
+
 def test_uninhabited_family_schema_rejects_every_value_without_a_manual_roster():
     class Empty(DeclaredFamily, affix="Empty"):
         pass
@@ -431,7 +460,7 @@ def test_inline_record_owns_keys_for_encode_decode_schema_and_projection(value):
     assert FieldCodec.decode(container, wire) == value
     assert FieldCodec.project(value, "report") == wire
     assert set(FieldCodec.record_schema(container)["required"]) == wire.keys()
-    with pytest.raises(TypeError):
+    with pytest.raises(MalformedRecord, match=f"Missing required fields for {container.__name__}: number"):
         FieldCodec.decode(container, {"text": "seven"})
     with pytest.raises(ValueError):
         FieldCodec.decode(container, {**wire, "other": 1})
@@ -486,3 +515,32 @@ def test_message_role_keeps_the_exact_external_envelope(role, external):
     assert message.to_wire() == wire
     assert Message.from_wire(wire) == message
     assert "role" not in FieldCodec.record_schema(Message)["properties"]
+
+
+@dataclass(frozen=True)
+class _SavedRow:
+    path: Annotated[Path, PathText]
+    at: Annotated[datetime, TimestampText]
+    count: int
+
+
+@pytest.mark.parametrize("wire,refusal", [
+    ({"path": 7, "at": "2026-10-18T12:00:00+00:00", "count": 1}, "received int"),
+    ({"path": "/saved", "at": 1.5, "count": 1}, "received float"),
+    ({"path": "/saved", "at": "2026-10-18T12:00:00+00:00"}, "Missing required fields for _SavedRow: count"),
+])
+def test_refused_record_data_raises_the_declared_error(wire, refusal):
+    with pytest.raises(MalformedRecord, match=refusal) as raised:
+        FieldCodec.decode(_SavedRow, wire)
+    assert type(raised.value) is MalformedRecord
+
+
+def test_declaration_bug_passes_through_a_data_boundary_as_type_error():
+    from agent_comms.bus_source_page import SourcePage
+
+    @dataclass(frozen=True, kw_only=True)
+    class TwoRepresentations(SourcePage):
+        saved: Annotated[Path, PathText, TimestampText]
+
+    with pytest.raises(TypeError, match="one representation"):
+        TwoRepresentations.capture(saved="/saved")

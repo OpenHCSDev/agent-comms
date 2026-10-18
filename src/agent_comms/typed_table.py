@@ -33,7 +33,7 @@ from typing import (
 from .locked_store import RootFile
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, ValueDecoder, compile_decoder
+from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -168,7 +168,7 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def from_sql(cls, value: object) -> bool:
         if type(value) is not int or value not in (0, 1):
-            raise ValueError("SQLite boolean must be 0 or 1")
+            raise MalformedRecord("SQLite boolean must be 0 or 1")
         return bool(value)
 
 
@@ -234,8 +234,8 @@ class JsonStorage(SqlStorage):
     @classmethod
     def from_sql(cls, value: object) -> object:
         if type(value) is not str:
-            raise ValueError("SQLite JSON must be text")
-        return json.loads(value)
+            raise MalformedRecord("SQLite JSON must be text")
+        return FieldCodec.parse(value)
 
 
 @dataclass(frozen=True)
@@ -272,7 +272,7 @@ class Index:
         existence = "IF NOT EXISTS " if if_not_exists else ""
         return (
             f"CREATE {'UNIQUE ' if self.unique else ''}INDEX "
-            f"{existence}{_identifier(name)} ON {_identifier(owner.require_name())} "
+            f"{existence}{_identifier(name)} ON {_identifier(owner.declared_name)} "
             f"({owner._column_list(self.columns)})"
             + (f" WHERE {owner._sql(self.where)}" if self.where else "")
         )
@@ -293,7 +293,7 @@ class ForeignKey:
             raise ValueError("Foreign key column counts differ")
         return (
             f"FOREIGN KEY ({owner._column_list(self.columns)}) "
-            f"REFERENCES {_identifier(self.target.require_name())} "
+            f"REFERENCES {_identifier(self.target.declared_name)} "
             f"({self.target._column_list(self.target_columns)})"
             + (f" ON DELETE {self.on_delete}" if self.on_delete else "")
             + (" DEFERRABLE INITIALLY DEFERRED" if self.deferred else "")
@@ -316,7 +316,7 @@ class SqlValue:
         """Read a single-column projection without losing empty or nullable results."""
         try:
             if cursor.description is None or len(cursor.description) != 1:
-                raise ValueError("Scalar projection requires exactly one SQLite column")
+                raise MalformedRecord("Scalar projection requires exactly one SQLite column")
             return [self.decode(row[0]) for row in cursor]
         finally:
             cursor.close()
@@ -401,7 +401,7 @@ class TypedRow:
         names = tuple(item[0] for item in cursor.description)
         projection = {**cls.column_projection(), **extra}
         if len(set(names)) != len(names) or set(names) != set(projection.values()):
-            raise ValueError(f"Query columns do not match {cls.__name__}: {names!r}")
+            raise MalformedRecord(f"Query columns do not match {cls.__name__}: {names!r}")
         return {key: names.index(column) for key, column in projection.items()}
 
     @classmethod
@@ -409,7 +409,9 @@ class TypedRow:
         cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]
     ) -> Self:
         values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
-        instance = cls(**{item.name: values[item.name] for item in cls._fields() if item.init})
+        instance = FieldCodec.construct(
+            cls, {item.name: values[item.name] for item in cls._fields() if item.init}
+        )
         for item in cls._fields():
             if not item.init:
                 object.__setattr__(instance, item.name, values[item.name])
@@ -496,6 +498,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     source expressions; values always use bound parameters.
     """
 
+    family_discriminator: ClassVar[str] = "row"
     unique: ClassVar[tuple[tuple[str, ...], ...]] = ()
     checks: ClassVar[tuple[str, ...]] = ()
     indexes: ClassVar[tuple[Index, ...]] = ()
@@ -553,7 +556,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
                 sql += " UNIQUE"
             if column.references is not None:
                 target, name = column.references
-                sql += f" REFERENCES {_identifier(target.require_name())} ({target._column_list((name,))})"
+                sql += f" REFERENCES {_identifier(target.declared_name)} ({target._column_list((name,))})"
             for constraint in item.storage.constraints(item.wire_name, item.annotation):
                 sql += f" CHECK ({constraint})"
             if column.check:
@@ -566,9 +569,9 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         definitions.extend(f"UNIQUE ({cls._column_list(group)})" for group in cls.unique)
         definitions.extend(f"CHECK ({cls._sql(check)})" for check in cls.checks)
         definitions.extend(reference.sql(cls) for reference in cls.references())
-        table = _identifier(cls.require_name())
+        table = _identifier(cls.declared_name)
         statements = {
-            cls.require_name(): f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
+            cls.declared_name: f"CREATE TABLE {existence}{table} ({', '.join(definitions)}) STRICT"
             + (", WITHOUT ROWID" if cls.without_rowid else "")
         }
         indexes = cls.indexes + tuple(
@@ -604,7 +607,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def drop(cls, db: sqlite3.Connection) -> None:
         """Drop the declared table; SQLite drops its indexes with it."""
-        db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.require_name())}")
+        db.execute(f"DROP TABLE IF EXISTS {_identifier(cls.declared_name)}")
 
     @classmethod
     def _condition(
@@ -627,7 +630,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         condition, parameters = cls._condition(where, parameters, key)
         direction, selected = " DESC" if descending else "", row_type or cls
         return selected.iterate(db.execute(
-            f"SELECT {selected._select_list(cls)} FROM {_identifier(cls.require_name())} "
+            f"SELECT {selected._select_list(cls)} FROM {_identifier(cls.declared_name)} "
             f"WHERE {condition}"
             + (" ORDER BY " + ", ".join(cls._column_list((name,)) + direction for name in order_by)
                if order_by else "") + (" LIMIT ?" if limit is not None else ""),
@@ -667,7 +670,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
         rows = cls.select(db, **key)
         if len(rows) > 1:
-            raise ValueError(f"Expected one {cls.declared_name} for {tuple(key)}")
+            raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
         return next(iter(rows), None)
 
     @classmethod
@@ -679,14 +682,14 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def exists(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = ()) -> bool:
         return SqlValue.for_annotation(bool).read(db.execute(
-            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.require_name())} WHERE {cls._sql(where)})",
+            f"SELECT EXISTS(SELECT 1 FROM {_identifier(cls.declared_name)} WHERE {cls._sql(where)})",
             parameters))[0]
 
     @classmethod
     def count(cls, db: sqlite3.Connection, *, where: str = "1", parameters: tuple = (), **key: object) -> int:
         condition, parameters = cls._condition(where, parameters, key)
         return SqlValue.for_annotation(int).read(db.execute(
-            f"SELECT COUNT(*) FROM {_identifier(cls.require_name())} WHERE {condition}", parameters))[0]
+            f"SELECT COUNT(*) FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters))[0]
 
     @classmethod
     def _writable_fields(cls, columns: tuple[str, ...] | None = None) -> tuple[_Field, ...]:
@@ -700,7 +703,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     @classmethod
     def insertion_statement(cls, columns: tuple[str, ...] = ()) -> str:
         writable = cls._writable_fields(columns or None)
-        return (f"INSERT INTO {_identifier(cls.require_name())} "
+        return (f"INSERT INTO {_identifier(cls.declared_name)} "
                 f"({cls._column_list(tuple(item.name for item in writable))}) "
                 f"VALUES ({', '.join('?' for _ in writable)})")
 
@@ -716,7 +719,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         parameters: tuple = (), **key: object,
     ) -> sqlite3.Cursor:
         condition, parameters = cls._condition(where, parameters, key)
-        return db.execute(f"DELETE FROM {_identifier(cls.require_name())} WHERE {condition}", parameters)
+        return db.execute(f"DELETE FROM {_identifier(cls.declared_name)} WHERE {condition}", parameters)
 
     def _insertion(self) -> tuple[str, tuple]:
         writable = self._writable_fields()
@@ -761,7 +764,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         if not selected:
             raise ValueError(f"Update requires fields for {cls.declared_name}")
         return db.execute(
-            f"UPDATE {_identifier(cls.require_name())} SET "
+            f"UPDATE {_identifier(cls.declared_name)} SET "
             + ", ".join(f"{_identifier(item.wire_name)}=?" for item in selected)
             + f" WHERE {cls._sql(where)}",
             tuple(item.encode(changes[item.name]) for item in selected) + parameters,

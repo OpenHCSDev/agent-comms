@@ -14,6 +14,7 @@ from agent_comms.cli_result import CliResult
 from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
+from agent_comms.owner_protocol import OwnerFailure, OwnerLine
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
@@ -185,9 +186,9 @@ async def test_one_runtime_declaration_works_through_proxy_and_actual_socket(tmp
         try:
             writer.write(b'{"action":"not-a-request","thread":"owner"}\n')
             await writer.drain()
-            result = json.loads(await reader.readline())
-            assert set(result) == {"error"}
-            assert "Unknown RuntimeRequest" in result["error"]
+            failure = OwnerLine.read(await reader.readline())
+            assert isinstance(failure, OwnerFailure) and failure.rpc_error is None
+            assert "Unknown RuntimeRequest" in failure.error
         finally:
             writer.close()
             await writer.wait_closed()

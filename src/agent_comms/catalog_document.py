@@ -7,9 +7,17 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
-from .channels import BuiltinChannelView, Channel, Channels, SavedView, SavedViewChannel, TagChannel, ViewPredicate
+from .channels import (
+    BuiltinChannelView,
+    Channel,
+    Channels,
+    SavedView,
+    SavedViewChannel,
+    TagChannel,
+    ViewPredicate,
+)
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
-from .errors import UnknownChannelError
+from .errors import RelationViolationError, UnknownChannelError
 from .thread_identity import ThreadProvenance
 
 
@@ -120,14 +128,16 @@ class CatalogDocument:
 
     def require_available_name(self, name: str) -> None:
         if name.removeprefix("#") in self.saved_views:
-            raise ValueError(f"Name {name.removeprefix('#')!r} is reserved by a saved view.")
+            raise RelationViolationError(f"Name {name.removeprefix('#')!r} is reserved by a saved view.")
 
     def require_available_tag_name(
         self, name: str, threads: Mapping[str, ThreadProvenance], *, previous: str | None = None
     ) -> None:
         self.require_available_name(name)
         if name in self.all_tags(threads) and name != previous:
-            raise ValueError(f"Tag {name!r} already exists; tag rename does not merge identities.")
+            raise RelationViolationError(
+                f"Tag {name!r} already exists; tag rename does not merge identities."
+            )
 
     def remember_tags(self, tags: frozenset[str], created_at: float) -> None:
         for tag in tags:

@@ -13,7 +13,7 @@ from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from acp.schema import PromptResponse, SetSessionConfigOptionResponse
 from pydantic import BaseModel, JsonValue
@@ -25,7 +25,7 @@ from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
 from .goal_history import RecordedGoalRevision
 from .goals import Goal
-from .owner_protocol import OwnerAnnouncement
+from .owner_protocol import ClientLine, OwnerAnnouncement, OwnerLine, OwnerReady, OwnerResult
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
 from .thread_identity import ThreadIncarnation
@@ -48,8 +48,8 @@ class RuntimeRequestContext:
     session_id: str
     name: str
 
-    async def send(self, payload: dict[str, Any]) -> None:
-        await self.client.send(payload)
+    async def send(self, line: OwnerLine) -> None:
+        await self.client.send(line)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -66,14 +66,14 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
         values["kind"] = values.pop("action", None)
         return cls.from_payload(values)
 
-    def to_wire(self) -> dict[str, Any]:
+    def to_wire(self) -> dict[str, object]:
         payload = FieldCodec.encode(self)
         return {"action": payload.pop("kind"), **payload}
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+        cls, thread: str, controller_token: str | None, parameters: dict[str, object]
+    ) -> dict[str, object]:
         # The owner decodes once; proxies preserve the owner's error envelope.
         return {"action": FieldCodec.encode(cls), "thread": thread,
                 **FieldCodec.encode(parameters)}
@@ -98,7 +98,7 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
 class ResultRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         reply = await self.result(ctx)
-        await ctx.send({"result": FieldCodec.encode(reply)})
+        await ctx.send(OwnerResult(result=FieldCodec.encode(reply)))
 
     @abstractmethod
     async def result(self, ctx: RuntimeRequestContext) -> DeclaredReply: ...
@@ -206,7 +206,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
 class SubscribeRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
         agent = ctx.server.agent
-        await ctx.send(FieldCodec.encode(OwnerAnnouncement()))
+        await ctx.send(OwnerAnnouncement())
         ctx.server.clients.setdefault(ctx.session_id, set()).add(ctx.client)
         await agent.emit_session_identity(ctx.session_id, ctx.name, client=ctx.client)
         await agent.sessions.transcript.subscribe(
@@ -219,38 +219,29 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         async with agent.sessions.config.session_options(ctx.name) as config_options:
             metadata = await agent.sessions.metadata(ctx.name)
             await ctx.send(
-                {
-                    "controllerToken": ctx.client.token,
-                    "ready": {
-                        **metadata,
-                        "configOptions": [
-                            option.model_dump(by_alias=True, exclude_none=True)
-                            for option in config_options
-                        ],
-                    },
-                }
+                OwnerReady(
+                    ready=metadata,
+                    config_options=[
+                        option.model_dump(by_alias=True, exclude_none=True)
+                        for option in config_options
+                    ],
+                    controller_token=ctx.client.token,
+                )
             )
         while line := await ctx.reader.readline():
-            response = json.loads(line)
-            acknowledgement = response.get("permissionResponse") if isinstance(response, dict) else None
-            if not isinstance(acknowledgement, dict):
-                continue
-            reply_id = acknowledgement.get("id")
-            pending = ctx.client.pending.get(reply_id) if isinstance(reply_id, str) else None
-            if pending is not None and not pending.done():
-                pending.set_result(acknowledgement)
+            ClientLine.read(line).answer(ctx.client)
 
 
 @dataclass(frozen=True, kw_only=True)
 class PromptRuntimeRequest(ResultRuntimeRequest):
-    prompt: list[dict[str, Any]]
-    meta: dict[str, Any] | None = None
+    prompt: list[dict[str, object]]
+    meta: dict[str, object] | None = None
     controller_token: str | None = field(default=None, metadata={"wire_name": "controllerToken"})
 
     @classmethod
     def proxy_payload(
-        cls, thread: str, controller_token: str | None, parameters: dict[str, Any]
-    ) -> dict[str, Any]:
+        cls, thread: str, controller_token: str | None, parameters: dict[str, object]
+    ) -> dict[str, object]:
         return super().proxy_payload(
             thread, controller_token, {"controllerToken": controller_token, **parameters}
         )

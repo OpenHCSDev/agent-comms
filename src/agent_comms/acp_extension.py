@@ -21,7 +21,7 @@ from .declared_family import DeclaredFamily
 from .context_reading import ContextReading
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, MalformedRecord, WireValue
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
@@ -135,7 +135,7 @@ def decode_updates(metadata: object) -> tuple[AgentCommsUpdate, ...]:
     if metadata is None:
         return ()
     if not isinstance(metadata, dict):
-        raise ValueError("ACP metadata must be an object")
+        raise MalformedRecord("ACP metadata must be an object")
     if "agentComms" not in metadata:
         return ()
     extension = metadata["agentComms"]
@@ -751,12 +751,12 @@ def decode_request(metadata: object = None, **expanded) -> CommsRequest:
     if metadata is None:
         metadata = {}
     if not isinstance(metadata, dict):
-        raise ValueError("ACP metadata must be an object")
+        raise MalformedRecord("ACP metadata must be an object")
     extension = expanded.get("agentComms", metadata.get("agentComms"))
     if extension is None:
         return QueuePromptRequest()
     if not isinstance(extension, dict) or set(extension) != {"request"}:
-        raise ValueError("Comms metadata requires one declared request")
+        raise MalformedRecord("Comms metadata requires one declared request")
     return FieldCodec.decode(CommsRequest, extension["request"])
 
 

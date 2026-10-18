@@ -1,7 +1,8 @@
 """The opt-in channel activity feed is a local display, never wire authority."""
 
 from agent_comms.messages import Membership
-from agent_comms.read_basis import NamedViewer
+from agent_comms.read_basis import ChannelDisplayScope, DMDisplayScope, NamedViewer
+from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.presentation import ReadThrough
 import json
 from contextlib import contextmanager
@@ -17,7 +18,22 @@ from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
-from agent_comms.message_page import NewerTraversal, OlderTraversal, PageBounds, PageTraversal
+from agent_comms.message_page import PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
+
+
+def test_missing_painted_scope_is_a_stale_bound():
+    with pytest.raises(DMPaintedBoundChanged):
+        ChannelDisplayScope("#api", frozenset({"#api"})).require_displayed()
+
+
+def test_invalid_display_participants_are_typed_scope_changes(tmp_path):
+    comms = populated(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    snapshot = comms.registry.snapshot()
+    for first, peer in (("missing", "alice"), (viewer, "missing"), ("alice", "bob"), (viewer, viewer)):
+        with pytest.raises(DMScopeChanged):
+            DMDisplayScope.capture_human(first, peer, snapshot)
 
 
 def populated(tmp_path):
@@ -220,8 +236,6 @@ def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
     assert head.has_newer and not head.has_older
     tail = comms.views.channel_display_page("#api", bounds=PageBounds(OlderTraversal(rows[-1].seq), 1))
     assert bodies(tail) == ["second target"] and tail.has_older and tail.has_newer
-    with pytest.raises(ValueError, match="either before or after"):
-        PageTraversal.capture(before=2, after=1)
 
 
 def test_fixed_opened_boundary_excludes_later_append(tmp_path):
@@ -433,7 +447,7 @@ def test_busy_display_journey_uses_identity_not_presence_file_replacement(tmp_pa
     page = comms.views.channel_display_page("#api", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name))
     assert bodies(page) == [f"burst {n}" for n in range(20)]
     comms.registry.rename("alice", "renamed")
-    with pytest.raises(ValueError, match="incarnation changed"):
+    with pytest.raises(DMScopeChanged, match="incarnation changed"):
         comms.views.mark_dm_view_read(
             "alice", worktree=str(tmp_path), through=dm.newest_seq,
             expected_display_basis=dm.display_basis,

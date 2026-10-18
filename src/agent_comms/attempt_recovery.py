@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .field_codec import MalformedRecord
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
 from agent_comms.coordination_contracts import (
     MAX_REASON_CODE_CHARS,
@@ -90,7 +91,7 @@ class VerifiedOwnerLoss:
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
             try:
                 release = comms.owners.releases.get(attempt.owner_thread)
-            except (OSError, ValueError, TypeError) as error:
+            except (OSError, RelationViolationError, MalformedRecord) as error:
                 raise RecoveryBlocked("native owner release acknowledgement is invalid") from error
             try:
                 release = release.require_native_loss(registry, source)

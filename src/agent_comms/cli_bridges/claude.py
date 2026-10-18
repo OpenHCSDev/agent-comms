@@ -79,10 +79,9 @@ class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
         return cls(thread)
 
 
-class ClaudeBridge(RunningClaude, LineMonitorBridge):
+class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
     """Follow this Claude session's file without submitting an input."""
 
-    declared_name = None  # Follows a session; not one more way to read it.
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024

@@ -8,8 +8,10 @@
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
 Incompetence is not tolerated: a unit is fired from a task, not berated about it.
-Two strikes on one task: the task is taken away and reassigned (`fire`). Nothing here judges
-code; it refuses orders that leave a unit room to interpret, and refuses to let a deadline lapse silently.
+Two strikes on one task: the task is taken away and reassigned (`fire`). A strike recorded in
+error is voided with `unstrike`, never deleted: it stays readable beside its void and stops
+counting. Nothing here judges code; it refuses orders that leave a unit room to interpret,
+and refuses to let a deadline lapse silently.
 """
 import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
 from abc import abstractmethod
@@ -31,7 +33,7 @@ from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, Co
                      CommsTodoCreateTool, CommsTodoTool)
 from ..todos import (BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, StrikeTodo)
+                     RecordHuntTodo, StrikeTodo, VoidStrikeTodo)
 from . import capacity, rules, storage
 from .config import CommanderConfig, Repo
 
@@ -79,7 +81,7 @@ def open_todos(unit=None):
 
 def struck(todo, unit):
     """Strikes count per unit and task, across every order of that task the unit held."""
-    return sum(s.previous.owner == unit for s in todo.strikes)
+    return len(todo.live_strikes(unit))
 
 
 def hhmm(event):
@@ -637,6 +639,30 @@ class RuledVerb(CommanderVerb):
         rules.require(self.who)
 
 
+def unstrike(task: str, why: str, at: str | None = None) -> None:
+    """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
+    todo = COMMS.goals.todos.get(task)
+    live = [s for s in todo.live_strikes() if at in (None, hhmm(s.at))]
+    if not live:
+        sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
+    voided = live[-1]
+    refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the void
+    call(CommsTodoTool(id=task, operation=VoidStrikeTodo(
+        todo.revision, COMMS.registry.require(ME).incarnation, voided, why)))
+    unit = voided.previous.owner
+    n = struck(COMMS.goals.todos.get(task), unit)
+    line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
+            f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
+    with open(NARRATIVE, 'a') as f:
+        f.write(f'- {line}\n')
+    try:
+        post(['#comms'], f'On the record: {line}')
+    except SystemExit as failed:  # the void is on the record; a rerun would find no live strike
+        print(f'Void recorded, but the #comms post failed ({failed}). Repost with order.post.',
+              file=sys.stderr)
+    print(f'{unit}: {n} strike(s) on {task}')
+
+
 class LoadedVerb(RuledVerb):
     """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
 
@@ -674,6 +700,18 @@ class StrikeVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         strike(self.unit, self.why, self.caught)
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnstrikeVerb(OrderVerb, RuledVerb):
+    help = "void a strike recorded in error; it stays on the record and stops counting"
+    pid: str = option("pid")
+    why: str = option("--why")
+    at: str | None = option("--at", default=None,
+                            help="HH:MM the strike was recorded; default the newest")
+
+    def run(self) -> None:
+        unstrike(self.pid, self.why, self.at)
 
 
 @dataclass(frozen=True, kw_only=True)

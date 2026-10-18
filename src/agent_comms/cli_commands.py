@@ -7,8 +7,8 @@ command catalog. Existing CLI spellings belong to the store_files.
 from __future__ import annotations
 
 import argparse
-import json
 import asyncio
+import json
 import os
 import re
 import shlex
@@ -21,27 +21,31 @@ from itertools import dropwhile, takewhile
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_type_hints
 
-from acp.schema import SessionConfigSelectOption
 from acp.exceptions import RequestError
+from acp.schema import SessionConfigSelectOption
 
+from .active_route import ActiveRoute, replace_unreadable_active_route
 from .activity import ActivityState
-from .channels import Channel
-from .channel_targets import CommandTarget, ResolvedChannel
-from .cli_result import CliResult
-from .tool_result import ToolResult
 from .catalog_document import CatalogDocument
-from .registry_document import RegistrySnapshot
+from .change_report import ChangeReport
+from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
+from .channel_targets import CommandTarget, ResolvedChannel
+from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .command import Command
+from .cli_bridges.claude import ClaudeTranscript
+from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
-from .field_codec import FieldCodec, PathText, compile_decoder
+from .cli_result import CliResult
+from .command import Command
 from .comms import Comms
 from .config_options import (
-    CatalogConfigOption, CatalogSelection, ConfigOptions,
-    ModelConfigOption, ThinkingLevelConfigOption,
+    CatalogConfigOption,
+    CatalogSelection,
+    ConfigOptions,
+    ModelConfigOption,
+    ThinkingLevelConfigOption,
 )
 from .declared_family import DeclaredFamily
-from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -52,36 +56,49 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .cli_bridges.claude import ClaudeTranscript
-from .cli_bridges.history import History, OfflineHistory, OnlineHistory
+from .field_codec import FieldCodec, PathText, compile_decoder
 from .harness_install import Harness, HarnessInstalled
-from .importing import ImportLimits, ImportedSessionMetadata, ThreadImported
-from .message_page import HistoryCursor, PageBounds, PageTraversal
-from .schema_report import StoreSchemaReport, StoreSchemaReports
-from .shared_ledger import LedgerDocument
-from .tool_caller import ToolCaller
-from .turn_context import (
-    CodexRolloutProvenance, ContextManifest, ContextManifestChange, ContextSegment,
-    ContributionCoordinates, NextContextTurn, Provenance, TurnContext,
-)
-from .native_turn_context import NativeContextData
-from .runtime import RuntimeConnection, socket_path
-from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
-from .working_memory_questions import SpanAnswer
+from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .message_page import PageBounds
+from .message_reference import MessageReference
+from .page_traversal import OlderTraversal, PageCursor
 from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
+from .native_turn_context import NativeContextData
+from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .change_report import ChangeReport
-from .message_reference import MessageReference
+from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
+from .registry_document import RegistrySnapshot
+from .runtime import RuntimeConnection, socket_path
+from .schema_report import StoreSchemaReport, StoreSchemaReports
+from .shared_ledger import LedgerDocument
+from .thread_execution import (
+    ArchiveOwnerControl,
+    ExternalThreadExecution,
+    NativeOwnerCommand,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+    ThreadCommandAvailability,
+    ThreadExecution,
+)
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_status import ThreadStatus
 from .threads import Thread
-from .thread_execution import (
-    ArchiveOwnerControl, ExternalThreadExecution, NativeOwnerCommand,
-    OwnerLifecycleControl, StartOwnerControl, ThreadCommandAvailability, ThreadExecution,
+from .tool_caller import ToolCaller
+from .tool_result import ToolResult
+from .turn_context import (
+    CodexRolloutProvenance,
+    ContextManifest,
+    ContextManifestChange,
+    ContextSegment,
+    ContributionCoordinates,
+    NextContextTurn,
+    Provenance,
+    TurnContext,
 )
-from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
-from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
+from .wire_log import WireLog
+from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
+from .working_memory_questions import SpanAnswer
 
 
 def _duration_seconds(value: str) -> float:
@@ -557,7 +574,7 @@ class ActiveStatusResult(CliResult):
 @dataclass(frozen=True)
 class HistoryPageResult(CliResult):
     messages: tuple[Message, ...]
-    before: int | HistoryCursor | None
+    before: PageCursor | None
     has_older: bool
 
     def encoded(self) -> object:
@@ -699,7 +716,7 @@ class DeclaredOptions(Command):
     def add_parser(cls, subparsers: Any) -> None:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
             metadata = declared.metadata
             group = metadata["group"]
@@ -708,20 +725,22 @@ class DeclaredOptions(Command):
                 if group not in groups:
                     groups[group] = parser.add_mutually_exclusive_group(required=True)
                 owner = groups[group]
-            decoder = compile_decoder(hints[declared.name])
+            annotation = hints[declared.name]
+            decoder = compile_decoder(annotation)
             options = {**decoder.argument_options(), **metadata["parser_options"]}
             if metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
                 options["default"] = metadata["parser_default_factory"]()
-            elif declared.default is not MISSING:
-                options["default"] = declared.default
-            elif declared.default_factory is not MISSING:
-                options["default"] = declared.default_factory()
             else:
-                options["required"] = True
-            if "default" in options:
-                options["default"] = decoder.argument_text(FieldCodec.encode(options["default"]))
+                default = (declared.default_factory() if declared.default_factory is not MISSING
+                           else declared.default)
+                if default is MISSING:
+                    options["required"] = True
+                else:
+                    options["default"] = decoder.argument_text(
+                        FieldCodec.encode(default, annotation)
+                    )
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
@@ -1238,12 +1257,13 @@ class HistoryCliCommand(CliCommand):
     everything: bool = option("--everything", help="Every message scope (the default)", default=False)
     me: str | None = option("--as", help="DM participant; required with --with", default=None)
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
-    before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
+    before: PageCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
         if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
             raise ValueError("history takes at most one of --with, --channel, --everything")
-        bounds = PageBounds(PageTraversal.capture(self.before, None), self.limit)
+        traversal = self.before.older() if self.before is not None else OlderTraversal()
+        bounds = PageBounds(traversal, self.limit)
         if self.with_thread:
             page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)
         elif self.channel:
@@ -1380,8 +1400,9 @@ class InstallCliCommand(CliCommand):
     commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .commander.config import CommanderConfig, Repo
         from importlib.resources import files
+
+        from .commander.config import CommanderConfig, Repo
 
         home = Path.home()
         project = self.project.resolve()
@@ -1394,7 +1415,7 @@ class InstallCliCommand(CliCommand):
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
         return InstallResult(str(config.write(home)), {
-            type(harness).require_name(): harness.install(ctx, self.commander, project)
+            type(harness).declared_name: harness.install(ctx, self.commander, project)
             for harness in Harness.present(home)})
 
 
@@ -1561,7 +1582,7 @@ class RestartCliCommand(CliCommand):
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        if thread.active_turn.executing:
+        if thread.turn_record.read().executing:
             return ()
         return (cls(name=thread.name),) if thread.restart_candidates(status) else ()
 
@@ -1621,7 +1642,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     model: str | None = option("--model", parser_default=NativeThreadDefaults.model,
                         catalog=ModelConfigOption)
     thinking_level: ThinkingLevelField = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
+        "--thinking-level", default=NativeThreadDefaults.thinking_level,
         catalog=ThinkingLevelConfigOption)
 
     @classmethod
@@ -1692,7 +1713,7 @@ class ContextCliCommand(CliCommand):
     @classmethod
     def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         super().add_parser(subparsers)
-        parser = subparsers.choices[cls.require_name()]
+        parser = subparsers.choices[cls.declared_name]
         parser.add_argument("--turn", type=int, default=argparse.SUPPRESS)
         parser.add_argument("--diff", action="store_true")
         parser.add_argument("--imported", action="store_true")
@@ -2056,3 +2077,19 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
     def apply(self, ctx: Comms) -> ThreadPinnedResult:
         ctx.channels.set_thread_pinned(self.channel, self.name, self.pinned)
         return ThreadPinnedResult(self.name, self.pinned)
+
+
+@dataclass(frozen=True)
+class RouteReplacedResult(CliResult):
+    root: str
+    backup: str
+
+
+class ReplaceRouteCliCommand(CliCommand, declared_name=ActiveRoute.repair_command):
+    help = ("Replace an old-version or unreadable active route file with a route to --root; "
+            "the old file is kept beside it")
+
+    def apply(self, ctx: Comms) -> CliResult:
+        marker = WireLog(ctx.root / "bus.jsonl").private_marker_unlocked()
+        route = ActiveRoute(ctx.root, marker.root_id)
+        return RouteReplacedResult(str(ctx.root), str(replace_unreadable_active_route(route)))
