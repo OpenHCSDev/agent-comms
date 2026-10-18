@@ -10,7 +10,7 @@ import json
 import os
 import sqlite3
 import struct
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
 from contextlib import closing
 from dataclasses import dataclass, field, replace
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 class RouteTable:
     """Disposable tables owned and reset together by the route projection."""
 
-    schema: ClassVar[int] = 5
+    schema: ClassVar[int] = 6
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -170,16 +170,64 @@ class RouteTimeRow(RouteTable, TypedTable):
         return node
 
 
-@dataclass(frozen=True)
-class RouteSourceRow(RouteTable, TypedTable):
-    id: int = field(metadata={"sql": Column(primary_key=True)})
-    revision: FileRevision | None
-    tail_digest: str | None
+class RouteSourceRow(TypedRow, ABC):
+    @classmethod
+    def current(cls, connection) -> RouteSourceRow:
+        rows = RecordedRouteSourceRow.select(connection)
+        if rows:
+            recorded, = rows
+            return recorded
+        return UnrecordedRouteSource()
 
-    def matches_source(self, source: WireSnapshot) -> bool:
-        return self.revision is None or (
-            source.same_file(self.revision.identity)
-            and source.fingerprint(self.revision.size) == self.tail_digest)
+    @property
+    @abstractmethod
+    def through(self) -> int: ...
+
+    @abstractmethod
+    def matches_source(self, source: WireSnapshot) -> bool: ...
+
+    @abstractmethod
+    def needs_rebuild(self, source: WireSnapshot) -> bool: ...
+
+    @abstractmethod
+    def check_source(self, source: WireSnapshot, preparation: RouteIndexState) -> None: ...
+
+
+@dataclass(frozen=True)
+class RecordedRouteSourceRow(RouteTable, RouteSourceRow, TypedTable, declared_name="route_source"):
+    id: int = field(metadata={"sql": Column(primary_key=True)})
+    revision: FileRevision
+    tail_digest: str
+
+    @property
+    def through(self):
+        return self.revision.size
+
+    def matches_source(self, source):
+        return (source.same_file(self.revision.identity)
+                and source.fingerprint(self.through) == self.tail_digest)
+
+    def needs_rebuild(self, source):
+        # An empty older cut cannot retire a later committed projection.
+        return source.boundary != 0 and not self.matches_source(source)
+
+    def check_source(self, source, preparation):
+        if not self.matches_source(source):
+            preparation.defer_read(0, source.boundary)
+
+
+@dataclass(frozen=True)
+class UnrecordedRouteSource(RouteSourceRow):
+    through: ClassVar[int] = 0
+
+    def matches_source(self, source):
+        return False
+
+    def needs_rebuild(self, source):
+        return True
+
+    def check_source(self, source, preparation):
+        pass  # No indexed deliveries can disagree with this reader's source.
 
 
 @dataclass(frozen=True)
@@ -321,14 +369,14 @@ class BusRouteCounts:
         """The writer alone creates the WAL store; no source bytes are decoded here."""
         if self.path.exists():
             with closing(CoordinationStore.read_snapshot(self.path)) as current:
-                if (RouteSourceRow.present(current)
+                if (RecordedRouteSourceRow.present(current)
                         and SQLiteJournalMode.read(current.execute("PRAGMA journal_mode"))[0].journal_mode == "wal"):
                     return
         with _store_lock(self.path), closing(CoordinationStore.writer(self.path)) as connection:
             connection.execute("PRAGMA journal_mode=WAL")
             connection.execute("PRAGMA synchronous=FULL")
             connection.execute("BEGIN IMMEDIATE")
-            if not RouteSourceRow.present(connection):
+            if not RecordedRouteSourceRow.present(connection):
                 for owner in TypedTable.members_with(RouteTable):
                     owner.create(connection)
             connection.commit()
@@ -336,11 +384,6 @@ class BusRouteCounts:
     def prepare(self) -> None:
         """Create the writer-owned WAL store after its publication lock releases."""
         self._initialize()
-
-    def _recorded(self) -> RouteSourceRow | None:
-        with closing(self._open()) as connection:
-            rows = RouteSourceRow.select(connection)
-            return rows[0] if rows else None
 
     def sync(
         self, source: WireSnapshot,
@@ -354,18 +397,11 @@ class BusRouteCounts:
         answers from its own remainder instead of waiting.
         """
         size = source.boundary
-        recorded = self._recorded()
-        if size == 0 and recorded is not None:
-            # An original empty cut cannot retire a later committed projection.
-            return RouteIndexReady()
-        rebuild = recorded is None
-        offset = recorded.revision.size if recorded and recorded.revision else 0
-        if not rebuild and offset:
-            if not recorded.matches_source(source):
-                rebuild, offset = True, 0
-            elif size < offset:
-                return RouteIndexReady()
-        if not rebuild and offset == size:
+        with closing(self._open()) as connection:
+            recorded = RouteSourceRow.current(connection)
+        rebuild = recorded.needs_rebuild(source)
+        offset = 0 if rebuild else recorded.through
+        if not rebuild and offset >= size:
             return RouteIndexReady()
 
         through = offset
@@ -381,21 +417,19 @@ class BusRouteCounts:
             ):
                 connection.execute("PRAGMA synchronous=FULL")
                 connection.execute("BEGIN IMMEDIATE")
-                current_rows = RouteSourceRow.select(connection)
-                current = current_rows[0] if current_rows else None
+                current = RouteSourceRow.current(connection)
                 if current != recorded:
                     connection.rollback()
-                    current_through = current.revision.size if current and current.revision else 0
-                    return (RouteIndexReady() if current_through >= size
-                            else RouteIndexBehind(current_through, size))
+                    return (RouteIndexReady() if current.through >= size
+                            else RouteIndexBehind(current.through, size))
                 if rebuild:
                     for owner in TypedTable.members_with(RouteTable):
                         owner.delete(connection)
                 for row in rows:
                     RouteEntryRow.record(connection, row)
-                RouteSourceRow.delete(connection)
+                RecordedRouteSourceRow.delete(connection)
                 if through:
-                    RouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
+                    RecordedRouteSourceRow(1, replace(source.revision, size=through), source.fingerprint(through)).insert(connection)
                 connection.commit()
         except BlockingIOError:
             return RouteIndexBlocked()
@@ -403,13 +437,6 @@ class BusRouteCounts:
 
 
 class OpenedRouteCounts(BusRouteCounts):
-    """Delivery projection bound to one original wire cut and namespace.
-
-    The index may lag this cut or already cover later rows. Its stored totals
-    are not the reader's source authority. Both queries and the unindexed
-    remainder belong to this reader, never to an independently supplied cap.
-    """
-
     blocking: ClassVar[bool] = False
 
     def __init__(
@@ -428,8 +455,11 @@ class OpenedRouteCounts(BusRouteCounts):
     def _decode(self, record: Mapping) -> tuple[DeliveryMessage, ...]:
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
-    def _acquire(self) -> OpenedRouteCounts:
+    def _prepare(self) -> None:
         self._preparation = self.sync(self.source, self._decode, blocking=self.blocking)
+
+    def _acquire(self) -> OpenedRouteCounts:
+        self._prepare()
         super()._acquire()
         try:
             self._appended = self._appended_deliveries()
@@ -451,11 +481,9 @@ class OpenedRouteCounts(BusRouteCounts):
         size = self.source.boundary
         if size == 0:
             return ()
-        records = RouteSourceRow.select(self.connection)
-        recorded = records[0] if records else None
-        through = recorded.revision.size if recorded and recorded.revision else 0
-        if recorded is not None and not recorded.matches_source(self.source):
-            self._preparation.defer_read(0, size)
+        recorded = RouteSourceRow.current(self.connection)
+        through = recorded.through
+        recorded.check_source(self.source, self._preparation)
         if size - through > self.rebuild_bytes:
             self._preparation.defer_read(through, size)
         if through >= size:
@@ -597,10 +625,7 @@ class WaitingRouteCounts(OpenedRouteCounts):
 
     blocking = True
 
-    def _sync_source(self) -> RouteIndexState:
-        state = super()._sync_source()
-        # Each step commits the next bounded chunk; lock acquisition itself
-        # waits for a writer. Read failures propagate, never restart this read.
-        while not state.complete:
-            state = super()._sync_source()
-        return state
+    def _prepare(self) -> None:
+        super()._prepare()
+        while not self._preparation.complete:
+            super()._prepare()

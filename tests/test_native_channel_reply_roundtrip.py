@@ -227,8 +227,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
             comms.registry.new_thread(name, frozenset({'team'}), str(project), model=f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture', thinking_level=OffThinkingLevel)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(
         comms,
         runtime_enabled=True,
@@ -462,7 +460,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert current.session_file == old.session_file
                 assert Path(current.session_file).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"
-            comms.owners.pin_private_nk_launch(comms.root, root_id, package)
             attachment = CommsClient(
                 comms, runtime_enabled=True,
             )

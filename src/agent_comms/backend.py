@@ -298,12 +298,12 @@ class TurnSession:
                 return
             self.prompt_state = self.prompt_state.start(event)
             if self.has_start_listener:
-                yield events.InputStarted(id=None)
+                yield events.OriginalInputStarted()
             self.ensure_input_forwarding()
         elif self.started_input:
             matched, input_id = self.inputs.mark_started(self, event)
             if matched:
-                yield events.InputStarted(id=input_id)
+                yield events.FollowingInputStarted(id=input_id)
             else:
                 self.inputs.uncertain = True
                 self.output.final_assistant_stop = False

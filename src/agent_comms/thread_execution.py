@@ -17,6 +17,40 @@ if TYPE_CHECKING:
     from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
 
 
+class ThreadCommandAvailability:
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return True
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return cls.available_for(status, owner_pid=thread.pid)
+
+
+class NativeOwnerCommand(ThreadCommandAvailability):
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.execution.native_command_available(cls, status, owner_pid=thread.pid)
+
+
+class OwnerLifecycleControl(ThreadCommandAvailability):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.allows_owner_control()
+
+
+class StartOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.allows_owner_start(owner_pid=owner_pid)
+
+
+class ArchiveOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, owner_pid: int) -> bool:
+        return status.stopped
+
+
 class ConversationPreparation(ABC):
     @abstractmethod
     def native(self): ...

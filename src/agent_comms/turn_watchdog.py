@@ -140,7 +140,7 @@ class ModelWait(TurnWait):
         yield watchdog.state("aborting", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
         await session.abort_stalled_rpc()
         for input_id in session.started_during_abort:
-            yield events.InputStarted(id=input_id)
+            yield events.FollowingInputStarted(id=input_id)
         yield watchdog.state("failed", reason_code, elapsed_ms, phase=phases.ShutdownPhase())
         session.output.record_failure(
             failures.ModelStalled(

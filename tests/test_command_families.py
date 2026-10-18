@@ -13,7 +13,6 @@ from agent_comms.cli_commands import CliCommand, option
 from agent_comms.comms import Comms
 from agent_comms.messages import InfoKind
 from agent_comms.pi_vocabulary import ServiceTier
-from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import RuntimeProxy, RuntimeServer
 from agent_comms.runtime_requests import (
     ResultRuntimeRequest,
@@ -33,8 +32,8 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
 
     register = parse(["register", "--name", "a", "--worktree", "/wt", "--tags", "x, y,x"])
     assert register.tags == frozenset({"x", "y"})
-    invoke = parse(["invoke", "--tool", "comms_threads"])
-    assert invoke.arguments == {}
+    invoke = parse(["tool", "--tool", "comms_threads"])
+    assert invoke.arguments == "{}"
     send = parse(["send", "--from", "a", "--to", "b", "--body", "hello"])
     assert send.type is InfoKind
     configured = parse(["configure", "--name", "a", "--service-tier", "standard"])
@@ -65,8 +64,6 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
 
     comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
-    monkeypatch.delenv(ROOT_ID_ENV, raising=False)
-    monkeypatch.delenv(PACKAGE_ENV, raising=False)
     assert main(["--root", str(tmp_path), "contract-probe", "--amount", "40"]) == 0
     assert json.loads(capsys.readouterr().out) == {"amount": 41, "root": str(tmp_path)}
 
@@ -211,8 +208,6 @@ def test_normal_history_cli_keeps_migrated_content_and_source_identity(
         comms.messaging.send("alice", "bob", f"{comms.root.name} direct")
     source = live.views.attach_history(old.root)
     live_bus = (live.root / "bus.jsonl").read_bytes()
-    monkeypatch.delenv(ROOT_ID_ENV, raising=False)
-    monkeypatch.delenv(PACKAGE_ENV, raising=False)
     assert main(["--root", str(live.root), *arguments]) == 0
     rows = json.loads(capsys.readouterr().out)[key]
     historical = [row for row in rows if "history" in row]

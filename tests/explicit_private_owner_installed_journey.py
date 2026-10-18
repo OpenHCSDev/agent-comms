@@ -13,7 +13,6 @@ from acp import spawn_agent_process
 from acp.schema import TextContentBlock
 from agent_comms.comms import Comms
 from agent_comms.native_package import verify_native_package
-from agent_comms.launch_runtime import PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.runtime import socket_path
 from agent_comms.threads import Thread
 from compaction_loopback import LoopbackProvider
@@ -67,12 +66,11 @@ async def main(package, evidence):
             project = stage / 'project'
             project.mkdir(mode=0o700)
             comms = Comms(stage / 'wire')
-            root_id = comms.messaging.initialize_private_initial_protocol()
+            comms.messaging.initialize_private_initial_protocol()
             comms.registry.declare(comms.registry.new_thread('recipient', frozenset({'team'}), str(project), model='selected-offline/fixture', thinking_level=OffThinkingLevel))
             env = {key: value for key, value in os.environ.items()
                    if not key.startswith(('PI_', 'AGENT_COMMS_')) and key != 'PYTHONPATH'}
-            env.update({ROOT_ID_ENV: root_id, PACKAGE_ENV: str(package),
-                        'PI_CODING_AGENT_DIR': str(profile), 'AGENT_COMMS_AGENT_BIN': 'pi',
+            env.update({'PI_CODING_AGENT_DIR': str(profile), 'AGENT_COMMS_AGENT_BIN': 'pi',
                         'AGENT_COMMS_AGENT_MODELS': 'selected-offline/fixture',
                         'AGENT_COMMS_AGENT_ARGS': '--offline --no-extensions --no-skills --no-context-files --no-tools',
                         'XDG_CONFIG_HOME': str(stage / 'config'), 'XDG_DATA_HOME': str(stage / 'data'),
@@ -83,27 +81,6 @@ async def main(package, evidence):
                 env['AGENT_COMMS_ROOT'] = 'wire'
             baseline_requests = provider.posts
             try:
-                denied = []
-                for defect in ('missing', 'partial', 'root-id', 'package'):
-                    invalid = dict(env)
-                    if defect == 'missing':
-                        invalid.pop(ROOT_ID_ENV)
-                        invalid.pop(PACKAGE_ENV)
-                    elif defect == 'partial':
-                        invalid.pop(PACKAGE_ENV)
-                    elif defect == 'root-id':
-                        invalid[ROOT_ID_ENV] = 'f' * 32
-                    else:
-                        invalid[PACKAGE_ENV] = str(stage / 'unreviewed-package')
-                    status, reply, stderr = await cli(invalid, stage, root_args, {'name': 'recipient'})
-                    owner = comms.registry.require('recipient')
-                    denied.append({'case': defect, 'exit': status, 'reply': reply})
-                    (stage / 'denials.json').write_text(json.dumps(denied, indent=2))
-                    assert status == 1 and 'error' in reply, (mode, defect, status, reply, stderr)
-                    assert owner.process_identity is None, 'Invalid authority forked/reserved an owner'
-                    assert not (comms.root / 'diagnostics').exists(), 'Invalid authority reached launch'
-                    assert provider.posts == baseline_requests
-                print(mode, 'INVALID_AUTHORITY_DENIED_BEFORE_FORK', flush=True)
                 status, reply, stderr = await cli(env, stage, root_args, {'name': 'recipient'})
                 assert status == 0 and reply['launched'], (reply, stderr)
                 owner = comms.registry.require('recipient')
@@ -128,7 +105,7 @@ async def main(package, evidence):
                 records = [json.loads(line) for line in Path(owner.session_file).read_text().splitlines()]
                 users = [row for row in records if row.get('type') == 'message' and row['message'].get('role') == 'user']
                 assert len(users) == 1 and f'ONE_NATIVE_INPUT_{mode}' in str(users[0])
-                results.append({'mode': mode, 'denied_before_fork': denied, 'native_users': len(users),
+                results.append({'mode': mode, 'native_users': len(users),
                                 'provider_requests': provider.posts - baseline_requests, 'reply': provider.text})
                 (evidence / 'acknowledgement.json').write_text(json.dumps(results, indent=2))
                 print(mode, 'REAL_CLI_OWNER_STDIO_ACP_ONE_NATIVE_REPLY', flush=True)

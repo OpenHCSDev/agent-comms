@@ -1,6 +1,5 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
 from agent_comms.messages import NoticeRole
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
@@ -147,9 +146,6 @@ class InterruptedCase(EffectCase):
 
 @pytest.fixture
 async def owner_turn(comms, tmp_path, fake_native_catalog):
-    comms.owners.pin_private_nk_launch(
-        comms.root, comms.messaging.initialize_private_initial_protocol(), tmp_path
-    )
     owner = CommsAgent(
         comms,
         agent_bin="unused",
@@ -185,7 +181,7 @@ async def start_owned_input(execution, progress):
     with claim_scope(None, native_id, execution.original.prompt):
         pass
     assert claim_scope.native_start(None, native_id, execution.original.prompt)
-    await progress.consume(ae.InputStarted(None))
+    await progress.consume(ae.OriginalInputStarted())
 
 
 def waiting_owner(execution):
@@ -354,9 +350,6 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
 
         monkeypatch.setattr(native.provider, "response_chunks", with_progress)
     comms = Comms(native.root)
-    comms.owners.pin_private_nk_launch(
-        comms.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], pinned_native_package()
-    )
     owner = CommsAgent(
         comms,
         agent_bin="pi",
@@ -427,9 +420,6 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     settings["compaction"] = {"enabled": True, "reserveTokens": 128, "keepRecentTokens": 32}
     (config / "settings.json").write_text(json.dumps(settings))
     comms = Comms(native.root)
-    comms.owners.pin_private_nk_launch(
-        comms.root, os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"], pinned_native_package()
-    )
     owner = CommsAgent(
         comms,
         agent_bin="pi",

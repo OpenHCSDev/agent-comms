@@ -48,10 +48,10 @@ class Repository:
             cwd=self.path,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=120,  # Each comparison type-checks both revisions.
             check=False,
         )
-        assert result.returncode in (0, 1), result.stderr
+        assert result.returncode in (0, 1), result.stderr[-2000:]
         return result.returncode, json.loads(result.stdout)
 
 
@@ -101,7 +101,7 @@ def test_added_type_check_fails(repo: Repository) -> None:
 
 
 def test_moves_between_files_pass(repo: Repository) -> None:
-    source = 'value = type(x) is not int\nread = row["key"]\n'
+    source = 'x = row = {"key": 1}\nvalue = type(x) is not int\nread = row["key"]\n'
     base = repo.commit({"from.py": source, "other.py": "a = 1\n"})
     moved = repo.commit({"from.py": None, "nested/to.py": source})
     combined = repo.commit({"nested/to.py": None, "other.py": "a = 1\n" + source})
@@ -357,6 +357,9 @@ async def second(value):
     ("StringDispatch", 'def decide(x):\n    return x in ("a", "b", "c")\n'),
     ("TypeSwitch", 'def decide(x):\n    return isinstance(x, A) or isinstance(x, B) or isinstance(x, C)\n'),
     ("AnyAnnotation", "from typing import Any\ndef read(value: Any) -> None: ...\n"),
+    ("Unformatted", "value=1\n"),
+    ("LintFindings", "import os\n"),
+    ("TypeErrors", 'value: int = "text"\n'),
 ])
 def test_per_file_increase_cannot_be_offset_or_moved(repo: Repository, measure: str, source: str) -> None:
     base = repo.commit({"old.py": source, "new.py": ""})
@@ -365,6 +368,22 @@ def test_per_file_increase_cannot_be_offset_or_moved(repo: Repository, measure: 
     assert status == 1
     assert report["delta"][f"{measure}:{repo.root}/new.py"] > 0
     assert sum(delta for key, delta in report["delta"].items() if key.startswith(measure + ":")) == 0
+
+
+def test_both_revisions_are_checked_under_the_head_configuration(repo: Repository) -> None:
+    source = "import sys\nimport os\n\nvalue: int = 'text'\nused = (os, sys)\n"
+    (repo.path / "pyproject.toml").write_text(
+        '[tool.ruff.lint]\nselect = ["E", "F"]\n[tool.mypy]\npython_version = "3.11"\n')
+    base = repo.commit({"kept.py": source + "type Pair = tuple[int, int]\n"})
+    (repo.path / "pyproject.toml").write_text('[tool.ruff.lint]\nselect = ["E", "F", "I"]\n')
+    head = repo.commit({"kept.py": source + "type Pair = tuple[int, int]\nother = 1\n"})
+    status, report = repo.compare(base, head)
+    # The base alone cannot parse PEP 695 under its own 3.11 target, and the head adds the
+    # import-order rule; under one configuration neither changes the file's counts.
+    assert report["base"][f"TypeErrors:{repo.root}/kept.py"] == 1
+    assert report["base"][f"LintFindings:{repo.root}/kept.py"] == 1
+    for measure in ("TypeErrors", "LintFindings", "Unformatted"):
+        assert report["delta"][f"{measure}:{repo.root}/kept.py"] == 0
 
 
 def test_foreign_probes_and_codec_bases_use_ast_not_text(repo: Repository) -> None:

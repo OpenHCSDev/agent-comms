@@ -1,7 +1,6 @@
 """Pi's own compaction engine, seen through Core's turn path: pinned Pi + localhost provider."""
 
 from __future__ import annotations
-from agent_comms.native_package import pinned_native_package
 
 from agent_comms.queued_input import InitialInput
 import asyncio
@@ -258,7 +257,9 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
             assert ends[0].reason is ThresholdCompactionReason
             assert len(prompts) == 1
             kinds = [type(event) for event in events]
-            assert kinds.index(ae.CompactionEnd) < kinds.index(ae.InputStarted)
+            assert kinds.index(ae.CompactionEnd) < next(
+                index for index, kind in enumerate(kinds) if issubclass(kind, ae.InputStarted)
+            )
             if case == "cap_disabled":
                 final_assistant = next(
                     row["message"] for row in reversed(saved)
@@ -293,12 +294,8 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     for key, value in child_env.items():
         monkeypatch.setenv(key, value)
     comms = wire(root / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    package = pinned_native_package()
+    comms.messaging.initialize_private_initial_protocol()
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(package))
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     owner = CommsAgent(
         comms, agent_bin=native_bin, agent_args=native_args, runtime_enabled=True,
         auto_wake=False,

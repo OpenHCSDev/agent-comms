@@ -57,7 +57,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     session = SavedSelectedSession(created.path.parent,
         identity=NativeSessionIdentity(created.session_id, created.session_file))
     execution = SelectedExecution(root=native.root,
-        wire_root_id=os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"],
+        wire_root_id=Comms(native.root).owners.require_private_launch().wire_root_id,
         owner_name="launch-ownership", native_package=package)
     verifications = []
     verify = native_pi._trusted_package

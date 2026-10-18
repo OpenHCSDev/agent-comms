@@ -1,6 +1,5 @@
 """Opt-in current installed fork check using an actual retained source, localhost only."""
 from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -52,13 +51,9 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent) + os.pathsep + os.environ["PATH"])
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     comms = Comms(fixture.root)
-    package = pinned_native_package()
-    root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
-    comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
     comms.registry.declare(
         comms.registry.new_thread('retained-parent', frozenset(), str(fixture.project), session_file=str(source), model='response-local/fixture', thinking_level=OffThinkingLevel)
     )
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(
         comms,
         agent_bin=launcher,

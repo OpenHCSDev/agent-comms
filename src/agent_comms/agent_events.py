@@ -9,7 +9,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .acp_failure import (
     FailureSource, UnrecordedFailureSource, NativeTurnOutcome, ProviderRetryResult,
@@ -25,6 +25,7 @@ from .tool_declaration import ToolDeclaration
 from .child_process import ProcessIdentity
 
 if TYPE_CHECKING:
+    from .started_input import StartedInput
     from .transcript_events import SentTranscript
     from .pi_commands import PiCommand
     from .native_turn_context import NativeContextManifestData
@@ -70,18 +71,36 @@ class ContextObserved(AgentEvent):
     context: NativeContextManifestData
 
 
-@dataclass(frozen=True)
-class InputDisposition(AgentEvent):
-    id: str | None
+class InputStarted(AgentEvent):
+    @abstractmethod
+    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput: ...
 
 
 @dataclass(frozen=True)
-class InputStarted(InputDisposition):
-    pass
+class OriginalInputStarted(InputStarted):
+    id: ClassVar[None] = None
+
+    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
+        return inputs.first_sources[session_id]
 
 
 @dataclass(frozen=True)
-class InputRefused(InputDisposition):
+class FollowingInputStarted(InputStarted):
+    id: str
+
+    def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
+        return inputs.following_sources[session_id][self.id]
+
+
+class InputRefused(AgentEvent):
+    @abstractmethod
+    async def apply_to(self, inputs: InputDrain, session_id: str) -> None: ...
+
+
+@dataclass(frozen=True)
+class FollowingInputRefused(InputRefused):
+    id: str
+
     async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
         await inputs.input_refused(session_id, self.id)
 

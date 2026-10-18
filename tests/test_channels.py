@@ -22,6 +22,7 @@ from agent_comms.display_order import (
     LastActivityThreadSort, LastMessageThreadSort, LastUserInputChannelSort, ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.registry_document import RosterVisibility
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -41,7 +42,7 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     assert channel.parent == "#ui" and channel.archived
 
     observer = wire(tmp_path)
-    projected = {view.channel.name: view for view in observer.views.channel_views(show_archived=True)}
+    projected = {view.channel.name: view for view in observer.views.channel_views(RosterVisibility(archived=True))}
     assert projected["#api"].channel.parent == "#ui"
     assert projected["#api"].channel.archived
     assert {name: view.members for name, view in projected.items()} == before

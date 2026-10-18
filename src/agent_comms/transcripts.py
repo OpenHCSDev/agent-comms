@@ -22,7 +22,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
-from .external_transcript import ExternalDraftRow, ExternalTranscript
+from .external_transcript import ExternalTranscript
 from .native_transcript import RecordsCut
 from .private_path import FileRevision
 from .bus_publication import CommittedDelivery
@@ -35,9 +35,9 @@ from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_sources import (
     AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
-    LaterTranscript, LiveAssignedTranscriptSource, TranscriptSource, WireFrontier,
+    LaterTranscript, LiveAssignedTranscriptSource, TranscriptDraft, TranscriptSource, WireFrontier,
 )
-from .coordination_errors import StaleRevision, TranscriptChanged
+from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
 from .coordination_database import CoordinationStore
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_response import _assert_response_schema
@@ -322,7 +322,7 @@ class TranscriptRead:
     def current_identity(self) -> TranscriptReadIdentity:
         return self.identity.recapture(self.owner)
 
-    def _read_page(self) -> tuple[TranscriptPage, ExternalDraftRow | None]:
+    def _read_page(self) -> tuple[TranscriptPage, TranscriptDraft]:
         identity = self.identity
         return self.owner._thread_transcript_page(
             self.source,
@@ -339,13 +339,13 @@ class TranscriptRead:
             raise StaleRevision("Transcript read inputs changed during preparation")
         return page
 
-    def read_snapshot(self) -> tuple[TranscriptPage, ExternalDraftRow | None]:
+    def read_snapshot(self) -> tuple[TranscriptPage, TranscriptDraft]:
         """Read the page and external draft from one retained source lifecycle."""
         page, draft = self._read_page()
         self.identity.require_draft_snapshot(self.current_identity())
         return page, draft
 
-    def current_draft(self) -> ExternalDraftRow | None:
+    def current_draft(self) -> TranscriptDraft:
         """Read current text beside this page, before its finished cut changes."""
         with self.source.records.reading() as records:
             draft = records.current_draft()
@@ -555,23 +555,23 @@ class Transcripts:
         max_messages: int,
         max_bytes: int,
         through: TranscriptCursor | None,
-    ) -> tuple[TranscriptPage, ExternalDraftRow | None]:
+    ) -> tuple[TranscriptPage, TranscriptDraft]:
         """Read page and draft while their record owner retains one source lifecycle."""
         self.page_reads += 1
         thread, runtime = page.thread, page.runtime
         cursor = before or after
-        if cursor and (cursor.session_file != runtime.read_key or cursor.offset < 0):
+        if cursor and cursor.session_file != runtime.read_key:
             raise TranscriptChanged()
         source = page.projection
         with page.records.reading() as reader:
             size = reader.cut().offset
-            if cursor and cursor.offset > size:
+            if cursor and not reader.valid_offset(cursor.offset, size):
                 raise TranscriptChanged()
             if through is not None:
-                if through.session_file != runtime.read_key or not 0 <= through.offset <= size:
+                if through.session_file != runtime.read_key or not reader.valid_offset(through.offset, size):
                     raise TranscriptChanged()
                 size = through.offset
-                if cursor and cursor.offset > size:
+                if cursor and not reader.valid_offset(cursor.offset, size):
                     raise TranscriptChanged()
             frontier = through or source.frontier.cursor(runtime.read_key, size)
             source.require_cursor(frontier)
@@ -585,14 +585,18 @@ class Transcripts:
                     max_messages=max_messages, max_bytes=max_bytes,
                 )
             draft = reader.current_draft()
-        start, end = traversal.bounds(initial, consumed)
+            start, end = traversal.bounds(initial, consumed)
+            has_older = reader.has_older(start.offset) or start.wire.sequence > 0
+            requested_earlier = traversal.request_earlier(reader, start.offset)
         events = traversal.finish(records)
+        if requested_earlier and not events:
+            raise CoordinationReadUnavailable("Waiting for the bridge's earlier transcript page")
         if page.inherited and not after and (cursor is None or cursor == frontier):
             events = (*events, *self._fork_start_events(thread))
         return (
             TranscriptPage(
                 events, start, end,
-                start.offset > 0 or start.wire.sequence > 0,
+                has_older,
                 end != frontier,
             ),
             draft,

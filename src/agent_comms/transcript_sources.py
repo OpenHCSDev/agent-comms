@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
+from .typed_table import TypedStore
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
@@ -164,7 +165,8 @@ class TranscriptTraversal(ABC):
         # interrupted call (its result record never arrives) from growing a page.
         open_rounds: set[str] = set()
         round_grace = 0
-        native = self.native(reader, initial, frontier) if frontier.offset else (record for record in ())
+        native = (self.native(reader, initial, frontier) if reader.has_records(frontier.offset)
+                  else (record for record in ()))
         projected = project(native, max_records=max_messages + 1, max_bytes=max_bytes)
         try:
             record, events = next(projected, (None, ()))
@@ -205,13 +207,16 @@ class TranscriptTraversal(ABC):
                     consumed = consumed.at_sequence(self.receipt_position(message.message))
                     message = next(source_rows, None)
             if record is None:
-                consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
+                consumed = consumed.at_offset(frontier.offset if self.ascending else reader.start)
             if message is None:
                 consumed = consumed.at_sequence(frontier.wire.sequence if self.ascending else 0)
             return consumed, records
         finally:
             projected.close()
             native.close()
+
+    def request_earlier(self, records, offset: int) -> bool:
+        return records.request_earlier(offset)
 
     ascending = False
     # Reading newest-first meets a round's result before its call.
@@ -243,6 +248,9 @@ class EarlierTranscript(TranscriptTraversal):
 
 
 class LaterTranscript(TranscriptTraversal):
+    def request_earlier(self, records, offset: int) -> bool:
+        return False
+
     ascending = True
     descending_rounds = False
 
@@ -268,12 +276,43 @@ class LaterTranscript(TranscriptTraversal):
         return initial, consumed
 
 
+class TranscriptDraft:
+    def end_turn(self, transcript: TypedStore) -> None:
+        """An absent draft needs no write."""
+
+    def external_row(self):
+        """The ACP draft field is null when there is no external draft."""
+        return None
+
+
+@dataclass(frozen=True)
+class NoDraft(TranscriptDraft):
+    pass
+
+
 class TranscriptSource:
     """Recorded items alone carry no assigned-wire or publication authority.
 
     Native and external stores supply their original records. An assigned
     source adds the separately acquired wire/publication capability below.
     """
+
+    start = 0
+
+    def has_records(self, through: int) -> bool:
+        return through > 0
+
+    def valid_offset(self, offset: int, through: int) -> bool:
+        return 0 <= offset <= through
+
+    def has_older(self, offset: int) -> bool:
+        return offset > self.start
+
+    def request_earlier(self, offset: int) -> bool:
+        return False
+
+    async def watch_requests(self, emit) -> None:
+        """Sources without a harness continuation have no bridge requests."""
 
     def turns(self, last: int):
         """Read input-bounded turns under one original record-source cut."""
@@ -295,9 +334,8 @@ class TranscriptSource:
                 raise StaleRevision('Turn source changed during its read')
         return tuple(turns)
 
-    def current_draft(self):
-        """Saved records have no draft unless their reader supplies one."""
-        return None
+    def current_draft(self) -> TranscriptDraft:
+        return NoDraft()
 
     def publication_revision(self, root, recipient):
         return PublishedReplyRevision(0, 0)

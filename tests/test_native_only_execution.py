@@ -149,14 +149,12 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         project.mkdir()
         caller_project.mkdir()
         comms = Comms(base / "wire")
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_initial_protocol()
         comms.registry.declare(comms.registry.new_thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),
             AGENT_COMMS_THREAD="headless",
-            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=package,
             AGENT_COMMS_AGENT_BIN="pi",
             AGENT_COMMS_AGENT_ARGS="",
             PYTHONPATH=str(Path(events.__file__).parent.parent),
@@ -178,7 +176,6 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
             assert registered.worktree == str(project)
-            comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
             client = CommsClient(comms)
             try:
                 loaded = await client.load_session(str(project), "headless")
