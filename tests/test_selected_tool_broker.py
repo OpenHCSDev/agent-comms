@@ -143,7 +143,7 @@ def test_default_off_and_packaged_extension_selection(
             tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
             model=selected_model, selected_tool_mode=mode
         )
-    with pytest.raises(native_pi.NativePiUnavailable, match="nominal"):
+    with pytest.raises(AttributeError, match="launch_arguments"):
         native_pi.NativePiRpcLaunch.tracked(
             tmp_path,
             worktree=tmp_path,

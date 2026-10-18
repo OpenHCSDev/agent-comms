@@ -28,53 +28,53 @@ from .send_outcome import GrantedSend, HeldSend
 from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
 
 
-class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
-    turn_pending = True
-
-    @classmethod
+class HeldSends:
+    @staticmethod
     @contextmanager
-    def send_new(cls, delegate, *args):
-        """A not-yet-started turn cannot acquire new input during maintenance."""
+    def open(delegate, *args):
         yield HeldSend()
 
-    @classmethod
-    @contextmanager
-    def send_running(cls, delegate, *args):
-        """Only READY or DRAINING can lend the original running turn's pipe."""
-        yield HeldSend()
+    @staticmethod
+    def pending() -> bool: return True
 
-    @classmethod
-    def require_open(cls) -> None:
-        if cls.turn_pending:
-            raise RelationViolationError("Maintenance ingress requires READY")
+    @staticmethod
+    def require_open():
+        raise RelationViolationError("Maintenance ingress requires READY")
 
 
 class GrantedSends:
-    """One grant implementation shared by allowed new and running sends."""
-
-    @classmethod
+    @staticmethod
     @contextmanager
-    def grant(cls, delegate, *args):
+    def open(delegate, *args):
         if delegate is None:
             yield GrantedSend()
         else:
             with delegate(*args) as outcome:
                 yield outcome
 
+    @staticmethod
+    def pending() -> bool: return False
 
-class RunningTurnSends(GrantedSends):
-    @classmethod
-    def send_running(cls, delegate, *args):
-        return cls.grant(delegate, *args)
+    @staticmethod
+    def require_open():
+        pass
 
 
-class NewTurnSends(GrantedSends):
+class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
+    new_sends = running_sends = HeldSends
+
     @classmethod
     def send_new(cls, delegate, *args):
-        return cls.grant(delegate, *args)
+        return cls.new_sends.open(delegate, *args)
+
+    @classmethod
+    def send_running(cls, delegate, *args):
+        return cls.running_sends.open(delegate, *args)
 
 
-class DrainingPhase(RunningTurnSends, MaintenancePhase):
+class DrainingPhase(MaintenancePhase):
+    running_sends = GrantedSends
+
     @classmethod
     def successors(cls):
         # A wire-compatible cutover clears directly; format migrations may
@@ -94,8 +94,8 @@ class InstallingPhase(MaintenancePhase):
         return (ReadyPhase,)
 
 
-class ReadyPhase(NewTurnSends, RunningTurnSends, MaintenancePhase):
-    turn_pending = False
+class ReadyPhase(MaintenancePhase):
+    new_sends = running_sends = GrantedSends
 
     @classmethod
     def successors(cls):
@@ -110,10 +110,10 @@ class MaintenanceStatus:
 
     @property
     def turn_pending(self) -> bool:
-        return self.phase.turn_pending
+        return self.phase.new_sends.pending()
 
     def require_open(self) -> None:
-        self.phase.require_open()
+        self.phase.new_sends.require_open()
 
 
 @dataclass(frozen=True)

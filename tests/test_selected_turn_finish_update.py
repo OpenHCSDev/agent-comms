@@ -30,6 +30,11 @@ async def test_selected_turn_publishes_canonical_end_on_success_and_failure(
         def __init__(self):
             self.backend_inboxes = {}
 
+        def bind_native_turn(self, session_id, owner):
+            inbox = asyncio.Queue()
+            self.backend_inboxes[session_id] = inbox
+            return inbox
+
         async def finish_turn_inputs(self, session_id, inbox):
             self.backend_inboxes.pop(session_id, None)
             events.append("inputs-finished")
