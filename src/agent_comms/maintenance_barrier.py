@@ -28,27 +28,53 @@ from .send_outcome import GrantedSend, HeldSend
 from .store_files import _async_store_lock, _atomic_write_text, _store_lock, store_lock_path
 
 
-class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
-    turn_pending = True
-
-    @classmethod
+class HeldSends:
+    @staticmethod
     @contextmanager
-    def send(cls, delegate, *args):
-        if cls.turn_pending:
-            yield HeldSend()
-        elif delegate is None:
+    def open(delegate, *args):
+        yield HeldSend()
+
+    @staticmethod
+    def pending() -> bool: return True
+
+    @staticmethod
+    def require_open():
+        raise RelationViolationError("Maintenance ingress requires READY")
+
+
+class GrantedSends:
+    @staticmethod
+    @contextmanager
+    def open(delegate, *args):
+        if delegate is None:
             yield GrantedSend()
         else:
             with delegate(*args) as outcome:
                 yield outcome
 
+    @staticmethod
+    def pending() -> bool: return False
+
+    @staticmethod
+    def require_open():
+        pass
+
+
+class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
+    new_sends = running_sends = HeldSends
+
     @classmethod
-    def require_open(cls) -> None:
-        if cls.turn_pending:
-            raise RelationViolationError("Maintenance ingress requires READY")
+    def send_new(cls, delegate, *args):
+        return cls.new_sends.open(delegate, *args)
+
+    @classmethod
+    def send_running(cls, delegate, *args):
+        return cls.running_sends.open(delegate, *args)
 
 
 class DrainingPhase(MaintenancePhase):
+    running_sends = GrantedSends
+
     @classmethod
     def successors(cls):
         # A wire-compatible cutover clears directly; format migrations may
@@ -69,7 +95,7 @@ class InstallingPhase(MaintenancePhase):
 
 
 class ReadyPhase(MaintenancePhase):
-    turn_pending = False
+    new_sends = running_sends = GrantedSends
 
     @classmethod
     def successors(cls):
@@ -84,10 +110,10 @@ class MaintenanceStatus:
 
     @property
     def turn_pending(self) -> bool:
-        return self.phase.turn_pending
+        return self.phase.new_sends.pending()
 
     def require_open(self) -> None:
-        self.phase.require_open()
+        self.phase.new_sends.require_open()
 
 
 @dataclass(frozen=True)

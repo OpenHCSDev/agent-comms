@@ -14,11 +14,13 @@ from abc import abstractmethod
 from dataclasses import dataclass
 from importlib.resources import files
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from .comms import Comms
 from .declared_family import DeclaredFamily
 from .thread_execution import ExternalThreadExecution
+
+if TYPE_CHECKING:
+    from .comms import Comms
 
 
 def replace_link(link: Path, target: Path) -> None:
@@ -143,7 +145,7 @@ UMask=0077
 
 
 @dataclass(frozen=True)
-class OpenCodeHarness(Harness):
+class OpenCodeHarness(Harness, declared_name="opencode"):
     """OpenCode loads the TUI plugin, which attaches its session to the bus itself; run `opencode-comms`."""
 
     executable: ClassVar[str] = 'opencode'

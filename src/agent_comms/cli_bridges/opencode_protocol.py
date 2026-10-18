@@ -2,10 +2,12 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable, Iterator
+from itertools import takewhile
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from metaclass_registry import RegistryConfig
-from pydantic import JsonValue, TypeAdapter
+from pydantic import Field, JsonValue, TypeAdapter
 
 from agent_comms.cli_protocol import RegisteredWireMeta, TaggedWire, WireModel
 
@@ -31,9 +33,20 @@ class Toast(WireModel):
     title: str = 'Comms'
 
 
+class Revert(WireModel):
+    """The message a user reverted to; it and everything after it were undone. A session
+    nobody reverted undid nothing."""
+    messageID: str = ''
+
+    def kept(self, messages: Iterable[SavedMessage]) -> Iterator[SavedMessage]:
+        return takewhile(lambda saved: saved.info.id != self.messageID, messages)
+
+
 class Session(WireModel):
     id: str
     directory: str
+    title: str | None = None
+    revert: Revert = Field(default_factory=Revert)
 
 
 class SavedInput(WireModel):
@@ -217,12 +230,12 @@ class OpenCodeStream:
         self.messages: dict[str, MessageInfo] = {}
 
     def snapshot(self, saved: SavedMessage) -> tuple[TranscriptUpdate, ...]:
-        self.messages[saved.info.id] = saved.info
-        updates: list[TranscriptUpdate] = []
-        for part in saved.parts:
-            if part.finished(saved.info):
-                updates.extend(saved.info.present(part))
-        return tuple(updates)
+        self.know((saved,))
+        return saved.publications()
+
+    def know(self, saved: Iterable[SavedMessage]) -> None:
+        """Parts that arrive later name only their message."""
+        self.messages.update((message.info.id, message.info) for message in saved)
 
     async def part(self, part: Part) -> tuple[TranscriptUpdate, ...]:
         if part.messageID not in self.messages:

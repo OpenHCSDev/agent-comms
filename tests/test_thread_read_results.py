@@ -3,7 +3,7 @@ from itertools import product
 
 from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (
-    ObserveThreads, ThreadBusy, ThreadMissing, ThreadPresented, ThreadUnavailable, ThreadsObserved,
+    NotObserved, ObserveThreads, ThreadBusy, ThreadMissing, ThreadPresented, ThreadUnavailable, ThreadsObserved,
     UnreadableHistory,
 )
 from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
@@ -45,7 +45,8 @@ def test_changed_interest_retains_one_results_mapping_and_starts_empty():
     first = ObserveThreads(frozenset({'one'})).observation()
     assert first.observed.results == {}
     first.observed = observed({'one': ThreadBusy()})
-    assert ObserveThreads(frozenset({'one'})).observation().for_interest(first) is first
-    next_read = ObserveThreads(frozenset({'one', 'two'})).observation().for_interest(first)
+    assert NotObserved().for_interest(first) is first
+    assert first.for_interest(ObserveThreads(frozenset({'one'})).observation()) is first
+    next_read = first.for_interest(ObserveThreads(frozenset({'one', 'two'})).observation())
     assert next_read.observed is first.observed
     assert next_read.initial == {'two'}

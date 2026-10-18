@@ -92,8 +92,7 @@ class CodexRolloutProvenance(Provenance):
                 "· not current instructions")
 
     def public_text(self, comms) -> str:
-        from .import_records import CodexRecord
-        from .importing import object_value
+        from .cli_bridges.codex_rollout import ROLLOUT_RECORD
 
         if min(self.offset, self.length, self.instruction) < 0:
             raise ValueError("Historical Codex source coordinates must be nonnegative")
@@ -102,12 +101,11 @@ class CodexRolloutProvenance(Provenance):
             raw = source.read(self.length)
         if len(raw) != self.length or hashlib.sha256(raw).hexdigest() != self.sha256:
             raise ValueError("Historical Codex source record changed or is unavailable")
-        record = CodexRecord.from_wire(object_value(json.loads(raw)))
         try:
-            instruction = record.historical_instructions()[self.instruction]
+            instruction = ROLLOUT_RECORD.validate_json(raw).instructions()[self.instruction]
         except IndexError as error:
             raise ValueError("Historical instruction is outside its original record") from error
-        return instruction.body
+        return instruction.text
 
 
 @dataclass(frozen=True)

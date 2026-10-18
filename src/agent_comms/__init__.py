@@ -16,7 +16,7 @@ from .historical_views import (
     HistoryCursor,
     HistorySource,
 )
-from .importing import ImportFormat, ImportLimits, ImportReceipt, ImportSnapshot
+from .importing import ImportLimits, ImportReceipt, ImportSnapshot
 from .mentions import MentionQuery
 from .read_basis import Conversation, DisplayedConversation, HistoricalDisplay
 from .read_ledger import ReadLedger
@@ -34,7 +34,6 @@ __all__ = [
     "DisplayedConversation",
     "Conversation",
     "MentionQuery",
-    "ImportFormat",
     "ImportLimits",
     "ImportReceipt",
     "ImportSnapshot",
