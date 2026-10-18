@@ -1294,7 +1294,8 @@ class HistoryCliCommand(CliCommand):
             result = EverythingHistoryPageResult
         page = read(bounds)
         messages = list(reversed(page.messages))
-        while page.has_older and len(messages) < self.limit and (cursor := page.oldest_cursor) is not None:
+        while (page.has_older and len(messages) < self.limit
+               and (cursor := page.oldest_cursor) is not None):
             page = read(replace(bounds, traversal=cursor.older(), limit=self.limit - len(messages)))
             messages.extend(reversed(page.messages))
         return result(tuple(messages), page.has_older)
