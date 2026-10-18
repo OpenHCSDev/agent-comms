@@ -318,10 +318,7 @@ class ActivityLog(ThreadOwnedState):
                 after = FileRevision.capture(self._path)
                 break
         if not snapshot.checkpoint.current_at(after):
-            self._publish_checkpoint()
-
-    def _publish_checkpoint(self) -> None:
-        self._read_snapshot().checkpoint.publish(self.checkpoint)
+            self._read_snapshot().checkpoint.publish(self.checkpoint)
 
     def emit(self, activity: Activity) -> None:
         with self._writing():
@@ -392,7 +389,8 @@ class ActivityLog(ThreadOwnedState):
                     if started_from.checkpoint.current_at(revision):
                         return started_from
                     checkpoint = started_from.checkpoint.prepare(self.checkpoint).validated(revision, stream)
-                    complete, offset = checkpoint.restore_latest()
+                    complete = {}
+                    offset = checkpoint.restore_into(complete)
                     latest = complete
                     stream.seek(offset)
                     while stream.tell() < revision.size:

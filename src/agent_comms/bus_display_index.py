@@ -6,16 +6,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
+from .bus_activity_index import ChannelActivity
 from .bus_projection import AppendCheckpoint, BusAppendIndex, NoCheckpoint
 from .messages import Message
 from .read_basis import ChannelDisplayScope, ReadCursor
-from .read_ledger import ReadLedger
 
 if TYPE_CHECKING:
     from .wire_log import WireSnapshot
-
-DisplayMetrics = tuple[dict[str, tuple[float, float]], dict[str, int]]
-
 
 @dataclass(frozen=True)
 class DisplayMetricScope:
@@ -23,48 +20,33 @@ class DisplayMetricScope:
     viewer_names: frozenset[str]
     seen: ReadCursor
 
-    @property
-    def empty_metrics(self) -> DisplayMetrics:
-        return ({scope.channel: (0.0, 0.0) for scope in self.scopes},
-                dict.fromkeys((scope.channel for scope in self.scopes), 0))
-
     def unread(self, message: Message) -> bool:
         return message.sender not in self.viewer_names and message.seq not in self.seen
-
-    def observe(self, message: Message, metrics: DisplayMetrics) -> None:
-        clocks, counts = metrics
-        unread = self.unread(message)
-        for scope in self.scopes:
-            if scope.includes(message):
-                last_message, last_user = clocks[scope.channel]
-                clocks[scope.channel] = (
-                    max(last_message, message.timestamp),
-                    max(last_user, message.timestamp)
-                    if ReadLedger.human(message.sender_role) else last_user,
-                )
-                counts[scope.channel] += int(unread)
-
 
 @dataclass(frozen=True)
 class DisplaySnapshot:
     """Computed metrics, including zero rows, independent of a saved checkpoint."""
 
     semantics: DisplayMetricScope
-    activity: dict[str, tuple[float, float]]
+    activity: dict[str, ChannelActivity]
     counts: dict[str, int]
-
-    @property
-    def metrics(self) -> DisplayMetrics:
-        return self.activity, self.counts
 
     @staticmethod
     def empty(semantics: DisplayMetricScope) -> DisplaySnapshot:
-        return DisplaySnapshot(semantics, *semantics.empty_metrics)
+        return DisplaySnapshot(semantics, {scope.channel: ChannelActivity() for scope in semantics.scopes},
+                               dict.fromkeys((scope.channel for scope in semantics.scopes), 0))
+
+    def observe(self, message: Message) -> None:
+        unread = self.semantics.unread(message)
+        for scope in self.semantics.scopes:
+            if scope.includes(message):
+                self.activity[scope.channel] = self.activity[scope.channel].observe(message)
+                self.counts[scope.channel] += int(unread)
 
 
 @dataclass(frozen=True)
 class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
-    schema: Literal[4] = field(default=4, kw_only=True)
+    schema: Literal[5] = field(default=5, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -84,14 +66,14 @@ class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
     def from_prefix(cls, index: BusDisplayIndex, opened: WireSnapshot, boundary: int,
                     semantics: DisplayMetricScope, checkpoint: DisplayCheckpoint | NoCheckpoint) -> DisplayCheckpoint:
         if not checkpoint.matches_scope(semantics):
-            metrics = opened.query_page_index(lambda page: page.display_metrics(semantics, boundary))
+            snapshot = opened.query_page_index(lambda page: page.display_snapshot(semantics, boundary))
             offset = boundary
         else:
-            metrics = (dict(checkpoint.activity), dict(checkpoint.counts))
+            snapshot = DisplaySnapshot(semantics, dict(checkpoint.activity), dict(checkpoint.counts))
             offset = checkpoint.offset
             for message, _ in opened.public_records(offset, before_offset=boundary):
-                semantics.observe(message, metrics)
-        projected = cls(opened.revision, boundary, opened.fingerprint(boundary), semantics, *metrics)
+                snapshot.observe(message)
+        projected = cls(opened.revision, boundary, opened.fingerprint(boundary), semantics, snapshot.activity, snapshot.counts)
         if not checkpoint.matches_scope(semantics) or offset != boundary:
             index.write(projected)
         opened.remember_append_checkpoint(index, projected)

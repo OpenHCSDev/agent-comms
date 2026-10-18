@@ -15,6 +15,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
+from .bus_activity_index import ChannelActivity
+from .bus_display_index import DisplayMetricScope, DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
@@ -25,7 +27,6 @@ from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
-    from .bus_display_index import DisplayMetricScope, DisplayMetrics
     from .wire_log import WireSnapshot
 
 
@@ -297,16 +298,17 @@ class BusPageIndex:
             except (ValueError, TypeError) as error:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
 
-    def display_metrics(self, semantics: DisplayMetricScope, before_offset: int) -> DisplayMetrics:
-        clocks, counts = semantics.empty_metrics
+    def display_snapshot(self, semantics: DisplayMetricScope, before_offset: int) -> DisplaySnapshot:
+        snapshot = DisplaySnapshot.empty(semantics)
         seen, names = semantics.seen, tuple(semantics.viewer_names)
         for scope in semantics.scopes:
             predicate, parameters = scope.index_predicate
             row, = BusPageRow.select(self.connection, row_type=BusPageMetrics,
                 where=f"offset < ? AND ({predicate})",
                 parameters=(seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters))
-            clocks[scope.channel], counts[scope.channel] = (row.last, row.human), row.count
-        return clocks, counts
+            snapshot.activity[scope.channel] = ChannelActivity(row.last, row.human)
+            snapshot.counts[scope.channel] = row.count
+        return snapshot
 
 
 class EmptyBusPageIndex(BusPageIndex):
@@ -318,5 +320,5 @@ class EmptyBusPageIndex(BusPageIndex):
     def _offsets(self, *args, **kwargs):
         yield from ()
 
-    def display_metrics(self, semantics, boundary):
-        return semantics.empty_metrics
+    def display_snapshot(self, semantics, boundary):
+        return DisplaySnapshot.empty(semantics)

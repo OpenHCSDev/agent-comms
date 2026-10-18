@@ -22,8 +22,9 @@ class ActivityCheckpoint(AppendCheckpoint):
         if any(name != event.thread for name, event in self.latest.items()):
             raise ValueError("Activity checkpoint identity does not match its event")
 
-    def restore_latest(self):
-        return dict(self.latest), self.offset
+    def restore_into(self, latest):
+        latest.update(self.latest)
+        return self.offset
 
     @classmethod
     def capture(

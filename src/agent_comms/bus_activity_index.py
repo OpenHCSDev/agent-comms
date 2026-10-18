@@ -1,10 +1,10 @@
 """Disposable activity projection of the original complete bus boundary."""
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
 
@@ -13,29 +13,25 @@ if TYPE_CHECKING:
     from .messages import Message
     from .wire_log import WireSnapshot
 
-ActivityFields = tuple[str, str, float, bool, bool]
-
-
 @dataclass(frozen=True)
 class ActivityClocks:
-    channels: Mapping[str, ChannelActivity]
-    sent: Mapping[str, float]
+    channels: dict[str, ChannelActivity] = field(default_factory=dict)
+    sent: dict[str, float] = field(default_factory=dict)
+
+    def observe(self, message: Message) -> None:
+        self.channels[message.target] = self.channels.get(message.target, ChannelActivity()).observe(message)
+        if message.role.counts_as_conversation():
+            self.sent[message.sender] = max(self.sent.get(message.sender, 0.0), message.timestamp)
 
 
 @dataclass(frozen=True)
-class ActivityCheckpoint(AppendCheckpoint):
-    channels: dict[str, tuple[float, float]]
-    sent: dict[str, float]
-    schema: Literal[3] = field(default=3, kw_only=True)
+class ActivityCheckpoint(ActivityClocks, AppendCheckpoint):
+    schema: Literal[4] = field(default=4, kw_only=True)
 
-    def restore_clocks(self):
-        return dict(self.channels), dict(self.sent), self.offset
-
-    @property
-    def snapshot(self) -> ActivityClocks:
-        return ActivityClocks(
-            {name: ChannelActivity(*clock) for name, clock in self.channels.items()}, self.sent,
-        )
+    def restore_into(self, clocks):
+        clocks.channels.update(self.channels)
+        clocks.sent.update(self.sent)
+        return self.offset
 
 
 class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
@@ -45,24 +41,19 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     def __init__(self, bus_path: Path):
         super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
 
-    def snapshot(self, opened: WireSnapshot,
-                 parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
+    def snapshot(self, opened: WireSnapshot) -> ActivityClocks:
         boundary = opened.complete_prefix.boundary
         checkpoint = opened.append_checkpoint(self)
-        channels, sent, offset = checkpoint.restore_clocks()
+        clocks = ActivityClocks()
+        offset = checkpoint.restore_into(clocks)
         if offset == boundary:
-            return ActivityClocks({name: ChannelActivity(*clock) for name, clock in channels.items()}, sent)
-        for record, _, _ in opened.rows(offset, boundary):
-            for sender, target, timestamp, is_user, is_sent in parse(record):
-                last_message, last_user = channels.get(target, (0.0, 0.0))
-                channels[target] = (max(last_message, timestamp),
-                                    max(last_user, timestamp) if is_user else last_user)
-                if is_sent:
-                    sent[sender] = max(sent.get(sender, 0.0), timestamp)
-        projected = ActivityCheckpoint(opened.revision, boundary, opened.fingerprint(boundary), channels, sent)
+            return clocks
+        for message, _ in opened.public_records(offset, before_offset=boundary):
+            clocks.observe(message)
+        projected = ActivityCheckpoint(opened.revision, boundary, opened.fingerprint(boundary), clocks.channels, clocks.sent)
         self.write(projected)
         opened.remember_append_checkpoint(self, projected)
-        return projected.snapshot
+        return clocks
 
 
 

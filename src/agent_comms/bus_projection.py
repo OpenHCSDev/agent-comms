@@ -53,9 +53,6 @@ class NoCheckpoint:
     def prepare(self, store):
         return store.read()
 
-    def for_snapshot(self, opened):
-        return self
-
     def validated(self, revision, stream):
         return self
 
@@ -71,11 +68,8 @@ class NoCheckpoint:
     def matches_scope(self, semantics):
         return False
 
-    def restore_clocks(self):
-        return {}, {}, 0
-
-    def restore_latest(self):
-        return {}, 0
+    def restore_into(self, destination):
+        return 0
 
     def publish(self, store):
         pass
@@ -98,9 +92,6 @@ class AppendCheckpoint:
 
     def prepare(self, store):
         return self
-
-    def for_snapshot(self, opened):
-        return self.validated(opened.revision, opened.stream)
 
     def validated(self, revision, stream):
         return self if self.accepts(revision, stream) else NoCheckpoint()
@@ -215,5 +206,5 @@ class BusAppendIndex(AppendProjectionStore[Checkpoint]):
     def capture(
         self, prepared: Checkpoint | NoCheckpoint, opened: WireSnapshot,
     ) -> Checkpoint | NoCheckpoint:
-        self._held = prepared.for_snapshot(opened)
+        self._held = prepared.validated(opened.revision, opened.stream)
         return self._held
