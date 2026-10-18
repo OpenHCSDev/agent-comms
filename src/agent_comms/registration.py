@@ -24,8 +24,7 @@ from .thread_status import (
 )
 from .threads import Thread
 from .storage_rules import StorageRule
-from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
-from .turn_phase import TurnPhase
+from .turn_lease import FinishedTurnFence, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -242,19 +241,6 @@ class Registration:
             edit.commit()
             return result
 
-    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with self.store.editing() as edit:
-            effects = edit.document.transition_turn(lease, phase)
-            edit.commit()
-            return effects
-
-    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        """Interpret the observation against this same locked original turn."""
-        with self.store.editing() as edit:
-            effects = edit.document.observe_native_phase(lease, phase)
-            edit.commit()
-            return effects
-
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
         with self.store.reading() as document:
@@ -272,7 +258,7 @@ class Registration:
             owner = RegistryOwner.capture_local(edit.document.snapshot(), expected.name)
             owner.require_claim(expected, generation)
             self._assert_maintenance_open_unlocked()
-            leased, _ = edit.document.lease_turn(owner.thread, turn.value, None)
+            leased, _ = edit.document.lease_turn(owner.thread, turn.value, None, self.store.path)
             edit.commit()
             return leased, generation
 
@@ -294,7 +280,7 @@ class Registration:
             owner.require_exact(snapshot, expected, generation)
             owner.thread.require_idle()
             self._assert_maintenance_open_unlocked()
-            result = edit.document.lease_turn(owner.thread, turn.value, routing)
+            result = edit.document.lease_turn(owner.thread, turn.value, routing, self.store.path)
             edit.commit()
             return result
 
@@ -312,7 +298,7 @@ class Registration:
             owner = RegistryOwner.capture_local(edit.document.snapshot(), name)
             owner.thread.require_idle()
             self._assert_maintenance_open_unlocked()
-            result = edit.document.lease_turn(owner.thread, turn.value, routing)
+            result = edit.document.lease_turn(owner.thread, turn.value, routing, self.store.path)
             edit.commit()
             return result
 

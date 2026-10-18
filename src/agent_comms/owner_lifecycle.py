@@ -248,7 +248,7 @@ class OwnerLifecycle:
             )
             if thread.process_alive:
                 return thread
-            owned = replace(thread, process_identity=identity, active_turn=None)
+            owned = replace(thread.without_turn(), process_identity=identity)
             self.registry.register(owned, new_owner=True)
             return owned
 
@@ -465,7 +465,7 @@ class OwnerLifecycle:
 
         def reserve(identity: ProcessIdentity) -> None:
             nonlocal owned
-            owned = replace(thread, process_identity=identity, active_turn=None)
+            owned = replace(thread.without_turn(), process_identity=identity)
             self.registry.register(owned, new_owner=True)
 
         with owner_process_output(self.root, thread) as output:

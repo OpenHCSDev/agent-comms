@@ -28,7 +28,7 @@ from .thread_identity import (
     TurnId,
     TurnIdentity,
 )
-from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnState
+from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
     from .launch_runtime import ThreadLaunch
@@ -91,7 +91,8 @@ class Thread(ThreadProvenance):
         default_factory=AgentBackend.for_new_threads, kw_only=True,
         metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
     )
-    active_turn: ActiveTurn | None = None
+    turn_record: TurnRecord | None = None
+    active_turn: ActiveTurn | None = field(init=False, default=None, compare=False)
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
@@ -158,6 +159,9 @@ class Thread(ThreadProvenance):
         return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
 
     def __post_init__(self) -> None:
+        object.__setattr__(
+            self, "active_turn", self.turn_record.read() if self.turn_record else None
+        )
         generated = isinstance(self.created_at, _GeneratedCreationTime)
         object.__setattr__(self, "_generated_created_at", generated)
         if generated:
@@ -365,9 +369,15 @@ class Thread(ThreadProvenance):
         return launch(self) == launch(other)
 
     def without_turn_claim(self) -> Thread:
-        if self.active_turn is None:
+        if self.turn_record is None:
             return self
-        return replace(self, active_turn=replace(self.active_turn, claimed_generation=None))
+        self.turn_record.without_claim()
+        return replace(self)
+
+    def without_turn(self) -> Thread:
+        """The registry transaction retires the record before dropping its reference."""
+        self.without_turn_claim()
+        return replace(self, turn_record=None)
 
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""

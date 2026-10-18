@@ -252,7 +252,7 @@ class AgentActivity:
             assert lease is not None
             try:
                 phase = PreparingPhase(detail)
-                self.registry.transition_turn(lease, phase)
+                lease.record(self.registry.store.path).transition(lease, phase)
                 self._record_turn_activity(leased.name, (phase,))
             except BaseException:
                 self.registry.release_turn(lease)
@@ -266,13 +266,13 @@ class AgentActivity:
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = self.registry.transition_turn(lease, phase)
+            effects = lease.record(self.registry.store.path).transition(lease, phase)
             self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = self.registry.observe_native_phase(lease, phase)
+            effects = lease.record(self.registry.store.path).observe_native_phase(lease, phase)
             self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
 

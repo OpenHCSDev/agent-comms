@@ -5,8 +5,9 @@ from __future__ import annotations
 import math
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import Field, dataclass, field, fields, replace
+from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -26,7 +27,7 @@ from .restart_refusals import (
     OwnerGenerationChangedRefusal,
 )
 from .routing import TurnRouting
-from .thread_identity import ClaimedIdentity, GenerationCounter, OwnerIdentity
+from .thread_identity import ClaimedIdentity, GenerationCounter, OwnerIdentity, TurnIdentity
 from .thread_presentation import ThreadOwnerBinding
 from .thread_status import (
     ArchivedThreadStatus,
@@ -34,8 +35,7 @@ from .thread_status import (
     ThreadStatus,
 )
 from .threads import Thread
-from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnState
-from .turn_phase import TurnPhase
+from .turn_lease import ActiveTurn, FinishedTurnFence, TurnLeaseFence, TurnRecord
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
@@ -180,6 +180,13 @@ class RegistryDocument(RegistryPresence):
         return replace(self, **{
             declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
             for declared in fields(self)})
+
+    def capture_turns(self) -> RegistryDocument:
+        """The registry cache holds references, never the current turn observation."""
+        return replace(self, threads={
+            name: replace(thread) if thread.turn_record is not None else thread
+            for name, thread in self.threads.items()
+        })
 
     def snapshot(self) -> RegistrySnapshot:
         return RegistrySnapshot.capture(self)
@@ -352,7 +359,7 @@ class RegistryDocument(RegistryPresence):
             if name in self.aliases or thread.created_at in identities:
                 raise RelationViolationError(f"Restoration identity conflicts for {name!r}")
             identities[thread.created_at] = name
-            additions.append(replace(thread, process_identity=NoProcess(), active_turn=None))
+            additions.append(replace(thread.without_turn(), process_identity=NoProcess()))
         restored = {thread.name: thread for thread in additions}
         available = self.threads | restored
         aliases = source.restorable_aliases(available, self.aliases)
@@ -428,7 +435,7 @@ class RegistryDocument(RegistryPresence):
             self.owners.advance(name)
         thread = self.threads[name]
         self.statuses[name] = thread.execution.registered_status(thread, StoppedThreadStatus())
-        self.threads[name] = replace(thread, active_turn=None)
+        self.threads[name] = thread.without_turn()
         self.claims.advance(name)
 
     def archive(self, name: str) -> None:
@@ -491,6 +498,7 @@ class RegistryDocument(RegistryPresence):
             self.threads[child_name] = replace(self.threads[child_name], parent=None)
         if self.statuses[name].active:
             self.owners.advance(name)
+        self.threads[name].without_turn_claim()
         del self.threads[name]
         self.statuses.pop(name, None)
         self.last_seen.pop(name, None)
@@ -511,7 +519,7 @@ class RegistryDocument(RegistryPresence):
         self.last_seen[name] = time.time()
 
     def lease_turn(
-        self, current: Thread, turn_id: str, routing: TurnRouting | None
+        self, current: Thread, turn_id: str, routing: TurnRouting | None, registry_path: Path
     ) -> tuple[Thread, int]:
         """Caller holds the registry lock and has checked live turn ownership."""
         if current.turn_generation >= (1 << 63) - 1:
@@ -521,12 +529,13 @@ class RegistryDocument(RegistryPresence):
             turn_generation=current.turn_generation + 1,
             last_finished_turn_id=None,
             project_resume_due=False,
-            active_turn=ActiveTurn(
-                turn_id,
-                current.require_process().pid,
-                routing=routing,
-                claimed_generation=self.claims.generations[current.name],
-                turn_generation=current.turn_generation + 1,
+            turn_record=TurnRecord.begin(
+                registry_path, TurnIdentity(current.incarnation, current.turn_generation + 1),
+                ActiveTurn(
+                    turn_id, current.require_process().pid, routing=routing,
+                    claimed_generation=self.claims.generations[current.name],
+                    turn_generation=current.turn_generation + 1,
+                ),
             ),
         )
         self.threads[current.name] = leased
@@ -545,13 +554,11 @@ class RegistryDocument(RegistryPresence):
             return False, None
         attested = canonical_lease.can_attest(self.claims.generations[name])
         attested = attested and self.statuses[name].active
+        keeps_resume = current.active_turn.phase.keeps_project_resume
         self.threads[name] = replace(
-            current,
-            active_turn=None,
+            current.without_turn(),
             last_finished_turn_id=(lease.turn_id if current.turn_generation else None),
-            project_resume_due=(
-                current.project_resume_due and current.active_turn.phase.keeps_project_resume
-            ),
+            project_resume_due=current.project_resume_due and keeps_resume,
         )
         self.last_seen[name] = time.time()
         if not attested:
@@ -562,25 +569,6 @@ class RegistryDocument(RegistryPresence):
             turn_id=lease.turn_id,
             claimed_generation=lease.claimed_generation,
         )
-
-    def _turn_effects(
-        self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
-    ) -> tuple[TurnState, ...]:
-        """Capture publication effects from the exact fenced document mutation."""
-        name = self.canonical_name(lease.identity.incarnation.name)
-        current = self.threads.get(name)
-        if current is None or current.turn_lease != lease.renamed(name):
-            return ()
-        effects = tuple(observe(current.turn_state))
-        for state in effects:
-            self.threads[name] = replace(current, active_turn=state.active)
-        return effects
-
-    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        return self._turn_effects(lease, lambda state: state.phase_effects(phase))
-
-    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
 
     def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
         """Publish only the source fact of an already authorized original owner."""

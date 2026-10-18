@@ -7,7 +7,7 @@ import os
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
 
@@ -36,8 +36,16 @@ class RegistryRevision:
 class RegistryEntryRevision:
     """One thread's entry and the registry revision it was read from, under one lock."""
 
-    revision: tuple[FileRevision | None, FileRevision | None]
+    revision: tuple[FileRevision | None, ...]
     entry: RegistryEntry
+
+    @classmethod
+    def capture(
+        cls, revision: tuple[FileRevision | None, ...], entry: RegistryEntry,
+    ) -> RegistryEntryRevision:
+        source = entry.thread.turn_record
+        turn_revision = FileRevision.capture(source.path) if source is not None else None
+        return cls((*revision, turn_revision), entry)
 
 
 @dataclass(slots=True)
@@ -100,11 +108,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
             return self.empty()
         entry = self.cache.entry
         if entry is not None and entry.revision == revision:
-            return entry.document
+            return entry.document.capture_turns()
         with self.cache.decoding:
             entry = self.cache.entry
             if entry is not None and entry.revision == revision:
-                return entry.document
+                return entry.document.capture_turns()
             raw = json.loads(self.path.read_text())
             if entry is None:
                 document = RegistryDocument.from_wire(raw)
@@ -132,12 +140,17 @@ class RegistryStore(LockedStore[RegistryDocument]):
             self.private_guard_unlocked()
             revision = self.revision_unlocked()
             if revision[0] is None:
-                return RegistryEntryRevision(revision, self.empty().entry(name))
+                return RegistryEntryRevision.capture(revision, self.empty().entry(name))
             entry = self.cache.entry
             if entry is not None and entry.revision == revision[0]:
-                return RegistryEntryRevision(revision, entry.document.entry(name))
+                original = entry.document.entry(name)
+                return RegistryEntryRevision.capture(
+                    revision, replace(original, thread=replace(original.thread))
+                )
             raw = json.loads(self.path.read_text())
-            return RegistryEntryRevision(revision, RegistryDocument.entry_from_wire(raw, name))
+            return RegistryEntryRevision.capture(
+                revision, RegistryDocument.entry_from_wire(raw, name)
+            )
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)

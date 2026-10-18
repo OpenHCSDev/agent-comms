@@ -89,7 +89,7 @@ class UpdatedRegistration(RegistrationChange):
                 thread=replace(
                     self.thread,
                     process_identity=self.previous.process_identity,
-                    active_turn=self.previous.active_turn,
+                    turn_record=self.previous.turn_record,
                     turn_generation=self.previous.turn_generation,
                     last_finished_turn_id=self.previous.last_finished_turn_id,
                 ),
@@ -120,8 +120,9 @@ class UpdatedRegistration(RegistrationChange):
 
     @property
     def installed_thread(self) -> Thread:
-        if self.thread.active_turn == self.previous.active_turn:
+        if self.thread.turn_record == self.previous.turn_record:
             return self.thread
+        self.previous.without_turn_claim()
         return self.thread.without_turn_claim()
 
     def restarted(self) -> RegistrationChange:
