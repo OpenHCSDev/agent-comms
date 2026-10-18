@@ -497,7 +497,7 @@ class CertifiedSourceRead:
         self.require_current()
         return frozenset(row.reference for row in self.context_entry_rows(references))
 
-    def context_records(self, manifest):
+    def context_records(self, manifest, previous=None):
         """Choose new entry rows and one turn row from this certified index."""
         from .wire_record import (
             ContextEntryManifestWireObservation,
@@ -505,7 +505,9 @@ class CertifiedSourceRead:
             RecordedContextManifestWireObservation,
         )
 
-        recorded, entries = RecordedContextManifest.capture(manifest)
+        if previous is not None and previous.source != self.witness.source_identity:
+            raise RelationViolationError("Context predecessor belongs to another source")
+        recorded, entries = RecordedContextManifest.capture(manifest, previous)
         known = self.context_entry_references(
             tuple(entry.reference for entry in entries)
         )
@@ -845,6 +847,76 @@ class RecordedContextManifestSources(
     max_page_bytes: ClassVar[int] = 512 * 1024
 
     @classmethod
+    def latest(cls, log, thread):
+        with log.certified_read() as source:
+            prefix = source.witness
+            rows = cls.select(source.connection, thread=thread, order_by=("offset",),
+                              descending=True, limit=1)
+            captured = tuple((row, row.read_bytes(source.stream)) for row in rows)
+        resolved = cls.resolve(log, captured, prefix)
+        return next(iter(resolved.values()), None)
+
+    @classmethod
+    def resolve(cls, log, captured, prefix):
+        """Resolve only referenced predecessors and entries, decoding outside locks."""
+        rows = {row.offset: row for row, _ in captured}
+        raw = {row.offset: value for row, value in captured}
+        recorded = {offset: rows[offset].decode_bytes(value, prefix.root_id)
+                    for offset, value in raw.items()}
+        pending = set(recorded)
+        while pending:
+            references = set()
+            for offset in pending:
+                for segment in recorded[offset].segments:
+                    if segment.previous is not None:
+                        if not 0 <= segment.previous < offset:
+                            raise RelationViolationError("Context predecessor is not an earlier record")
+                        if segment.previous not in recorded:
+                            references.add(segment.previous)
+            if not references:
+                break
+            with log.certified_read() as source:
+                source.witness.require_read_window(prefix)
+                predecessors = tuple(row for offset in references for row in cls.select(
+                    source.connection, offset=offset))
+                captured_prior = tuple((row, row.read_bytes(source.stream)) for row in predecessors)
+            if {row.offset for row, _ in captured_prior} != references:
+                raise RelationViolationError("Recorded context predecessors are incomplete")
+            pending = set()
+            for row, value in captured_prior:
+                if row.offset + row.length > prefix.offset:
+                    raise RelationViolationError("Context predecessor exceeds its captured prefix")
+                rows[row.offset], raw[row.offset] = row, value
+                recorded[row.offset] = row.decode_bytes(value, prefix.root_id)
+                pending.add(row.offset)
+        references = {reference for manifest in recorded.values()
+                      for segment in manifest.segments for reference in segment.entries}
+        entries = {}
+        if references:
+            with log.certified_read() as source:
+                source.witness.require_read_window(prefix)
+                entry_rows = source.context_entry_rows(references)
+                if any(row.offset + row.length > prefix.offset for row in entry_rows):
+                    raise RelationViolationError("Context entry exceeds its captured prefix")
+                geometries = {(row.offset, row.length): row for row in entry_rows}
+                entry_bytes = tuple(row.read_bytes(source.stream) for row in geometries.values())
+            for value in entry_bytes:
+                for entry in WireRecord.from_wire(json.loads(value), prefix.root_id).context_entries():
+                    if entry.reference in references:
+                        entries[entry.reference] = entry.manifest
+            if entries.keys() != references:
+                raise RelationViolationError("Recorded context entries are incomplete")
+        values = {}
+        for offset in sorted(recorded):
+            manifest = recorded[offset]
+            if any(values[segment.previous].thread != manifest.thread
+                   for segment in manifest.segments if segment.previous is not None):
+                raise RelationViolationError("Context predecessor belongs to another owner")
+            values[offset] = manifest.restore(entries, values)
+        return {row: CapturedWireSource(prefix.source_identity, row, value, values[row.offset])
+                for row, value in captured}
+
+    @classmethod
     def for_owner(
         cls, log: WireLog, name: str, registry: Registration, *,
         cursor: ContextManifestCursor | None = None,
@@ -909,33 +981,11 @@ class RecordedContextManifestSources(
                              if row not in retained)
 
         resources = {row: retained[row] for row in rows if row in retained}
-        changed = {row: row.decode_bytes(raw, prefix.root_id) for row, raw in captured}
-
-        references = {reference for recorded in changed.values()
-                      for segment in recorded.segments for reference in segment.entries}
-        entries: dict[ContextEntryReference, SegmentManifest] = {}
-        if references:
-            with log.certified_read() as source:
-                source.witness.require_read_window(prefix)
-                entry_rows = source.context_entry_rows(references)
-                geometries = {(row.offset, row.length): row for row in entry_rows}
-                if any(row.offset + row.length > prefix.offset for row in entry_rows):
-                    raise RelationViolationError("Context entry lies beyond its turn's source prefix")
-                entry_bytes = tuple(row.read_bytes(source.stream) for row in geometries.values())
-            for raw in entry_bytes:
-                record = WireRecord.from_wire(json.loads(raw), prefix.root_id)
-                for entry in record.context_entries():
-                    if entry.reference in references:
-                        entries[entry.reference] = entry.manifest
-            if entries.keys() != references:
-                raise RelationViolationError("Recorded context entries are incomplete")
-
-        for row, raw in captured:
-            if row in changed:
-                manifest = changed[row].restore(entries)
-                if manifest.thread.resolved(snapshot) != incarnation:
-                    raise RelationViolationError("Context source differs from recorded owner.")
-                resources[row] = CapturedWireSource(prefix.source_identity, row, raw, manifest)
+        changed = cls.resolve(log, captured, prefix)
+        for row, resource in changed.items():
+            if resource.value.thread.resolved(snapshot) != incarnation:
+                raise RelationViolationError("Context source differs from recorded owner.")
+            resources[row] = resource
         return ContextManifestPage(tuple(resources[row] for row in rows), older, newer)
 
     def decode_bytes(self, raw: bytes, root_id: str):
