@@ -21,7 +21,7 @@ from agent_comms.config_options import (
     ThinkingLevelConfigOption,
 )
 from agent_comms.session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
-from agent_comms import agent_events as events
+import agent_comms.agent_events as events
 from agent_comms.pi_vocabulary import OffThinkingLevel, HighThinkingLevel
 from delivery_owner_fixture import canonical_agent
 

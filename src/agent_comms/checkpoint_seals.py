@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Literal
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .field_codec import Id128Text, Sha256Text
 from .private_path import FileRevision
 
 if TYPE_CHECKING:
@@ -43,15 +44,11 @@ class PrefixSeal:
         )
 
     def __post_init__(self) -> None:
-        if len(self.root_id) != 32 or any(c not in "0123456789abcdef" for c in self.root_id):
-            raise ValueError("Invalid prefix root identity")
+        Id128Text.from_text(self.root_id)
         if self.through_seq < 0:
             raise ValueError("Invalid prefix revision/sequence")
-        if any(
-            len(value) != 64 or any(c not in "0123456789abcdef" for c in value)
-            for value in (self.digest, self.tail)
-        ):
-            raise ValueError("Invalid prefix digest")
+        Sha256Text.from_text(self.digest)
+        Sha256Text.from_text(self.tail)
 
 
 @dataclass(frozen=True)

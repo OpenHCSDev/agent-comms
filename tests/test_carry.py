@@ -3,13 +3,15 @@
 import importlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 
-from agent_comms import private_nk_entrypoint
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.comms import Comms
 from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadLedger
@@ -17,7 +19,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
-from tools.upgrade_bus import bus_files, carried
+from tools.upgrade_bus import Revisions, Stack, UpgradeRefused, before_stop, bus_files, carried, carry_all
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -55,13 +57,16 @@ class Repository:
 
 def test_steps_at_head_form_one_chain_and_each_module_declares_its_step():
     chain = CarryChain.at(REPO, "HEAD")
+    names = [step.name for step in chain.steps]
     assert chain.steps[0].after is None
-    assert [step.after for step in chain.steps[1:]] == [step.name for step in chain.steps[:-1]]
+    assert [step.after for step in chain.steps[1:]] == names[:-1]
     for step in chain.steps:
         if step.revision == "HEAD":
             (declared,) = [value for value in vars(importlib.import_module(f"cutover.{step.name}")).values()
                            if isinstance(value, type) and issubclass(value, Carry) and value is not Carry]
-            assert (declared.name(), declared.after) == (step.name, step.after)
+            assert declared.name() == step.name
+            # A deleted line may run between a step and the step it names.
+            assert declared.after is None or names.index(declared.after) < names.index(step.name)
 
 
 def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
@@ -80,6 +85,64 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
     tail = repo.commit({"carry_c": None})
     assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
         ("carry_a", held), ("carry_b", "HEAD"), ("carry_c", repo.git("rev-parse", f"{tail}^"))]
+
+
+def test_a_step_added_after_a_deleted_line_runs_after_it_for_both_real_ledgers(tmp_path):
+    """Today's history: route_index and wake_index were deleted before display_counts forked
+    from their parent, then todo_releases (17:15) and order_run arrived. Every bus that ran
+    the deleted line keeps a pending list, at 17:15 and at main."""
+    repo = Repository(tmp_path)
+    repo.commit({"carry_external_pages": step_source(None)})
+    repo.commit({"carry_route_index": step_source("carry_external_pages"),
+                 "carry_wake_index": step_source("carry_route_index")})
+    repo.commit({"carry_route_index": None, "carry_wake_index": None})
+    repo.commit({"carry_display_counts": step_source("carry_external_pages")})
+    repo.commit({"carry_todo_voids": step_source("carry_display_counts"),
+                 "carry_turn_records": step_source("carry_todo_voids")})
+    released = repo.commit({"carry_todo_releases": step_source("carry_turn_records")})
+    repo.commit({"carry_order_run": step_source("carry_wake_index"),
+                 "carry_todo_releases": step_source("carry_order_run")})
+    # The laptop's ledger; ts-gaming's adds carry_order_run, applied before it reached main.
+    laptop = ("carry_external_pages", "carry_display_counts", "carry_todo_voids",
+              "carry_turn_records", "carry_route_index", "carry_wake_index")
+
+    def pending(revision: str, applied: tuple[str, ...]) -> list[str]:
+        return [step.name for step in CarryChain.at(tmp_path, revision).pending(applied)]
+
+    assert pending(released, laptop) == ["carry_todo_releases"]
+    assert pending("HEAD", (*laptop, "carry_order_run")) == ["carry_todo_releases"]
+    assert pending("HEAD", laptop) == ["carry_order_run", "carry_todo_releases"]
+
+
+def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgrades_in_order(tmp_path):
+    (tmp_path / "repo").mkdir()
+    repo = Repository(tmp_path / "repo")
+    runnable = "\nif __name__ == '__main__':\n    Step.main()\n"
+    repo.commit({"carry_a": step_source(None) + runnable, "carry_b": step_source("carry_a") + runnable,
+                 "carry_c": step_source("carry_b") + runnable})
+    environment = {**os.environ, "PYTHONPATH": os.pathsep.join(
+        [str(REPO / "src"), str(REPO / "tools"), str(repo.path / "tools")])}
+
+    def apply(name: str, root: Path) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(repo.path / STEPS / f"{name}.py"), str(root), "--apply"],
+                              env=environment, cwd=repo.path, capture_output=True, text=True, timeout=60)
+
+    skipped = tmp_path / "skipped"
+    skipped.mkdir()
+    CarryLedger(skipped).record("carry_b")
+    for name in ("carry_a", "carry_c"):
+        refused = apply(name, skipped)
+        assert refused.returncode and "Bus ledger skips a step" in refused.stderr
+    assert CarryLedger(skipped).applied() == ("carry_b",)
+
+    ledgerless = tmp_path / "ledgerless"
+    ledgerless.mkdir()
+    assert "must first run ['carry_a', 'carry_b']" in apply("carry_b", ledgerless).stderr
+    assert CarryLedger(ledgerless).applied() is None
+    chain = CarryChain.at(repo.path, "HEAD")
+    for step in chain.pending(CarryLedger(ledgerless).applied() or ()):
+        assert apply(step.name, ledgerless).returncode == 0
+    assert CarryLedger(ledgerless).applied() == ("carry_a", "carry_b", "carry_c")
 
 
 @pytest.mark.parametrize("steps", [
@@ -128,13 +191,13 @@ def test_a_deleted_step_name_is_never_reused(tmp_path):
 
 def record_source(version: int, fields: str) -> str:
     return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
-            "from agent_comms.wire_metadata import WireRootIdText\n\n"
-            "class RootId(WireRootIdText):\n    \"\"\"Another representation of the same spelling.\"\"\"\n\n"
+            "from agent_comms.field_codec import Id128Text\n\n"
+            "class RootId(Id128Text):\n    \"\"\"Another representation of the same spelling.\"\"\"\n\n"
             f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
 
 
 PLAIN = "    root: str\n"
-SPELLED = "    root: Annotated[str, WireRootIdText]\n"
+SPELLED = "    root: Annotated[str, Id128Text]\n"
 
 
 @pytest.mark.refactor_guard
@@ -159,6 +222,64 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
     changed = {"src/agent_comms/record.py"}
     assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
         {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
+
+
+class CheckoutStack(Stack):
+    """A checkout's stack running this test's interpreter in place of its synced one."""
+
+    @property
+    def python(self) -> Path:
+        return Path(sys.executable)
+
+
+def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_path):
+    """The installed checkout's src lacks what the new step imports; both passes import
+    the src of the tree that declares the step."""
+    (tmp_path / "checkout/src").mkdir(parents=True)
+    repo = Repository(tmp_path / "checkout")
+    (repo.path / "src/probe_api.py").write_text("OLD = 1\n")
+    older = repo.commit({"carry": (REPO / STEPS / "carry.py").read_text()})
+    (repo.path / "src/probe_api.py").write_text("OLD = 1\nNEW = 2\n")
+    newer = repo.commit({"carry_probe": (
+        "from probe_api import NEW\n\nfrom cutover.carry import Carried, Carry\n\n\n"
+        "class Probe(Carry):\n    after = None\n\n"
+        "    @classmethod\n    def before_stop(cls, root, *, apply):\n"
+        "        (root / 'stopped').write_text(str(NEW))\n        return Carried(1, {}, ('stopped',))\n\n"
+        "    @classmethod\n    def carry(cls, root, *, apply):\n"
+        "        (root / 'carried').write_text(str(NEW))\n        return Carried(1, {}, ('carried',))\n\n\n"
+        "if __name__ == '__main__':\n    Probe.main()\n")})
+    repo.git("checkout", "-q", older)
+    root = tmp_path / "bus"
+    root.mkdir()
+    pending = CarryChain.at(repo.path, newer).pending(())
+    revisions = Revisions(repo.path, tmp_path / "trees")
+    try:
+        installed = CheckoutStack(repo.path, home=tmp_path)
+        before = bus_files(root)
+        steps = [*before_stop(root, pending, installed, revisions), *carry_all(root, pending, installed, revisions)]
+    finally:
+        revisions.close()
+    assert carried(root, before, steps) == {"identical": 0, "rewritten": 3}
+    assert (root / "stopped").read_text() == (root / "carried").read_text() == "2"
+    assert CarryLedger(root).applied() == ("carry_probe",)
+
+
+def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
+    store = tmp_path / "todos.sqlite3"
+    with closing(sqlite3.connect(store)) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("CREATE TABLE todo (id)")
+        db.execute("INSERT INTO todo VALUES (1)")
+        db.commit()
+    before = bus_files(tmp_path)
+    with closing(sqlite3.connect(store, autocommit=True)) as opened:
+        opened.execute("BEGIN IMMEDIATE")
+        opened.execute("ROLLBACK")
+        assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
+        assert carried(tmp_path, before, [{"rewritten": []}]) == {"identical": 1, "rewritten": 0}
+        opened.execute("UPDATE todo SET id = 2")
+        with pytest.raises(UpgradeRefused, match=r"\['todos.sqlite3'\]"):
+            carried(tmp_path, before, [{"rewritten": []}])
 
 
 def run_step(name: str, root: Path, *flags: str) -> dict:
@@ -205,14 +326,20 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
                                  "native_package": str(tmp_path)}))
     route.chmod(0o600)
 
-    steps = [step.name for step in CarryChain.at(REPO, "HEAD").steps if step.revision == "HEAD"]
+    chain = CarryChain.at(REPO, "HEAD").steps
+    steps = [step.name for step in chain if step.revision == "HEAD"]
     for name in steps:
+        # The older bus ran each deleted step while the tree still held it.
+        for deleted in chain[len(CarryLedger(root).applied() or ()):]:
+            if deleted.revision == "HEAD":
+                break
+            CarryLedger(root).record(deleted.name)
         before = bus_files(root)
         carried(root, before, [run_step(name, root)])
         applied = run_step(name, root, "--apply")
         carried(root, before, [applied])
         assert run_step(name, root)["changed"] == 0, name
-    assert CarryLedger(root).applied() == tuple(steps)
+    assert CarryLedger(root).applied() == tuple(step.name for step in chain)
 
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.earlier_projects == (Path("/earlier/project"),)
@@ -240,6 +367,9 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     store = RegistryStore(root / "registry.json")
     with store.locked():
         store._write_unlocked(json.dumps(registry, indent=2))
+    chain = [step.name for step in CarryChain.at(REPO, "HEAD").steps]
+    for earlier in chain[: chain.index("carry_turn_records")]:
+        CarryLedger(root).record(earlier)
     if carried_count is None:
         with pytest.raises(subprocess.CalledProcessError):
             run_step("carry_turn_records", root, "--apply")

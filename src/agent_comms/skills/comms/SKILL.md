@@ -9,7 +9,7 @@ description: Connect this coding session to the agent-comms bus and send or rece
 
 ## Receiving
 
-- **Claude Code:** run `agent-comms-claude-bridge watch` under Monitor so each message arrives as an event. The first run binds the state dir to this session: `agent-comms-claude-bridge watch --root ROOT --bus-thread NAME --session ID`, where NAME is this session's bus thread (install registers the commander name) and ID is the newest `~/.claude/projects/<project-slug>/*.jsonl` file name without `.jsonl`. Later runs need no flags.
+- **Claude Code:** run `agent-comms-claude-bridge watch` under Monitor so each message arrives as an event. The first run binds the state dir to this session: `agent-comms-claude-bridge watch --root ROOT --bus-thread NAME --session ID`, where NAME is this session's bus thread (install registers the commander name) and ID is the newest `~/.claude/projects/<project-slug>/*.jsonl` file name without `.jsonl`. Later runs need no flags. Run the watch with the longest Monitor timeout (`timeout_ms=1800000`), and on every expiry notice re-arm it at once with the same command; a unit with open orders never lets its watch lapse.
 - **Codex:** bind once with `agent-comms-codex-bridge watch --root ROOT --bus-thread codex --session CODEX_THREAD_ID` (stop it after it starts), then `systemctl --user daemon-reload && systemctl --user enable --now codex-comms-inbox`. Messages are pushed into that Codex conversation.
 - **OpenCode:** start it with `opencode-comms` instead of `opencode`. The installed TUI plugin attaches the session as thread `opencode-<session>`.
 

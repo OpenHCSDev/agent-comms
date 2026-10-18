@@ -11,8 +11,8 @@ from types import MappingProxyType
 
 import pytest
 
-from agent_comms import agent_backend as ab
-from agent_comms import agent_events as ae
+import agent_comms.agent_backend as ab
+import agent_comms.agent_events as ae
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
@@ -172,7 +172,7 @@ def test_pi_event_family_matches_pi_0_85_1_when_imported_fresh():
 
     result = subprocess.run(
         [sys.executable, "-c", (
-            "from agent_comms import pi_events as p\n"
+            "import agent_comms.pi_events as p\n"
             "from agent_comms.pi_native_backend import PiNativeBackend as B\n"
             "kinds = {k for m in p.NativePiEvent.members_with(p.NativePiEvent) for k in m.known_kinds()}\n"
             "assert kinds == B.event_kinds, kinds ^ B.event_kinds\n"

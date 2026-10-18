@@ -42,10 +42,11 @@ from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
-from .field_codec import MalformedRecord
+from .field_codec import Id128Text, MalformedRecord
 from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
+from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
@@ -111,6 +112,7 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
+    package: VerifiedNativePackage,
     root: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
@@ -132,6 +134,7 @@ async def stream_agent_events(
                     persistent_session.child_state.managed_launch,
                     agent_bin,
                     tuple(agent_args),
+                    package=package,
                     root=root,
                     worktree=Path(cwd),
                     environment=env_extra,
@@ -550,7 +553,7 @@ class TurnSession:
     def prepare_launch(self) -> None:
         self.command = commands.Prompt(
             id=f"agent-comms-prompt-{secrets.token_hex(16)}",
-            input_id=secrets.token_hex(16),
+            input_id=Id128Text.mint(),
             message=self.task,
             images=self.images or None,
             context_contributions=self.context_contributions,

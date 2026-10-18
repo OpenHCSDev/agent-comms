@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import re
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack
@@ -19,13 +18,14 @@ from .agent_events import AgentEvent, InputRefused
 from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .field_codec import MalformedRecord
+from .field_codec import Id128Text, MalformedRecord
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_entries import NativeEntry
+from .native_package import VerifiedNativePackage
 from .native_pi import (
     NativeContextProof,
     NativeEmptyAnswer,
@@ -266,7 +266,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     @classmethod
     async def execute(
         cls,
-        package: Path,
+        package: VerifiedNativePackage,
         *,
         input_id: str,
         prompt: str,
@@ -286,8 +286,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         execution: NativeExecution,
         following: FollowingInputs = NO_FOLLOWING_INPUTS,
     ) -> NativeTurnResult:
-        if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
-            raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
+        Id128Text.decode(input_id)
         if not prompt or not isinstance(prompt, str):
             raise ValueError("A native turn requires a nonempty prompt")
         measurements = startup.measurements

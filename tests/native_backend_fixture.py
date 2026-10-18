@@ -9,8 +9,8 @@ from contextlib import AsyncExitStack, asynccontextmanager
 from functools import partial
 from unittest.mock import patch
 
-from agent_comms import agent_events as events
-from agent_comms import backend
+import agent_comms.agent_events as events
+import agent_comms.backend as backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, TurnInbox, WhenBusy
 from agent_comms.comms import Comms
 from agent_comms.fresh_private_session import create_fresh_private_session

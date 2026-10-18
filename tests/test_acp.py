@@ -22,8 +22,8 @@ import pytest
 from acp import RequestError
 from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
-from agent_comms import agent_events as ae
-from agent_comms import backend
+import agent_comms.agent_events as ae
+import agent_comms.backend as backend
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.send_outcome import GrantedSend
 from agent_comms.acp import CommsAgent, CommsClient

@@ -38,7 +38,7 @@ bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 verify() (
     cd -- "$1/node_modules/@earendil-works/pi-coding-agent"
     sha256sum --check --status "$manifest" &&
-        python3 "$repo_root/src/agent_comms/native_package.py" "$PWD"
+        PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package "$PWD"
 )
 
 publish() {
@@ -53,7 +53,7 @@ publish() {
     deployment_package="$deployment/node_modules/@earendil-works/pi-coding-agent"
     if [[ -e "$deployment" ]]; then
         verify "$deployment"
-        python3 "$repo_root/src/agent_comms/native_package.py" \
+        PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package \
             --install-sources "$deployment_package" "$repo_root"
     else
         deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
@@ -62,7 +62,7 @@ publish() {
         cp -a --reflink=auto -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
         verify "$deployment_stage"
-        python3 "$repo_root/src/agent_comms/native_package.py" \
+        PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package \
             --install-sources \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent" "$repo_root"
         mv -- "$deployment_stage" "$deployment"
@@ -156,10 +156,10 @@ python3 "$stack_root/patch-native-request-observation.py" \
 python3 "$stack_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent" \
     ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
-python3 "$repo_root/src/agent_comms/native_package.py" --share-resources \
+PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package --share-resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
 if [[ "$update_pins" == true ]]; then
-    python3 "$repo_root/src/agent_comms/native_package.py" --write-manifest "$native_package"
+    PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package --write-manifest "$native_package"
     build_id=$(sha256sum "$manifest" | cut -c1-16)
     target="$stack_root/.pi-native-$build_id"
 fi
@@ -167,7 +167,7 @@ if ! verify "$stage"; then
     printf 'The built native tree differs from %s. If a source or the stock release\n' "$manifest" >&2
     printf 'changed on purpose, run %s --update-pins and commit the manifest.\n' "$0" >&2
     printf 'Built tree: %s (npm %s)\n' \
-        "$(python3 "$repo_root/src/agent_comms/native_package.py" --digest \
+        "$(PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package --digest \
             "$stage/node_modules/@earendil-works/pi-coding-agent")" "$(npm --version)" >&2
     exit 1
 fi

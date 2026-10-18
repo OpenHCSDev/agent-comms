@@ -92,7 +92,7 @@ def private_directory():
 @pytest.fixture
 def declared_native_package(tmp_path_factory, monkeypatch) -> Path:
     """This test's own pin and the package directory it names; nothing is prepared."""
-    from agent_comms import native_package
+    import agent_comms.native_package as native_package
 
     manifest = tmp_path_factory.mktemp("declared-stack") / native_package.MANIFEST.name
     manifest.write_text("# a test-owned pin\n")
@@ -187,12 +187,15 @@ def comms(root: Path) -> Comms:
 
 
 @pytest.fixture
-def commander(comms: Comms, tmp_path: Path):
+def commander(comms: Comms, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """A commander thread "lead" holding the owner request "request" and a unit "worker" holding an
-    ordinary goal, called as lead."""
+    ordinary goal, called as lead. GitHub lists no pull requests to its orders' progress."""
     from agent_comms.goal_actions import SetGoalAction
     from agent_comms.goals import RequestGoalOrder
+    from agent_comms.todos import PullRequests
     from agent_comms.tool_caller import ThreadCaller
+
+    monkeypatch.setattr(PullRequests, "read", lambda self, repo, state: ())
 
     for created, name in enumerate(("lead", "worker"), 1):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
@@ -261,7 +264,7 @@ def selected_model(monkeypatch, tmp_path):
     import shlex
     import sys
 
-    from agent_comms import native_pi
+    import agent_comms.native_pi as native_pi
     from agent_comms.native_arguments import NativeArguments, SelectedModel
     from native_backend_fixture import NativeBackendFixture
 

@@ -7,7 +7,9 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import calendar
 import re
+import subprocess
 import sqlite3
 import time
 import asyncio
@@ -16,9 +18,9 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar, Self
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
 from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -26,13 +28,22 @@ from .threads import Thread
 from .typed_table import Column, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
-from .goals import OrderCheck
+from .goals import OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
+from .storage_rules import StorageRule
+from .plan_phases import OrderPhase, UnplannedPhase
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    @property
+    def work(self) -> str:
+        return "delivered work"
 
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
@@ -61,13 +72,16 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     commit: str
 
     def __post_init__(self) -> None:
-        if any(not isinstance(sha, str) or not 7 <= len(sha) <= 40
-               or sha.strip("0123456789abcdef") for sha in (self.commit, self.delivered)):
-            raise ValueError("Delivery requires a checked and a delivered commit hash.")
+        GitCommitText.decode(self.commit)
+        GitCommitText.decode(self.delivered)
 
     @property
     def delivered(self) -> str:
         return self.commit
+
+    @property
+    def work(self) -> str:
+        return f"delivered commit {self.delivered}"
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -96,6 +110,10 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if base.strip() != head[2]:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
+        parents = await self.run(check, "git", "rev-list", "--parents", "-n", "1", self.delivered)
+        if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
+            raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
+                             "first pushed commit that answers the order.")
         pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
                                 "--list", "origin/*")
         if not pushed.strip():
@@ -110,6 +128,221 @@ class OperationDelivery(OrderDelivery):
 
     async def delivery_time(self, check):
         return EventTime.capture(time.time())
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    number: int
+    title: str
+    head: str
+    merge: str | None = None
+    merged_at: float | None = None
+    updated_at: float = 0.0
+
+    @classmethod
+    def listed(cls, number: str, title: str, head: str, merge: str, merged: str,
+               updated: str) -> Self:
+        """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
+        return cls(int(number), title, head, merge or None,
+                   _github_time(merged) if merged else None, _github_time(updated))
+
+    def names(self, problem: str) -> bool:
+        return re.search(rf"\b{re.escape(problem)}\b", self.title) is not None
+
+
+def _github_time(text: str) -> float:
+    return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
+
+
+class PullRequests:
+    """A repository's pull requests, read from GitHub once and shared by every order on a board."""
+
+    def __init__(self) -> None:
+        self._read: dict[tuple[str, str], tuple[PullRequest, ...]] = {}
+
+    def listed(self, repo: str, state: str) -> tuple[PullRequest, ...]:
+        if (repo, state) not in self._read:
+            self._read[repo, state] = self.read(repo, state)
+        return self._read[repo, state]
+
+    def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
+        listed = subprocess.run(
+            ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
+             "--json", "number,title,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
+             '.[] | [.number, .title, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
+             " .updatedAt] | @tsv"),
+            capture_output=True, text=True, timeout=60)
+        if listed.returncode:
+            raise ValueError(listed.stderr.strip() or f"gh pr list -R {repo} failed.")
+        return tuple(PullRequest.listed(*line.split("\t")) for line in listed.stdout.splitlines())
+
+
+def _clock(at: float) -> str:
+    return time.strftime("%H:%M", time.localtime(at))
+
+
+@dataclass(frozen=True)
+class ProgressSource:
+    """What an order's progress is read from: its unit's checkout and the repository's PRs."""
+    todo: Todo
+    checkout: Path
+    pulls: PullRequests
+
+    @property
+    def since(self) -> float:
+        return self.todo.order.at.recorded_at("An order")
+
+    def requests(self, state: str) -> list[PullRequest]:
+        """PRs naming the problem touched since the order; an older one served an earlier order."""
+        return [pr for pr in self.pulls.listed(self.todo.repo, state)
+                if pr.names(self.todo.id) and pr.updated_at >= self.since]
+
+    def commit(self, *excluded: str) -> tuple[str, float] | None:
+        """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
+        log = subprocess.run(
+            ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.since)}",
+             "--format=%H %ct", "HEAD", "--not", *excluded),
+            capture_output=True, text=True, timeout=30)
+        if log.returncode or not log.stdout.strip():
+            return None
+        sha, at = log.stdout.split()
+        return sha, float(at)
+
+
+@dataclass(frozen=True)
+class OrderProgress(DeclaredFamily, affix="Progress"):
+    """Where an order's work stands, derived on each read from its unit's checkout and PRs.
+
+    Never stored: the checkout and GitHub are its owners."""
+    strikes: ClassVar[bool] = True
+
+    @classmethod
+    def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
+        """The first found member by its declared precedence; with none found, no commit yet."""
+        owner = todo.holder
+        assert owner, "Only a held order has progress."
+        source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
+        members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
+        try:
+            found = (progress for member in members if (progress := member.found(source)))
+            return next(found, NoCommitProgress())
+        except (ValueError, subprocess.TimeoutExpired) as unread:
+            return UnreadProgress(str(unread))
+
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
+
+    def stalled(self, ordered: float, now: float) -> bool:
+        """Work stalls 15 minutes after ``moved`` with no commit, push or PR change."""
+        return self.moved is not None and now - self.moved > 900
+
+    @property
+    def moved(self) -> float | None:
+        return None
+
+
+@dataclass(frozen=True)
+class FoundProgress(OrderProgress):
+    """A state read finds in the checkout or on GitHub; the lowest ``precedence`` found wins."""
+    precedence: ClassVar[int]
+
+    @classmethod
+    @abstractmethod
+    def found(cls, source: ProgressSource) -> Self | None: ...
+
+
+@dataclass(frozen=True)
+class NoCommitProgress(OrderProgress):
+    @property
+    def line(self) -> str:
+        return "no commit since the order"
+
+    def stalled(self, ordered: float, now: float) -> bool:
+        """No first commit within 10 minutes of the order."""
+        return now - ordered > 600
+
+
+@dataclass(frozen=True)
+class UnreadProgress(OrderProgress):
+    reason: str
+
+    @property
+    def line(self) -> str:
+        return f"progress unread: {self.reason}"
+
+
+@dataclass(frozen=True)
+class CommittedProgress(FoundProgress):
+    precedence: ClassVar[int] = 3
+    sha: str
+    at: float
+
+    @property
+    def moved(self) -> float | None:
+        return self.at
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        commit = source.commit("--remotes")
+        return None if commit is None else cls(commit[0][:9], commit[1])
+
+    @property
+    def line(self) -> str:
+        return f"committed {self.sha} at {_clock(self.at)}, not pushed"
+
+
+@dataclass(frozen=True)
+class PushedProgress(CommittedProgress):
+    """Pushed past the default branch, with no PR naming the order yet."""
+    precedence: ClassVar[int] = 4
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        commit = source.commit("origin/HEAD")
+        return None if commit is None else cls(commit[0][:9], commit[1])
+
+    @property
+    def line(self) -> str:
+        return f"pushed {self.sha} at {_clock(self.at)}, no PR"
+
+
+@dataclass(frozen=True)
+class OpenPrProgress(FoundProgress):
+    precedence: ClassVar[int] = 2
+    number: int
+    head: str
+    at: float
+
+    @property
+    def moved(self) -> float | None:
+        return self.at
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        return next((cls(pr.number, pr.head[:9], pr.updated_at)
+                     for pr in source.requests("open")), None)
+
+    @property
+    def line(self) -> str:
+        return f"PR #{self.number} open at {self.head}"
+
+
+@dataclass(frozen=True)
+class MergedProgress(FoundProgress):
+    """Merged work is done; its deadline no longer draws a strike."""
+    precedence: ClassVar[int] = 1
+    strikes: ClassVar[bool] = False
+    sha: str
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        return next((cls(pr.merge[:9]) for pr in source.requests("merged")
+                     if pr.merge and (pr.merged_at or 0) >= source.since), None)
+
+    @property
+    def line(self) -> str:
+        return f"merged as {self.sha}, record done"
 
 
 @dataclass(frozen=True)
@@ -160,7 +393,8 @@ class NotifiedFirstCallEvent(FirstCallEvent):
         return current.notify()
 
 
-class OrderWords(str):
+@dataclass(frozen=True)
+class OrderWords(WireValue):
     """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
     CITED: ClassVar[re.Pattern] = re.compile(
@@ -168,11 +402,25 @@ class OrderWords(str):
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
     least_words: ClassVar[int] = 1
+    text: str
 
-    def __new__(cls, text: str):
-        if refused := cls.refused(text):
+    def __post_init__(self) -> None:
+        if refused := self.refused(self.text):
             raise ValueError(refused)
-        return super().__new__(cls, text)
+
+    def to_wire(self) -> str:
+        return self.text
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        if not isinstance(data, str):
+            raise MalformedRecord(f"Expected {cls.__name__}, received {type(data).__name__}")
+        with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
+            return cls(data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(str)
 
     @classmethod
     def refused(cls, text: str) -> str | None:
@@ -198,10 +446,19 @@ class PlainText(OrderWords):
 
 
 class StrikeReason(PlainText):
-    """What a unit did, plainly, in enough words to stand on the public record."""
+    """What a unit did, plainly, in enough words to stand on the public record. A unit's
+    wording is answered by a correction, never a strike: a reason whose every quoted span
+    is jargon is about wording alone."""
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+    @classmethod
+    def refused(cls, text: str) -> str | None:
+        cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
+        if cited and all(PlainText.found(span) for span in cited):
+            return f"{cited} is the unit's wording; send it a correction, not a strike."
+        return super().refused(text)
 
 
 class OrderText(OrderWords):
@@ -300,6 +557,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -314,7 +572,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
 
-    def copy_as(self, kind, **evidence):
+    def require_transfer(self, todo: Todo) -> None:
+        raise ValueError("Only an undelivered order can change owner.")
+
+    def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
     def instructions(self, todo):
@@ -336,22 +597,40 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return replace(self, check=correction.check,
                        check_corrections=(*self.check_corrections, correction))
 
-    def installed(self, works, artifact):
+    def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
+
+    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
+        raise ValueError("Only an undelivered order can be withdrawn.")
+
+    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
+        """How this order retired its problem without delivery, as the record and board say."""
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
 
+    def require_transfer(self, todo: Todo) -> None:
+        pass
+
+    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
+        return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
+                            superseded_by=superseded_by)
+
 
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+
+    def require_transfer(self, todo: Todo) -> None:
+        owner = (todo.assignment or todo.released[-1].previous).owner
+        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -382,6 +661,21 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
     def require_close(self):
         pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class WithdrawnProblemOrder(ProblemOrder):
+    """An order the commander sent in error and retired before delivery; it strikes no one."""
+
+    previous: Assignment
+    why: str
+    superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
+    pending: ClassVar[bool] = False
+
+    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
+        superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
+        return (f"{todo.id}: order {self.id} withdrawn from {self.previous.owner}, "
+                f"no strike: {self.why}{superseded}",)
 
 
 @dataclass(frozen=True)
@@ -487,6 +781,9 @@ class Assignment:
     def successor(self, proposed: Assignment, current: Todo) -> Assignment:
         if self.generation == proposed.generation:
             raise TodoConflict(current)
+        return self.handed_to(proposed)
+
+    def handed_to(self, proposed: Assignment) -> Assignment:
         previous = self.previous_owners
         if self.owner_identity != proposed.owner_identity:
             previous = (*previous, self.owner_identity)
@@ -556,6 +853,10 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def prepare(self, goals, current):
         return self
 
+    def record(self, goals: Goals, problem: str) -> Todo:
+        """Write this operation; one that also revises the holder's Goal routes through it."""
+        return goals.apply_problem(problem, self)
+
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
@@ -599,6 +900,54 @@ class StrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class OrderVerdict(TodoOperation, declared_name=None):
+    """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+    actor: ThreadIncarnation
+    previous: Assignment
+    tool_call_id: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
+
+    @abstractmethod
+    def judged(self, current: Todo) -> Todo: ...
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        _text(self.tool_call_id, "Judged tool call ID", 200)
+        judged = self.judged(current)
+        return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class AcceptedVerdict(OrderVerdict):
+    """The tool call carries out the order clause it quotes."""
+    quote: str
+
+    def judged(self, current: Todo) -> Todo:
+        quoted = " ".join(self.quote.split())
+        order = " ".join(current.order.instructions(current).split())
+        if len(quoted.split()) < 4 or quoted not in order:
+            raise ValueError("Quote 4+ words of the order this tool call carries out.")
+        return current
+
+
+@dataclass(frozen=True)
+class SendBackVerdict(OrderVerdict):
+    """The tool call goes back; the same write strikes the holder and revises the order Goal."""
+    reason: StrikeReason
+
+    def judged(self, current: Todo) -> Todo:
+        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
+                            self.at)
+        struck: Todo = strike.apply(current)
+        return struck
+
+    def record(self, goals: Goals, problem: str) -> Todo:
+        return goals.send_back(problem, self)
+
+
+@dataclass(frozen=True)
 class VoidStrikeTodo(TodoOperation):
     """The commander takes back a strike recorded in error; the strike stays on the record."""
     actor: ThreadIncarnation
@@ -617,6 +966,22 @@ class VoidStrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class ReleaseTodo(TodoOperation):
+    """The commander takes an open problem off its unit; the order and its strikes stay."""
+    actor: ThreadIncarnation
+    previous: Assignment
+    reason: StrikeReason
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        return replace(current, assignment=None, released=(*current.released, self),
+                       revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class CorrectCheckTodo(TodoOperation):
     """The commander replaces a wrong check of an open order.
 
@@ -632,6 +997,19 @@ class CorrectCheckTodo(TodoOperation):
         current.require_commander(self.actor)
         _text(self.reason, "Check correction reason", 2000)
         return replace(current, order=current.order.corrected(self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class ServeTodo(TodoOperation):
+    """The commander names the plan phase an open order serves; it keeps its id and holder."""
+    actor: ThreadIncarnation
+    serves: type[OrderPhase]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        return replace(current, order=replace(current.order, serves=self.serves),
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -676,19 +1054,43 @@ class DeliverTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class InstallTodo(TodoOperation):
+class CloseOrderTodo(TodoOperation, declared_name=None):
+    """The commander records the order's terminal state and closes its problem in one revision."""
     actor: ThreadIncarnation
-    works: str
-    artifact: str
+
+    @abstractmethod
+    def closed(self, current: Todo) -> ProblemOrder: ...
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        closed = replace(current, order=self.closed(current))
+        return DoneTodoState.decide(closed, ChangeTodoState(
+            current.revision, DoneTodoState, self.actor, current.assignment.generation))
+
+
+@dataclass(frozen=True)
+class InstallTodo(CloseOrderTodo):
+    works: str
+    artifact: str
+
+    def closed(self, current: Todo) -> ProblemOrder:
         if not Path(self.artifact).is_file():
             raise ValueError("Retain the installed application artifact before closing.")
-        installed = replace(current, order=current.order.installed(self.works, self.artifact))
-        return DoneTodoState.decide(installed, ChangeTodoState(
-            current.revision, DoneTodoState, self.actor, current.assignment.generation))
+        return current.order.installed(self.works, self.artifact)
+
+
+@dataclass(frozen=True)
+class WithdrawTodo(CloseOrderTodo):
+    """An undelivered order sent in error leaves its problem with its reason and no strike."""
+    previous: Assignment
+    why: str
+    superseded_by: str | None = None
+
+    def closed(self, current: Todo) -> ProblemOrder:
+        current.require_assignment(self.previous)
+        _text(self.why, "Withdrawal reason", 2000)
+        return current.order.withdrawn(self.previous, self.why, self.superseded_by)
 
 
 @dataclass(frozen=True)
@@ -722,6 +1124,8 @@ class Todo(TypedTable):
     strikes: tuple[StrikeTodo, ...] = ()
     hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
+    released: tuple[ReleaseTodo, ...] = ()
+    verdicts: tuple[OrderVerdict, ...] = ()
 
     @property
     def pending(self):
@@ -732,6 +1136,11 @@ class Todo(TypedTable):
         return RecordedThreadIncarnation(self.creator, self.creator_created)
 
     @property
+    def holder(self) -> str | None:
+        """The unit holding this problem; None once it is closed or released."""
+        return None if self.assignment is None else self.assignment.owner
+
+    @property
     def strike_count(self) -> int:
         return 0 if self.assignment is None else len(self.live_strikes(self.assignment.owner))
 
@@ -740,6 +1149,18 @@ class Todo(TypedTable):
         taken_back = tuple(void.strike for void in self.voided)
         return tuple(recorded for recorded in self.strikes
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
+
+    def struck_on_order(self, unit: str) -> bool:
+        """A live strike on ``unit`` recorded since the current order was sent; a send-back that
+        replaces this order is that same miss, so it counts no second strike."""
+        sent = self.order.at.recorded_at("An order")
+        return any(recorded.at.recorded_at("A strike") >= sent
+                   for recorded in self.live_strikes(unit))
+
+    def struck_out(self, unit: str) -> bool:
+        """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
+        orders reach it."""
+        return len(self.live_strikes(unit)) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
         if self != result:
@@ -760,9 +1181,12 @@ class Todo(TypedTable):
     def proposed_assignment(self, proposed: Assignment) -> Assignment:
         if self.assignment is not None:
             return replace(proposed, previous_owners=self.assignment.previous_owners)
+        if self.released:  # the released owner joins the next owner's history
+            return self.released[-1].previous.handed_to(proposed)
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+        self.order.require_transfer(self)
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
@@ -876,6 +1300,12 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
+    def holds_pending(self, owner: ThreadIncarnation) -> bool:
+        """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
+        return any(todo.pending for todo in self._select(
+            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
+            (owner.name, owner.wire_birth)))
+
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """The orders serving one request: a Goal on the commander's thread."""
         return self._select(
@@ -934,6 +1364,22 @@ class TodoStore(TypedStore):
                 return current
             result.upsert(db)
             return self._current(db, todo_id)
+
+    def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
+        """Release every open problem the unit holds from this commander in one write; each
+        records the same reason, and its order and strikes stay."""
+        with self.writing() as db:
+            held = tuple((todo, assignment) for todo in self._rows(
+                db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
+                (unit, actor.name, actor.wire_birth))
+                if todo.state.open and (assignment := todo.assignment))
+            if not held:
+                raise TodoError(f"{unit} holds no open problem.")
+            released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)
+                             for todo, assignment in held)
+            for todo in released:
+                todo.upsert(db)
+            return released
 
     def assign(
         self,

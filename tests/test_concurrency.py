@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 
-from agent_comms import store_files
+import agent_comms.store_files as store_files
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation

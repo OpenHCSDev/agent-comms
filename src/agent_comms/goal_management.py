@@ -10,7 +10,8 @@ from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
+from .goal_actions import (GoalAction, GoalActionContext, GoalPrecondition, RuntimeInvocable,
+                           SentBackOrderGoalAction)
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
@@ -32,7 +33,7 @@ from .threads import Thread
 from .input_attempt import ReservedInput, UnresolvedInput
 from .input_disposition import DeliveryOverview, InputDispositions
 from .turn_lease import FinishedTurnFence
-from .todos import TodoStore
+from .todos import SendBackVerdict, StrikeReason, Todo, TodoOperation, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -56,9 +57,26 @@ class Goals:
         actor = self.registry.require(commander).incarnation
         current = self.todos.get(problem)
         current.require_commander(actor)
-        prepared = operation.prepare(self, current)
+        return operation.prepare(self, current).record(self, problem)
+
+    def apply_problem(self, problem: str, operation: TodoOperation) -> Todo:
         with _store_lock(self._wire_lock_path):
-            return self.todos.apply(problem, prepared)
+            applied: Todo = self.todos.apply(problem, operation)
+            return applied
+
+    def send_back(self, problem: str, verdict: SendBackVerdict) -> Todo:
+        """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
+        holder = verdict.previous
+        self.update_goal(holder.owner, SentBackOrderGoalAction(
+            expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
+        sent_back: Todo = self.todos.get(problem)
+        return sent_back
+
+    def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
+        actor = self.registry.require(commander).incarnation
+        store: TodoStore = self.todos
+        with _store_lock(self._wire_lock_path):
+            return store.fire(unit, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

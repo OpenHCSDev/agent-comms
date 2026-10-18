@@ -27,7 +27,7 @@ from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
-from .todos import DeliverTodo, GoalRef, PendingProblemOrder, Todo
+from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
     from .goal_presentation import GoalSnapshot
@@ -260,8 +260,8 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             sequence = pending.sequence
             raise ValueError(
                 f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                f"Call comms_inbox with goal_id={goal.id!r} and "
-                f"wait_for={list(self.wait_for)!r}. Inspect standby_review.messages, then "
+                f"Call comms_inbox with standby={{'goal_id': {goal.id!r}, "
+                f"'wait_for': {list(self.wait_for)!r}}}. Inspect standby_review.messages, then "
                 "pass only standby_review.reviewed_inputs to comms_goal to wait "
                 "for a later reply. Do not pass excluded owner or other dependency inputs. "
                 "This does not mark them STARTED or replay them."
@@ -343,10 +343,13 @@ class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, 
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliveredOrderGoalAction(GoalAction, RuntimeInvocable):
+class HeldOrderGoalAction(GoalAction, RuntimeInvocable):
+    """A Todo operation on a held order and the revision of the holder's Goal, in one write."""
     problem: str
-    operation: DeliverTodo
-    progress: str = ""
+    operation: TodoOperation
+
+    @abstractmethod
+    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal: ...
 
     def prepare(self, goals, name, actor):
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
@@ -360,9 +363,25 @@ class DeliveredOrderGoalAction(GoalAction, RuntimeInvocable):
     def change(self, ctx):
         ctx.goals.todos.apply(self.problem, self.operation)
         goal = ctx.require_goal()
-        pending = any(todo.pending for todo in ctx.goals.todos.for_goal(ctx.thread.incarnation, goal.id))
-        return replace(goal, state=goal.state.after_order_delivery(pending),
-                       progress=self.progress, revision=goal.revision + 1)
+        return replace(self.revised(goal, ctx), revision=goal.revision + 1)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredOrderGoalAction(HeldOrderGoalAction):
+    operation: DeliverTodo
+    progress: str = ""
+
+    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
+        return replace(goal, state=goal.state.after_order_delivery(pending), progress=self.progress)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SentBackOrderGoalAction(HeldOrderGoalAction):
+    operation: SendBackVerdict
+
+    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+        return replace(goal, progress=f"Sent back on {self.problem}: {self.operation.reason.text}")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -452,7 +471,8 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        """The order joins the unit's live Goal or starts one; its Todo names the request served."""
+        """The order joins the unit's live Goal or starts one; its Todo names the request served.
+        Every refusal comes before the Todo is reserved, so a refused send writes nothing."""
         commander = ctx.goals.registry.require(self.commander)
         commander.require_active_goal(self.request).order.require_request()
         self.deadline.require_deadline()
@@ -461,11 +481,11 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
         request = GoalRef(commander.name, commander.created_at, self.request)
         current = ctx.thread.goal
         if current is not None and not current.state.terminal:
-            self.reserve(ctx, current.id, request)
-            return replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
-        fresh = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder())
-        self.reserve(ctx, fresh.goal_id, request)
-        return fresh.change(ctx)
+            goal = replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
+        else:
+            goal = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder()).change(ctx)
+        self.reserve(ctx, goal.id, request)
+        return goal
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -58,7 +58,9 @@ def test_seal_follows_owned_descendants_and_every_mechanism_in_multiple_inherita
 
 
 def test_tracked_native_cannot_fork_child_reader_or_claim_authorities():
-    from agent_comms import backend, tracked_turn, turn_watchdog
+    import agent_comms.backend as backend
+    import agent_comms.tracked_turn as tracked_turn
+    import agent_comms.turn_watchdog as turn_watchdog
 
     tree = ast.parse(Path(tracked_turn.__file__).read_text())
     forbidden = {"AttachedChild", "PiRpcChannel", "PendingAttestation"}

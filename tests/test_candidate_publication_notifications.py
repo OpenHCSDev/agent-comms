@@ -10,7 +10,8 @@ import threading
 import pytest
 
 from agent_comms.bus_publication import AgentOrigin
-from agent_comms import candidate_maintenance, selected_claim
+import agent_comms.candidate_maintenance as candidate_maintenance
+import agent_comms.selected_claim as selected_claim
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import (
     prepare_fenced_response, publish_fenced_response, resolve_existing_response,

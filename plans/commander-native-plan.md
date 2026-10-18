@@ -61,6 +61,7 @@
 | 30 | A proof is bound to the build it ran on | none (screenshots and logs are bare file paths) | the run record written by the build check (`tools/build_runtime.py`) carries runtime ID and Core/Toad revisions; `CommsProblemCloseTool` refuses when that runtime does not contain the order's delivered commit | 3 |
 | 31 | An order states its intent as a deletion target | none (orders name a line, so units fix the line: P520 swapped `is_set()` for `except ValueError` around every caller) | the order declares the decision family being deleted, its owner, and a family-wide count from the existing NRA/refactor-audit scanners; completion runs that count on the delivered commit and refuses unless it is zero with no new site of the same kind | 3 |
 | 32 | Where units' time goes, classified | none (`activity.log` has call times but no durations or turn boundaries) | Core's turn records carry each call's start and end and each turn's start reason; `UnitTime` derives per unit and fleet the minutes in model, tool runs (build, check, test, shell), waiting on another owner, waiting on the commander, and idle; the commander marks each large wait necessary or self-inflicted | 6, 7 |
+| 33 | Order progress beside its deadline; the unit never sees a due time | `order.py board`, `overdue`, `due`, `send`; `rotate.py` (before: a due time and "Delivered" only, so merged work drew the strike threat) | `OrderProgress` in Core (`todos.py`), derived on read from the unit's checkout and the repository's PRs, never stored: no commit, committed not pushed, pushed with no PR, open PR, merged; `CommsTodoListTool` returns it per held order. Merged work draws no strike; no first commit within 10 minutes, or no new commit, push or PR change for 15 minutes, is a STALL with the progress line. `CommsOrderTool` sends the unit no due time: the deadline stays the commander's fire line | 1, 7 |
 
 **Dropped deliberately:** old verdicts and `edits.jsonl`. They judged copies of tool calls, and any old call can be judged again from the transcripts.
 
@@ -203,18 +204,4 @@ Toad is a view of Core, so the commander's page is one more view over Core's ans
 
 ## Order and dependencies
 
-| Phase | Depends on |
-|---|---|
-| step zero: stop the split | none |
-| 0 retained-store conversion | none |
-| 1 one owner for orders | none (uses tools that exist) |
-| 2 design reconciled | 1 |
-| 3 record plane | 0 |
-| 4 review queue | 3 |
-| 5 story | 4 |
-| 6 commander page in Toad | 5 (its alarms pane fills with 7) |
-| 7 control plane | 3 (standing rules read orders and strikes) |
-| 8 cutover | 4, 5, 6, 7 and the parity gate |
-| 9 skill | 8 |
-
-Step zero is done today. Phases 0 and 1 can start at once and run in parallel. Phase 1 matters most: it ends the duplicate ownership of orders that exists on `main` today.
+The phases and what each waits for are declared once, in `src/agent_comms/plan_phases.py` (the `PlanPhase` family). An order names the phase it serves with a `Serves: <phase>` line, stored as `ProblemOrder.serves`; a phase is done when every order serving it is closed. Each rotation prints `PLAN IDLE` for every phase whose dependencies are done and that has no open order (`PlanIdle` in `src/agent_comms/standing_rules.py`).

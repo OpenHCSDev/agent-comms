@@ -47,7 +47,8 @@ class ThreadStatusModel:
         return replace(self, presentation=delivery.presentation(self.presentation))
 
     def disconnected(self, status: SessionDisconnected) -> ThreadStatusModel:
-        return ThreadStatusModel.known(self.name, status.over(self.presentation))
+        return self.status.with_disconnection(
+            self, lambda: ThreadStatusModel.known(self.name, status.over(self.presentation)))
 
     @classmethod
     def known(cls, name: str, presentation: ThreadPresentation | None) -> ThreadStatusModel:

@@ -18,11 +18,10 @@ from contextlib import AbstractAsyncContextManager, asynccontextmanager, context
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
-from uuid import uuid4
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .lifecycle import LifecycleState
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
@@ -32,6 +31,10 @@ from .store_files import (
     _store_lock,
     store_lock_path,
 )
+
+
+class MaintenanceHeldError(RelationViolationError):
+    """The bus is in maintenance: its readers close and wait for READY."""
 
 
 class HeldSends:
@@ -45,7 +48,7 @@ class HeldSends:
 
     @staticmethod
     def require_open():
-        raise RelationViolationError("Maintenance ingress requires READY")
+        raise MaintenanceHeldError("Maintenance ingress requires READY")
 
 
 class GrantedSends:
@@ -131,7 +134,7 @@ class MaintenanceOperator:
             raise ValueError('Maintenance operator must have bounded identity')
 
 
-class MaintenanceOperatorText(TextRepresentation):
+class MaintenanceOperatorText(TextRepresentation[MaintenanceOperator]):
     @classmethod
     def from_text(cls, value: str) -> MaintenanceOperator:
         return MaintenanceOperator(value)
@@ -163,8 +166,7 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
 
     def __post_init__(self):
         super().__post_init__()
-        if len(self.nonce) != 32:
-            raise ValueError("Maintenance requires a nonce")
+        Id128Text.decode(self.nonce)
 
     def require_marker(self, marker: MaintenanceMarker, root: Path) -> MaintenanceState:
         if (
@@ -291,7 +293,7 @@ class MaintenanceBarrier(MaintenanceIngress):
                 raise RelationViolationError('Maintenance already active or uncertain')
             hold = MaintenanceState(version=1, root=str(self.registry_path.parent.resolve()),
                                     generation=current.generation + 1, operator=operator,
-                                    nonce=uuid4().hex, phase=DrainingPhase)
+                                    nonce=Id128Text.mint(), phase=DrainingPhase)
             self._write_unlocked(hold)
             return hold
 
@@ -299,7 +301,7 @@ class MaintenanceBarrier(MaintenanceIngress):
                           phase: type[MaintenancePhase]) -> MaintenanceState:
         if self.current_unlocked() != expected:
             raise RelationViolationError('Maintenance generation/operator changed')
-        hold = expected.successor(phase, uuid4().hex)
+        hold = expected.successor(phase, Id128Text.mint())
         self._write_unlocked(hold)
         return hold
 

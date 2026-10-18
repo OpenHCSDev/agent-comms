@@ -11,7 +11,8 @@ Sending to the unit that already holds the problem replaces its order; without -
 Incompetence is not tolerated: a unit is fired from a task, not berated about it.
 Two strikes on one task: the task is taken away and reassigned (`fire`). A strike recorded in
 error is voided with `unstrike`, never deleted: it stays readable beside its void and stops
-counting. Nothing here judges code; it refuses orders that leave a unit room to interpret,
+counting. An order sent in error is retired with `withdraw`: its problem closes with no strike.
+Nothing here judges code; it refuses orders that leave a unit room to interpret,
 and refuses to let a deadline lapse silently.
 """
 import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
@@ -26,16 +27,19 @@ from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..goals import CountCheckResult, OrderCheck
+from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
+from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
-                     CommsTodoCreateTool, CommsTodoTool)
+from ..tools import (CommsFireTool, CommsOrderCheckTool,
+                     CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
+                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, StrikeTodo, VoidStrikeTodo)
-from . import capacity, rules, storage
+                     RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
+                     WithdrawTodo, AssignTodo, OrderProgress, Todo)
+from . import capacity, rules
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -76,8 +80,14 @@ def todos():
 
 
 def open_todos(unit=None):
-    """Problems not yet closed, optionally only those assigned to one unit."""
-    return [t for t in todos() if t.state.open and unit in (None, t.assignment.owner)]
+    """Problems not yet closed and held by a unit, optionally only those held by one unit."""
+    return [t for t in todos() if t.state.open and t.holder and unit in (None, t.holder)]
+
+
+def progress() -> dict[str, OrderProgress]:
+    """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
+    listed: TodoList = call(CommsTodoListTool())
+    return listed.progress
 
 
 def struck(todo, unit):
@@ -214,6 +224,11 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
     except ValueError as refused:
         problems.append(str(refused))
+    serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
+    try:
+        phase = OrderPhase.decode(serves[1] if serves else UnplannedPhase.declared_name)
+    except ValueError as refused:
+        problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -229,7 +244,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
     owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
     check = (line := re.search(r'(?m)^Check:(.*)$', body)) and OrderCheck.parse(line[1])
-    listed = {t.id: t for t in open_todos()}
+    listed = {t.id: t for t in todos() if t.state.open}
     if not group:
         problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
     elif not new and (missing := [pid for pid in group if pid not in listed]):
@@ -260,13 +275,24 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for path, line in re.findall(r'(?<![\w.])(/\S+?\.\w+):(\d+)', body):
         if not os.path.exists(path) or int(line) > sum(1 for _ in open(path, errors='replace')):
             problems.append(f'cited {path}:{line} does not exist; read the code before citing it')
+    # A module deleted here can still be imported by another repo:
+    # P12 deleted acp_ingress.py, which Toad imports.
+    deleted = {stem for edit in edits
+               for stem in re.findall(r'(?i)\bdelete\s+`?(?:\S*/)?(\w+)\.py\b', edit)}
+    if check and deleted and (unread := importers(deleted, check)):
+        problems.append(f'the order deletes {sorted(deleted)}, which {unread} import; '
+                        'the check must also count their `from agent_comms` imports')
+    if any(re.search(r'(?<![\w/])tools/', edit) for edit in edits) and not all(
+            said in body for said in ('--root tools', '--root src')):
+        problems.append('the order changes tools/: say "ratchet with --root tools and with '
+                        '--root src, each as its own command"')
     # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
-    holders = sorted({listed[pid].assignment.owner for pid in group if pid in listed} - {unit})
-    replaces = not new and all(pid in listed and listed[pid].assignment.owner == unit for pid in group)
+    holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
+    replaces = not new and all(pid in listed and listed[pid].holder == unit for pid in group)
     try:
         trace = FileLine.from_wire(traced) if traced is not None else None
         for pid in group:
-            if pid in listed:
+            if pid in listed and listed[pid].assignment:
                 listed[pid].assignment.require_trace(unit, trace)
     except ValueError as refused:
         problems.append(str(refused))
@@ -276,17 +302,23 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
     if problems:
         sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + storage.RULE.replace('<you>', unit) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.' + f'\nDue {due} {time.strftime("%Z")}. Miss it and the task is reassigned.')
+    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + COMMS.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in CONFIG.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+               + '\nStart now and push as you go.')  # a unit shown a due time takes until then
     taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
-    if not mechanical and (fired := [pid for pid in group if pid in listed and struck(listed[pid], unit) >= 2]):
-        sys.exit(f'Refused: {unit} has 2 strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
+    fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
+    if not mechanical and fired:
+        sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
+                 f'Reassign them; only --mechanical orders on them reach {unit}.')
+    # A miss already struck on the order this replaces is one miss:
+    # the send-back records no second strike.
+    struck_already = replaces and listed[group[0]].struck_on_order(unit)
     at = time.time()
     try:
         order = PendingProblemOrder(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
-            report=report[1], run=run,
+            report=report[1], run=run, serves=phase,
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
@@ -301,11 +333,25 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for other, text in taken.items():
         post([other], text)
     print(order.id)
-    if replaces and not clean:
+    if replaces and not clean and struck_already:
+        print(f'{unit} already struck on this order of {group[0]}; '
+              'the send-back counts that one miss once')
+    elif replaces and not clean:
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
         strike(unit, f'sent back on {group[0]}: {verdict}')
+
+
+def importers(modules: set[str], check: OrderCheck) -> list[str]:
+    """The other configured repos whose `from agent_comms` imports name a module, unless the
+    check reads them."""
+    pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
+    return [str(repo.checkout) for repo in CONFIG.repos
+            if repo.checkout != Path(check.directory).resolve()
+            and str(repo.checkout) not in check.command
+            and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
+                                str(repo.checkout / repo.source)]).returncode == 0]
 
 
 def correct_check(pid: str, line: str, why: str) -> None:
@@ -382,12 +428,20 @@ def last_activity(unit):
 def board():
     lines = ['# Fleet board', '',
              "GENERATED by agent-comms-commander order from Core's Todo store. Do not edit by hand:",
-             '`order problem` adds a row, `order send ... Problem: P<n>` orders it, `order close` removes it.', '',
-             '| Problem | Owner file | Owner | Order | Due | Delivered | Owner last acted |', '|---|---|---|---|---|---|---|']
-    for t in sorted(open_todos(), key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
-        unit = t.assignment.owner
-        lines.append(f'| {t.id}: {t.text} | {t.order.owner.to_wire()} | {unit} | {t.order.id} | {hhmm(t.deadline)} | '
-                     f'{"no" if t.pending else "yes, install pending"} | {last_activity(unit) or "-"} |')
+             '`order problem` adds a row, `order send ... Problem: P<n>` orders it, `order close` or `order withdraw` removes it.', '',
+             '| Problem | Owner file | Owner | Order | Due | Progress | Delivered '
+             '| Owner last acted |',
+             '|---|---|---|---|---|---|---|---|']
+    listed, read = (t for t in todos() if t.state.open), progress()
+    for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
+        unit, last = t.holder, t.released[-1:]
+        owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
+        lines.append(f'| {t.id}: {t.text} | {t.order.owner.to_wire()} | {owner} | {t.order.id} | '
+                     f'{hhmm(t.deadline)} | {read[t.id].line if t.id in read else "-"} | '
+                     f'{"no" if t.pending else "yes, install pending"} | '
+                     f'{unit and last_activity(unit) or "-"} |')
+    lines += ['', '## Withdrawn orders', '',
+              *(f'- {line}' for t in todos() for line in t.order.withdrawals(t))]
     open(BOARD, 'w').write('\n'.join(lines) + '\n')
 
 
@@ -563,21 +617,28 @@ def replied(unit, since):
     return f'; REPLIED {at} [{latest["id"]}]: {" ".join(str(latest.get("text")).split())[:160]} -- read it before pushing'
 
 
+def deadline_lines(held: list[Todo]) -> list[str]:
+    """Late units under OVERDUE with their progress; progress drawing no strike prints its own line.
+
+    An open order whose work stopped moving prints STALL with its progress line, whatever is due."""
+    now = time.time()
+    pending = [t for t in held if t.pending]
+    past = [t for t in pending if t.deadline.recorded_at('An order deadline') < now]
+    read = progress() if pending else {}
+    late = [f'{t.holder} (due {hhmm(t.deadline)}, order {t.order.id}, {read[t.id].line}'
+            f'{replied(t.holder, t.order.at.recorded_at("An order"))})'
+            for t in past if read[t.id].strikes]
+    stalled = [f'STALL {t.id} {t.holder}: {read[t.id].line} -> push it now or reassign'
+               for t in pending if read[t.id].stalled(t.order.at.recorded_at('An order'), now)]
+    passed = [f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {read[t.id].line}'
+              for t in past if not read[t.id].strikes]
+    alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
+             'missed = order strike, 2 strikes = fire')
+    return [alarm] * bool(late) + stalled + passed
+
+
 def overdue():
-    checked = 0
     while True:
-        if time.time() - checked > 300:
-            checked = time.time()
-            if storage.free_gb() < storage.CLEANUP_GB:
-                print(f'DISK LOW: {CONFIG.disk} has {storage.free_gb():.1f} GB free (cleanup due under {storage.CLEANUP_GB} GB) -> put a cleanup owner on it now', flush=True)
-            heavy = []
-            for unit in sorted({t.assignment.owner for t in open_todos()}):
-                try:
-                    COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
-                except SelectedToolDenied as quota:
-                    heavy.append(f'{unit}: {quota}')
-            if heavy:
-                print('VIOLATION storage quota: ' + '; '.join(heavy) + ' -> order the cleanup', flush=True)
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
@@ -586,11 +647,8 @@ def overdue():
                  if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
         if stale:
             print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
-        late = [f'{t.assignment.owner} (due {hhmm(t.deadline)}, order {t.order.id}{replied(t.assignment.owner, t.order.at.at)})'
-                for t in held if t.pending and t.deadline.at < time.time()]
-        if late:
-            print('OVERDUE: ' + ', '.join(late) + ' -> read the diff now; missed = order strike, 2 strikes = fire',
-                  flush=True)
+        for line in deadline_lines(held):
+            print(line, flush=True)
         # Units leave finished PRs open and wander off. An open PR naming an ordered problem that
         # nobody has touched for 5 minutes is a stall, whatever the unit says it is doing.
         ordered = {t.id: (t.assignment.owner, t.order.at.at, t.deadline.at) for t in held if t.pending}
@@ -680,6 +738,49 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
     print(f'{unit}: {n} strike(s) on {task}')
 
 
+def due(pid: str, at: str, why: str) -> None:
+    """Core moves a held order's deadline, its assignment unchanged; the reason goes on record."""
+    todo = COMMS.goals.todos.get(pid)
+    if not todo.pending:
+        sys.exit(f'Refused: {pid} holds no pending order whose deadline could move.')
+    if len(why.split()) < 8:
+        sys.exit('Refused: --why says why the deadline moves (8+ words)')
+    refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
+    moved = deadline(at)
+    call(CommsTodoTool(id=pid, operation=AssignTodo(
+        todo.revision, todo.assignment, moved, todo.order, todo.goal)))
+    on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} ({pid} order {todo.order.id} due '
+              f'{hhmm(todo.deadline)} moved to {hhmm(moved)}): {why}', 'Deadline')
+    print(f'{pid}: due {hhmm(moved)}')
+
+
+def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
+    """Core retires an undelivered order sent in error.
+
+    The reason goes on the public record and to the unit that held it."""
+    todo = COMMS.goals.todos.get(pid)
+    refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
+    call(CommsTodoTool(id=pid, operation=WithdrawTodo(
+        todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, why,
+        superseded_by)))
+    withdrawal, = COMMS.goals.todos.get(pid).order.withdrawals(todo)
+    on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal')
+    post([todo.assignment.owner],
+         f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
+    board()
+    print(withdrawal)
+
+
+def fire(unit: str, why: str) -> None:
+    """Core releases every open problem the unit holds in one call; orders and strikes stay."""
+    try:
+        reason = StrikeReason(why)
+    except ValueError as refused:
+        sys.exit(f'Refused: {refused}')
+    for todo in call(CommsFireTool(unit=unit, reason=reason)).todos:
+        print(f'{todo.id}: released from {unit}: {why}')
+
+
 class LoadedVerb(RuledVerb):
     """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
 
@@ -723,6 +824,16 @@ class StrikeVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class FireVerb(OrderVerb, RuledVerb):
+    help = "take every open problem off a unit; their orders and strikes stay"
+    unit: str = option("unit")
+    why: str = option("--why")
+
+    def run(self) -> None:
+        fire(self.unit, self.why)
+
+
+@dataclass(frozen=True, kw_only=True)
 class UnstrikeVerb(OrderVerb, RuledVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
     pid: str = option("pid")
@@ -732,6 +843,29 @@ class UnstrikeVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         unstrike(self.pid, self.why, self.at)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DueVerb(OrderVerb, RuledVerb):
+    help = "move a held order's deadline; the reason goes on the public record"
+    pid: str = option("pid")
+    at: str = option("at", help="HH:MM the order is now due")
+    why: str = option("--why")
+
+    def run(self) -> None:
+        due(self.pid, self.at, self.why)
+
+
+@dataclass(frozen=True, kw_only=True)
+class WithdrawVerb(OrderVerb, RuledVerb):
+    help = "retire an undelivered order sent in error; its problem closes with no strike"
+    pid: str = option("pid")
+    why: str = option("--why")
+    superseded_by: str | None = option("--superseded-by", default=None, metavar="PID",
+                                       help="the problem that already owns this fix")
+
+    def run(self) -> None:
+        withdraw(self.pid, self.why, self.superseded_by)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -755,6 +889,17 @@ class CheckVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         correct_check(self.pid, self.check, self.why)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServeVerb(OrderVerb, RuledVerb):
+    help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
+    pid: str = option("pid")
+    phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
+
+    def run(self) -> None:
+        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.decode(self.phase)))
+        print(f'{self.pid} serves {self.phase}')
 
 
 @dataclass(frozen=True, kw_only=True)

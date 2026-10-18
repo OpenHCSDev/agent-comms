@@ -142,7 +142,7 @@ def test_guard_follows_aliases_qualified_imports_and_inherited_reexports():
             "class Bad(agent_comms.field_codec.Shared): pass"
         ),
         "agent_comms.e": (
-            "from agent_comms import field_codec as fc\n"
+            "import agent_comms.field_codec as fc\n"
             "class Bad(fc.FieldCodec): pass"
         ),
         "agent_comms.f": "from .field_codec import *\nclass Bad(Shared): pass",

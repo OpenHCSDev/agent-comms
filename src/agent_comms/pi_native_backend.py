@@ -235,7 +235,8 @@ class PiNativeBackend(
         return await open_native(
             self,
             self.agent_bin,
-            self.arguments(thread),
+            thread.native_launch_arguments(self.arguments(thread)),
+            package=self.comms.owners.require_private_launch().native_package,
             worktree=thread.worktree,
             root=self.comms.root,
             environment=environment,
@@ -257,7 +258,7 @@ class PiNativeBackend(
         images = {"images": content.images} if content.images else {}
         async for event in backend.stream_agent_events(
             self.agent_bin,
-            self.arguments(thread),
+            thread.native_launch_arguments(self.arguments(thread)),
             content.text,
             delivery.worktree,
             delivery.environment,
@@ -271,6 +272,7 @@ class PiNativeBackend(
             native_start=delivery.input_started,
             request_observer=delivery.request_progress,
             persistent_session=self,
+            package=self.comms.owners.require_private_launch().native_package,
             root=self.comms.root,
             ui_request=delivery.ui_request,
         ):
@@ -323,7 +325,7 @@ class PiNativeBackend(
             NativePiRpcLaunch.package_for_command, launcher, runtime,
         ))
         identity = await RuntimeForkHelper.run(
-            RuntimeForkRequest(str(package), parent.runtime.path, parent.worktree,
+            RuntimeForkRequest(str(package.path), parent.runtime.path, parent.worktree,
                                runtime=runtime), cwd=Path(parent.worktree),
         )
         return PiSessionFile(identity.session_file)
@@ -333,7 +335,8 @@ class PiNativeBackend(
     async def models(self, thread: Thread) -> tuple[str, ...]:
         from .pi_commands import GetAvailableModels
 
-        data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+        data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv,
+            package=self.comms.owners.require_private_launch().native_package)
         return tuple(dict.fromkeys(
             model.display_name for model in data.models if model.provider and model.id
         ))
@@ -351,7 +354,9 @@ class PiNativeBackend(
             raise ValueError("A configuration change names a model or a thinking level")
         arguments = self.arguments(thread)
         for command in commands:
-            state = await command.configure(self.agent_bin, arguments, worktree=Path(thread.worktree))
+            state = await command.configure(self.agent_bin, arguments,
+                package=self.comms.owners.require_private_launch().native_package,
+                worktree=Path(thread.worktree))
             arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
                 state.thinking_level
             ).argv

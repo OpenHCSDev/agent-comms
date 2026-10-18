@@ -5,7 +5,7 @@ from threading import Event
 
 import pytest
 
-from agent_comms import agent_events as events
+import agent_comms.agent_events as events
 from agent_comms.acp import CommsAgent
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.goal_attempts import GoalAttemptError, GoalAttemptStore

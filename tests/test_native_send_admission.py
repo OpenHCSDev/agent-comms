@@ -17,7 +17,8 @@ from pathlib import Path
 import pytest
 from agent_comms.turn_watchdog import ModelWait
 
-from agent_comms import native_pi, native_prompt_send
+import agent_comms.native_pi as native_pi
+import agent_comms.native_prompt_send as native_prompt_send
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.diagnostics import PublicationMeasurements
@@ -173,7 +174,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
     import threading
     import time
 
-    from agent_comms import coordinated_runtime as runtime
+    import agent_comms.coordinated_runtime as runtime
 
     with pytest.MonkeyPatch.context() as patch:
         root, root_id, comms, _, people = _root(directory, direct=True)
@@ -340,7 +341,7 @@ async def test_short_claim_contention_sends_once_after_release(
     import sqlite3
     import threading
 
-    from agent_comms import coordinated_runtime as runtime
+    import agent_comms.coordinated_runtime as runtime
     from agent_comms.store_files import _store_lock
 
     root, root_id, comms, _initial, people = _root(tmp_path, direct=True)

@@ -11,15 +11,21 @@ import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
-from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .tool_declaration import ToolDeclaration
 from .pi_vocabulary import NoThinkingOverride, PiStopReason, ThinkingLevel, ThinkingLevelField, UnreportedStopReason
 from .transcript_events import SentTranscript
+
+if TYPE_CHECKING:
+    from .agent_events import AgentEvent, ProviderUsage
+    from .backend import TurnSession
+    from .turn_usage import UsageAccount
 
 
 def wire_field(name: str, default=None):
@@ -82,7 +88,8 @@ class PiPayload:
             raise MalformedRecord(f"Unexpected {member.__name__} fields")
         hints = FieldCodec._types(member)
         for f, key in declared:
-            if key in value:
+            # Native null means omitted where the declaration names its not-reported member.
+            if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
                 data[key] = member.normalize_field(hints[f.name], key, value[key], value)
         return data
 
@@ -212,6 +219,55 @@ class PiCost(PiPayload):
     total: float | None = wire_field("total")
 
 
+class TokenTotal:
+    """Whether Pi reported a positive token total, decided once where its usage is decoded."""
+
+    @staticmethod
+    def reported(total: int | None) -> TokenTotal:
+        return ReportedTokens(total) if total is not None and total > 0 else UnreportedTokens()
+
+    def otherwise(self, other: TokenTotal) -> TokenTotal:
+        return other
+
+    def provisional(self, session: TurnSession) -> Iterator[AgentEvent]:
+        return iter(())
+
+    def confirm(self, account: UsageAccount) -> None:
+        """Only a reported total confirms the context usage."""
+
+    def settle(self, session: TurnSession) -> Iterator[AgentEvent]:
+        if session.usage.provisional:
+            session.usage.rollback()
+            yield session.context_info()
+
+
+@dataclass(frozen=True)
+class UnreportedTokens(TokenTotal):
+    pass
+
+
+@dataclass(frozen=True)
+class ReportedTokens(TokenTotal):
+    count: int
+
+    def otherwise(self, other: TokenTotal) -> TokenTotal:
+        return self
+
+    def confirm(self, account: UsageAccount) -> None:
+        account.confirm(self.count)
+
+    def provisional(self, session: TurnSession) -> Iterator[AgentEvent]:
+        session.usage.observe(self.count)
+        yield session.context_info()
+
+    def settle(self, session: TurnSession) -> Iterator[AgentEvent]:
+        if not session.accepts_output:
+            yield from super().settle(session)
+            return
+        session.usage.confirm(self.count)
+        yield session.context_info()
+
+
 @dataclass(frozen=True)
 class PiUsage(PiPayload):
     @classmethod
@@ -230,10 +286,19 @@ class PiUsage(PiPayload):
     cache_write_1h: int | None = wire_field("cacheWrite1h")
 
     @property
-    def positive_tokens(self) -> int | None:
-        return (
-            self.total_tokens if self.total_tokens is not None and self.total_tokens > 0 else None
-        )
+    def token_total(self) -> TokenTotal:
+        return TokenTotal.reported(self.total_tokens)
+
+    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
+        return (account.charge(self),)
+
+
+@dataclass(frozen=True)
+class UnreportedUsage(PiUsage):
+    """Pi sent no usage object: nothing is charged and no token total is known."""
+
+    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
+        return ()
 
 
 @dataclass(frozen=True)
@@ -404,7 +469,7 @@ class ProviderDiagnosticError(PiPayload):
         return f"{name} (code {self.code})" if self.code is not None else name
 
 
-class TransportStageText(TextRepresentation):
+class TransportStageText(TextRepresentation[ProviderTransportStage]):
     """The native provider's scalar spelling, not a second record decoder."""
 
     @classmethod
@@ -525,7 +590,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
     content: tuple[PiContent, ...] | str | None = None
-    usage: PiUsage | None = None
+    usage: PiUsage = wire_field("usage", UnreportedUsage())
     input_id: str | None = wire_field("inputId")
     input_digest: str | None = wire_field("inputDigest")
     stop_reason: type[PiStopReason] = wire_field("stopReason", UnreportedStopReason)
@@ -543,8 +608,8 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         return super().normalize_field(target, key, value, record)
 
     @property
-    def measured_tokens(self):
-        return self.usage.positive_tokens if self.usage is not None else None
+    def measured_tokens(self) -> TokenTotal:
+        return self.usage.token_total
 
     def require_failed_terminal(self):
         raise ValueError("Native recovery requires an unambiguous failed terminal")
@@ -642,8 +707,8 @@ class AssistantMessage(PiMessage):
         if reason.tool_round and session.committable_message(self.text):
             updates.append(CommittedProgress(text=self.text))
         session.output.start_message()
-        if self.usage is not None and session.accepts_output:
-            updates.append(session.usage.charge(self.usage))
+        if session.accepts_output:
+            updates.extend(self.usage.charges(session.usage))
         session.output.final_assistant_stop = reason.successful and session.started_input
         updates.extend([event async for event in reason.apply(session, self)])
         return tuple(updates)
@@ -904,6 +969,10 @@ class PiContextUsage(PiPayload):
     tokens: int | None = None
     context_window: int | None = wire_field("contextWindow")
 
+    @property
+    def token_total(self) -> TokenTotal:
+        return TokenTotal.reported(self.tokens)
+
 
 @dataclass(frozen=True)
 class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
@@ -1046,7 +1115,7 @@ class ThinkingLevelsData(PiResponseData):
 @dataclass(frozen=True)
 class CompactionData(PiResponseData):
     summary: str | None = None
-    usage: PiUsage | None = None
+    usage: PiUsage = wire_field("usage", UnreportedUsage())
     first_kept_entry_id: str | None = wire_field("firstKeptEntryId")
     tokens_before: int | None = wire_field("tokensBefore")
     estimated_tokens_after: int | None = wire_field("estimatedTokensAfter")
@@ -1058,7 +1127,7 @@ class CompactionData(PiResponseData):
         return compaction_summary(self.summary) if self.summary is not None else None
 
     def charge(self, session):
-        yield from session.usage.charge_compaction(self.usage)
+        yield from self.usage.charges(session.usage)
 
 
 @dataclass(frozen=True)
@@ -1331,8 +1400,7 @@ class McpLiveAcknowledgement:
         return acknowledgement if acknowledgement.input_id == input_id else None
 
     def __post_init__(self):
-        if re.fullmatch(r"[a-f0-9]{32}", self.input_id) is None:
-            raise ValueError("Invalid external MCP input identity")
+        Id128Text.from_text(self.input_id)
         if len(self.servers) > 32 or len({server.id for server in self.servers}) != len(
             self.servers
         ):

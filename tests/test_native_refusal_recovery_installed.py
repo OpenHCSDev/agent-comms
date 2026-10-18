@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import agent_events as ae, backend
+import agent_comms.agent_events as ae
+import agent_comms.backend as backend
 from agent_comms.pi_native_backend import PersistentPiSession
 from compaction_loopback import LoopbackProvider
 

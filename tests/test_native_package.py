@@ -1,9 +1,10 @@
 """Provider-free complete-package provenance and filesystem-shape controls."""
 
 import hashlib
+import importlib.util
+import sys
 import json
 import os
-import runpy
 import shutil
 import subprocess
 from contextlib import contextmanager
@@ -12,7 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import native_package
+import agent_comms.native_package as native_package
 from agent_comms.native_package import (
     NativePackageError,
     package_tree_digest,
@@ -197,6 +198,17 @@ def test_missing_or_malformed_commitment_is_not_a_success_marker(package, pin):
         verify_native_package(package)
 
 
+def load_resource_module(path):
+    spec = importlib.util.spec_from_file_location('agent_comms.resource_fixture', path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    try:
+        spec.loader.exec_module(module)
+        return vars(module)
+    finally:
+        sys.modules.pop(spec.name)
+
+
 @pytest.mark.parametrize("include_resources", [False, True])
 def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, include_resources):
     installed = tmp_path / "site-packages/agent_comms"
@@ -205,12 +217,12 @@ def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, includ
     shutil.copy2(native_package.__file__, module)
     if not include_resources:
         with pytest.raises(ValueError, match="Installed native package resources"):
-            runpy.run_path(str(module))
+            load_resource_module(module)
         return
     resources = installed / "_native"
     resources.mkdir()
     (resources / "pi-native.sha256").write_text("packaged pin")
-    namespace = runpy.run_path(str(module))
+    namespace = load_resource_module(module)
     assert namespace["MANIFEST"] == resources / "pi-native.sha256"
 
 
@@ -222,7 +234,7 @@ def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp
     artifacts = source / "_native"
     artifacts.mkdir()
     (artifacts / "core_stamp.py").write_text("# unrelated build metadata\n")
-    namespace = runpy.run_path(str(module))
+    namespace = load_resource_module(module)
     assert namespace["MANIFEST"] == tmp_path / "stack/pi-native.sha256"
     assert namespace["OWNER_INSTRUCTIONS"] == tmp_path / "stack/APPEND_SYSTEM.md"
 
@@ -234,7 +246,9 @@ def launcher(tmp_path):
     (stack / "bin").mkdir(parents=True)
     source = tmp_path / "src/agent_comms"
     source.mkdir(parents=True)
-    shutil.copy2(repo / "src/agent_comms/native_package.py", source)
+    (source / '__init__.py').write_text('')
+    for name in ('native_package.py', 'private_path.py', 'declared_family.py', 'errors.py'):
+        shutil.copy2(repo / 'src/agent_comms' / name, source)
     for name in ("pi-native", "prepare-pi-native"):
         shutil.copy2(repo / "stack/bin" / name, stack / "bin" / name)
     staged = tmp_path / "staged"
@@ -286,7 +300,8 @@ def test_launcher_uses_only_verified_copied_bootstrap(launcher, tmp_path):
     assert not marker.exists()
 
 
-def test_native_publication_installs_declared_source_with_one_link(launcher, tmp_path):
+@pytest.mark.parametrize("command", [["pi-native"], ["prepare-pi-native", "--publish"]])
+def test_launch_and_publication_install_declared_source_with_one_link(launcher, tmp_path, command):
     stack, package = launcher
     snapshot = tmp_path / "extensions/global/index.ts"
     snapshot.parent.mkdir(parents=True)
@@ -324,19 +339,29 @@ def test_native_publication_installs_declared_source_with_one_link(launcher, tmp
     prepared = stack / f".pi-native-{build}"
     package.parents[2].rename(prepared)
     deployments = tmp_path / "deployments"
+    script, *flags = command
+    launch = [str(stack / "bin" / script), *flags, *([str(deployments)] if flags else [])]
 
-    result = subprocess.run(
-        [str(stack / "bin/prepare-pi-native"), "--publish", str(deployments)],
-        capture_output=True,
-        text=True,
-        timeout=15,
-    )
+    # The launch ends by exec'ing node; the sources are installed before that.
+    interpreter = tmp_path / "interpreter"
+    interpreter.mkdir()
+    (interpreter / "node").write_text("#!/bin/sh\nexit 0\n")
+    (interpreter / "node").chmod(0o755)
+    env = dict(os.environ, PATH=f"{interpreter}:{os.environ['PATH']}")
 
-    assert result.returncode == 0, result.stderr
-    assert (deployments / f"native-current-{build}").is_dir()
+    def run():
+        result = subprocess.run(launch, capture_output=True, text=True, timeout=15, env=env)
+        assert result.returncode == 0, result.stderr
+
+    run()
+    assert (deployments / f"native-current-{build}").is_dir() == bool(flags)
     assert destination.read_bytes() == content
     assert destination.stat().st_nlink == 1
     assert stale_link.read_bytes() == b"stale\n"
+    installed = destination.stat()
+    run()
+    assert (destination.stat().st_ino, destination.stat().st_mtime_ns) == (
+        installed.st_ino, installed.st_mtime_ns)
 
 
 @pytest.mark.parametrize("script", ["pi-native", "prepare-pi-native"])

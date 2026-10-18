@@ -6,6 +6,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,
@@ -16,7 +17,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
-from agent_comms.tools import ToolRequest
+from agent_comms.tools import CommsInboxTool, ToolRequest
 from agent_comms.tool_caller import ThreadCaller
 from stored_inputs import stored_inputs
 
@@ -61,7 +62,7 @@ def test_inspected_canonical_dependencies_allow_standby_without_replay(tmp_path,
     before = ledger.path.read_bytes()
     messages = comms.bus.inbox("worker")
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))
-    result = inbox.invoke(comms, {"thread": "worker", "goal_id": goal.id, "wait_for": ["parent"]}, caller=ThreadCaller("worker"))
+    result = inbox.invoke(comms, {"thread": "worker", "standby": {"goal_id": goal.id, "wait_for": ["parent"]}}, caller=ThreadCaller("worker"))
     assert result["messages"] == []  # Display ACK is not handling evidence.
     review = result["standby_review"]
     assert [row["sequence"] for row in review["messages"]] == [m.seq for m in messages]
@@ -144,3 +145,16 @@ def test_standby_excludes_retained_rebound_history_but_retains_rename(tmp_path, 
     review = comms.goals.goal_input_review("worker", goal.id, ["renamed-parent"])
     assert review.reviewed_inputs == (f"bus:{current.seq}",)
     assert old in list(comms.views.dm_history_page("renamed-parent", "worker").messages)
+
+
+def test_inbox_standby_is_one_record(wired, monkeypatch):
+    monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
+    goal = wired.goals.update_goal("fixer", SetGoalAction(text="Wait for the parent"))
+    wired.messaging.send_message("PR111", "fixer", "Reply")
+    standby = {"goal_id": goal.id, "wait_for": ["PR111"]}
+    for half in ({"goal_id": goal.id}, {"wait_for": ["PR111"]}):
+        with pytest.raises(MalformedRecord, match="comms_inbox"):
+            CommsInboxTool.invoke(wired, {"thread": "fixer", "standby": half}, caller=ThreadCaller("fixer"))
+    result = CommsInboxTool.invoke(wired, {"thread": "fixer", "standby": standby}, caller=ThreadCaller("fixer"))
+    assert len(result["messages"]) == 1  # A refused half record read nothing.
+    assert (result["standby_review"]["goal_id"], result["standby_review"]["wait_for"]) == (goal.id, ["PR111"])

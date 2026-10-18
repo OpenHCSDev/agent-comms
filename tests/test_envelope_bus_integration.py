@@ -14,7 +14,7 @@ from threading import Barrier
 
 import pytest
 
-from agent_comms import store_files
+import agent_comms.store_files as store_files
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
@@ -711,7 +711,7 @@ def test_sigkill_across_claim_send_recovers_one_row_or_none(tmp_path: Path, phas
 import os, signal, sys
 from pathlib import Path
 sys.path.insert(0, sys.argv[2])
-from agent_comms import store_files
+import agent_comms.store_files as store_files
 from agent_comms.comms import Comms
 root = Path(sys.argv[1])
 phase = sys.argv[3]

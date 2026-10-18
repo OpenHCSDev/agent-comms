@@ -29,7 +29,7 @@ TEN = "the unit pushed a commit that deleted the store test file"
 ])
 def test_value_types_refuse_their_declared_words(family, text, accepted):
     if accepted:
-        assert family(text) == text
+        assert family(text).text == text
     else:
         with pytest.raises(ValueError):
             family(text)

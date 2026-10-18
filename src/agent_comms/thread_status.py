@@ -10,7 +10,7 @@ from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation
-from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, StoppedThreadPresentationStatus
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -23,6 +23,8 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     running: ClassVar[bool] = False
     stopped: ClassVar[bool] = False
     visible: ClassVar[bool] = False
+    # Whether a message sent now is read now; each status answers, none by default.
+    receiving: ClassVar[bool]
 
     @abstractmethod
     def in_view(self, visibility: RosterVisibility) -> bool:
@@ -123,6 +125,7 @@ class ActiveThreadPresence:
 
 class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
     running = True
+    receiving = True
 
     def require_running(self) -> None:
         pass
@@ -132,11 +135,15 @@ class RunningThreadStatus(ActiveThreadPresence, ThreadStatus):
 
 
 class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):
-    pass
+    receiving = True
 
 
 class StoppedThreadStatus(ThreadStatus):
     stopped = True
+    receiving = False
+
+    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
+        return replace(super().presentation(title, activity), status=StoppedThreadPresentationStatus())
 
     def require_stopped(self) -> None:
         pass
@@ -169,6 +176,8 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
     It has no launched process to stop or restart, so it stays in every view.
     """
 
+    receiving = False
+
     def in_view(self, visibility: RosterVisibility) -> bool:
         return True
 
@@ -180,6 +189,8 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
 
 
 class ArchivedThreadStatus(ThreadStatus):
+    receiving = False
+
     def in_view(self, visibility: RosterVisibility) -> bool:
         return visibility.archived
 
@@ -191,6 +202,8 @@ class ArchivedThreadStatus(ThreadStatus):
 
 
 class DeletingThreadStatus(ThreadStatus):
+    receiving = False
+
     def in_view(self, visibility: RosterVisibility) -> bool:
         return False
 
@@ -198,7 +211,7 @@ class DeletingThreadStatus(ThreadStatus):
         raise RelationViolationError(f"Thread {name!r} is being permanently deleted.")
 
 
-class ThreadStatusName(TextRepresentation):
+class ThreadStatusName(TextRepresentation[ThreadStatus]):
     @classmethod
     def encode(cls, value: object) -> object:
         return FieldCodec.encode(type(value))
