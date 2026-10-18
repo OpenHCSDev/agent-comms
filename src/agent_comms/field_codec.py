@@ -285,6 +285,23 @@ class NullMember(WireValue):
         return FieldCodec.value_schema(type(None))
 
 
+class RecordMember(WireValue):
+    """A wire union's record case uses the declared record codec."""
+
+    accepts_null = False
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return FieldCodec.decode_record(cls, data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.record_schema(cls)
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode_record(self)
+
+
 class InlineRecord(WireValue):
     """A typed field represented by its declared object's sibling wire fields."""
 

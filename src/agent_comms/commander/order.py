@@ -5,6 +5,8 @@
   Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
   Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
   Works when: <user-visible closing run, 8+ words> (unless mechanical; close requires the file)
+  Deletes: <decision family> at PATH:LINE :: <repo> :: <family-wide count>
+    (optional; done refuses unless the count is 0)
   1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
@@ -31,13 +33,14 @@ from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
+from ..standing_rules import HuntDue
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
+                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
 from . import capacity, rules
 from .config import CommanderConfig, Repo
@@ -319,6 +322,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
             report=report[1], run=run, serves=phase,
+            deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
+                rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
@@ -575,10 +580,6 @@ def hunts():
     return [h for t in todos() for h in t.hunts]
 
 
-def last_hunt():
-    return max((h.at.at for h in hunts()), default=0)
-
-
 def next_hunt():
     """Least-recently hunted file among the most-churned production files on origin/main."""
     hunted = {}
@@ -664,7 +665,7 @@ def overdue():
                         idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        if time.time() - last_hunt() > 900:
+        for _ in HuntDue.violations(COMMS, ME):
             print(HuntVerb.due(next_hunt()), flush=True)
         time.sleep(60)
 

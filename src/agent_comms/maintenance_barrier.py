@@ -48,7 +48,7 @@ class HeldSends:
 
     @staticmethod
     def require_open():
-        raise MaintenanceHeldError("Maintenance ingress requires READY")
+        raise MaintenanceHeldError("Maintenance holds ingress: the bus is under maintenance")
 
 
 class GrantedSends:

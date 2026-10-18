@@ -8,9 +8,9 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
-from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
-from .goals import Goal
 from .declared_family import DeclaredFamily
+from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
+from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import LockedStore, RootFile
 from .thread_identity import RecordedThreadIncarnation
@@ -122,7 +122,7 @@ class RecordedGoalWait(GoalWait):
         )
         return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
 
-    def current_for(self, goal: Goal, owner: RecordedThreadIncarnation) -> bool:
+    def current_for(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> bool:
         """A retained wait can survive edits, but not replacement of its owner.
 
         Callers select the row by goal ID before asking this question. A newer
@@ -297,24 +297,33 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         self.update(change)
         return removed
 
+    def resolve(self, goal: GoalDeclaration) -> GoalWait:
+        return self.for_goal(goal, self.read())
+
     @staticmethod
-    def for_goal(goal: Goal, rows: dict[str, RecordedGoalWait]) -> GoalWait:
-        if not goal.state.active:
-            return NoGoalWait()
-        return rows.get(goal.id, NoGoalWait())
+    def for_goal(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:
+        return rows.get(goal.active().reported_id(), NoGoalWait())
 
     @classmethod
     def execution(
-        cls, goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
+        cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""
-        if goal is None:
-            return IdleGoalExecution()
-        return cls.for_goal(goal, rows).project(goal, snapshot, agents)
+        return goal.project(
+            lambda current: cls.for_goal(current, rows).project(current, snapshot, agents),
+            IdleGoalExecution,
+        )
 
     @staticmethod
+    def current_waits(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
+                      owner: RecordedThreadIncarnation) -> tuple[RecordedGoalWait, ...]:
+        wait = rows.get(goal.reported_id())
+        return (wait,) if wait is not None and wait.current_for(goal, owner) else ()
+
+    @classmethod
     def closed_wait_group(
+        cls,
         owner: str,
         targets: tuple[GoalWaitTarget, ...],
         rows: dict[str, RecordedGoalWait],
@@ -336,13 +345,10 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            goal = thread.active_goal
-            wait = rows.get(goal.id) if goal is not None else None
-            if wait is not None and (
-                goal is None
-                or not wait.current_for(goal, thread.incarnation.require_recorded())
-            ):
-                wait = None
+            goal = thread.goal.active()
+            wait = next(iter(cls.current_waits(
+                goal, rows, thread.incarnation.require_recorded(),
+            )), None)
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
@@ -352,17 +358,10 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_goal = peer.active_goal
-                peer_wait = (
-                    rows.get(peer_goal.id)
-                    if peer_goal is not None
-                    else None
-                )
-                if peer_wait is not None and (
-                    peer_goal is None
-                    or not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded())
-                ):
-                    peer_wait = None
+                peer_goal = peer.goal.active()
+                peer_wait = next(iter(cls.current_waits(
+                    peer_goal, rows, peer.incarnation.require_recorded(),
+                )), None)
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before

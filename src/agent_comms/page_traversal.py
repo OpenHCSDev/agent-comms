@@ -8,7 +8,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec, SubclassUnion
+from .field_codec import FieldCodec, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
@@ -52,7 +52,7 @@ class LiveCursor(PageCursor):
 
 
 @dataclass(frozen=True)
-class HistoryCursor(PageCursor):
+class HistoryCursor(RecordMember, PageCursor):
     source: str
     sequence: int
 
@@ -61,17 +61,6 @@ class HistoryCursor(PageCursor):
 
     def newer(self) -> NewerTraversal:
         return NewerTraversal(self.sequence, self.source)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
-
-    @classmethod
-    def from_wire(cls, data: object) -> Self:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
 
 
 class PageTraversal(ABC):

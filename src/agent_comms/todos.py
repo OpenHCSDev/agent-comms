@@ -13,23 +13,21 @@ import subprocess
 import sqlite3
 import time
 import asyncio
-from collections.abc import Iterator
-from contextlib import contextmanager
+from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from abc import abstractmethod
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self
 
-from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
+from .change_report import FileLine
+from .child_process import BoundedRun, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue
+from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedStore, TypedTable
-from .recorded_time import EventTime, UnrecordedEventTime
-from .change_report import FileLine
-from .goals import OrderCheck, ProblemGoalOrder
-from .child_process import BoundedRun, ExitedOutcome
+from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
@@ -51,10 +49,13 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, check):
-        await self.require_source(check)
-        result = await BoundedRun.run(("bash", "-c", check.command), cwd=check.directory, timeout=120)
-        check.result.require(result)
+    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
+        """The order's check and every count its deletion declares run on the delivered source."""
+        for each in (check, *deletes.checks):
+            await self.require_source(each)
+            command = ("bash", "-c", each.command)
+            result = await BoundedRun.run(command, cwd=each.directory, timeout=120)
+            each.result.require(result)
         return replace(self, at=await self.delivery_time(check))
 
     @abstractmethod
@@ -541,6 +542,50 @@ class ApplicationOrderRun(OrderRun):
         return (f"{self.label} {self.text}",)
 
 
+class OrderDeletion(DeclaredFamily, affix="Deletion"):
+    """The decision family an order deletes, read once from its Deletes: line."""
+
+    label: ClassVar[str] = "Deletes:"
+    LINE: ClassVar[re.Pattern] = re.compile(r"(.+?)\s+at\s+(\S+):(\d+)\s*::\s*(\S+)\s*::\s*(.+)")
+    checks: ClassVar[tuple[OrderCheck, ...]] = ()
+
+    @staticmethod
+    def parse(line: str | None) -> OrderDeletion:
+        if line is None:
+            return NoOrderDeletion()
+        if not (found := OrderDeletion.LINE.fullmatch(line.strip())):
+            raise ValueError(f"Write {OrderDeletion.label} <decision family> at PATH:LINE :: "
+                             "<repo> :: <family-wide scanner count>.")
+        return FamilyDeletion(found[1], FileLine(found[2], int(found[3])),
+                              OrderCheck(found[4], found[5], CountCheckResult(0)))
+
+    def instructions(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class NoOrderDeletion(OrderDeletion):
+    pass
+
+
+@dataclass(frozen=True)
+class FamilyDeletion(OrderDeletion):
+    """Completion counts the whole family on the delivered commit, so a site renamed or wrapped
+    instead of deleted still counts, and only zero passes."""
+
+    family: str
+    site: FileLine
+    count: OrderCheck
+
+    @property
+    def checks(self) -> tuple[OrderCheck, ...]:
+        return (self.count,)
+
+    def instructions(self) -> tuple[str, ...]:
+        return (f"{self.label} {self.family} at {self.site.to_wire()} :: {self.count.directory} :: "
+                f"{self.count.command}",)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """One checked order lives on its Todo, independently of the unit's Goal."""
@@ -557,6 +602,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    deletes: OrderDeletion = field(
+        default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
@@ -582,6 +629,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
             f"Owner: {self.owner.to_wire()}",
             f"Check: {self.check.directory} :: {self.check.command}",
+            *self.deletes.instructions(),
             *self.run.instructions(),
             f"Deadline: {FieldCodec.encode(todo.deadline)}",
             *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
@@ -720,13 +768,27 @@ class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
         super().__init__(f"Todo {current.id} changed (revision {current.revision}, owner {owner}).")
 
 
-@dataclass(frozen=True, slots=True)
-class GoalRef:
+class GoalReference(SubclassUnion):
+    def require_reference(self) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class NoGoalReference(NullMember, GoalReference):
+    pass
+
+
+@dataclass(frozen=True)
+class GoalRef(RecordMember, GoalReference):
+
     owner: str
     owner_created: float
     goal_id: str
 
     def __post_init__(self) -> None:
+        self.require_reference()
+
+    def require_reference(self) -> None:
         _text(self.owner, "Thread name", 128)
         try:
             self.incarnation.require_recorded()
@@ -1045,7 +1107,8 @@ class DeliverTodo(TodoOperation):
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(self, delivery=asyncio.run(self.delivery.verified(current.order.check)))
+        verified = self.delivery.verified(current.order.check, current.order.deletes)
+        return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
@@ -1117,7 +1180,7 @@ class Todo(TypedTable):
     creator_created: float
     state: type[TodoState]
     revision: int = field(metadata={"sql": Column(check="revision>0")})
-    goal: GoalRef | None
+    goal: GoalReference = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
     assignment: Assignment | None
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
@@ -1333,8 +1396,7 @@ class TodoStore(TypedStore):
         repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
-        if type(goal) is not GoalRef:
-            raise TodoError("Goal reference must be a typed GoalRef.")
+        goal.require_reference()
         proposed = Todo(
             id=todo_id,
             repo=repo_id,
