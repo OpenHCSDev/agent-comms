@@ -81,7 +81,7 @@ class Channel(DeclaredFamily, affix="Channel"):
     def require_parent(self) -> None: ...
 
     @abstractmethod
-    def restore_preferences(self, existing: bool) -> bool: ...
+    def can_restore_preferences(self, existing: bool) -> bool: ...
 
     @abstractmethod
     def sort_key(self, ordering, view) -> tuple: ...
@@ -114,7 +114,7 @@ class GroupedChannel:
     def require_parent(self) -> None:
         pass
 
-    def restore_preferences(self, existing: bool) -> bool:
+    def can_restore_preferences(self, existing: bool) -> bool:
         return True
 
     def sort_key(self, ordering, view) -> tuple:
@@ -184,7 +184,7 @@ class BuiltinChannelView(MembershipChannel, Channel):
     def require_parent(self) -> None:
         raise ValueError("Built-in channels cannot be presentation parents.")
 
-    def restore_preferences(self, existing: bool) -> bool:
+    def can_restore_preferences(self, existing: bool) -> bool:
         return not existing
 
     def sort_key(self, ordering, view) -> tuple:

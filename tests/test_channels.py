@@ -7,6 +7,7 @@ import pytest
 from agent_comms import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import ActivityState
+from agent_comms.channel_targets import BuiltinChannel
 from agent_comms.channels import AllOfMatch, AnyOfMatch, TagChannel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.channel_management import (
@@ -498,11 +499,10 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms.channels.update_tags("b", add=frozenset({"zeta"}))
 
     def names(client):
-        return [
-            view.channel.name
-            for view in client.views.channel_views()
-            if view.channel.builtin is None
-        ]
+        ordered = [view.channel.name for view in client.views.channel_views()]
+        prefix = [builtin.value for builtin in BuiltinChannel]
+        assert ordered[:len(prefix)] == prefix
+        return ordered[len(prefix):]
 
     comms.channels.set_channel_order(CreatedChannelSort)
     created_names = names(wire(tmp_path))

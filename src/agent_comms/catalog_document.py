@@ -259,7 +259,7 @@ class CatalogDocument:
         missing = {
             name: channel
             for name, channel in source.views(source_threads).items()
-            if name not in self.preferences and channel.restore_preferences(existing)
+            if name not in self.preferences and channel.can_restore_preferences(existing)
         }
         for name, channel in missing.items():
             self.preferences[name] = source.preferences.get(
