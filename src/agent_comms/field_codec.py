@@ -45,13 +45,20 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
 
     @classmethod
     @contextmanager
-    def refusing(cls, subject: str) -> Iterator[None]:
-        """A declaration-owned check that refuses data with ValueError refuses a malformed record."""
+    def refusing(cls, subject: str, *parse_errors: type[ValueError]) -> Iterator[None]:
+        """A plain ValueError from a declared check, or a named parser error, refuses the record.
+
+        A ValueError subclass the domain declares keeps its own meaning and passes through.
+        """
         try:
             yield
         except cls:
             raise
+        except parse_errors as error:
+            raise cls(f"{subject}: {error}") from error
         except ValueError as error:
+            if type(error) is not ValueError:
+                raise
             raise cls(f"{subject}: {error}") from error
 
 
@@ -481,7 +488,7 @@ class FieldCodec(Sealed):
     @staticmethod
     def parse(text: str | bytes) -> object:
         """External JSON text is data: strict UTF-8, syntax and duplicate keys refuse it."""
-        with MalformedRecord.refusing("Invalid JSON"):
+        with MalformedRecord.refusing("Invalid JSON", json.JSONDecodeError, UnicodeDecodeError):
             return json.loads(
                 text.decode("utf-8") if isinstance(text, bytes) else text,
                 object_pairs_hook=_unique_object,
@@ -762,7 +769,10 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
 
     @classmethod
     def decode(cls, data):
-        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers"):
+        from pydantic import ValidationError
+
+        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers",
+                                      ValidationError):
             return cls.validator().validate_python(data, strict=True)
 
     @classmethod

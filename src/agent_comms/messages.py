@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import math
 import re
 import time
 from collections.abc import Mapping, Sequence
@@ -397,6 +398,8 @@ class Message:
             raise RelationViolationError("Message target cannot be empty.")
         if not self.body:
             raise ValueError("Message body cannot be empty.")
+        if not math.isfinite(self.timestamp):
+            raise ValueError("Message timestamp must be finite.")
         self.task.require_sender(self.sender)
         if self.claim_transition is not None:
             transition = self.claim_transition

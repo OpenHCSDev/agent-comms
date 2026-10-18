@@ -97,11 +97,11 @@ class TestChangeReportKind:
         assert Message.from_committed_wire(committed.to_wire()) == stored
 
     def test_missing_fields_are_named_in_the_refusal(self):
-        from agent_comms.field_codec import FieldCodec
+        from agent_comms.field_codec import FieldCodec, MalformedRecord
 
-        with pytest.raises(TypeError, match="Missing required fields for ChangeReport: facts"):
+        with pytest.raises(MalformedRecord, match="Missing required fields for ChangeReport: facts"):
             FieldCodec.decode(ChangeReport, {"branch": "main"})
-        with pytest.raises(TypeError, match="Missing required fields for ChangedFact: owner"):
+        with pytest.raises(MalformedRecord, match="Missing required fields for ChangedFact: owner"):
             FieldCodec.decode(ChangedFact, {
                 "fact": "f", "consumers": ["a.py:1"], "search_command": "grep x",
                 "edits_before": 1, "edits_after": 1,
