@@ -390,6 +390,30 @@ def test_family_instance_schema_tracks_decode_members_and_custom_discriminator()
     assert len(FieldCodec.value_schema(ExplicitScope)["oneOf"]) == 2
 
 
+def test_member_cannot_write_a_second_family_discriminator():
+    class Scope(DeclaredFamily, affix="Scope"):
+        family_discriminator = "selection"
+
+    with pytest.raises(TypeError, match="Only the family root"):
+        class BrokenScope(Scope):
+            family_discriminator = "another"
+
+
+def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
+    from agent_comms.tool_declaration import ToolDeclaration
+    from agent_comms.transcript_events import ToolStartTranscript
+
+    arguments = {"from": "sender", "to": "receiver", "body": "hello"}
+    event = ToolStartTranscript(
+        tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
+        tool=ToolDeclaration.record("comms_send", arguments),
+    )
+    encoded = FieldCodec.encode(event)
+    assert encoded["tool"]["tool"] == "comms_send"
+    assert "kind" not in encoded["tool"]
+    assert FieldCodec.decode(ToolStartTranscript, encoded) == event
+
+
 def test_uninhabited_family_schema_rejects_every_value_without_a_manual_roster():
     class Empty(DeclaredFamily, affix="Empty"):
         pass

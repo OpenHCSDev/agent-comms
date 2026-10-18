@@ -498,6 +498,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     source expressions; values always use bound parameters.
     """
 
+    family_discriminator: ClassVar[str] = "row"
     unique: ClassVar[tuple[tuple[str, ...], ...]] = ()
     checks: ClassVar[tuple[str, ...]] = ()
     indexes: ClassVar[tuple[Index, ...]] = ()

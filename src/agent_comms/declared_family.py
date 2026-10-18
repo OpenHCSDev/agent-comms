@@ -33,6 +33,8 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         if len(roots) > 1:
             raise TypeError("A declaration cannot belong to two families.")
         root = next(iter(roots), None)
+        if root is not None and "family_discriminator" in namespace:
+            raise TypeError("Only the family root may declare its discriminator.")
         if affix is not None and root is not None:
             raise TypeError("A member cannot start another family.")
         is_root = affix is not None or (
