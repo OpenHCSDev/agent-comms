@@ -15,7 +15,7 @@ from collections.abc import Iterator
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation, WireValue
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .tool_declaration import ToolDeclaration
@@ -219,8 +219,38 @@ class PiCost(PiPayload):
     total: float | None = wire_field("total")
 
 
-class TokenTotal:
+class TokenTotal(WireValue):
     """Whether Pi reported a positive token total, decided once where its usage is decoded."""
+
+    accepts_null = True
+    external_json_shape = True
+
+    @classmethod
+    def from_wire(cls, value: object) -> TokenTotal:
+        return UnreportedTokens() if value is None else ReportedTokens(FieldCodec.decode(int, value))
+
+    def matches(self, count: int) -> bool:
+        return False
+
+    def require_count(self) -> int:
+        raise ValueError("Pi has not reported this count")
+
+    def context_info(self, info):
+        return info
+
+    def observe_size(self, account: UsageAccount) -> None:
+        account.size = None
+
+    def update_size(self, account: UsageAccount) -> None:
+        pass
+
+    def reading(self, used: TokenTotal):
+        from .context_reading import UnmeasuredContext
+        return UnmeasuredContext()
+
+    def with_size(self, size: int):
+        from .context_reading import UnmeasuredContext
+        return UnmeasuredContext()
 
     @staticmethod
     def reported(total: int | None) -> TokenTotal:
@@ -243,12 +273,38 @@ class TokenTotal:
 
 @dataclass(frozen=True)
 class UnreportedTokens(TokenTotal):
-    pass
+    def to_wire(self) -> None:
+        return None
 
 
 @dataclass(frozen=True)
 class ReportedTokens(TokenTotal):
     count: int
+
+    def to_wire(self) -> int:
+        return self.count
+
+    def matches(self, count: int) -> bool:
+        return self.count == count
+
+    def require_count(self) -> int:
+        return self.count
+
+    def context_info(self, info):
+        return replace(info, context_size=self.count)
+
+    def observe_size(self, account: UsageAccount) -> None:
+        self.update_size(account)
+
+    def update_size(self, account: UsageAccount) -> None:
+        account.size = self.count
+
+    def reading(self, used: TokenTotal):
+        return used.with_size(self.count)
+
+    def with_size(self, size: int):
+        from .context_reading import ContextUsage
+        return ContextUsage(self.count, size)
 
     def otherwise(self, other: TokenTotal) -> TokenTotal:
         return self
@@ -912,7 +968,7 @@ class PiModel(PiPayload, DeclaredFamily, affix="Model"):
     wire_tag = None
     opaque: ClassVar[bool] = False
     display_name: ClassVar[str | None] = None
-    context_window: ClassVar[int | None] = None
+    context_window: ClassVar[TokenTotal] = UnreportedTokens()
 
     @classmethod
     def wire_member(cls, value):
@@ -937,8 +993,8 @@ class ReportedModel(PiModel):
     provider: str | None = None
     id: str | None = None
     name: str | None = None
-    context_window: int | None = wire_field("contextWindow")
-    max_tokens: int | None = wire_field("maxTokens")
+    context_window: TokenTotal = wire_field("contextWindow", UnreportedTokens())
+    max_tokens: TokenTotal = wire_field("maxTokens", UnreportedTokens())
 
     @property
     def identity(self):
@@ -967,7 +1023,7 @@ class PiContextUsage(PiPayload):
         return super().normalize_field(target, key, value, record)
 
     tokens: int | None = None
-    context_window: int | None = wire_field("contextWindow")
+    context_window: TokenTotal = wire_field("contextWindow", UnreportedTokens())
 
     @property
     def token_total(self) -> TokenTotal:
@@ -1066,8 +1122,8 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     # default on output; its internal family tag is not a native model object.
     model: PiModel = field(default_factory=UnreportedModel, metadata={"wire_omit_default": True})
     thinking_level: ThinkingLevelField = wire_field("thinkingLevel", default=NoThinkingOverride)
-    message_count: int | None = wire_field("messageCount")
-    pending_message_count: int | None = wire_field("pendingMessageCount")
+    message_count: TokenTotal = wire_field("messageCount", UnreportedTokens())
+    pending_message_count: TokenTotal = wire_field("pendingMessageCount", UnreportedTokens())
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
 
@@ -1081,13 +1137,12 @@ class StateData(NativeSessionSnapshot, PiResponseData):
         """Project this actual native state, not a later usage-only observation."""
         from .agent_events import AgentInfo
 
-        return AgentInfo(
+        return self.model.context_window.context_info(AgentInfo(
             model=self.model.display_name,
             thinking_level=self.thinking_level,
             session_name=self.session_name,
             session_file=session.active_session_file,
-            context_size=self.model.context_window,
-        )
+        ))
 
     def matches_model(self, selected: tuple[str, str]) -> bool:
         return self.model.matches_identity(selected)

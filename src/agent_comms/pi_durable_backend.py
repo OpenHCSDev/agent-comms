@@ -239,7 +239,7 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
         usage = (await child.request(GetSessionStats())).context_usage
         if usage is None:
             raise ValueError('Durable session has no context observation')
-        return ContextUsage(usage.tokens, usage.context_window)
+        return usage.context_window.reading(usage.token_total)
 
     async def models(self, thread):
         child = await self.open(thread)

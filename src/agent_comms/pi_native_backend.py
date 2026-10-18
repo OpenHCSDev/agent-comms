@@ -292,7 +292,7 @@ class PiNativeBackend(
         usage = stats.context_usage
         if usage is None:
             return ContextUsage(tokens=None, window=None)
-        return ContextUsage(tokens=usage.tokens, window=usage.context_window)
+        return usage.context_window.reading(usage.token_total)
 
     # -- Compacts ---------------------------------------------------------
 
