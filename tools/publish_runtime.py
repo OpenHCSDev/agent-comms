@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from importlib.metadata import distribution
+from importlib.resources import files
 import os
 from pathlib import Path
 import subprocess
@@ -20,7 +21,6 @@ import sys
 import uuid
 
 from agent_comms.active_route import read_active_route
-from agent_comms.cli_bridges import opencode
 from agent_comms.comms import wire
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.launch_runtime import LaunchRuntime
@@ -46,7 +46,7 @@ class RuntimePublication:
             if entry.group == 'console_scripts'
         }
         links[Path.home() / '.local/share/agent-comms/opencode_tui.ts'] = (
-            Path(opencode.__file__).with_name('opencode_tui.ts')
+            Path(files('agent_comms.cli_bridges') / 'opencode_tui.ts')
         )
         for link, target in links.items():
             target.stat()
