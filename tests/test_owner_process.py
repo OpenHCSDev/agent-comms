@@ -17,6 +17,7 @@ import pytest
 
 from agent_comms.acp import CommsAgent
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.owner_lifecycle import NoRelease
 from agent_comms.child_process import ObservedProcess, ParentedProcess
 from agent_comms.comms import Comms
 from agent_comms.config_options import ThinkingLevelConfigOption
@@ -56,7 +57,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
             mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
         assert owner.process_alive
         assert comms.registry.snapshot() == before
-        assert "worker" not in comms.owners.releases.read()
+        assert isinstance(comms.owners.releases.get("worker"), NoRelease)
         restarted = comms.owners.restart_owners(
             ["worker"], agent_bin="pi", agent_args=[]
         )

@@ -36,8 +36,8 @@ class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):
     def require_release(self, acknowledgement, snapshot, current) -> None: ...
 
     @abstractmethod
-    def recovery_session_files(self, row, acknowledgement) -> tuple[Path, ...]:
-        """Original launch selections to inspect after attested owner loss."""
+    def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
+        """Original input selection, or the exact stopped registry owner's selection."""
 
 
 @dataclass(frozen=True)
@@ -64,14 +64,14 @@ class UnrecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
             raise StaleFence("native input claim_scope was already bound")
 
     def require_release(self, acknowledgement, snapshot, current) -> None:
-        current.require_local_process(acknowledgement.thread.require_process())
+        current.require_local_process(acknowledgement.require_process())
         current.require_idle()
         if not acknowledgement.current(snapshot, current, acknowledgement.before):
             raise RelationViolationError("Unrecorded native send has no exact stopped release")
 
-    def recovery_session_files(self, row, stopped) -> tuple[Path, ...]:
-        # An unopened owner has no stored runtime files to recover.
-        return tuple(files.session for files in stopped.thread.runtime.storage_files())
+    def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
+        # The exact stopped declaration is held by VerifiedOwnerLoss's registry lock.
+        return tuple(files.session for files in stopped_owner.runtime.storage_files())
 
 
 @dataclass(frozen=True)
@@ -89,14 +89,14 @@ class RecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
 
     def require_release(self, acknowledgement, snapshot, current) -> None:
         sent = ClaimedIdentity(current.incarnation, self.value)
-        fence = ClaimedIdentity(acknowledgement.thread.incarnation, acknowledgement.before)
+        fence = ClaimedIdentity(acknowledgement.incarnation(), acknowledgement.before)
         if not fence.includes(sent):
             raise RelationViolationError("Native release predates the sending claim_scope")
         if snapshot.claimed_generations[current.name] == acknowledgement.after:
             if not acknowledgement.current(snapshot, current, acknowledgement.before):
                 raise RelationViolationError("Native release differs from its stopped declaration")
 
-    def recovery_session_files(self, row, acknowledgement) -> tuple[Path, ...]:
+    def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
         # The original send contract authorized only journals inside this
         # recipient's native-sessions directory, and recorded selected identity
         # later, with the context acknowledgement. That directory remains checked by

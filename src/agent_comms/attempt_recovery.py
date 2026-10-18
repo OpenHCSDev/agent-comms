@@ -89,13 +89,11 @@ class VerifiedOwnerLoss:
             if source is None or source.owner_identity != attempt.owner_identity:
                 raise RecoveryBlocked("native attempt has no matching dispatched owner")
             try:
-                release = comms.owners.releases.read().get(attempt.owner_thread)
+                release = comms.owners.releases.get(attempt.owner_thread)
             except (OSError, ValueError, TypeError) as error:
                 raise RecoveryBlocked("native owner release acknowledgement is invalid") from error
-            if release is None:
-                raise RecoveryBlocked("native owner release acknowledgement is missing")
             try:
-                release.require_native_loss(registry, source)
+                release = release.require_native_loss(registry, source)
             except (ValueError, IdentityConflict, RelationViolationError) as error:
                 raise RecoveryBlocked(f"native owner release does not prove loss of this claim_scope: {error}") from error
             proof = object.__new__(cls)
@@ -139,7 +137,7 @@ class VerifiedOwnerLoss:
         if not self.owns(self._store, self.attempt):
             raise RecoveryBlocked("native exit observation requires acquired owner loss")
         session_files = self.native_input.sent_owner_claimed_generation.recovery_session_files(
-            self.native_input, self.release
+            self.native_input, self.boundary.registry.require(self.release.name)
         )
         session_dir = (
             self._store.session.path.parent / "native-sessions" / self.native_input.owner_lookup
@@ -216,8 +214,8 @@ class RecoveryMonitorCapability:
 
         if not (root / "coordination.sqlite3").exists():
             return  # No native coordinator, hence no selected attempt claims.
-        acknowledgement = Comms(root).owners.releases.read().get(owner.name)
-        if acknowledgement is None or acknowledgement.thread.process_identity != owner.process_identity:
+        acknowledgement = Comms(root).owners.releases.get(owner.name)
+        if not acknowledgement.matches(owner):
             raise RecoveryBlocked("stopped attempt requires the exact exited owner release")
         cls.recover_owner(root, owner)
 

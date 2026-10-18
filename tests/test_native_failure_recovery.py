@@ -24,6 +24,8 @@ from agent_comms.coordinator import Coordination
 from agent_comms.execution_states import FailedExecution
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
+from agent_comms.owner_lifecycle import OwnerReleaseEvidence
+from agent_comms.comms import Comms
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
@@ -204,10 +206,10 @@ def test_recovery_refuses_ambiguous_evidence(released_failure, damage):
     elif damage == "tool":
         rows[-1]["message"]["content"] = [{"type": "toolCall", "name": "bash"}]
     elif damage == "wrong_epoch":
-        path = root / "owner_release_receipts.json"
-        receipts = json.loads(path.read_text())
-        receipts["beta"]["before"] = receipts["beta"]["after"] + 1
-        path.write_text(json.dumps(receipts))
+        releases = Comms(root).owners.releases
+        original = releases.get("beta")
+        with releases.writing() as db:
+            OwnerReleaseEvidence.update(db, where="name=?", parameters=("beta",), before=original.after + 1)
     elif damage == "wrong_session":
         session_file = session_file.parent.parent / "other.jsonl"
     if damage not in {"wrong_session", "wrong_epoch"}:
