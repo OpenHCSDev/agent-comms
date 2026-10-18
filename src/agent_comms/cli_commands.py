@@ -13,15 +13,13 @@ import os
 import re
 import shlex
 import time
-import types
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
-from enum import Enum
 from itertools import dropwhile, takewhile
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_type_hints
 
 from acp.schema import SessionConfigSelectOption
 from acp.exceptions import RequestError
@@ -710,24 +708,8 @@ class DeclaredOptions(Command):
                 if group not in groups:
                     groups[group] = parser.add_mutually_exclusive_group(required=True)
                 owner = groups[group]
-            options = dict(metadata["parser_options"])
-            annotation = hints[declared.name]
-            scalar = (
-                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
-            )
-            if scalar is bool:
-                options.setdefault("action", "store_true")
-            elif scalar in (int, float):
-                options.setdefault("type", scalar)
-            elif isinstance(scalar, type) and issubclass(scalar, Enum):
-                options["choices"] = [kind.value for kind in scalar]
-            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options.setdefault("choices", scalar.names())
-            elif (
-                get_origin(scalar) is type and get_args(scalar)
-                and issubclass(get_args(scalar)[0], DeclaredFamily)
-            ):
-                options.setdefault("choices", get_args(scalar)[0].names())
+            decoder = compile_decoder(hints[declared.name])
+            options = {**decoder.argument_options(), **metadata["parser_options"]}
             if metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
@@ -738,13 +720,8 @@ class DeclaredOptions(Command):
                 options["default"] = declared.default_factory()
             else:
                 options["required"] = True
-            if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = options["default"].declared_name
-            elif (
-                isinstance(options.get("default"), type)
-                and issubclass(options["default"], DeclaredFamily)
-            ):
-                options["default"] = options["default"].declared_name
+            if "default" in options:
+                options["default"] = decoder.argument_text(FieldCodec.encode(options["default"]))
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
@@ -753,19 +730,14 @@ class DeclaredOptions(Command):
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload = {"kind": FieldCodec.encode(cls)}
+        payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
         hints = get_type_hints(cls)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
             normalize = declared.metadata["normalize"]
-            if normalize is not None:
-                value = normalize(value)
-            elif isinstance(hints[declared.name], type) and issubclass(
-                hints[declared.name], DeclaredFamily
-            ):
-                value = {"kind": value}
-            payload[key] = value
+            payload[key] = (normalize(value) if normalize is not None
+                            else compile_decoder(hints[declared.name]).argument_payload(value))
         return cls.from_payload(payload)
 
 
