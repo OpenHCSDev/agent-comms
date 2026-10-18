@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.agent_backend import AgentBackend, BackendDeclarationError, RuntimeLocation
 from agent_comms.field_codec import FieldCodec
+from agent_comms.turn_digests import LastTurns
 from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend, Inspect
 from agent_comms.pi_native_backend import PiNativeBackend
 from agent_comms.threads import Thread
@@ -47,7 +48,7 @@ def test_location_methods_and_missing_history(tmp_path):
         assert reader.cut().offset == 0
         assert tuple(reader.reverse(0)) == ()
         assert reader.current_draft().external_row() is None
-    assert source.turns(5) == ()
+    assert source.turns(LastTurns(5)) == ()
     assert not Path(location.path).exists()
     files, = location.storage_files()
     assert files.schema_paths == (Path(location.path),)
@@ -81,9 +82,12 @@ try {
 
 def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration):
     location = DurableDatabase(str(tmp_path / 'history.sqlite3'))
-    subprocess.run(['node', '--input-type=module', '-e', SEED, location.path],
-                   cwd=Path(__file__).parents[1] / 'src/agent_comms', check=True,
-                   capture_output=True, timeout=20)
+    hosts = Path(__file__).parents[1] / 'src/agent_comms'
+    seeded = subprocess.run(['node', '--input-type=module', '-e', SEED, location.path],
+                            cwd=hosts, capture_output=True, text=True, timeout=20)
+    assert seeded.returncode == 0, (
+        f'seeding failed; the durable host needs its locked packages: '
+        f'npm ci --ignore-scripts --omit=dev in {hosts}\n{seeded.stderr[-2000:]}')
     async def journey():
         backend = PiDurableBackend()
         thread = thread_registration.new_thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
@@ -102,7 +106,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
                     assert forward == tuple(reversed(records))
                     with reader.projection(None, None) as project:
                         assert tuple(project(iter(forward), max_records=10, max_bytes=1024))
-                turns = source.turns(1)
+                turns = source.turns(LastTurns(1))
                 assert len(turns) == 1
                 assert [event.text for event in turns[0].events] == ['entry 258', 'entry 259']
             await asyncio.to_thread(read)

@@ -12,8 +12,8 @@ ledger (``carries.json``) names the carry steps still pending; each runs from
 the revision that declares it (``tools/cutover/carry.py``). Every run first
 rehearses on a copy of the bus: the steps, then ``who``, ``threads`` and
 ``history`` reads, and every file no step names as rewritten must be
-byte-identical. ``--rehearse``
-stops there.
+byte-identical. The rehearsal prepares native Pi in the staged stack exactly as
+the live phase does. ``--rehearse`` stops there.
 
 A live run then stops the running agent owners with the installed CLI, backs
 the bus up (tar plus a hash of every file), moves the checkout,
@@ -218,6 +218,7 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         copy = Path(scratch) / root.name
         copy_bus(root, copy)
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
+        stack.prepare_native()
         before = bus_files(copy)
         steps = [*before_stop(copy, pending, stack, revisions),
                  *carry_all(copy, pending, stack, revisions)]

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
@@ -29,7 +29,7 @@ class NoWakeReason(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class RecipientDecision(ABC):
+class RecipientDecision(DeclaredFamily):
     recipient: str  # Stable recipient_lookup, never the mutable canonical name.
 
     @abstractmethod
@@ -45,18 +45,10 @@ class RecipientDecision(ABC):
     def to_wire(self) -> dict[str, str]: ...
 
     marker: ClassVar[str]  # the key only this decision's wire row carries
-    # Each member by its marker. slots=True rebuilds every class, so __subclasses__()
-    # also lists the discarded pre-slots copies; the rebuilt class registers last.
-    members: ClassVar[dict[str, type[RecipientDecision]]] = {}
-
-    def __init_subclass__(cls, **kwargs):
-        super().__init_subclass__(**kwargs)
-        cls.members[cls.marker] = cls
-
     @classmethod
     def from_wire(cls, row: dict[str, str]) -> RecipientDecision:
         """A committed row's decision, whose digest its first read proved."""
-        member, = (member for marker, member in cls.members.items() if marker in row)
+        member, = (member for member in cls.members_with(cls) if member.marker in row)
         return member.from_wire(row)
 
     def initial_notification(self, recipient, sender_lookup, *, observation):
