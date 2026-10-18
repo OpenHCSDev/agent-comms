@@ -76,13 +76,12 @@ class PiPayload:
             if member.opaque:
                 return {"kind": member.declared_name, "payload": value}
             data["kind"] = member.declared_name
-        declared = [f for f in fields(member) if f.init]
-        names = {f.metadata.get("wire_name", f.name) for f in declared}
+        declared = FieldCodec.record_fields(member)
+        names = {key for _, key in declared}
         if member.strict_fields and set(value) - names - {member.wire_tag}:
             raise MalformedRecord(f"Unexpected {member.__name__} fields")
         hints = FieldCodec._types(member)
-        for f in declared:
-            key = f.metadata.get("wire_name", f.name)
+        for f, key in declared:
             if key in value:
                 data[key] = member.normalize_field(hints[f.name], key, value[key], value)
         return data

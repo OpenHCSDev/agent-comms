@@ -156,10 +156,9 @@ class NativeContextRecord:
         This is an emitted acknowledgement, not proof of durable inclusion. A journal
         read must independently corroborate the same complete located record.
         """
-        record = FieldCodec.decode(cls, {
-            item.metadata.get("wire_name", item.name): getattr(context_event, item.name)
-            for item in fields(cls)
-        })
+        emitted = FieldCodec.encode(context_event)
+        record = FieldCodec.decode(cls, {key: emitted[key]
+                                         for _, key in FieldCodec.record_fields(cls)})
         if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
             raise NativePiUnavailable("Native Pi context names another original input")
         if record.input_commit != NativeInputCommit.from_event(input_event):
@@ -229,7 +228,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return {
             "objects": cls.schema_objects(),
             "columns": [
-                {"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
+                {"name": item.name, "wire": FieldCodec.wire_key(item)}
                 for item in fields(cls)
             ],
             "insert": cls.insertion_statement(),

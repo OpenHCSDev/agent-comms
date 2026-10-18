@@ -358,7 +358,7 @@ class TypedRow:
         return tuple(
             _Field(
                 name=item.name,
-                wire_name=(item.metadata.get("wire_name", item.name)
+                wire_name=(FieldCodec.wire_key(item)
                            if item.metadata.get("sql", Column()).record_key else item.name),
                 init=item.init,
                 annotation=hints[item.name],
