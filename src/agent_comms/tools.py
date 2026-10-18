@@ -808,9 +808,10 @@ class CommsTodoListTool(ThreadReadTool):
 class CommsStandingRulesTool(ThreadReadTool):
     label = "Read broken standing rules"
     description = "Every standing rule the commander breaks now, one line each, derived on read."
+    after: float = tool_field("Only rules broken since this time; 0 lists every one", default=0.0)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.subject(self.thread))
+        broken = StandingRule.broken(comms, caller.subject(self.thread), self.after)
         return StandingRulesRead(tuple(rule.line() for rule in broken))
 
 
@@ -890,7 +891,7 @@ class CommsProblemCloseTool(ThreadToolRequest):
     label = "Close installed problem"
     description = "Record installed application evidence and close only a problem with no open order."
     problem: str = tool_field("Problem ID")
-    works: str = tool_field("What worked in the installed application, 8+ words")
+    works: str = tool_field("What worked in the app, quoting the order's Works when run")
     artifact: str = tool_field("Existing verification artifact file")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:

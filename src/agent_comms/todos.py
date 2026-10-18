@@ -235,8 +235,11 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     def line(self) -> str: ...
 
     def stalled(self, ordered: float, now: float) -> bool:
+        return (since := self.stalled_since(ordered)) is not None and now > since
+
+    def stalled_since(self, ordered: float) -> float | None:
         """Work stalls 15 minutes after ``moved`` with no commit, push or PR change."""
-        return self.moved is not None and now - self.moved > 900
+        return None if self.moved is None else self.moved + 900
 
     @property
     def moved(self) -> float | None:
@@ -259,9 +262,9 @@ class NoCommitProgress(OrderProgress):
     def line(self) -> str:
         return "no commit since the order"
 
-    def stalled(self, ordered: float, now: float) -> bool:
+    def stalled_since(self, ordered: float) -> float | None:
         """No first commit within 10 minutes of the order."""
-        return now - ordered > 600
+        return ordered + 600
 
 
 @dataclass(frozen=True)
@@ -522,24 +525,45 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     @abstractmethod
     def instructions(self) -> tuple[str, ...]: ...
 
+    @abstractmethod
+    def require_closing(self, works: str) -> None:
+        """Refuse closing evidence that does not show this run happened."""
+
 
 @dataclass(frozen=True)
 class MechanicalOrderRun(OrderRun):
     def instructions(self) -> tuple[str, ...]:
         return ()
 
+    def require_closing(self, works: str) -> None:
+        """The order's check alone closes it."""
+
 
 @dataclass(frozen=True)
 class ApplicationOrderRun(OrderRun):
     text: str
+    least_words: ClassVar[int] = 8  # the run, and the evidence that it happened
+    quoted_words: ClassVar[int] = 4
 
     def __post_init__(self) -> None:
-        if len(self.text.split()) < 8:
-            raise ValueError(f'Add "{self.label} <the user-visible closing run, 8+ words>"; '
-                             'a grep never closes a problem.')
+        if len(self.text.split()) < self.least_words:
+            raise ValueError(f'Add "{self.label} <the user-visible closing run, '
+                             f'{self.least_words}+ words>"; a grep never closes a problem.')
 
     def instructions(self) -> tuple[str, ...]:
         return (f"{self.label} {self.text}",)
+
+    def require_closing(self, works: str) -> None:
+        quoted = self.phrases(self.text) & self.phrases(works)
+        if len(works.split()) < self.least_words or not quoted:
+            raise ValueError(f"Describe what worked in {self.least_words}+ words, quoting "
+                             f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
+
+    @classmethod
+    def phrases(cls, text: str) -> set[tuple[str, ...]]:
+        words = [word.strip(".,;:!?\"'`()").lower() for word in text.split()]
+        return {tuple(words[at:at + cls.quoted_words])
+                for at in range(len(words) - cls.quoted_words + 1)}
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):
@@ -689,6 +713,7 @@ class DeliveredProblemOrder(ProblemOrder):
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
     def installed(self, works, artifact):
+        self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
 
 
@@ -699,8 +724,8 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
     def __post_init__(self):
         super().__post_init__()
-        if len(self.works.split()) < 8 or not self.artifact.strip():
-            raise ValueError("Describe what worked (8+ words) and name its artifact file.")
+        if not self.works.strip() or not self.artifact.strip():
+            raise ValueError("Describe what worked and name its artifact file.")
 
     def installed(self, works, artifact):
         if (works, artifact) != (self.works, self.artifact):
@@ -952,7 +977,7 @@ class StrikeTodo(TodoOperation):
     reason: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
 
-    def apply(self, current):
+    def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
@@ -1002,8 +1027,7 @@ class SendBackVerdict(OrderVerdict):
     def judged(self, current: Todo) -> Todo:
         strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
                             self.at)
-        struck: Todo = strike.apply(current)
-        return struck
+        return strike.apply(current)
 
     def record(self, goals: Goals, problem: str) -> Todo:
         return goals.send_back(problem, self)
@@ -1193,6 +1217,12 @@ class Todo(TypedTable):
     @property
     def pending(self):
         return self.order.pending
+
+    def late_since(self, now: float) -> float | None:
+        """When this order crossed its deadline undelivered: the moment it became late, or None
+        while it can still arrive on time or is delivered."""
+        deadline = self.deadline.recorded_at("An order deadline")
+        return deadline if self.pending and deadline < now else None
 
     @property
     def creator_identity(self) -> ThreadIncarnation:
