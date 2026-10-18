@@ -85,7 +85,7 @@ class GoalScheduler:
                 try:
                     thread.require_local_process(ProcessIdentity.capture(os.getpid()))
                     snapshot.status(thread.name).require_running()
-                    thread.active_turn.require_idle()
+                    thread.turn_record.read().require_idle()
                 except RelationViolationError:
                     return
                 goal = thread.goal.active()

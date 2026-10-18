@@ -87,7 +87,7 @@ class OrdinaryTurnRule(ReservationRule):
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
         return (
-            not check.current.active_turn.matches(check.turn)
+            not check.current.turn_record.read().matches(check.turn)
         )
 
 

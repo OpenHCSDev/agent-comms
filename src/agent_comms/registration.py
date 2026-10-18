@@ -24,8 +24,7 @@ from .thread_status import (
 )
 from .threads import Thread
 from .storage_rules import StorageRule
-from .turn_lease import FinishedTurnFence, TurnLeaseFence, TurnState
-from .turn_phase import TurnPhase
+from .turn_lease import FinishedTurnFence, TurnLeaseFence
 
 _RUNNING_STATUS = RunningThreadStatus()
 
@@ -83,7 +82,7 @@ class Registration:
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
             # observed source must not rewrite this authorized turn's settings.
-            observed = replace(change.installed_thread,
+            observed = replace(change.thread,
                 worktree=original.thread.worktree, model=original.thread.model,
                 thinking_level=original.thread.thinking_level)
             return replace(original, thread=observed)
@@ -132,7 +131,7 @@ class Registration:
             change = self._prepare_declaration(edit.document, channels, thread, status)
             change = self._commit_registration(edit, change)
             channels.remember_tags(change.thread.tags, change.thread.created_at)
-        return change.installed_thread
+        return change.thread
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         change.thread.role.require_maintenance_open(
@@ -242,19 +241,6 @@ class Registration:
             edit.commit()
             return result
 
-    def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        with self.store.editing() as edit:
-            effects = edit.document.transition_turn(lease, phase)
-            edit.commit()
-            return effects
-
-    def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
-        """Interpret the observation against this same locked original turn."""
-        with self.store.editing() as edit:
-            effects = edit.document.observe_native_phase(lease, phase)
-            edit.commit()
-            return effects
-
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
         with self.store.reading() as document:
@@ -272,7 +258,7 @@ class Registration:
             owner = RegistryOwner.capture_local(edit.document.snapshot(), expected.name)
             owner.require_claim(expected, generation)
             self._assert_maintenance_open_unlocked()
-            leased, _ = edit.document.lease_turn(owner.thread, turn.value, None)
+            leased, _ = edit.lease_turn(owner.thread, turn.value, None)
             edit.commit()
             return leased, generation
 
@@ -292,9 +278,9 @@ class Registration:
             snapshot = edit.document.snapshot()
             owner = RegistryOwner.capture_local(snapshot, expected.name)
             owner.require_exact(snapshot, expected, generation)
-            owner.thread.active_turn.require_idle()
+            owner.thread.turn_record.read().require_idle()
             self._assert_maintenance_open_unlocked()
-            result = edit.document.lease_turn(owner.thread, turn.value, routing)
+            result = edit.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
 
@@ -310,9 +296,9 @@ class Registration:
         turn = TurnId.for_registration(turn_id)
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.document.snapshot(), name)
-            owner.thread.active_turn.require_idle()
+            owner.thread.turn_record.read().require_idle()
             self._assert_maintenance_open_unlocked()
-            result = edit.document.lease_turn(owner.thread, turn.value, routing)
+            result = edit.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
 

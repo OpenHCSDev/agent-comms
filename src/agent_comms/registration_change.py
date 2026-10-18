@@ -38,10 +38,6 @@ class RegistrationChange(ABC):
     @abstractmethod
     def changes_owner(self) -> bool: ...
 
-    @property
-    def installed_thread(self) -> Thread:
-        return self.thread.without_turn_claim()
-
     @abstractmethod
     def restarted(self) -> RegistrationChange: ...
 
@@ -51,12 +47,12 @@ class RegistrationChange(ABC):
 
     def apply(self, document: RegistryDocument) -> None:
         """Caller holds registry/publication authority and records goal history."""
-        thread = self.installed_thread
-        document.threads[thread.name] = thread
+        thread = self.thread
+        document.install_thread(thread)
         document.statuses[thread.name] = self.status
         document.last_seen[thread.name] = time.time()
         if self.changes_owner:
-            document.claims.advance(thread.name)
+            document.advance_claim(thread.name)
             document.owners.advance(thread.name)
 
 
@@ -79,7 +75,7 @@ class UpdatedRegistration(RegistrationChange):
 
     def declared(self, requested: Thread) -> RegistrationChange:
         """Decide whether to keep or claim execution against the locked prior owner."""
-        if self.previous.active_turn.executing:
+        if self.previous.turn_record.read().executing:
             if requested.execution is not self.previous.execution:
                 raise RelationViolationError("Cannot replace receiving capability during its active turn.")
             if requested.process_identity.conflicts_with(self.previous.process_identity):
@@ -89,7 +85,7 @@ class UpdatedRegistration(RegistrationChange):
                 thread=replace(
                     self.thread,
                     process_identity=self.previous.process_identity,
-                    active_turn=self.previous.active_turn,
+                    turn_record=self.previous.turn_record,
                     turn_generation=self.previous.turn_generation,
                     last_finished_turn_id=self.previous.last_finished_turn_id,
                 ),
@@ -118,12 +114,6 @@ class UpdatedRegistration(RegistrationChange):
             or self.previous_status.changes_owner(self.status)
         )
 
-    @property
-    def installed_thread(self) -> Thread:
-        if self.thread.active_turn == self.previous.active_turn:
-            return self.thread
-        return self.thread.without_turn_claim()
-
     def restarted(self) -> RegistrationChange:
         return OwnerRestartRegistration(
             thread=self.thread,
@@ -141,7 +131,7 @@ class NativeSourcePublication(UpdatedRegistration):
     """
 
     def apply(self, document: RegistryDocument) -> None:
-        document.threads[self.thread.name] = self.installed_thread
+        document.install_thread(self.thread)
 
 
 class ExplicitOwnerChange(RegistrationChange):
@@ -152,10 +142,6 @@ class ExplicitOwnerChange(RegistrationChange):
     @property
     def claims_owner(self) -> bool:
         return True
-
-    @property
-    def installed_thread(self) -> Thread:
-        return self.thread.without_turn_claim()
 
     def restarted(self) -> RegistrationChange:
         return self
