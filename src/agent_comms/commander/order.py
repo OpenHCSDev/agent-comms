@@ -27,16 +27,16 @@ from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..goals import CountCheckResult, OrderCheck
+from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import PlanPhase
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
-                     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
+from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
+                     RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
 from . import capacity, rules, storage
 from .config import CommanderConfig, Repo
@@ -296,7 +296,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
     fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
     if not mechanical and fired:
-        sys.exit(f'Refused: {unit} has 2 strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
+        sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
+                 f'Reassign them; only --mechanical orders on them reach {unit}.')
     at = time.time()
     try:
         order = PendingProblemOrder(
@@ -755,15 +756,12 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
 
 
 def fire(unit: str, why: str) -> None:
-    """Core releases every open problem the unit holds, one call each; orders and strikes stay."""
-    actor = COMMS.registry.require(ME).incarnation
+    """Core releases every open problem the unit holds in one call; orders and strikes stay."""
     try:
         reason = StrikeReason(why)
     except ValueError as refused:
         sys.exit(f'Refused: {refused}')
-    for todo in open_todos(unit) or sys.exit(f'Refused: {unit} holds no open problem.'):
-        release = ReleaseTodo(todo.revision, actor, todo.assignment, reason)
-        call(CommsTodoTool(id=todo.id, operation=release))
+    for todo in call(CommsFireTool(unit=unit, reason=reason)).todos:
         print(f'{todo.id}: released from {unit}: {why}')
 
 
