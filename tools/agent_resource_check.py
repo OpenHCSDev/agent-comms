@@ -90,20 +90,32 @@ class ProcessIdentity:
 
 
 class DirectoryUsers:
-    """Read-only, point-in-time users of a directory, excluding this checker.
+    """Inspect all requested paths in one /proc pass, excluding this checker."""
 
-    The checker exits before removal; its own --users argument is not a user.
-    All other live processes are checked, including ones we cannot inspect.
-    """
+    option = "--users"
+    shell_boundaries = frozenset((b";", b"&&", b"||", b"|", b"&", b"(", b")", b">", b">>", b"<", b"<<", b">&", b"<&"))
 
-    def __init__(self, path):
-        path = path.expanduser().absolute()
-        names = {os.fsencode(str(path)), os.fsencode(os.path.realpath(path))}
-        expressions = []
-        for name in names:
-            name = name.rstrip(b"/") or b"/"
-            expressions.append(re.escape(name) + (rb"(?=$|[/\x00\s:'\"])" if name != b"/" else b""))
+    @staticmethod
+    def kinds():
+        return (DirectoryUsers, *DirectoryUsers.__subclasses__())
+
+    def __init__(self, paths):
+        self.paths = tuple(dict.fromkeys(path.expanduser().absolute() for path in paths))
+        aliases = {}
+        for path in self.paths:
+            for name in (os.fsencode(path), os.fsencode(os.path.realpath(path))):
+                aliases.setdefault(name.rstrip(b"/") or b"/", set()).add(str(path))
+        # Prefer the longest name, then include its queried ancestors too.
+        # One path may be both a symlink alias and a child of another query.
+        self.path_matches = {
+            name: set().union(*(owners for parent, owners in aliases.items()
+                               if name == parent or name.startswith(parent.rstrip(b"/") + b"/")))
+            for name in aliases
+        }
+        expressions = (re.escape(name) + (rb"(?=$|[/\x00\s:'\"])" if name != b"/" else b"")
+                       for name in sorted(aliases, key=len, reverse=True))
         self.pattern = re.compile(b"(?:" + b"|".join(expressions) + b")")
+        self.query_options = tuple(kind.option.encode() for kind in self.kinds())
         command = Path(sys.argv[0])
         self.commands = {os.fsencode(str(command)), os.fsencode(str(command.absolute())), os.fsencode(command.name)}
         self.ancestors = set()
@@ -111,7 +123,7 @@ class DirectoryUsers:
         while pid:
             try:
                 identity = ProcessIdentity.read(Path("/proc") / str(pid))
-            except (OSError, ValueError, IndexError):
+            except (FileNotFoundError, ProcessLookupError, PermissionError, ValueError, IndexError):
                 break
             if identity.key in self.ancestors:
                 break
@@ -126,13 +138,13 @@ class DirectoryUsers:
             argument = arguments[index]
             if argument in self.commands:
                 checking = True
-            elif checking and argument == b"--users" and index + 1 < len(arguments):
-                index += 2
-                continue
-            elif checking and argument.startswith(b"--users="):
+            elif checking and argument.split(b"=", 1)[0] in self.query_options:
                 index += 1
+                while (index < len(arguments) and arguments[index] not in self.shell_boundaries
+                       and not arguments[index].startswith(b"-")):
+                    index += 1
                 continue
-            elif argument in (b";", b"&&", b"||", b"|", b"&", b"(", b")"):
+            elif argument in self.shell_boundaries:
                 checking = False
             result.append(argument)
             index += 1
@@ -141,33 +153,65 @@ class DirectoryUsers:
     def command_line(self, data):
         arguments = data.split(b"\x00")
         for index, argument in enumerate(arguments):
-            if b"--users" not in argument or not any(command in argument for command in self.commands):
+            if (not any(option in argument for option in self.query_options)
+                    or not any(command in argument for command in self.commands)):
                 continue
-            # Shell -c bodies put the query in one argument. Remove only that
-            # query's option/value, not other paths in the invoking command.
             try:
                 lexer = shlex.shlex(os.fsdecode(argument), posix=True, punctuation_chars=True)
                 lexer.whitespace_split = True
                 lexer.commenters = ""
                 tokens = [os.fsencode(token) for token in lexer]
             except ValueError:
-                continue  # An unparsed argument remains visible, never clear.
+                continue  # Unparsed arguments remain visible, never clear.
             arguments[index] = b" ".join(self.without_query(tokens))
         return b"\x00".join(self.without_query(arguments))
 
+    def still_userspace(self, proc, before, result):
+        """Discard a departed process, never an unreadable live one."""
+        try:
+            after = ProcessIdentity.read(proc)
+        except (FileNotFoundError, ProcessLookupError):
+            return False
+        except (PermissionError, ValueError, IndexError) as error:
+            result["unreadable"]["stat"] = str(error)
+            return True
+        if not after.userspace:
+            return False
+        if after.key != before.key:
+            result["unreadable"]["stat"] = "PID changed during inspection"
+        return True
+
+    def read_interface(self, proc, before, name, read, result):
+        try:
+            data = os.fsencode(read())
+        except (FileNotFoundError, ProcessLookupError) as error:
+            if not self.still_userspace(proc, before, result):
+                return False
+            if not name.startswith("fd/"):
+                result["unreadable"][name] = str(error)
+        except PermissionError as error:
+            result["unreadable"][name] = str(error)
+        else:
+            if name == "cmdline" and before.key in self.ancestors:
+                data = self.command_line(data)
+            paths = set().union(*(self.path_matches[match.group()] for match in self.pattern.finditer(data)))
+            if paths:
+                result["matches"].append(name)
+                result["paths"].extend(paths)
+        return True
+
     def inspect(self, proc):
-        result = {"pid": int(proc.name), "matches": [], "unreadable": {}}
+        result = {"pid": int(proc.name), "matches": [], "paths": [], "unreadable": {}}
         try:
             before = ProcessIdentity.read(proc)
         except (FileNotFoundError, ProcessLookupError):
             return None
-        except (OSError, ValueError, IndexError) as error:
+        except (PermissionError, ValueError, IndexError) as error:
             result["unreadable"]["stat"] = str(error)
             return result
         if not before.userspace:
             return None
         result["start_time"] = before.start_time
-        # These are Linux's external file interfaces, not separate scan policies.
         readers = (
             ("exe", (proc / "exe").readlink),
             ("cwd", (proc / "cwd").readlink),
@@ -176,36 +220,21 @@ class DirectoryUsers:
             ("maps", (proc / "maps").read_bytes),
         )
         for name, read in readers:
-            try:
-                data = os.fsencode(read())
-                if name == "cmdline" and before.key in self.ancestors:
-                    data = self.command_line(data)
-                if self.pattern.search(data):
-                    result["matches"].append(name)
-            except OSError as error:
-                result["unreadable"][name] = str(error)
+            if not self.read_interface(proc, before, name, read, result):
+                return None
         try:
             for descriptor in (proc / "fd").iterdir():
-                try:
-                    if self.pattern.search(os.fsencode(descriptor.readlink())):
-                        result["matches"].append("fd/" + descriptor.name)
-                except (FileNotFoundError, ProcessLookupError):
-                    pass  # An individually closed descriptor is not an inspection failure.
-                except OSError as error:
-                    result["unreadable"]["fd/" + descriptor.name] = str(error)
-        except OSError as error:
-            result["unreadable"]["fd"] = str(error)
-        try:
-            after = ProcessIdentity.read(proc)
-        except (FileNotFoundError, ProcessLookupError):
-            return None
-        except (OSError, ValueError, IndexError) as error:
-            result["unreadable"]["stat"] = str(error)
-        else:
-            if after.key != before.key:
-                result["unreadable"]["stat"] = "PID changed during inspection"
-            elif not after.userspace:
+                if not self.read_interface(proc, before, "fd/" + descriptor.name, descriptor.readlink, result):
+                    return None
+        except (FileNotFoundError, ProcessLookupError) as error:
+            if not self.still_userspace(proc, before, result):
                 return None
+            result["unreadable"]["fd"] = str(error)
+        except PermissionError as error:
+            result["unreadable"]["fd"] = str(error)
+        if not self.still_userspace(proc, before, result):
+            return None
+        result["paths"] = sorted(set(result["paths"]))
         return result if result["matches"] or result["unreadable"] else None
 
     def __iter__(self):
@@ -216,23 +245,49 @@ class DirectoryUsers:
             if result is not None:
                 yield result
 
+    def report(self):
+        found = False
+        for process in self:
+            print(json.dumps(process, sort_keys=True))
+            found = True
+        return int(found)
+
+
+class FreeDirectories(DirectoryUsers):
+    """Print paths with no users; refuse to clear any path when a process is unreadable."""
+
+    option = "--free"
+
+    def report(self):
+        processes = tuple(self)
+        unreadable = tuple(process for process in processes if process["unreadable"])
+        if unreadable:
+            for process in unreadable:
+                print(json.dumps(process, sort_keys=True), file=sys.stderr)
+            return 1
+        used = set().union(*(process["paths"] for process in processes))
+        for path in self.paths:
+            if str(path) not in used:
+                print(path)
+        return 0
+
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, default=Path('/var/tmp/agent-comms-live-20260927-wzjtqhza'))
     parser.add_argument("--assert-headroom", action="store_true")
     parser.add_argument("--monitor", action="store_true")
-    parser.add_argument("--users", type=Path, metavar="PATH", help="list directory users and unreadable processes (excluding this checker); exit 1 if any")
+    queries = parser.add_mutually_exclusive_group()
+    for kind in DirectoryUsers.kinds():
+        queries.add_argument(kind.option, dest=kind.__name__, type=Path, nargs="+", metavar="PATH",
+                             help=kind.__doc__)
     args = parser.parse_args()
-    if args.users is not None:
-        # Other users' /proc entries are readable only by root; read them all instead of failing on them.
-        if os.geteuid() != 0:
-            os.execvp("sudo", ["sudo", "-n", sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
-        found = False
-        for process in DirectoryUsers(args.users):
-            print(json.dumps(process, sort_keys=True))
-            found = True
-        raise SystemExit(int(found))
+    for kind in DirectoryUsers.kinds():
+        if (paths := getattr(args, kind.__name__)) is not None:
+            # Read other users' /proc entries too, rather than silently omit them.
+            if os.geteuid() != 0:
+                os.execvp("sudo", ["sudo", "-n", sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
+            raise SystemExit(kind(paths).report())
     limits = limits_for(args.root)
     free, memory = headroom(limits)
     level, reasons = severity(free, memory, limits)
@@ -246,7 +301,7 @@ def main():
     if args.monitor:
         try:
             previous = json.loads(STATE.read_text()).get("level")
-        except (OSError, ValueError):
+        except (FileNotFoundError, PermissionError, ValueError):
             previous = None
         if previous != level:
             STATE.parent.mkdir(parents=True, exist_ok=True)
