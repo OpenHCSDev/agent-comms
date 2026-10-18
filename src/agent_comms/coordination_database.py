@@ -7,7 +7,7 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from contextlib import closing, contextmanager, nullcontext, suppress
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Self
@@ -86,39 +86,33 @@ class StoreFile(DeclaredFamily):
 
     @contextmanager
     def observing(self, consumer, *arguments):
-        with self._connection() as source:
-            yield self._capture(consumer, source, *arguments)
-
-    def _connection(self):
-        return nullcontext(self)
+        yield from self._capture(consumer, *arguments)
 
     @abstractmethod
-    def _capture(self, consumer, source, *arguments): ...
+    def _capture(self, consumer, *arguments): ...
 
 
 @dataclass(frozen=True)
 class MissingStore(StoreFile, declared_name="missing"):
-    def _capture(self, consumer, source, *arguments):
-        return consumer.missing_store(self, *arguments)
+    def _capture(self, consumer, *arguments):
+        yield consumer.missing_store(self, *arguments)
 
 
 @dataclass(frozen=True)
 class InvalidStore(StoreFile):
     reason: str
 
-    def _capture(self, consumer, source, *arguments):
-        return consumer.invalid_store(self, *arguments)
+    def _capture(self, consumer, *arguments):
+        yield consumer.invalid_store(self, *arguments)
 
 
 @dataclass(frozen=True)
 class ReadableStore(StoreFile):
     path: Path
 
-    def _connection(self):
-        return CoordinationStore.observing(self.path)
-
-    def _capture(self, consumer, source, *arguments):
-        return consumer.capture(source, *arguments)
+    def _capture(self, consumer, *arguments):
+        with CoordinationStore.observing(self.path) as connection:
+            yield consumer.capture(connection, *arguments)
 
 
 class CoordinationStore:
