@@ -47,7 +47,6 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
-    from .presentation import WireRevision
     from .registration import Registration
 
 
@@ -699,7 +698,7 @@ class ThreadRelationships:
         self._recent: tuple[Message, ...] = ()
         self._limited = False
 
-    def revision(self) -> WireRevision:
+    def revision(self) -> presentation.WireRevision:
         """What a snapshot derives from; equal revisions show the same thing."""
         return self.views.revision()
 
