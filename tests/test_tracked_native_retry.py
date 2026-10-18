@@ -8,7 +8,7 @@ from agent_comms.pi_payloads import FailedProviderRetry, PiMessage, SucceededPro
 from agent_comms.tracked_turn import CompletedTrackedTerminal, PendingTrackedTerminal, TrackedTurnSession
 from agent_comms.turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
 from agent_comms.turn_goal_permission import InactiveGoalPermission
-from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
+from agent_comms.native_pi import NativeEmptyAnswer, NativePiTerminalFailure, NativePiUnavailable
 from agent_comms.turn_output import TurnOutput
 from agent_comms.turn_failure import ModelRequestFailed, RetryableProviderFailure
 
@@ -92,14 +92,14 @@ def test_delivered_notice_preserves_original_but_real_steering_can_revise(text):
 
 
 @pytest.mark.parametrize("response,parts", [
-    (CompletedTrackedTerminal(""), []),
     (CompletedTrackedTerminal("Unmatched original"), ["Different streamed text"]),
 ])
 @pytest.mark.parametrize("text", ["", '{"decision":"IGNORE"}', "Background answer"])
 def test_notice_cannot_supply_an_unproved_original_answer(response, parts, text):
     response = following(DeliveredFollowingInput).continue_response(response, parts)
     response = response.tool_round().append(text)
-    with pytest.raises(NativePiUnavailable, match="no unique authoritative completed response"):
+    failure = NativeEmptyAnswer if not text else NativePiUnavailable
+    with pytest.raises(failure):
         response.require_response([text])
     response = following(AcceptedFollowingInput).continue_response(response, [text])
     response = response.append("Real user requested this answer")

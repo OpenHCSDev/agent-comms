@@ -19,10 +19,10 @@ from .activity import (
 from .coordination_errors import CoordinationError
 from .coordinator import Coordination
 from .errors import RelationViolationError
-from .native_pi import NativePiUnavailable
+from .native_pi import NativeRequestFailure
 
 UNAVAILABLE_DRAIN_ERRORS = (OSError, sqlite3.Error, CoordinationError, RequestError, RelationViolationError)
-DEFERRED_DRAIN_ERRORS = (NativePiUnavailable, *UNAVAILABLE_DRAIN_ERRORS)
+DEFERRED_DRAIN_ERRORS = (NativeRequestFailure, *UNAVAILABLE_DRAIN_ERRORS)
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -54,7 +54,7 @@ async def drain_failures(
         yield
     except asyncio.CancelledError:
         raise
-    except NativePiUnavailable as error:
+    except NativeRequestFailure as error:
         # A failed native input has already been settled and published by its
         # request owner; it is never replayed, so the owner keeps taking later
         # inputs, as a restart would. This is not an inbox read failure and

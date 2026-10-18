@@ -9,7 +9,7 @@ from functools import partial
 
 from .coordination_errors import StaleFence
 from .coordinator import Coordination
-from .native_pi import NativePiTerminalFailure, NativePiUnavailable
+from .native_pi import NativePiTerminalFailure, NativeRequestFailure
 from .private_send_claim import PrivateSendClaim
 from .selected_participant import SelectedParticipant
 from .selected_result import publish_native_failure
@@ -45,7 +45,7 @@ class SelectedRequest:
                 self.participant, error.context.input_id, error.public_message, source_error=error
             ))
             raise
-        except NativePiUnavailable as error:
+        except NativeRequestFailure as error:
             await self._native_failure(error)
             raise
         except CancelledError:
