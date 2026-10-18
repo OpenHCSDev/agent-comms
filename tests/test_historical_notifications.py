@@ -20,6 +20,8 @@ from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import FullWake
 
+SENDER = "sender"  # the notification carries its sender's lookup; these tests read progress only
+
 
 @pytest.fixture
 def archived_notification(tmp_path, *, thread_registration):
@@ -145,10 +147,11 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     )
     with pytest.raises(TypeError, match="activity"):
         assignment.notification(
-            recipient, observation=RecordedRecipientActivity(), updated_at_ms=1
+            recipient, SENDER, observation=RecordedRecipientActivity(), updated_at_ms=1
         )
     recorded = assignment.notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=activity,
         updated_at_ms=1,
@@ -157,6 +160,7 @@ def test_recorded_engagement_is_not_an_active_turn(archived_notification):
     assert recorded.state.detail == ""
     live = assignment.notification(
         recipient,
+        SENDER,
         observation=UnavailableRecipientActivity(),
         activity=activity,
         updated_at_ms=1,
@@ -186,6 +190,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     engagement = EngagedAssignment.build(FullWake(), "durable-execution", "sender")
     sent = engagement.notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=sent_activity,
         updated_at_ms=1_000,
@@ -193,6 +198,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     queued_activity = replace(sent_activity, progress=QueuedProgress(1_000))
     queued = FullWake().initial_state().build_preengagement(FullWake()).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=queued_activity,
         updated_at_ms=1_000,
@@ -200,6 +206,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
     read_activity = replace(sent_activity, progress=ShownToModelProgress(2_000))
     read = engagement.notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=read_activity,
         updated_at_ms=1_000,
@@ -212,6 +219,7 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
         FullWake(), "durable-execution", "sender"
     ).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=answered_activity,
         updated_at_ms=3_000,
@@ -219,12 +227,14 @@ def test_sent_recipient_progresses_through_durable_read_and_answer(archived_noti
 
     delivered = DeliveredAssignment.build(FullWake(), None, None).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=sent_activity,
         updated_at_ms=2_000,
     )
     delivered_answer = DeliveredAssignment.build(FullWake(), None, None).notification(
         recipient,
+        SENDER,
         observation=RecordedRecipientActivity(),
         activity=replace(
             sent_activity,

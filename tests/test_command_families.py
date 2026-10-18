@@ -33,7 +33,7 @@ def test_cli_decodes_tag_sets_enums_json_and_shell_words_once(monkeypatch):
     register = parse(["register", "--name", "a", "--worktree", "/wt", "--tags", "x, y,x"])
     assert register.tags == frozenset({"x", "y"})
     invoke = parse(["tool", "--tool", "comms_threads"])
-    assert invoke.arguments == "{}"
+    assert invoke.arguments == {}
     send = parse(["send", "--from", "a", "--to", "b", "--body", "hello"])
     assert send.type is InfoKind
     configured = parse(["configure", "--name", "a", "--service-tier", "standard"])

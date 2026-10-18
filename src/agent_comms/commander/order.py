@@ -249,9 +249,11 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
     # path:line it cites must exist.
     if check and os.path.isdir(check[1]) and not problems:
         try:
-            ran = subprocess.run(['bash', '-c', check[2]], cwd=check[1], capture_output=True, text=True, timeout=90)
-            got = re.findall(r'\d+', ran.stdout)
-            if got and int(got[-1]) == int(check[3]):
+            ran = subprocess.run(['bash', '-c', check[2]], cwd=check[1], capture_output=True, timeout=90)
+            if (got := CountCheckResult.printed(ran.stdout)) is None:
+                problems.append('the check printed no integer; '
+                                'use grep -c PATTERN FILE or ... | wc -l')
+            elif got == int(check[3]):
                 problems.append(f'Check already prints {check[3]} before any work: `{check[2]}` proves nothing; write a check that fails now')
         except subprocess.TimeoutExpired:
             problems.append('Check took over 90 s; done runs it too, so make it a focused count')

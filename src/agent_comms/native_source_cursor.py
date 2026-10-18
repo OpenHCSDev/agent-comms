@@ -221,7 +221,7 @@ class NativeSourceCursor:
         with self.store.session.boundary(self.bus, blocking=False) as boundary:
             registry = boundary.registry
             reason = "current native cursor has no matching live owner"
-            if self.bus.log._private_marker_unlocked().root_id != self.wire_root_id:
+            if self.bus.log.private_marker_unlocked().root_id != self.wire_root_id:
                 raise StaleFence(reason)
             captured = RegistryOwner.capture(registry, owner_name, reason)
             with self.store.session.read():

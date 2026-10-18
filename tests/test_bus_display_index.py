@@ -21,7 +21,7 @@ def opened(path, *indexes):
     path.chmod(0o600)
     log = WireLog(path)
     log.write_metadata_unlocked(WireMetadata(last_seq=2, claimed_after_seq=2, writer_protocol_version=1, wire_root_id="0" * 32))
-    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening(), prepared_indexes=prepared) as source:
+    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening(), prepared_indexes=prepared) as source:
         yield source
 
 
