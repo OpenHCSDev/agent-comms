@@ -559,7 +559,7 @@ class ServeVerb(ConnectorVerb):
         try:
             app = connector.application()
         except UnregisteredThreadError:
-            return f"First run agent-comms register --name {CALLER.name} --worktree DIR --tags comms"
+            return f"First run agent-comms register --name {CALLER.name} --worktree DIR"
         web.run_app(app, host=LOOPBACK, port=PORT, access_log=None)
         return 0
 
