@@ -774,7 +774,8 @@ def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
     repo = Path(__file__).parents[1]
     steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
     assert list(steps).index('carry_todo_verdicts') > list(steps).index('carry_problem_goals')
-    for name, changed in (('carry_problem_goals', 2), ('carry_todo_verdicts', 3)):
+    for name, member, changed in (('carry_problem_goals', 'ProblemGoals', 2),
+                                   ('carry_todo_verdicts', 'TodoVerdicts', 3)):
         held = tmp_path / name
         held.mkdir()
         archive = subprocess.run(['git', '-C', str(repo), 'archive', steps[name].revision,
@@ -782,12 +783,10 @@ def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
         subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
         ran = subprocess.run([sys.executable, '-c',
                               'import importlib, pathlib, sys; '
-                              'from cutover.carry import Carry; '
                               'm=importlib.import_module(\"cutover.\"+sys.argv[1]); '
-                              'c=next(v for v in vars(m).values() if isinstance(v,type) '
-                              'and issubclass(v,Carry) and v.__module__==m.__name__); '
-                              'import json; print(json.dumps({\"changed\":c.carry(pathlib.Path(sys.argv[2]),apply=True).changed}))',
-                              name, str(comms.root)],
+                              'c=getattr(m,sys.argv[2]); '
+                              'import json; print(json.dumps({\"changed\":c.carry(pathlib.Path(sys.argv[3]),apply=True).changed}))',
+                              name, member, str(comms.root)],
                              capture_output=True, text=True, cwd=held,
                              env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
         assert ran.returncode == 0, ran.stderr
