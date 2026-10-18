@@ -262,10 +262,6 @@ class ActivitySnapshot:
     checkpoint: ActivityCheckpoint | NoCheckpoint = field(default_factory=NoCheckpoint)
     latest: Mapping[str, Activity] = field(default_factory=dict)
 
-    def current_at(self, path: Path) -> bool:
-        return self.checkpoint.current_at(FileRevision.capture(path))
-
-
 @dataclass(slots=True)
 class ActivityReadState:
     """What a process has read of one activity log: shared by every reader.
@@ -316,7 +312,7 @@ class ActivityLog(ThreadOwnedState):
         while True:
             snapshot = self._read_snapshot()
             with _store_lock(self._path):
-                if not snapshot.current_at(self._path):
+                if not snapshot.checkpoint.current_at(FileRevision.capture(self._path)):
                     continue
                 yield snapshot
                 after = FileRevision.capture(self._path)
