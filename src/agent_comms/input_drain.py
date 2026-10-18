@@ -280,7 +280,6 @@ class InputObservation:
             self.sessions.bindings.get(session_id),
             self.auto_wake,
             self.sessions.runtime_enabled,
-            self.effects.private_nk_native_package,
         ))
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
@@ -450,7 +449,6 @@ class InputObservation:
             observation = ExecutionWaitingObservation
         return observation(wire, entry, (
             root_id,
-            self.effects.private_nk_native_package,
             self.auto_wake,
             self.sessions.runtime_enabled,
             self.sessions.bindings.get(session_id),

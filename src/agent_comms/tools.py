@@ -1057,12 +1057,12 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
     tool: str = option("--tool")
-    arguments: str = option(
-        "--arguments", help="Tool arguments as a JSON object", default="{}",
-    )
+    arguments: JsonObject = option(
+        "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
+        parser_default="{}", normalize=_json_object)
 
     def apply(self, ctx: Comms) -> JsonObject:
-        return invoke_tool(ctx, self.tool, _json_object(self.arguments),
+        return invoke_tool(ctx, self.tool, self.arguments,
                            caller=ToolCaller.from_actor(self.caller))
 
 
