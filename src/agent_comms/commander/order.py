@@ -32,7 +32,8 @@ from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
+from ..tools import (CommsFireTool, CommsOrderCheckTool,
+                     CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,

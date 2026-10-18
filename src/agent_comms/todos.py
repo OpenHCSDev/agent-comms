@@ -915,7 +915,7 @@ class CorrectCheckTodo(TodoOperation):
 
 @dataclass(frozen=True)
 class ServeTodo(TodoOperation):
-    """The commander names the plan phase an open order serves; the order keeps its id and holder."""
+    """The commander names the plan phase an open order serves; it keeps its id and holder."""
     actor: ThreadIncarnation
     serves: type[OrderPhase]
 
