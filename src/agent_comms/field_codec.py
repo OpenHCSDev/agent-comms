@@ -489,11 +489,10 @@ class FieldCodec(Sealed):
     @classmethod
     def encode_record(cls, value: object) -> dict[str, Any]:
         """Encode a record: its family tag, then its declared fields."""
-        tag = (
-            {cast(type[DeclaredFamily], type(value)._family_root).family_discriminator: value.declared_name}
-            if isinstance(value, DeclaredFamily) else {}
-        )
-        return {**tag, **cls.encode_fields(value)}
+        if isinstance(value, DeclaredFamily):
+            root = cast(type[DeclaredFamily], type(value)._family_root)
+            return {root.family_discriminator: value.declared_name, **cls.encode_fields(value)}
+        return cls.encode_fields(value)
 
     @classmethod
     def encode_fields(cls, value: object) -> dict[str, object]:
