@@ -7,11 +7,11 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, PathText, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SubclassUnion
 from .locked_store import JsonDocument
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -307,10 +307,29 @@ class NoTurnRecord(NullMember, TurnRecord):
 
 @dataclass(frozen=True)
 class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
-    path: Annotated[Path, PathText]
-    registry_path: Annotated[Path, PathText]
+    """Durable turn identity; the reading registry supplies its file location."""
+
+    lookup: str
+    generation: int
+    _registry_path: Path | None = field(default=None, init=False, repr=False, compare=False)
 
     record_type = ActiveTurn
+
+    @property
+    def registry_path(self) -> Path:
+        if self._registry_path is None:
+            raise RelationViolationError("Turn record has not been bound to its registry")
+        return self._registry_path
+
+    @property
+    def path(self) -> Path:
+        return self.registry_path.parent / "turns" / f"{self.lookup}-{self.generation}.json"
+
+    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
+        expected = type(self).for_identity(registry_path, identity)
+        if (self.lookup, self.generation) != (expected.lookup, expected.generation):
+            raise RelationViolationError("Turn record identity differs from its registry owner")
+        return self if self._registry_path == expected.registry_path else expected
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
@@ -328,9 +347,9 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
 
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        name = f"{identity.incarnation.require_recorded().lookup}-{identity.generation}.json"
-        registry_path = registry_path.resolve()
-        return cls(registry_path.parent / "turns" / name, registry_path)
+        record = cls(identity.incarnation.require_recorded().lookup, identity.generation)
+        object.__setattr__(record, "_registry_path", registry_path.resolve())
+        return record
 
     @classmethod
     def begin(
