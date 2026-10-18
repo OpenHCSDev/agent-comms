@@ -320,6 +320,9 @@ class TargetOutcome:
     def reconnect_targets(self) -> tuple[str, ...]:
         return ()
 
+    def open_targets(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class TargetCompleted(TargetOutcome):
@@ -330,6 +333,9 @@ class TargetCompleted(TargetOutcome):
 
     def reconnect_targets(self) -> tuple[str, ...]:
         return self.result.reconnect_targets()
+
+    def open_targets(self) -> tuple[str, ...]:
+        return self.result.open_targets()
 
 
 @dataclass(frozen=True)
@@ -351,6 +357,10 @@ class TargetBatchResult(CliResult):
         return tuple(dict.fromkeys(name for outcome in self.outcomes
                                    for name in outcome.reconnect_targets()))
 
+    def open_targets(self) -> tuple[str, ...]:
+        return tuple(dict.fromkeys(name for outcome in self.outcomes
+                                   for name in outcome.open_targets()))
+
     def exit_code(self) -> int:
         return int(not self.successful)
 
@@ -363,7 +373,7 @@ class TargetSelection(ABC):
     @abstractmethod
     def run(self, declaration: type[CliCommand], comms: Comms, arguments: dict[str, object],
             *, confirmed: bool, channel: str | dict[str, tuple[str, ...]] | None, project: str,
-            snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> object:
+            snapshot: RegistrySnapshot, catalog: CatalogDocument | None) -> CliResult:
         """Bind, authorize and apply the declaration on this selection."""
 
 
@@ -469,6 +479,9 @@ class ThreadArchivedResult(CliResult, ToolResult):
 class ThreadCreatedResult(CliResult, ToolResult):
     created: str
     process_identity: ProcessState
+
+    def open_targets(self) -> tuple[str, ...]:
+        return (self.created,)
 
 
 @dataclass(frozen=True)
@@ -887,10 +900,6 @@ class CliCommand(
         return result.encoded()
 
     @classmethod
-    def open_targets(cls, result) -> tuple[str, ...]:
-        return ()
-
-    @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
         hints = get_type_hints(cls)
         declared = {key: item for item, key in FieldCodec.record_fields(cls)}
@@ -929,7 +938,7 @@ class CliCommand(
     def execute_target(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...], arguments: dict[str, object],
                        *, confirmed: bool = False,
                        channel: str | dict[str, tuple[str, ...]] | None = None,
-                       project: str | None = None) -> object:
+                       project: str | None = None) -> CliResult:
         selection = cls.selected_targets(target)
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
@@ -1674,10 +1683,6 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         defaults = NativeThreadDefaults()
         return (cls(name='', project=project, model=defaults.model,
                     thinking_level=defaults.thinking_level),)
-
-    @classmethod
-    def open_targets(cls, result: ThreadCreatedResult) -> tuple[str, ...]:
-        return (result.created,)
 
     def apply(self, ctx: Comms) -> ThreadCreatedResult:
         asyncio.run(ConfigOptions.configured().validate(self))
