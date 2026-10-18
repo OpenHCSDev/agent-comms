@@ -47,6 +47,7 @@ from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, OrderCheck
+from .standing_rules import StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
 from .messages import Message
@@ -159,6 +160,11 @@ class TodoChanged(ToolResult):
 class TodoList(ToolResult):
     todos: tuple[Todo, ...]
     progress: dict[str, OrderProgress] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class StandingRulesRead(ToolResult):
+    broken: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -772,6 +778,16 @@ class CommsTodoListTool(ThreadReadTool):
         pulls, storage = PullRequests(), comms.registry.storage_rule
         return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
                                  for todo in listed if todo.state.open and todo.holder})
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsStandingRulesTool(ThreadReadTool):
+    label = "Read broken standing rules"
+    description = "Every standing rule the commander breaks now, one line each, derived on read."
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> StandingRulesRead:
+        broken = StandingRule.broken(comms, caller.subject(self.thread))
+        return StandingRulesRead(tuple(rule.line() for rule in broken))
 
 
 @dataclass(frozen=True, kw_only=True)
