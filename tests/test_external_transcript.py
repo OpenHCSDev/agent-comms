@@ -81,7 +81,7 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
     assert captured_page.events == ()
     assert captured_draft.events[0].text == "Writing"
     with transcript.reading() as records:
-        assert records.current_draft() is None
+        assert records.current_draft().external_row() is None
 
 
 def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
@@ -95,9 +95,49 @@ def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
         assert not read.has_older(0) and not read.request_earlier(0)
         assert list(read.reverse(0)) == list(read.forward(0, 0)) == []
         assert read.turns(2) == read.frames() == ()
-        assert read.current_draft() is None
+        assert read.current_draft().external_row() is None
     transcript.end_turn()
     assert not transcript.path.exists()
+
+
+def test_end_turn_closes_the_read_before_the_draft_deletes_itself(tmp_path, monkeypatch):
+    import sqlite3
+    from agent_comms.external_transcript import ExternalDraftRow
+
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external("cli")
+    transcript.draft(turn_id="turn", item_id="draft", events=(AssistantTranscript("text"),))
+    connections = []
+    current_draft, end_turn = StoreRead.current_draft, ExternalDraftRow.end_turn
+
+    def capture(reader):
+        connections.append(reader.connection)
+        return current_draft(reader)
+
+    def delete_after_close(draft, store):
+        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
+            connections[-1].execute("SELECT 1")
+        end_turn(draft, store)
+
+    monkeypatch.setattr(StoreRead, "current_draft", capture)
+    monkeypatch.setattr(ExternalDraftRow, "end_turn", delete_after_close)
+    transcript.end_turn()
+    with transcript.reading() as records:
+        assert records.current_draft().external_row() is None
+
+
+def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external("cli")
+    transcript.draft(turn_id="old", item_id="draft", events=(AssistantTranscript("old"),))
+    with transcript.reading() as records:
+        old = records.current_draft()
+    transcript.draft(turn_id="new", item_id="draft", events=(AssistantTranscript("new"),))
+    old.end_turn(transcript)
+    with transcript.reading() as records:
+        assert records.current_draft().turn_id == "new"
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):
@@ -130,9 +170,9 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     with pytest.raises(StaleRevision):
         read.current_draft()
     with transcript.reading() as records:
-        assert records.current_draft() is None
+        assert records.current_draft().external_row() is None
     assert [e.text for e in comms.transcripts.thread_transcript_page("codex").events] == ["Tool", "Hello!"]
     transcript.draft(turn_id="t2", item_id="b", events=(AssistantTranscript("Interrupted"),))
     transcript.end_turn()
     with transcript.reading() as records:
-        assert records.current_draft() is None
+        assert records.current_draft().external_row() is None

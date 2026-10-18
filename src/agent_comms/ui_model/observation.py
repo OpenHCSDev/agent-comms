@@ -401,7 +401,7 @@ class Published(TranscriptPublicationState):
 
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
         if self.identity.same_snapshot(read.identity):
-            return TranscriptDraftUpdate(read.identity, read.current_draft())
+            return TranscriptDraftUpdate(read.identity, read.current_draft().external_row())
         return TranscriptSnapshotUpdate.from_read(read)
 
 
