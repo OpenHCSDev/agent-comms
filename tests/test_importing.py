@@ -616,7 +616,7 @@ def test_import_refuses_redirected_session_directory(tmp_path, comms):
         comms.threads.import_thread(OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
     assert stat.S_IMODE(outside.stat().st_mode) == 0o755
     assert not list(outside.iterdir())
-    assert not comms.registry.name_taken("imported")
+    assert not comms.registry.snapshot().taken("imported")
 
 
 def test_opencode_database_uses_readonly_snapshot(tmp_path):

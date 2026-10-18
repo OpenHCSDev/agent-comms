@@ -43,8 +43,8 @@ def test_rename_takes_its_own_alias_and_refuses_another_threads(tmp_path):
     _declare(comms, "worker", str(tmp_path))
     _declare(comms, "other", str(tmp_path))
     comms.registry.rename("worker", "renamed")
-    assert comms.registry.name_taken("worker") and not comms.registry.name_taken(
-        "worker", owner="renamed")
+    names = comms.registry.snapshot()
+    assert names.taken("worker") and not names.taken("worker", owner="renamed")
     with pytest.raises(RelationViolationError, match="'worker' is already in use"):
         comms.threads._rename_thread("other", "worker")
     assert comms.threads._rename_thread("renamed", "worker").current == "worker"

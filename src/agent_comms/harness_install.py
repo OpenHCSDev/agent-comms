@@ -89,7 +89,8 @@ class Harness(DeclaredFamily, affix="Harness"):
     def install(self, comms: Comms, commander: str, project: Path) -> HarnessInstalled:
         for link, target in self.links().items():
             replace_link(link, target)
-        registered = [name for name in self.bus_threads(commander) if not comms.registry.name_taken(name)]
+        names = comms.registry.snapshot()
+        registered = [name for name in self.bus_threads(commander) if not names.taken(name)]
         for name in registered:
             comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree=str(project),
                                                                 execution=ExternalThreadExecution))

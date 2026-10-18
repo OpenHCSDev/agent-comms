@@ -182,7 +182,7 @@ class ThreadManagement:
             model=model,
         )
         with _store_lock(self._wire_lock_path):
-            if self.registry.name_taken(name):
+            if self.registry.snapshot().taken(name):
                 raise ValueError(f"Thread name {name!r} is already reserved.")
             self.registry.require_declaration_available(thread, StoppedThreadStatus())
             session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -551,7 +551,7 @@ class PrivateOwnerRename(ThreadRename):
         # Validate every deterministic registry/SQL name refusal *before* advancing a committed
         # private owner's generation. The wire lock excludes cooperating sends until both agree.
         registry.status(before.name).require_self_rename()
-        if registry.name_taken(new_name, owner=before.name):
+        if registry.snapshot().taken(new_name, owner=before.name):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
         Thread.require_name(new_name)
         if len(new_name) > MAX_IDENTIFIER_CHARS:
