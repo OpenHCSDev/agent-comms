@@ -10,7 +10,7 @@ from acp import RequestError
 from agent_comms import agent_events as events
 from agent_comms import coordinated_runtime, private_nk_entrypoint
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
-from agent_comms.input_attempt import ClearedUnsentInput, NotSentInput, ReservedInput
+from agent_comms.input_attempt import ClearedUnsentInput, NotSentInput, ReservedInput, StartedInput
 from agent_comms.native_arguments import NativeArguments
 from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -80,17 +80,24 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         if native_ok:
             await asyncio.wait_for(wake, 12)
         else:
+            from agent_comms.messages import AlertKind
             from agent_comms.native_pi import NativePiTerminalFailure
+            from agent_comms.turn_failure import ModelRequestFailed
             from delivery_owner_fixture import drain_diagnostic
 
             # The caller got its reply when the input was queued. A later
             # model failure comes from this separately running reply task.
-            with pytest.raises(NativePiTerminalFailure, match="Scripted provider failure"):
+            with pytest.raises(NativePiTerminalFailure, match="Scripted provider failure") as failed:
                 await asyncio.wait_for(wake, 12)
+            assert isinstance(failed.value.failure, ModelRequestFailed)
+            notice = list(comms.views.full_history_page().messages)[-1]
+            assert notice.notice and notice.type is AlertKind
+            assert notice.target == "sender" and "No automatic retry" in notice.body
             assert "Scripted provider failure" in drain_diagnostic(comms, "beta").reason
         sent = requests(control)
         assert len(sent) == 2 and "Fresh owner input" in sent[1]["message"]
         row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
+        assert isinstance(row, StartedInput)
         assert not row.unresolved and row.native_id == sent[1]["inputId"]
         assert not agent.inputs.queued_inputs.get("beta")
         assert "beta" not in agent.inputs.backend_inboxes
@@ -246,7 +253,8 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
                 )),
             )
         expected.update(
-            goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta"),
+            generation=comms.goals.open_goal_store().snapshot(goal.id),
         )
 
     async def blocked(package, **kwargs):
@@ -290,7 +298,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         )
         assert comms.registry.require("beta").goal == expected["goal"]
         assert comms.goals.goal_wait("beta") == expected["wait"]
-        assert not (comms.root / "goal-private").exists()
+        assert comms.goals.open_goal_store().snapshot(goal.id) == expected["generation"]
     finally:
         release.set()
         await asyncio.gather(turn, return_exceptions=True)
