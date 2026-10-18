@@ -283,7 +283,7 @@ def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> N
     row[PRIVATE_WIRE_FIELD]["initial"]["decisions"][0]["recipient_lookup"] = "imposter"
     bus_path.write_text(json.dumps(row) + "\n")
     with pytest.raises(
-        RelationViolationError, match="Private bus checkpoint root/inode/size changed"
+        RelationViolationError, match="Private bus checkpoint root/size changed"
     ):
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     assert (
@@ -292,7 +292,7 @@ def test_corrupt_initial_and_wrong_root_rejected_before_sql(tmp_path: Path) -> N
     )
     bus_path.write_bytes(original[:-1])
     with pytest.raises(
-        RelationViolationError, match="Private bus checkpoint root/inode/size changed"
+        RelationViolationError, match="Private bus checkpoint root/size changed"
     ):
         accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
     bus_path.write_bytes(original)
