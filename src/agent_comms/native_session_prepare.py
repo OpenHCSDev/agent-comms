@@ -20,16 +20,18 @@ from .prompt_state import UnwrittenPrompt
 
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
+    from .following_inputs import FollowingInputs
 
 
 class PreparedSession(UnwrittenPrompt):
     acknowledged = False
 
-    def permits_retention(self, session):
+    def permits_retention(self, session: backend.TurnSession) -> bool:
         return session.output.clean
 
-
-    async def deliver_to(self, inputs, session):
+    async def deliver_to(
+        self, inputs: FollowingInputs, session: backend.TurnSession,
+    ) -> bool:
         session.native.forget_context()
         state = session.native.attestation.state
         assert state is not None
@@ -71,18 +73,20 @@ class NativeSessionPreparation(backend.TurnSession):
         agent_args: Sequence[str],
         *,
         worktree: str,
+        root: Path,
         environment: dict[str, str],
         session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         async with persistent.lock:
             return await cls.open_acquired(persistent, agent_bin, agent_args,
-                worktree=worktree, environment=environment, session_file=session_file, observe=observe)
+                worktree=worktree, root=root, environment=environment,
+                session_file=session_file, observe=observe)
 
     @classmethod
     async def open_acquired(
         cls, persistent: PersistentPiSession, agent_bin: str, agent_args: Sequence[str], *,
-        worktree: str, environment: dict[str, str], session_file: str,
+        worktree: str, root: Path, environment: dict[str, str], session_file: str,
         observe: Callable[[StateData, events.AgentInfo], Awaitable[None]],
     ) -> StateData:
         """Keep the session's child owned through launch, observation and retention."""
@@ -90,7 +94,7 @@ class NativeSessionPreparation(backend.TurnSession):
         launch = await Coordination.run_worker(partial(
             persistent.child_state.managed_launch,
             agent_bin, tuple(agent_args), worktree=Path(worktree),
-            root=persistent.comms.root,
+            root=root,
             environment=environment, session_file=session_file,
         ))
         preparation = cls(launch, "", persistent_session=persistent, startup=NativeStartup.for_launch(launch))

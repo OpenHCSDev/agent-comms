@@ -2,12 +2,10 @@
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
 import os
 from pathlib import Path
 
 from .acp_extension import CoordinationChangedUpdate
-from .pi_vocabulary import ThinkingLevel
 from .registration import Registration
 from .thread_identity import RecordedThreadIncarnation
 from .thread_management import ThreadManagement
@@ -30,7 +28,7 @@ class ThreadConfiguration:
             os.getpid(),
             thread.worktree,
             self.threads.resolve_thread_model(thread.name),
-            FieldCodec.encode(thread.thinking_level),
+            thread.thinking_level.declared_name,
             thread.display_title,
             info.context_reading(),
         )

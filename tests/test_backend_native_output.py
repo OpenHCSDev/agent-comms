@@ -51,6 +51,7 @@ async def test_actual_native_cold_preparation_retains_without_admitting_input(na
             "--no-tools",
         ],
         worktree=str(owner.project),
+        root=owner.root,
         environment=dict(os.environ),
         session_file=str(owner.session),
         observe=observe,

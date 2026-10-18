@@ -9,9 +9,8 @@ from __future__ import annotations
 from .native_arguments import SelectedModel
 
 import asyncio
-import sqlite3
 import threading
-from collections.abc import Awaitable, Callable, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field
 from functools import partial
@@ -29,19 +28,15 @@ from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnRe
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary, send_fenced_prompt
 from .native_startup import NativeStartup
-from .pi_vocabulary import ThinkingLevel
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
-from .tracked_turn import NativeObserver, NoObserver, TrackedTurnSession
+from .tracked_turn import NO_NATIVE_OBSERVER, NativeObserver, TrackedTurnSession
 from .native_tool_call import NativeToolMode, NoNativeTools
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent
-    from .native_attestation import ObservedAttestation
-    from .pi_events import PiEvent
-    from .selected_session import SelectedSession
+                from .selected_session import SelectedSession
     from .selected_participant import SelectedParticipant
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
@@ -140,7 +135,7 @@ class PrivateSendClaim(PromptBoundary):
         *,
         model: SelectedModel,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
-        observe_event: NativeObserver = NoObserver(),
+        observe_event: NativeObserver = NO_NATIVE_OBSERVER,
         following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
@@ -257,7 +252,7 @@ class PrivateSendClaim(PromptBoundary):
             # records. No payload byte is
             # eligible until all of that retirement has returned successfully.
 
-    async def send_prompt(self, turn) -> None:
+    async def send_prompt(self, turn: TrackedTurnSession) -> None:
         with turn.startup.measurements.operation("prompt_writer_join"):
             await send_fenced_prompt(
                 turn.native.proc.stdin, turn.native.reader.encode(turn.command),

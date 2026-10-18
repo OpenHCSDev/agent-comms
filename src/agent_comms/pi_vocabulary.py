@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from abc import abstractmethod
 from enum import StrEnum
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
@@ -203,19 +204,19 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def native_arguments(cls):
-        return (ThinkingArgument(FieldCodec.encode(cls)),)
+    @abstractmethod
+    def native_arguments(cls) -> tuple[ThinkingArgument, ...]: ...
 
     @classmethod
-    def launch_arguments(cls):
+    def launch_arguments(cls) -> tuple[str, ...]:
         return tuple(token for argument in cls.native_arguments() for token in argument.argv)
 
     @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
 
@@ -223,15 +224,15 @@ class NoThinkingOverride(ThinkingLevel):
     declared_name = None
 
     @classmethod
-    def native_arguments(cls):
+    def native_arguments(cls) -> tuple[ThinkingArgument, ...]:
         return ()
 
     @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return current
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return level
 
 
@@ -240,7 +241,9 @@ class ThinkingLevelValue(FieldRepresentation):
 
     @classmethod
     def decode(cls, value):
-        return NoThinkingOverride if value is None else ThinkingLevel.decode(FieldCodec.decode(str, value))
+        if value is None:
+            return NoThinkingOverride
+        return ThinkingLevel.decode(FieldCodec.decode(str, value))
 
     @classmethod
     def encode(cls, value):
@@ -254,29 +257,37 @@ class ThinkingLevelValue(FieldRepresentation):
 ThinkingLevelField = Annotated[type[ThinkingLevel], ThinkingLevelValue]
 
 
-class OffThinkingLevel(ThinkingLevel):
+class NamedThinkingLevel:
+    declared_name: ClassVar[str]
+
+    @classmethod
+    def native_arguments(cls) -> tuple[ThinkingArgument, ...]:
+        return (ThinkingArgument(cls.declared_name),)
+
+
+class OffThinkingLevel(NamedThinkingLevel, ThinkingLevel):
     pass
 
 
-class MinimalThinkingLevel(ThinkingLevel):
+class MinimalThinkingLevel(NamedThinkingLevel, ThinkingLevel):
     pass
 
 
-class LowThinkingLevel(ThinkingLevel):
+class LowThinkingLevel(NamedThinkingLevel, ThinkingLevel):
     pass
 
 
-class MediumThinkingLevel(ThinkingLevel):
+class MediumThinkingLevel(NamedThinkingLevel, ThinkingLevel):
     pass
 
 
-class HighThinkingLevel(ThinkingLevel):
+class HighThinkingLevel(NamedThinkingLevel, ThinkingLevel):
     pass
 
 
-class XhighThinkingLevel(ThinkingLevel):
+class XhighThinkingLevel(NamedThinkingLevel, ThinkingLevel):
     ordinary_choice = False
 
 
-class MaxThinkingLevel(ThinkingLevel):
+class MaxThinkingLevel(NamedThinkingLevel, ThinkingLevel):
     ordinary_choice = False

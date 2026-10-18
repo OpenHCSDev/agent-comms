@@ -45,5 +45,7 @@ class InheritPrevious(PredicateInheritance):
 
 class InheritThinkingLevel(RegistrationInheritance):
     @classmethod
-    def choose(cls, incoming: type[ThinkingLevel], previous: type[ThinkingLevel]) -> type[ThinkingLevel]:
+    def choose(
+        cls, incoming: type[ThinkingLevel], previous: type[ThinkingLevel],
+    ) -> type[ThinkingLevel]:
         return incoming.applied(previous)
