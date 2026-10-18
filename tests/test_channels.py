@@ -539,7 +539,8 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     joined = list(comms.views.channel_history_page("#api").messages)
     assert len(joined) == 1 and joined[0].membership.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].starts_turn
-    assert "moving" not in comms.views.last_sent_timestamps(comms.bus.activity_clocks().sent)
+    with comms.bus.opened_activity() as clocks:
+        assert "moving" not in comms.views.last_sent_timestamps(clocks.sent)
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
     assert len(list(comms.views.channel_history_page("#api").messages)) == 2

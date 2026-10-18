@@ -58,7 +58,8 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup
     prior=_page(comms,lookup)
     raw=comms.bus.log.path.read_bytes()
-    activity=comms.bus.activity_clocks().channels
+    with comms.bus.opened_activity() as clocks:
+        activity=clocks.channels
     pending=comms.bus.pending_counts_all(['Alice','Bob'])
     awareness=comms.bus.awareness_segments(comms.registry.require('Alice'), ())
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
@@ -68,7 +69,8 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert len(list(comms.bus.full_history_page().messages))==1
     assert _page(comms,lookup)[0].offset>prior[0].offset
     assert _page(comms,lookup)[1:]==prior[1:]
-    assert comms.bus.activity_clocks().channels==activity
+    with comms.bus.opened_activity() as clocks:
+        assert clocks.channels==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
     assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
     assert list(comms.bus.full_history_page().messages)==[first]

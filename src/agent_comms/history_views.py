@@ -281,22 +281,22 @@ class HistoryViews:
         snapshot = self.registry.snapshot()
         catalog = self.channels.catalog.read()
         channels = catalog.views(snapshot.threads)
-        clocks = self.bus.activity_clocks()
-        return ChannelView.roster(
-            snapshot,
-            channels,
-            catalog.pinned_members(),
-            catalog.list_order,
-            self.agents.all_activity(
-                snapshot.visible_threads(
-                    show_stopped=show_stopped, show_archived=show_archived
-                ), snapshot=snapshot,
-            ),
-            self.last_sent_timestamps(clocks.sent, registry=snapshot),
-            ChannelActivity.for_views(channels, clocks.channels),
-            show_stopped=show_stopped,
-            show_archived=show_archived,
-        )
+        with self.bus.opened_activity() as clocks:
+            return ChannelView.roster(
+                snapshot,
+                channels,
+                catalog.pinned_members(),
+                catalog.list_order,
+                self.agents.all_activity(
+                    snapshot.visible_threads(
+                        show_stopped=show_stopped, show_archived=show_archived
+                    ), snapshot=snapshot,
+                ),
+                self.last_sent_timestamps(clocks.sent, registry=snapshot),
+                ChannelActivity.for_views(channels, clocks.channels),
+                show_stopped=show_stopped,
+                show_archived=show_archived,
+            )
 
     def thread_views(
         self, *, show_stopped: bool = True, show_archived: bool = False

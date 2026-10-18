@@ -77,14 +77,17 @@ class MessageBus:
             private_claim_writes=private_claim_writes,
         )
 
-    def activity_clocks(self, source: OpenedWireSnapshot | None = None) -> ActivityClocks:
-        """The existing index borrows the same opened source after release."""
-        if source is not None:
-            return self._activity.snapshot(source, self._bus_activity_fields)
+    def activity_clocks(self, source: OpenedWireSnapshot) -> ActivityClocks:
+        """Read clocks from the caller's already opened bus cut."""
+        return self._activity.snapshot(source, self._bus_activity_fields)
+
+    @contextmanager
+    def opened_activity(self) -> Iterator[ActivityClocks]:
+        """Own a fresh bus cut for callers without an existing snapshot."""
         with self.log._opened_wire_snapshot(
             need_sequence=False, prepared_indexes=self.log.prepare_append_indexes(),
-        ) as opened:
-            return self.activity_clocks(opened)
+        ) as source:
+            yield self.activity_clocks(source)
 
     @staticmethod
     def _bus_activity_fields(record: Mapping[str, object]):
@@ -124,16 +127,24 @@ class MessageBus:
 
     def inbox(
         self, name: str, target: str | None = None, *,
-        snapshot: RegistrySnapshot | None = None, after: MessageReference | None = None,
+        after: MessageReference | None = None,
         projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> Sequence[Message]:
-        """Unread messages delivered to a thread, read without scanning the log.
+        """Read unread deliveries against a newly captured registry."""
+        return self.inbox_at(
+            name, self._registry.snapshot(), target, after=after, projection=projection,
+        )
+
+    def inbox_at(
+        self, name: str, snapshot: RegistrySnapshot, target: str | None = None, *,
+        after: MessageReference | None = None,
+        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
+    ) -> Sequence[Message]:
+        """Read unread deliveries using the caller's captured registry.
 
         The route index lists which deliveries are unread, as it does for the
         pending counts, and the page index reads only those rows.
         """
-        if snapshot is None:
-            snapshot = self._registry.snapshot()
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
@@ -167,7 +178,7 @@ class MessageBus:
             async for _ in changes:
                 snapshot = self._registry.snapshot()
                 messages = await asyncio.to_thread(
-                    self.inbox, name, snapshot=snapshot, after=after, projection=WaitingRouteCounts)
+                    self.inbox_at, name, snapshot, after=after, projection=WaitingRouteCounts)
                 if not reader.current(self._registry.snapshot()):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
                 for message in messages:
@@ -252,7 +263,7 @@ class MessageBus:
         canonical = snapshot.require(name).name
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
-        messages = (message for message in self.inbox(canonical, snapshot=snapshot)
+        messages = (message for message in self.inbox_at(canonical, snapshot)
                     if message.seq <= sequence)
         displayed = self.reads.capture(canonical, messages, snapshot, self.log.path)
         self.reads.mark_displayed(canonical, displayed)
