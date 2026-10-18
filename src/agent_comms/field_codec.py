@@ -941,7 +941,7 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def decode(self, data: object) -> T: ...
 
-    field_names: tuple[str, ...] = ()
+    field_names: ClassVar[tuple[str, ...]] = ()
 
     def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
         return self.decode(data)
@@ -1326,7 +1326,7 @@ class _RecordDecoder(ValueDecoder[Any]):
 
     @property
     def field_names(self) -> tuple[str, ...]:
-        return tuple(entry.name for entry in FieldCodec._record_plan(self.record).bindings)
+        return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
 
     def decode(self, data):
         return self.decode_selected(data, {}, fields=self.field_names)
