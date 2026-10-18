@@ -10,6 +10,7 @@ from agent_comms.native_package import NativePackageError, VerifiedNativePackage
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.native_session_reopen import NativeSessionIdentity, SessionIdentityHelper
 from agent_comms.selected_session import SelectedSession
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 @pytest.fixture
@@ -28,7 +29,7 @@ def artifact(tmp_path, monkeypatch):
 def test_acquired_artifact_owns_path_and_derived_cli(artifact):
     with pytest.raises(TypeError, match="required positional argument: 'path'"):
         VerifiedNativePackage()
-    verified = VerifiedNativePackage.acquire(artifact)
+    verified = PrivateNkLaunch.acquire_package(artifact)
     assert verified.path == artifact
     assert verified.cli == artifact / 'dist/cli.js'
     with pytest.raises(dataclasses.FrozenInstanceError):
@@ -44,7 +45,7 @@ def test_one_digest_for_managed_catalog_tracked_and_saved_header(artifact, tmp_p
         return digest(root)
 
     monkeypatch.setattr(native_package, 'package_tree_digest', counted)
-    package = VerifiedNativePackage.acquire(artifact)
+    package = PrivateNkLaunch.acquire_package(artifact)
     # This construction-only check has no installed worker launcher and starts no child.
     monkeypatch.setattr(NativeArguments, 'owner_launcher', classmethod(lambda cls, runtime: str(package.cli)))
     work = tmp_path / 'work'
@@ -90,4 +91,4 @@ def test_acquisition_preserves_launch_trust_checks(artifact, tmp_path, change):
         path = artifact
         expected = 'differs from pinned'
     with pytest.raises(NativePackageError, match=expected):
-        VerifiedNativePackage.acquire(path)
+        PrivateNkLaunch.acquire_package(path)
