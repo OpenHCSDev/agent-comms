@@ -1167,6 +1167,35 @@ class RegisterCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
+class InstallCliCommand(CliCommand):
+    help = "Set up every coding harness on this machine to use this bus, with the commander skill and tools"
+    project: Path = option("--project", default_factory=Path.cwd, parser_default=".", normalize=Path)
+    repos: tuple[Path, ...] = option("--repos", default=(), parser_default="",
+                                     normalize=lambda value: tuple(Path(repo) for repo in _tags(value)))
+    commander: str = option("--commander", default="claude-code")
+
+    def apply(self, ctx: Comms) -> Any:
+        from .commander.config import CommanderConfig, Repo
+        from importlib.resources import files
+
+        from .harness_install import Harness
+
+        home = Path.home()
+        project = self.project.resolve()
+        config = CommanderConfig(
+            commander=self.commander, root=ctx.root, cli=Harness.bin("agent-comms"),
+            state=home / ".local/state/agent-comms/commander",
+            board=project / "docs/agents/fleet-board.md", narrative=project / "docs/agents/fleet-narrative.md",
+            skill=Path(str(files("agent_comms") / "skills/comms-commander/SKILL.md")), rules=(CommanderConfig.packaged_rules(),),
+            repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
+            worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
+        )
+        return {"config": str(config.write(home)),
+                **{type(harness).declared_name: harness.install(ctx, self.commander, project)
+                   for harness in Harness.present(home)}}
+
+
+@dataclass(frozen=True, kw_only=True)
 class HeartbeatCliCommand(CliCommand):
     help = "Mark thread running"
     name: str = option("--name")
