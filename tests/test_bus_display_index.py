@@ -6,7 +6,7 @@ import json
 import pytest
 
 from agent_comms.bus_activity_index import BusActivityIndex
-from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, EmptyDisplaySnapshot
+from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, DisplaySnapshot
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_path import FileRevision
@@ -57,7 +57,7 @@ def test_complete_line_cut_is_not_the_physical_cut(tmp_path, data, complete):
 def test_absent_bus_has_a_named_empty_display_result(tmp_path):
     source = AbsentWireSnapshot(WireMetadata(), 0)
     result = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer").snapshot(source, semantics())
-    assert isinstance(result, EmptyDisplaySnapshot)
+    assert isinstance(result, DisplaySnapshot)
     assert result.metrics == ({"#team": (0.0, 0.0)}, {"#team": 0})
 
 

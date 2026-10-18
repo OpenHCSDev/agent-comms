@@ -26,9 +26,10 @@ from .checkpoint_seals import PrefixSource
 from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .private_path import FileIdentity, FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake_policy import WakePolicy
-from .wire_log import OpenedWireSnapshot, WireLog
+from .wire_log import WireSnapshot, OpenedWireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
 from .wire_record import WireRecord
 
@@ -43,25 +44,25 @@ class ProjectionRebuildRequiredError(ProjectionUnavailableError):
 
 class CheckpointState(ABC):
     @abstractmethod
-    def require_source(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint: ...
+    def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint: ...
 
     @abstractmethod
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint: ...
 
-    def first_build(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
-        return self.require_source(stream, info, root_id)
+    def first_build(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
+        return self.require_source(source, root_id)
 
 
 @dataclass(frozen=True)
 class NoCheckpoint(CheckpointState):
-    def require_source(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
+    def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
         raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
 
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
         raise ProjectionUnavailableError("candidate projection is stale or unrelated")
 
-    def first_build(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
-        return CandidateCheckpoint.initial(root_id, info)
+    def first_build(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
+        return CandidateCheckpoint.initial(root_id, source.revision)
 
 
 class CandidateTable:
@@ -81,9 +82,9 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
 
 
     @classmethod
-    def initial(cls, root_id: str, info: os.stat_result) -> CandidateCheckpoint:
-        return cls(singleton=1, version=3, root_id=root_id, device=info.st_dev,
-                   inode=info.st_ino, byte_offset=0, tail_digest="", last_seq=0)
+    def initial(cls, root_id: str, revision: FileRevision) -> CandidateCheckpoint:
+        return cls(singleton=1, version=3, root_id=root_id, device=revision.identity.device,
+                   inode=revision.identity.inode, byte_offset=0, tail_digest="", last_seq=0)
 
     @classmethod
     def current(cls, db: sqlite3.Connection) -> CheckpointState:
@@ -96,12 +97,12 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
     def source_identity(self) -> PrefixSource:
         return PrefixSource(self.root_id, self.device, self.inode)
 
-    def require_source(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
-        if self.source_identity != PrefixSource(root_id, info.st_dev, info.st_ino):
+    def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
+        if self.source_identity != PrefixSource(root_id, source.revision.identity.device, source.revision.identity.inode):
             raise ProjectionRebuildRequiredError("candidate bus source changed")
-        if self.byte_offset > info.st_size:
+        if self.byte_offset > source.boundary:
             raise ProjectionRebuildRequiredError("candidate bus prefix was truncated")
-        if AppendCheckpoint.fingerprint(stream, self.byte_offset) != self.tail_digest:
+        if source.fingerprint(self.byte_offset) != self.tail_digest:
             raise ProjectionRebuildRequiredError("candidate bus prefix changed")
         return self
 
@@ -184,7 +185,7 @@ class _ReplayBatch:
 
 class IndexStart(ABC):
     @abstractmethod
-    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
               root_id: str) -> CandidateCheckpoint: ...
 
     def prepare_rows(self, db: sqlite3.Connection) -> None:
@@ -196,9 +197,9 @@ class IndexStart(ABC):
 
 
 class ResumeIndex(IndexStart):
-    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
               root_id: str) -> CandidateCheckpoint:
-        return checkpoint.require_source(stream, stat, root_id)
+        return checkpoint.require_source(source, root_id)
 
     def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
         if not index.path.exists():
@@ -207,9 +208,9 @@ class ResumeIndex(IndexStart):
 
 
 class RebuildIndex(IndexStart):
-    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
               root_id: str) -> CandidateCheckpoint:
-        return CandidateCheckpoint.initial(root_id, stat)
+        return CandidateCheckpoint.initial(root_id, source.revision)
 
     def prepare_rows(self, db: sqlite3.Connection) -> None:
         db.execute(f'DELETE FROM "{Candidate.declared_name}"')
@@ -217,9 +218,9 @@ class RebuildIndex(IndexStart):
 
 
 class FirstBuild(IndexStart):
-    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
               root_id: str) -> CandidateCheckpoint:
-        return checkpoint.first_build(stream, stat, root_id)
+        return checkpoint.first_build(source, root_id)
 
 
 class WakeCandidateIndex(TypedStore):
@@ -288,63 +289,33 @@ class WakeCandidateIndex(TypedStore):
         return _ParsedRow(sequence, tuple(rows), verified.acknowledgement)
 
     @classmethod
-    def _replay_prefix(
-        cls,
-        source: OpenedWireSnapshot,
-        offset: int,
-        last_seq: int,
-        *,
-        max_rows: int,
-        max_bytes: int,
-    ) -> _ReplayBatch:
-        """Replay a bounded batch inside the original committed source cut."""
-        stream = source.stream
-        rows: list[Candidate] = []
-        response_keys: list[CandidateResponseKey] = []
-        stream.seek(offset)
-        start = time.monotonic()
-        authorized = 0
-        for _ in range(max_rows):
-            if time.monotonic() - start > cls.batch_seconds:
-                break  # Bounded maintenance; no expensive hot-path rebuild.
-            available = max_bytes - (stream.tell() - offset)
-            if available <= 0:
+    def _replay_prefix(cls, source: WireSnapshot, offset: int, last_seq: int, *, max_rows: int, max_bytes: int) -> _ReplayBatch:
+        rows, response_keys = [], []
+        through = offset
+        started = time.monotonic()
+        records = iter(source.rows(offset))
+        for number in range(max_rows):
+            if time.monotonic() - started > cls.batch_seconds or through - offset >= max_bytes:
                 break
-            remaining = source.boundary - stream.tell()
-            if remaining <= 0:
+            try:
+                record, _, end = next(records)
+            except StopIteration:
                 break
-            raw = stream.readline(min(WireRecord.max_row_bytes + 1, remaining))
-            if not raw:
+            if end - offset > max_bytes and number:
                 break
-            WireRecord.require_row_size(raw, error_type=ProjectionUnavailableError)
-            if not raw.endswith(b"\n"):
-                raise ProjectionUnavailableError("incomplete candidate bus row")
-            if len(raw) > available and authorized:
-                # Keep the batch boundary inside the byte budget once it has
-                # authorized at least one record.
-                stream.seek(-(len(raw)), os.SEEK_CUR)
-                break
-            # A first record larger than the batch budget is authorized alone:
-            # every batch with remaining source bytes must advance the
-            # checkpoint; WireRecord independently admits its physical size.
-            authorized += 1
-            record = json.loads(raw, object_pairs_hook=unique_wire_object)
-            if not isinstance(record, dict):
-                raise ProjectionUnavailableError("candidate bus row is not an object")
             parsed = cls._parse_row(record, source.metadata.root_id, last_seq)
             last_seq = parsed.seq
             rows.extend(parsed.recipients)
             if parsed.response is not None:
                 response_keys.append(CandidateResponseKey(parsed.response.publication_key))
-        return _ReplayBatch(stream.tell(), last_seq, tuple(rows), tuple(response_keys))
+            through = end
+        return _ReplayBatch(through, last_seq, tuple(rows), tuple(response_keys))
 
-    def _source_end(self, stream: Any, next_offset: int) -> str:
-        """Reject path replacement before committing an index checkpoint."""
-        after = os.fstat(stream.fileno())
-        current_path = self.log.path.stat()
-        if (after.st_dev, after.st_ino) != (current_path.st_dev, current_path.st_ino):
+    def _source_end(self, source: WireSnapshot, next_offset: int) -> str:
+        current = self.log.path.stat()
+        if source.revision.identity != FileIdentity.from_stat(current):
             raise ProjectionRebuildRequiredError("candidate bus was replaced")
-        return AppendCheckpoint.fingerprint(stream, next_offset)
+        return source.fingerprint(next_offset)
 
     @staticmethod
     def _commit_batch(
@@ -373,16 +344,13 @@ class WakeCandidateIndex(TypedStore):
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
         try:
-            with self.log._opened_wire_snapshot(need_sequence=False) as snapshot:
-                source = snapshot.opened
-                stream = source.stream
+            with self.log._opened_wire_snapshot(need_sequence=False) as source:
                 root_id = source.metadata.root_id
-                stat = os.fstat(stream.fileno())
                 with self.writing() as db:
                     # TypedStore installs schema atomically. Capture the stored
                     # row, then close the SQL connection before reading or decoding.
                     recorded = CandidateCheckpoint.current(db)
-                checkpoint = start.start(recorded, stream, stat, root_id)
+                checkpoint = start.start(recorded, source, root_id)
                 batch = self._replay_prefix(
                     source, checkpoint.byte_offset, checkpoint.last_seq,
                     max_rows=max_rows, max_bytes=max_bytes,
@@ -390,13 +358,13 @@ class WakeCandidateIndex(TypedStore):
                 with self.writing() as db:
                     current = CandidateCheckpoint.current(db)
                     if current == recorded:
-                        tail = self._source_end(stream, batch.next_offset)
+                        tail = self._source_end(source, batch.next_offset)
                         self._commit_batch(db, batch, checkpoint, tail, start=start)
                         return batch.next_offset >= source.boundary
                 # Another writer's committed row owns progress. Close the SQL
                 # connection before validating its source; never replay a batch.
                 advanced = ResumeIndex().start(
-                    current, stream, os.fstat(stream.fileno()), root_id,
+                    current, source, root_id,
                 )
                 return advanced.byte_offset >= source.boundary
         except (
@@ -437,9 +405,8 @@ class WakeCandidateIndex(TypedStore):
             with self.snapshot() as db:
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
-                    checkpoint = ResumeIndex().start(
-                        CandidateCheckpoint.current(db), stream, stat, root_id,
-                    )
+                    source = OpenedWireSnapshot(marker, marker.last_seq, stream, FileRevision.from_stat(stat))
+                    checkpoint = ResumeIndex().start(CandidateCheckpoint.current(db), source, root_id)
                 return checkpoint
         except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
             raise ProjectionUnavailableError("candidate checkpoint unavailable") from error
@@ -516,8 +483,9 @@ class WakeCandidateIndex(TypedStore):
             with self.snapshot() as db:
                 checkpoint = CandidateCheckpoint.current(db).require_fresh(request)
                 with self.log.path.open("rb") as stream:
-                    stat = os.fstat(stream.fileno())
-                    checkpoint.require_source(stream, stat, request.root_id)
+                    source = OpenedWireSnapshot(self.log._private_marker_unlocked(), checkpoint.last_seq,
+                                                stream, FileRevision.from_file(stream))
+                    checkpoint.require_source(source, request.root_id)
                 data = Candidate.read(
                     db.execute(
                         f'SELECT * FROM "{Candidate.declared_name}" '

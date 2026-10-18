@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import math
 import os
 import sqlite3
@@ -15,7 +16,7 @@ from dataclasses import dataclass, field, replace
 from functools import partial
 from io import DEFAULT_BUFFER_SIZE
 from pathlib import Path
-from typing import BinaryIO
+from typing import BinaryIO, TYPE_CHECKING
 
 from agent_comms.coordination_tables.publications import (
     PublicationIntents,
@@ -83,12 +84,16 @@ class WireSnapshot(ABC):
     @abstractmethod
     def changed_since(self, revision) -> bool: ...
 
-    @property
-    @abstractmethod
-    def opened(self) -> OpenedWireSnapshot: ...
+
+
+    if TYPE_CHECKING:
+        revision: FileRevision
 
     @abstractmethod
-    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T: ...
+    def rows(self, after_offset: int = 0, before_offset: int | None = None): ...
+
+    @abstractmethod
+    def fingerprint(self, offset: int) -> str: ...
 
     @abstractmethod
     def checked(self, source) -> OpenedWireSnapshot: ...
@@ -97,7 +102,7 @@ class WireSnapshot(ABC):
     def records(self) -> Iterator[WireRecord]: ...
 
     @abstractmethod
-    def query_page_index[T](self, read: Callable[[BusPageIndex], T], *, empty: T) -> T: ...
+    def query_page_index[T](self, read: Callable[[BusPageIndex], T]) -> T: ...
 
     @abstractmethod
     def indexed_records(self, rows: Iterable[BusPageRow], *, before_offset: int) -> Iterator[tuple[Message, int]]: ...
@@ -180,12 +185,17 @@ class AbsentWireSnapshot(WireSnapshot):
     def changed_since(self, revision) -> bool:
         return revision is not None
 
-    @property
-    def opened(self) -> OpenedWireSnapshot:
-        raise RelationViolationError("Wire snapshot has no opened source")
 
-    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T:
-        return absent()
+
+    @property
+    def revision(self) -> FileRevision:
+        raise FileNotFoundError("An absent wire cut has no file revision")
+
+    def rows(self, after_offset: int = 0, before_offset: int | None = None):
+        return iter(())
+
+    def fingerprint(self, offset: int) -> str:
+        return hashlib.sha256(b"").hexdigest()
 
     def checked(self, source) -> OpenedWireSnapshot:
         raise RelationViolationError("Opened read differs from its certified source cut")
@@ -193,11 +203,14 @@ class AbsentWireSnapshot(WireSnapshot):
     def records(self) -> Iterator[WireRecord]:
         return iter(())
 
-    def query_page_index[T](self, read: Callable[[BusPageIndex], T], *, empty: T) -> T:
-        return empty
+    def query_page_index[T](self, read: Callable[[BusPageIndex], T]) -> T:
+        from .bus_page_index import EmptyBusPageIndex
+        return read(EmptyBusPageIndex())
 
     def indexed_records(self, rows: Iterable[BusPageRow], *, before_offset: int) -> Iterator[tuple[Message, int]]:
-        raise RelationViolationError("Indexed read exceeds its opened wire cut")
+        if before_offset or any(True for _ in rows):
+            raise RelationViolationError("Indexed read exceeds its opened wire cut")
+        return iter(())
 
     def append_checkpoint(self, index: BusAppendIndex) -> AppendCheckpoint | None:
         return None
@@ -228,12 +241,28 @@ class OpenedWireSnapshot(WireSnapshot):
     def changed_since(self, revision) -> bool:
         return self.revision != revision
 
-    @property
-    def opened(self) -> OpenedWireSnapshot:
-        return self
 
-    def read[T](self, present: Callable[[OpenedWireSnapshot], T], *, absent: Callable[[], T]) -> T:
-        return present(self)
+
+    def rows(self, after_offset: int = 0, before_offset: int | None = None):
+        """Complete rows whose starts fall within the requested original cut."""
+        stop = self.boundary if before_offset is None else min(before_offset, self.boundary)
+        if after_offset < 0 or stop < 0:
+            raise ValueError("Wire row offsets must be nonnegative")
+        self.stream.seek(after_offset)
+        while self.stream.tell() < stop:
+            offset = self.stream.tell()
+            raw = self.stream.readline(min(WireRecord.max_row_bytes + 1, self.boundary - offset))
+            WireRecord.require_row_size(raw, error_type=RelationViolationError)
+            if not raw.endswith(b"\n"):
+                raise RelationViolationError("Wire source has an incomplete original row")
+            if raw.strip():
+                record = json.loads(raw, object_pairs_hook=unique_wire_object)
+                if not isinstance(record, Mapping):
+                    raise ValueError("JSONL bus row must be an object")
+                yield record, offset, self.stream.tell()
+
+    def fingerprint(self, offset: int) -> str:
+        return AppendCheckpoint.fingerprint(self.stream, offset)
 
     def checked(self, source) -> OpenedWireSnapshot:
         if (self.revision != FileRevision.from_file(source.stream)
@@ -275,9 +304,12 @@ class OpenedWireSnapshot(WireSnapshot):
             stream.seek(position)
 
     def query_page_index[T](
-        self, read: Callable[[BusPageIndex], T], *, empty: T
+        self, read: Callable[[BusPageIndex], T]
     ) -> T:
         """Prepare/query this cut; source absence and index repair stay owned here."""
+        if self.boundary == 0:
+            from .bus_page_index import EmptyBusPageIndex
+            return read(EmptyBusPageIndex())
         access = self.metadata.access
         with BusPageIndex(Path(self.stream.name)) as index:
             try:
@@ -386,7 +418,7 @@ class ScannedWireSnapshot(OpenedWireSnapshot):
             )
             return tuple(self.indexed_records(rows, before_offset=before_offset))
 
-        yield from self.query_page_index(read, empty=())
+        yield from self.query_page_index(read)
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)

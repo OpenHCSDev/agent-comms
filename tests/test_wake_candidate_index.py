@@ -418,16 +418,16 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
                 index.writing() as db,
             ):
                 index._commit_batch(
-                    db, first_batch, CandidateCheckpoint.initial(root_id, stat),
-                    index._source_end(stream, first_batch.next_offset), start=RebuildIndex(),
+                    db, first_batch, CandidateCheckpoint.initial(root_id, source.revision),
+                    index._source_end(source, first_batch.next_offset), start=RebuildIndex(),
                 )
             with index.snapshot() as db:
                 assert db.execute("SELECT count(*) FROM candidate").fetchone()[0] == 0
         else:
             with index.writing() as db:
                 index._commit_batch(
-                    db, first_batch, CandidateCheckpoint.initial(root_id, stat),
-                    index._source_end(stream, first_batch.next_offset), start=RebuildIndex(),
+                    db, first_batch, CandidateCheckpoint.initial(root_id, source.revision),
+                    index._source_end(source, first_batch.next_offset), start=RebuildIndex(),
                 )
             first = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
                                after_seq=0, required_through_seq=messages[1].seq)
@@ -449,8 +449,8 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
                 index.writing() as db,
             ):
                 index._commit_batch(
-                    db, second_batch, CandidateCheckpoint.current(db).require_source(stream, stat, root_id),
-                    index._source_end(stream, second_batch.next_offset), start=ResumeIndex(),
+                    db, second_batch, CandidateCheckpoint.current(db).require_source(source, root_id),
+                    index._source_end(source, second_batch.next_offset), start=ResumeIndex(),
                 )
             with index.snapshot() as db:
                 assert all(db.execute(f'SELECT * FROM "{table}"').fetchall() == values

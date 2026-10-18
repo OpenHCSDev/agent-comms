@@ -866,23 +866,18 @@ class ThreadRelationships:
             if revision == self._recent_revision:
                 return self._recent, self._limited
             with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
-                return source.read(self._opened_recent_messages, absent=self._absent_recent_messages)
+                return self._opened_recent_messages(source)
 
-    def _absent_recent_messages(self) -> tuple[tuple[Message, ...], bool]:
-        self._recent_revision = None
-        self._recent, self._limited = (), False
-        return self._recent, self._limited
 
     def _opened_recent_messages(self, source) -> tuple[tuple[Message, ...], bool]:
         if not source.changed_since(self._recent_revision):
             return self._recent, self._limited
         previous = self._recent_revision
         if (previous is not None and source.same_file(previous.identity)
-                and previous.holds_cut(source.revision, previous.size)
-                and source.revision.size > previous.size):
+                and source.boundary > previous.size
+                and previous.holds_cut(source.revision, previous.size)):
             start = max(previous.size, source.boundary - self.RECENT_BYTES)
-            source.stream.seek(start)
-            data = source.stream.read(source.boundary - start)
+            data, start = source.tail_bytes(source.boundary - start)
             contiguous = start == previous.size
         else:
             data, start = source.tail_bytes(self.RECENT_BYTES)
@@ -898,7 +893,7 @@ class ThreadRelationships:
         )
         limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
         messages = messages[-self.RECENT_MESSAGES :]
-        self._recent_revision = source.revision
+        self._recent_revision = source.revision if source.boundary else None
         self._recent, self._limited = messages, limited
         return messages, limited
 

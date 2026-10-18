@@ -85,11 +85,9 @@ def _drain_candidate(root: Path) -> None:
                     hint, start=FirstBuild()
                 )
                 with log._opened_wire_snapshot(need_sequence=False) as snapshot:
-                    source = snapshot.opened
                     route_result = routes.sync(
-                        source.stream,
-                        source.revision,
-                        lambda record: DeliveryMessage.from_wire(record, root_id=source.metadata.root_id),
+                        snapshot,
+                        lambda record: DeliveryMessage.from_wire(record, root_id=snapshot.metadata.root_id),
                     )
                 if result.caught_up and route_result.complete:
                     with _guard:

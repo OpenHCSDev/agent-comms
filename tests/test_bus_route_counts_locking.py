@@ -20,8 +20,7 @@ def _open_source(comms):
 def _sync(comms, decode=None):
     with _open_source(comms) as source:
         return BusRouteCounts(comms.bus.log.path).sync(
-            source.stream,
-            source.revision,
+            source,
             decode or (lambda row: DeliveryMessage.from_wire(
                 row, root_id=source.metadata.root_id
             )),

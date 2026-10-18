@@ -37,13 +37,13 @@ class ReadDocument:
     notice: str | None = None
 
     def cursor(
-        self, viewer: str, snapshot: RegistryProvenance, source: FileIdentity | None
+        self, viewer: str, snapshot: RegistryProvenance, source
     ) -> ReadCursor:
         """Project this document against the reader's actual source identity."""
         viewer = snapshot.canonical_name(viewer)
         thread = snapshot.threads[viewer]
         recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
-        if recorded != source:
+        if recorded is None or not source.same_file(recorded):
             return ReadCursor()
         return ReadCursor.union(
             cursor for owner in thread.incarnation.recorded_names(snapshot)
@@ -143,8 +143,9 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> ReadCursor:
         document = self.read() if document is None else document
-        revision = FileRevision.capture(self.path.with_name("bus.jsonl"))
-        return document.cursor(viewer, snapshot, revision.identity if revision else None)
+        from .wire_log import WireLog
+        with WireLog(self.path.with_name("bus.jsonl"))._opened_wire_snapshot(need_sequence=False) as source:
+            return document.cursor(viewer, snapshot, source)
 
     def displayed_recipient(
         self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None
