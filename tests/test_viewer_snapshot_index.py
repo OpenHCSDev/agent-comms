@@ -616,7 +616,7 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
     from agent_comms.message_reference import MessageReference
     from agent_comms.wire_log import OpenedWireSnapshot, WireLog
     from agent_comms.wire_record import (
-        ObservationWireRecord,
+        AuthoredObservationWireRecord,
         RecordedContextManifestWireObservation,
     )
     from test_turn_context_wire import manifest
@@ -627,7 +627,7 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
     log.write_metadata_unlocked(WireMetadata(writer_protocol_version=1, wire_root_id='0' * 32))
     owner = thread_registration.new_thread('author', frozenset(), str(tmp_path), created_at=17003.0)
     recorded, _entries = RecordedContextManifest.capture(manifest(owner))
-    row = ObservationWireRecord(RecordedContextManifestWireObservation(recorded))
+    row = AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded))
     log.path.write_text(json.dumps(row.to_wire()) + '\n')
     log.path.chmod(0o600)
     with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:

@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
 from .errors import RelationViolationError, StoredHistoryUnreadable
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, WireValue
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
@@ -56,7 +56,7 @@ class WireRecord(ABC):
         from .messages import Message
 
         if "observation" in value:
-            return FieldCodec.decode(ObservationWireRecord, value)
+            return DeferredObservationWireRecord.from_wire(value)
         message = Message.from_committed_wire(value)
         if has_private_wire_fields(value):
             return CommittedDelivery.attest(message, value, root_id)
@@ -67,15 +67,15 @@ class WireRecord(ABC):
         """Display decoding preserves public messages and validates silent rows."""
         from .messages import Message
         if "observation" in value:
-            return FieldCodec.decode(ObservationWireRecord, value)
+            return DeferredObservationWireRecord.from_wire(value)
         return PublicWireRecord(Message.from_wire(value))
 
     @classmethod
     def certified_public_messages(cls, value: Mapping) -> tuple[Message, ...]:
         """Public output of a row already authorized by the complete WireScan.
 
-        Silent observations have no public messages. Their original manifests
-        were validated by certification and need no second reconstruction.
+        Silent observations have no public messages. Certification validates
+        their envelopes and index coordinates; context readers decode payloads.
         """
         if "observation" in value:
             return ()
@@ -136,6 +136,14 @@ class MessageWireRecord(WireRecord):
 class WireObservation(DeclaredFamily, affix="WireObservation"):
     """A silent fact; it has no message, audience, acknowledgement or sequence allocation."""
 
+    @classmethod
+    @abstractmethod
+    def checkpoint_from_wire(cls, data: dict, offset: int, length: int, previous_sequence: int): ...
+
+    @classmethod
+    def row_label(cls, data: dict) -> str:
+        return cls.declared_name
+
     @abstractmethod
     def context_manifests(self): ...
 
@@ -145,8 +153,6 @@ class WireObservation(DeclaredFamily, affix="WireObservation"):
     def recorded_context_manifests(self):
         return ()
 
-    @abstractmethod
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int): ...
 
 
 @dataclass(frozen=True)
@@ -155,19 +161,25 @@ class ContextEntryManifestWireObservation(WireObservation):
 
     entries: tuple["ContextEntryManifest", ...]
 
+    @classmethod
+    def checkpoint_from_wire(cls, data: dict, offset: int, length: int, previous_sequence: int):
+        from .private_bus_checkpoint import ContextEntrySources
+
+        entries = FieldCodec.decode(list[object], FieldCodec.field_plan(cls, "entries").raw(data))
+        rows = []
+        for entry in entries:
+            manifest = FieldCodec.field_plan(ContextEntryManifest, "manifest").raw(entry)
+            sources = ContextSources(FieldCodec.field_plan(SegmentManifest, "provenance").read(manifest))
+            rows.append(ContextEntrySources.for_reference(
+                ContextEntryReference.from_sources(sources), offset=offset, length=length
+            ))
+        return tuple(rows)
+
     def context_manifests(self):
         return ()
 
     def context_entries(self):
         return self.entries
-
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
-        from .private_bus_checkpoint import ContextEntrySources
-
-        return tuple(
-            ContextEntrySources.for_entry(entry, offset=offset, length=length)
-            for entry in self.entries
-        )
 
 
 @dataclass(frozen=True)
@@ -175,6 +187,20 @@ class RecordedContextManifestWireObservation(WireObservation):
     """One turn context referencing independently recorded transcript entries."""
 
     manifest: "RecordedContextManifest"
+
+    @classmethod
+    def checkpoint_from_wire(cls, data: dict, offset: int, length: int, previous_sequence: int):
+        from .private_bus_checkpoint import RecordedContextManifestSources
+
+        manifest = FieldCodec.field_plan(cls, "manifest").raw(data)
+        thread = FieldCodec.field_plan(RecordedContextManifest, "thread").read(manifest)
+        return (RecordedContextManifestSources(thread, offset=offset, length=length),)
+
+    @classmethod
+    def row_label(cls, data: dict) -> str:
+        manifest = FieldCodec.field_plan(cls, "manifest").raw(data)
+        sequence = FieldCodec.field_plan(RecordedContextManifest, "recording_turn").read(manifest)
+        return f"context sequence {sequence}"
 
     def __post_init__(self):
         self.manifest.turn.require_recorded()
@@ -185,41 +211,78 @@ class RecordedContextManifestWireObservation(WireObservation):
     def recorded_context_manifests(self):
         return (self.manifest,)
 
-    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
-        from .private_bus_checkpoint import RecordedContextManifestSources
 
-        return (
-            RecordedContextManifestSources(
-                self.manifest.thread, offset=offset, length=length
-            ),
-        )
-
-
-@dataclass(frozen=True)
 class ObservationWireRecord(WireRecord):
-    observation: WireObservation
+    """Silent row policy is shared by authored and deferred observation values."""
+
+    @abstractmethod
+    def read(self) -> WireObservation: ...
 
     def context_manifests(self):
-        return self.observation.context_manifests()
+        return self.read().context_manifests()
 
     def context_entries(self):
-        return self.observation.context_entries()
+        return self.read().context_entries()
 
     def recorded_context_manifests(self):
-        return self.observation.recorded_context_manifests()
+        return self.read().recorded_context_manifests()
 
     def sequence_after(self, previous: int) -> int:
         return previous
 
     def require_claim(self, metadata: WireMetadata) -> None:
-        # Decoding validates the observation; it cannot permit delivery.
+        # An observation never authorizes delivery or allocates a message sequence.
         return None
 
+
+@dataclass(frozen=True)
+class AuthoredObservationWireRecord(ObservationWireRecord):
+    observation: WireObservation
+
+    def read(self) -> WireObservation:
+        return self.observation
+
     def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
-        return self.observation.checkpoint_rows(offset, length, previous_sequence)
+        return DeferredObservationWireRecord.from_wire(self.to_wire()).checkpoint_rows(
+            offset, length, previous_sequence
+        )
 
     def to_wire(self):
         return FieldCodec.encode(self)
+
+
+@dataclass(frozen=True)
+class DeferredObservationWireRecord(ObservationWireRecord, WireValue):
+    """The original row is decoded only for the selected context read."""
+
+    data: dict
+
+    @classmethod
+    def from_wire(cls, value: object, root_id: str | None = None) -> DeferredObservationWireRecord:
+        record = cls(FieldCodec.record_data(AuthoredObservationWireRecord, value))
+        record.member
+        return record
+
+    @property
+    def member(self):
+        return FieldCodec.record_member(
+            WireObservation,
+            FieldCodec.field_plan(AuthoredObservationWireRecord, "observation").raw(self.data),
+        )
+
+    def to_wire(self):
+        return self.data
+
+    def read(self) -> WireObservation:
+        owner, data = self.member
+        try:
+            return FieldCodec.decode_record(owner, data)
+        except MalformedRecord as error:
+            raise StoredHistoryUnreadable(f"Unreadable {owner.row_label(data)}: {error}") from error
+
+    def checkpoint_rows(self, offset: int, length: int, previous_sequence: int):
+        owner, data = self.member
+        return owner.checkpoint_from_wire(data, offset, length, previous_sequence)
 
 
 @dataclass(frozen=True, slots=True)
@@ -252,6 +315,9 @@ class WireScan:
             raise StoredHistoryUnreadable("Malformed public bus row blocks publication.") from error
 
 
-from .turn_context import ContextEntryManifest, RecordedContextManifest
+from .turn_context import (
+    ContextEntryManifest, ContextEntryReference, ContextSources,
+    RecordedContextManifest, SegmentManifest,
+)
 from .delivery_policy import KeyedResponseAcknowledgement
 from .messages import Message

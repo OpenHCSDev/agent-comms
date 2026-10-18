@@ -494,7 +494,7 @@ class CertifiedSourceRead:
         """Choose new entry rows and one turn row from this certified index."""
         from .wire_record import (
             ContextEntryManifestWireObservation,
-            ObservationWireRecord,
+            AuthoredObservationWireRecord,
             RecordedContextManifestWireObservation,
         )
 
@@ -506,10 +506,10 @@ class CertifiedSourceRead:
         )
         new_entries = tuple(entry for entry in entries if entry.reference not in known)
         records = (
-            (ObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
+            (AuthoredObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
             if new_entries else ()
         )
-        return (*records, ObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
+        return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
@@ -731,8 +731,7 @@ class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTab
     entry_id: str = field(metadata={"sql": Column(primary_key=True)})
 
     @classmethod
-    def for_entry(cls, entry, *, offset: int, length: int):
-        reference = entry.reference
+    def for_reference(cls, reference, *, offset: int, length: int):
         return cls(
             reference.identity.session_id,
             reference.identity.session_file,

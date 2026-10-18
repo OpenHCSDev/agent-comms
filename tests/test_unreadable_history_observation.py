@@ -46,7 +46,7 @@ from agent_comms.ui_model.observation import (
 from agent_comms.ui_model.status import OpenThreadStatus
 from agent_comms.turn_context import RecordedContextManifest
 from agent_comms.wire_record import (
-    ObservationWireRecord,
+    AuthoredObservationWireRecord,
     RecordedContextManifestWireObservation,
     WireRecord,
 )
@@ -60,7 +60,7 @@ def saved_row(comms):
     comms.messaging.initialize_private_initial_protocol()
     comms.bus.log.path.touch(mode=0o600)
     recorded, _entries = RecordedContextManifest.capture(manifest(owner))
-    row = ObservationWireRecord(RecordedContextManifestWireObservation(recorded)).to_wire()
+    row = AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)).to_wire()
     return row
 
 
@@ -76,7 +76,7 @@ def test_recorded_selected_response_remains_a_strict_codec_member(comms):
     # guessed current producer. The saved declaration is the real decoder.
     segment["kind"] = "unavailable_future_segment"
     with pytest.raises(ValueError, match="Unknown ContextSegment"):
-        WireRecord.public_from_wire(row)
+        WireRecord.public_from_wire(row).recorded_context_manifests()
 
 
 def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(comms):
