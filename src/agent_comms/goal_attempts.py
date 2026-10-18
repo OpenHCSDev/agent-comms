@@ -342,9 +342,90 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
         raise StorageUncertainError("Unsupported goal attempt schema declaration.")
 
 
+class GoalPermit:
+    """A turn's goal launch result; absence never invents a reservation."""
+
+    def start(self, permits, store) -> bool:
+        return False
+
+    def prepare_context(self, turn) -> None:
+        pass
+
+    def require_send(self, store) -> None:
+        pass
+
+    def current_goal(self, account):
+        from .goals import NoGoal
+        return NoGoal()
+
+    def settle_original(self, account, terminal) -> None:
+        pass
+
+    def record_verified_progress(self, store, witness) -> None:
+        pass
+
+    def record_verified_completion(self, store, witness) -> None:
+        pass
+
+    def record_usage(self, account, event) -> None:
+        account.unattributed_usage.append((str(event.response_id), event.usage))
+
+    def prefer_original(self, original, goal_id: str):
+        return original.for_goal(goal_id)
+
+    def for_goal(self, goal_id: str):
+        return self
+
+    def finish_origin(self, account, goal_id: str, current, store) -> None:
+        generation = store.snapshot(goal_id)
+        if generation is not None and generation.lifecycle.allows_resume(True):
+            store.retire_goal(goal_id, expected_generation=generation.number,
+                              attempt_id=generation.attempt_id)
+        current.fail_origin(account.comms, account.thread_name)
+
+
+class NoGoalPermit(GoalPermit):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
-class LaunchPermit:
+class LaunchPermit(GoalPermit):
     reservation: Reservation
+
+    def start(self, permits, store) -> bool:
+        permits.callback(self.retire_unverified, store)
+        return True
+
+    def prepare_context(self, turn) -> None:
+        for segment in turn.thread.goal.active().context_segments(turn.thread, turn.runner.comms.goals):
+            turn.context = turn.context.prepend(segment)
+
+    def require_send(self, store) -> None:
+        from .ordinary_turn_rules import OrdinaryGoalGrantCheck
+        OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()
+
+    def current_goal(self, account):
+        return account.comms.registry.require(account.thread_name).continuation_goal(account.owner)
+
+    def settle_original(self, account, terminal) -> None:
+        account.settle_claimed(self, terminal)
+
+    def record_usage(self, account, event) -> None:
+        self.record_provider_usage(account.comms.goals.open_goal_store(),
+                                   str(event.response_id), event.usage.to_wire())
+
+    def prefer_original(self, original, goal_id: str):
+        return self
+
+    def for_goal(self, goal_id: str):
+        return self if self.reservation.goal_id == goal_id else NoGoalPermit()
+
+    def finish_origin(self, account, goal_id: str, current, store) -> None:
+        if self.has_verified_progress(store):
+            return
+        with suppress(StaleAttemptError):
+            self.reservation.fail(store, "Goal origin turn did not finish successfully.")
+        current.fail_origin(account.comms, account.thread_name)
 
     def retire_unverified(self, store: GoalAttemptStore) -> None:
         """Release this acquired claim; settled or superseded attempts stay intact."""

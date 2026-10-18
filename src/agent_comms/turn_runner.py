@@ -44,6 +44,7 @@ from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
 from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
+from .turn_input_source import OriginalTurnInput, RoutedOriginalInput
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
@@ -435,7 +436,7 @@ class TurnRunner:
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
-        original_owner_input: bool = False,
+        input_type: type[OriginalTurnInput] = RoutedOriginalInput,
         original_goal_permission: TurnGoalPermission = InactiveGoalPermission(),
         accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
@@ -452,7 +453,7 @@ class TurnRunner:
             original_keys=original_keys,
             initial_display_text=initial_display_text,
             autonomous_goal=autonomous_goal,
-            original_owner_input=original_owner_input,
+            input_type=input_type,
             original_goal_permission=original_goal_permission,
             accepted_input_id=accepted_input_id,
             dependency_wait_id=dependency_wait_id,

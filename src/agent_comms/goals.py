@@ -123,8 +123,32 @@ class ResolvedMentionBinding(GoalMentionBinding):
         ), ()
 
 
+class GoalMentionEvidence(WireValue):
+    accepts_null = True
+
+    @classmethod
+    def from_wire(cls, data):
+        return NoMentionSource() if data is None else FieldCodec.decode_record(GoalMentionSource, data)
+
+    @classmethod
+    def schema(cls):
+        return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(GoalMentionSource)]}
+
+    def matches(self, goal, owner, registry) -> bool:
+        return False
+
+    def contacts(self, goal, owner, registry):
+        return (), ()
+
+
+@dataclass(frozen=True)
+class NoMentionSource(GoalMentionEvidence):
+    def to_wire(self):
+        return None
+
+
 @dataclass(frozen=True, slots=True)
-class GoalMentionSource:
+class GoalMentionSource(GoalMentionEvidence):
     """Text-revision and owner-incarnation proof saved with its registry Goal."""
 
     goal_id: str
@@ -133,6 +157,19 @@ class GoalMentionSource:
     owner_name: str
     owner_created_at: float
     bindings: tuple[GoalMentionBinding, ...]
+    accepts_null = False
+
+    def to_wire(self):
+        return FieldCodec.encode_record(self)
+
+    def contacts(self, goal, owner, registry):
+        contacts, diagnostics = [], []
+        if owner.role.executable and self.matches(goal, owner, registry):
+            for binding in self.bindings:
+                projected, issues = binding.project(registry, owner, goal, self)
+                contacts.extend(projected)
+                diagnostics.extend(issues)
+        return tuple(contacts), tuple(diagnostics)
 
     def __post_init__(self) -> None:
         from .text_digest import TextDigest
@@ -502,7 +539,7 @@ class Goal(GoalDeclaration):
     progress: str = ""
     revision: int = 0
     reported_turn: str | None = None
-    mention_source: GoalMentionSource | None = None
+    mention_source: GoalMentionEvidence = field(default_factory=NoMentionSource)
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
 
@@ -590,17 +627,11 @@ class Goal(GoalDeclaration):
 
     def admit_turn(self, turn, permits) -> bool:
         from .turn_goal_account import TurnGoalAccount
-        if turn.original_owner_input:
-            return True
         turn.goal_permit = TurnGoalAccount.reserve(
             goal=self, owner=turn.thread, comms=turn.runner.comms,
             autonomous=turn.autonomous_goal,
         )
-        if turn.goal_permit is None:
-            return False
-        permits.callback(turn.goal_permit.retire_unverified,
-                         turn.runner.comms.goals.open_goal_store())
-        return True
+        return turn.goal_permit.start(permits, turn.runner.comms.goals.open_goal_store())
 
     def filter_scheduled(self, pending):
         return [turn for turn in pending if turn.goal_id == self.id]
@@ -617,14 +648,7 @@ class Goal(GoalDeclaration):
         ))
 
     def contacts(self, owner, registry):
-        contacts, diagnostics = [], []
-        source = self.mention_source
-        if owner.role.executable and source is not None and source.matches(self, owner, registry):
-            for binding in source.bindings:
-                projected, issues = binding.project(registry, owner, self, source)
-                contacts.extend(projected)
-                diagnostics.extend(issues)
-        return tuple(contacts), tuple(diagnostics)
+        return self.mention_source.contacts(self, owner, registry)
 
     def peer_state(self, owner, relation, goals):
         from .turn_context import PeerState

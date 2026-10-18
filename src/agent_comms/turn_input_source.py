@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 class TurnInputSource(ABC):
     accepted_id: str | None
     goal_permission: TurnGoalPermission
-    bypasses_goal_permit: ClassVar[bool] = False
     origins: ClassVar[tuple[Message, ...]] = ()
 
     if TYPE_CHECKING:
@@ -53,6 +52,9 @@ class TurnInputSource(ABC):
 
     def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
         return False
+
+    def require_goal_grant(self, permit, store) -> None:
+        permit.require_send(store)
 
 
 class InputDependency(ABC):
@@ -111,6 +113,28 @@ class OriginalTurnInput(TurnInputSource):
     dependency: InputDependency
     batch: InputBatch
 
+    @classmethod
+    def for_turn(cls, origins, dependency_wait_id):
+        if not origins:
+            return ScheduledOriginalInput
+        return DependencyOriginalInput if dependency_wait_id is not None else cls
+
+    @classmethod
+    def allows_start_wait(cls, wait) -> bool:
+        return wait.allows_routed_input()
+
+    @classmethod
+    def require_start_goal(cls, turn) -> None:
+        pass
+
+    @classmethod
+    def admit_goal(cls, turn, permits) -> bool:
+        return turn.thread.goal.active().admit_turn(turn, permits)
+
+    @classmethod
+    def permission(cls, turn):
+        return turn.thread.goal.active().continuation_permission()
+
     @property
     def keys(self) -> tuple[str, ...]:
         return self.batch.keys
@@ -162,6 +186,29 @@ class DirectInput(TurnInputSource):
 
 
 class OwnerOriginalInput(OriginalTurnInput, DirectInput):
+    @classmethod
+    def for_turn(cls, origins, dependency_wait_id):
+        return cls
+
+    @classmethod
+    def allows_start_wait(cls, wait) -> bool:
+        return True
+
+    @classmethod
+    def require_start_goal(cls, turn) -> None:
+        from acp import RequestError
+        if not turn.original_goal_permission.allows(turn.thread.goal):
+            raise RequestError.invalid_params({"reason": "input_authority_changed"})
+
+    @classmethod
+    def admit_goal(cls, turn, permits) -> bool:
+        return True
+
+    @classmethod
+    def permission(cls, turn):
+        from .turn_goal_permission import OwnerGoalPermission
+        return OwnerGoalPermission(turn.thread.goal)
+
     @property
     def notice_keys(self) -> tuple[str, ...]:
         return self.keys
@@ -232,7 +279,8 @@ class FollowingTurnInput(TurnInputSource):
 
 
 class AcceptedFollowingInput(FollowingTurnInput, DirectInput):
-    bypasses_goal_permit = True
+    def require_goal_grant(self, permit, store) -> None:
+        pass
 
 
 class RoutedFollowingInput(FollowingTurnInput, RoutedInput):
