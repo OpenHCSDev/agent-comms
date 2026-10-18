@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Sha256Text
 from .goals import Goal, NoGoal
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
@@ -225,6 +225,28 @@ class InstructionFile:
 
 
 @dataclass(frozen=True)
+class ContextSources:
+    """Native journal coordinates derived from one group of original sources."""
+
+    provenance: tuple[Provenance, ...]
+
+    def native_identity(self) -> NativeSessionIdentity:
+        originals = {identity for source in self.provenance for identity in source.native_identities()}
+        if len(originals) != 1:
+            raise ValueError("Original segment has no unambiguous native source identity")
+        (identity,) = originals
+        return identity
+
+    def journal_entries(self) -> tuple[str, ...]:
+        identity = self.native_identity()
+        entries = tuple(dict.fromkeys(entry for source in self.provenance
+                                      for entry in source.journal_entries(identity)))
+        if not entries:
+            raise ValueError("Original segment has no recoverable journal coordinates")
+        return entries
+
+
+@dataclass(frozen=True)
 class SegmentManifest:
     kind: type[ContextSegment]
     provenance: tuple[Provenance, ...]
@@ -239,8 +261,7 @@ class SegmentManifest:
     def __post_init__(self):
         if not self.provenance or min(self.utf8_bytes, self.tokens) < 0:
             raise ValueError("Invalid original context segment observation")
-        if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
-            raise ValueError("Context segment requires its measured byte digest")
+        Sha256Text.from_text(self.sha256)
 
     def remember_received(self, child) -> None:
         self.kind.remember_received(child, self.provenance)
@@ -287,20 +308,9 @@ class SegmentManifest:
         return (value.measured_manifest() == self
                 or any(child.contains_value(value) for child in self.contributors))
 
-    def native_identity(self) -> NativeSessionIdentity:
-        originals = {identity for source in self.provenance for identity in source.native_identities()}
-        if len(originals) != 1:
-            raise ValueError("Original segment has no unambiguous native source identity")
-        (identity,) = originals
-        return identity
-
-    def journal_entries(self) -> tuple[str, ...]:
-        identity = self.native_identity()
-        entries = tuple(dict.fromkeys(entry for source in self.provenance
-                                      for entry in source.journal_entries(identity)))
-        if not entries:
-            raise ValueError("Original segment has no recoverable journal coordinates")
-        return entries
+    @property
+    def sources(self) -> ContextSources:
+        return ContextSources(self.provenance)
 
     async def public_text(self, read_reference) -> str:
         if self.public_text_recorded:
@@ -352,11 +362,11 @@ class ContextEntryReference:
     entry_id: str
 
     @classmethod
-    def from_manifest(cls, manifest: SegmentManifest) -> ContextEntryReference:
-        entries = manifest.journal_entries()
+    def from_sources(cls, sources: ContextSources) -> ContextEntryReference:
+        entries = sources.journal_entries()
         if len(entries) != 1:
             raise ValueError("A context entry manifest must name exactly one journal entry")
-        return cls(manifest.native_identity(), entries[0])
+        return cls(sources.native_identity(), entries[0])
 
 
 @dataclass(frozen=True)
@@ -367,7 +377,7 @@ class ContextEntryManifest:
 
     @property
     def reference(self) -> ContextEntryReference:
-        return ContextEntryReference.from_manifest(self.manifest)
+        return ContextEntryReference.from_sources(self.manifest.sources)
 
 
 @dataclass(frozen=True)
@@ -399,7 +409,7 @@ class RecordedSegmentManifest:
             count, source = len(self.entries), offset
         else:
             count, source = self.inherited_entries, self.previous
-        return (tuple(ContextEntryReference.from_manifest(child)
+        return (tuple(ContextEntryReference.from_sources(child.sources)
                       for child in original.contributors[:count]), source)
 
     def record_text(
@@ -552,8 +562,7 @@ class ContributionCoordinates:
     def __post_init__(self):
         if not self.provenance or min(self.offset, self.length) < 0:
             raise ValueError("Contribution requires original sources and nonnegative byte coordinates")
-        if len(self.sha256) != 64 or not set(self.sha256) <= set("0123456789abcdef"):
-            raise ValueError("Contribution requires its original byte digest")
+        Sha256Text.from_text(self.sha256)
 
     @classmethod
     def capture(cls, kind, provenance, offset, text):
@@ -785,7 +794,7 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
         provenance = tuple(source for source in original.provenance
                            for source in source.turn_recording())
         header = replace(original, provenance=provenance, contributors=(), captured_text=())
-        references = tuple(ContextEntryReference.from_manifest(child)
+        references = tuple(ContextEntryReference.from_sources(child.sources)
                            for child in original.contributors)
         prior: tuple[ContextEntryReference, ...] = ()
         keyframe_offset = None

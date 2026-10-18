@@ -22,8 +22,8 @@ def _old_todo(path):
     assert original != target
     with closing(sqlite3.connect(path)) as db:
         db.execute(original)
-        db.execute("INSERT INTO todo (id,repo,text,creator,creator_created,state,revision,\"order\",deadline,strikes,hunts,voided) "
-                   "VALUES ('one','team/repo','unfinished','Alice',17002,'open',1,'{}','{}','[]','[]','[]')")
+        db.execute("INSERT INTO todo (id,repo,text,creator,creator_created,state,revision,\"order\",deadline,strikes,hunts,voided,released) "
+                   "VALUES ('one','team/repo','unfinished','Alice',17002,'open',1,'{}','{}','[]','[]','[]','[]')")
         db.commit()
 
 

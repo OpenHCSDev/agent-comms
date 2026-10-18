@@ -175,12 +175,7 @@ class CertifiedSourceRead:
                 digest = _SEED
                 self.stream.seek(0)
                 with os.fdopen(fd, "wb") as output:
-                    while raw := self.stream.readline(WireRecord.max_row_bytes + 1):
-                        WireRecord.require_row_size(
-                            raw, message="Carried source has an invalid row boundary",
-                        )
-                        if not raw.endswith(b"\n"):
-                            raise RelationViolationError("Carried source has an invalid row boundary")
+                    for _, raw in WireRecord.rows(self.stream):
                         output.write(raw)
                         digest = _chain(digest, raw)
                     output.flush()
@@ -498,8 +493,8 @@ class CertifiedSourceRead:
     def context_records(self, manifest, previous=None):
         """Choose new entry rows and one turn row from this certified index."""
         from .wire_record import (
+            AuthoredObservationWireRecord,
             ContextEntryManifestWireObservation,
-            ObservationWireRecord,
             RecordedContextManifestWireObservation,
         )
 
@@ -511,10 +506,10 @@ class CertifiedSourceRead:
         )
         new_entries = tuple(entry for entry in entries if entry.reference not in known)
         records = (
-            (ObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
+            (AuthoredObservationWireRecord(ContextEntryManifestWireObservation(new_entries)),)
             if new_entries else ()
         )
-        return (*records, ObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
+        return (*records, AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)))
 
     def keyed_receipt(self, intent: PublicationIntents) -> Message | None:
         """The sealed key index filters absence; an original row proves presence."""
@@ -712,7 +707,7 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
             record = FieldCodec.parse(raw)
             if not isinstance(record, Mapping):
                 raise MalformedRecord("Certified initial JSON must be an object.")
-            original = CommittedDelivery.from_wire(record, root_id)
+            original = CommittedDelivery.recorded(record, root_id)
         except MalformedRecord as error:
             raise RelationViolationError("Certified initial row is invalid.") from error
         if (
@@ -736,8 +731,7 @@ class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTab
     entry_id: str = field(metadata={"sql": Column(primary_key=True)})
 
     @classmethod
-    def for_entry(cls, entry, *, offset: int, length: int):
-        reference = entry.reference
+    def for_reference(cls, reference, *, offset: int, length: int):
         return cls(
             reference.identity.session_id,
             reference.identity.session_file,

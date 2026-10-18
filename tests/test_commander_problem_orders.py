@@ -8,7 +8,7 @@ from dataclasses import replace
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -21,7 +21,7 @@ from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDeli
     RecordedCommitDelivery, MechanicalOrderRun,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    DoneTodoState, RecordHuntTodo, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
+    Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -31,9 +31,9 @@ def order(root, identity, command='printf 1', expected=1):
         at=RecordedEventTime(100), first_call_deadline=RecordedEventTime(220))
 
 
-def create(commander, problem, command='printf 1', expected=1, deadline=1000):
+def create(commander, problem, command='printf 1', expected=1, deadline=1000, owner='worker'):
     comms, caller = commander
-    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+    CommsTodoCreateTool(owner=owner, order=CreateProblemGoalAction(
         problem=problem, order=order(comms.root, 'order-' + problem, command, expected),
         request='request', deadline=RecordedEventTime(deadline), commander='lead',
         repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
@@ -380,12 +380,76 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
 
 
-def test_todo_voids_carry_keeps_every_stored_strike(commander):
-    """A store from before voids gains the empty column once; its rows, strikes and schema then read as declared."""
+def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(commander, commander_script, tmp_path,
+                                                                           monkeypatch):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1', deadline=1)
+    posted = []
+    monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
+    script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')
+    withdrawn = comms.goals.todos.get('P1')
+    assert script.open_todos() == [] and not withdrawn.pending and script.struck(withdrawn, 'worker') == 0
+    line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
+    assert (tmp_path / 'board.md').read_text().count(line) == 1
+    assert line in (tmp_path / 'narrative.md').read_text()
+    assert [recipients for recipients, _ in posted] == [['#comms'], ['worker']]
+    with pytest.raises(ValueError, match='Only an undelivered order'):
+        script.withdraw('P1', 'withdrawing the same order twice records nothing new')
+
+
+FIRED = 'The unit took two strikes on this problem and its second delivery was late again.'
+
+
+@pytest.mark.parametrize('caller, why, refused', [
+    ('lead', FIRED, None),
+    ('worker', FIRED, pytest.raises(TodoConflict)),
+    ('lead', 'Late twice.', pytest.raises(ValueError, match='plainly in 10')),
+])
+def test_only_the_commander_releases_a_problem_and_its_owner_stays_on_record(commander, caller, why, refused):
+    comms, _ = commander
+    todo = create(commander, 'P1')
+    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
+        todo.assignment, FIRED)).apply(comms, commander[1])
+    struck = comms.goals.todos.get('P1')
+    def release():
+        CommsTodoTool(id='P1', operation=ReleaseTodo(struck.revision, comms.registry.require(caller).incarnation,
+            struck.assignment, StrikeReason(why))).apply(comms, ThreadCaller(caller))
+    if refused:
+        with refused:
+            release()
+        assert comms.goals.todos.get('P1') == struck
+        return
+    release()
+    released = comms.goals.todos.get('P1')
+    assert released.assignment is None and released.revision == struck.revision + 1
+    assert (released.order, released.strikes) == (struck.order, struck.strikes)
+    assert released.released[0].previous == struck.assignment
+    successor = Assignment('other', 3.0, 'lead', 1.0, 'next')
+    assert released.proposed_assignment(successor).previous_owners == (struck.assignment.owner_identity,)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(released)) == released
+
+
+def test_order_fire_releases_every_open_problem_the_unit_holds(commander, commander_script, capsys, tmp_path):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1')
+    create(commander, 'P2', 'printf 2', 2)
+    script.FireVerb(unit='worker', why=FIRED).run()
+    assert [(t.assignment, t.released[0].reason.text) for t in map(comms.goals.todos.get, ('P1', 'P2'))] == [(None, FIRED)] * 2
+    assert capsys.readouterr().out.splitlines() == [f'{pid}: released from worker: {FIRED}' for pid in ('P1', 'P2')]
+    script.board()
+    assert (tmp_path / 'board.md').read_text().count(f'unassigned: released from worker: {FIRED}') == 2
+
+
+@pytest.mark.parametrize('step, name, column', [
+    ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released')])
+def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
+    """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
     import sqlite3
     from contextlib import closing
-    from cutover.carry_todo_voids import TodoVoids
     from agent_comms.todos import TodoStore
+    carry = getattr(importlib.import_module(f'cutover.{step}'), name)
     comms, caller = commander
     todo = create(commander, 'P1')
     CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
@@ -393,13 +457,13 @@ def test_todo_voids_carry_keeps_every_stored_strike(commander):
     struck = comms.goals.todos.get('P1')
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
-        db.execute('ALTER TABLE todo DROP COLUMN voided')
+        db.execute(f'ALTER TABLE todo DROP COLUMN {column}')
         db.commit()
     with pytest.raises(Exception):
         comms.goals.todos.get('P1')
-    assert TodoVoids.carry(comms.root, apply=False).changed == 1
-    assert TodoVoids.carry(comms.root, apply=True).changed == 1
-    assert TodoVoids.carry(comms.root, apply=False).changed == 0
+    assert carry.carry(comms.root, apply=False).changed == 1
+    assert carry.carry(comms.root, apply=True).changed == 1
+    assert carry.carry(comms.root, apply=False).changed == 0
     assert comms.goals.todos.get('P1') == struck
 
 
@@ -426,3 +490,48 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     assert request.stalled() == []
+
+
+def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
+    """An order saved before closing runs is refused until the carry gives it the mechanical run it implied."""
+    import json
+    import sqlite3
+    from contextlib import closing
+    from cutover.carry_order_run import OrderRuns
+    from agent_comms.todos import MechanicalOrderRun, TodoStore
+    comms, _caller = commander
+    saved = create(commander, 'P1')
+    path = TodoStore.path_in(comms.root)
+    with closing(sqlite3.connect(path)) as db:
+        (order,), = db.execute('SELECT "order" FROM todo WHERE id = ?', ('P1',))
+        db.execute('UPDATE todo SET "order" = ? WHERE id = ?',
+                   (json.dumps({k: v for k, v in json.loads(order).items() if k != 'run'}), 'P1'))
+        db.commit()
+    with pytest.raises(MalformedRecord, match='run'):
+        comms.goals.todos.get('P1')
+    assert OrderRuns.carry(comms.root, apply=False).detail == {MechanicalOrderRun.declared_name: 1}
+    assert OrderRuns.carry(comms.root, apply=True).changed == 1
+    assert OrderRuns.carry(comms.root, apply=False).changed == 0
+    assert comms.goals.todos.get('P1') == saved
+
+
+def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander, commander_script, tmp_path):
+    """Two CLI units hold orders; only the one whose bridge left is detached, with its unread count."""
+    import importlib
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.thread_status import StoppedThreadStatus
+
+    comms, _ = commander
+    for created, unit in enumerate(('parted', 'watching'), 3):
+        comms.registry.declare(comms.registry.new_thread(
+            unit, frozenset(), str(tmp_path), created_at=float(created), execution=ExternalThreadExecution),
+            StoppedThreadStatus())
+        comms.goals.update_goal(unit, SetGoalAction(text='Commander brief', goal_id=f'{unit}-brief'))
+    create(commander, 'P1', owner='parted')
+    create(commander, 'P2', owner='watching')
+    comms.messaging.send('lead', 'parted', 'Are you there?')
+    rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
+    with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
+        lines = rotate.detached(rotate.owed_orders())
+    assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']

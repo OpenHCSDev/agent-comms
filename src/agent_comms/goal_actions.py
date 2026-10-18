@@ -259,8 +259,8 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
             sequence = pending.sequence
             raise ValueError(
                 f"Dependency reply {sequence} is already pending or UNKNOWN. "
-                f"Call comms_inbox with goal_id={goal.id!r} and "
-                f"wait_for={list(self.wait_for)!r}. Inspect standby_review.messages, then "
+                f"Call comms_inbox with standby={{'goal_id': {goal.id!r}, "
+                f"'wait_for': {list(self.wait_for)!r}}}. Inspect standby_review.messages, then "
                 "pass only standby_review.reviewed_inputs to comms_goal to wait "
                 "for a later reply. Do not pass excluded owner or other dependency inputs. "
                 "This does not mark them STARTED or replay them."

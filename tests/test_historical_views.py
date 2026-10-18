@@ -7,7 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import HistoricalMessage, HistoryCursor
+from agent_comms.historical_views import HistoricalMessage
+from agent_comms.page_traversal import HistoryCursor
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.historical_views import HistoryArchive

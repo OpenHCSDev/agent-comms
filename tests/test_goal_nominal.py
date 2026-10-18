@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 
 import pytest
 
-from agent_comms import tools
+import agent_comms.tools as tools
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.agent_events import GoalChanged

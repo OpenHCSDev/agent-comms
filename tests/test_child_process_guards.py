@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import child_process
+import agent_comms.child_process as child_process
 
 pytestmark = pytest.mark.refactor_guard
 

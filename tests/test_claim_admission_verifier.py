@@ -11,7 +11,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms import selected_claim
+import agent_comms.selected_claim as selected_claim
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.assignment_states import FullPendingAssignment
 from agent_comms.attempt_start import AttemptStart

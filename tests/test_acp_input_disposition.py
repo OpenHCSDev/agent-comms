@@ -12,9 +12,9 @@ import pytest
 from acp import RequestError
 from acp.schema import TextContentBlock
 
-from agent_comms import backend
-from agent_comms import pi_commands as commands
-from agent_comms import pi_events as pi
+import agent_comms.backend as backend
+import agent_comms.pi_commands as commands
+import agent_comms.pi_events as pi
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp_failure import RequestFailure
 from agent_comms.input_attempt import UnresolvedInput

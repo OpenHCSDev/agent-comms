@@ -19,6 +19,10 @@ fi
 unset NODE_OPTIONS NODE_PATH NODE_COMPILE_CACHE
 export NODE_DISABLE_COMPILE_CACHE=1
 python3 "$stack_root/../src/agent_comms/native_package.py" "${cli%/dist/cli.js}"
+# Each launch derives the installed extension sources from the verified
+# declaration; sources whose bytes already match are not written.
+python3 "$stack_root/../src/agent_comms/native_package.py" \
+    --install-sources "${cli%/dist/cli.js}" "$stack_root/.."
 exec node --no-global-search-paths \
     --import "${cli%/cli.js}/agent-comms-import-fence.mjs" \
     --import "${cli%/cli.js}/agent-comms-project-bootstrap.mjs" "$cli" "$@"

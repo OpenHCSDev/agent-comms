@@ -13,6 +13,7 @@ from pydantic import JsonValue
 
 from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
 from .agent_events import Error
+from .coordination_database import CoordinationStore
 from .native_child import PiChild
 from .external_transcript import ExternalCut
 from .native_entries import StoredEntry
@@ -50,8 +51,7 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     @property
     def members(self):
-        path = self.session
-        return (path, *(path.with_name(path.name + suffix) for suffix in ('-wal', '-shm', '-journal')), self.writer_lock)
+        return (*CoordinationStore.files(self.session), self.writer_lock)
 
     def storage_files(self):
         return (self,)

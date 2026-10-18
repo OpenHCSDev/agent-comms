@@ -21,7 +21,7 @@ from typing import ClassVar, Literal
 from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
 from .message_reference import MessageReference
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Id128Text, Sha256Text
 from .thread_identity import GenerationCounter, TurnId
 
 
@@ -108,10 +108,10 @@ def _text(value: object, label: str) -> str:
 
 
 def _generation(value: object) -> str:
-    result = _text(value, "Generation")
-    if len(result) != 32 or any(char not in "0123456789abcdef" for char in result):
-        raise ClaimTransitionError("Generation must be a lowercase 128-bit hex value.")
-    return result
+    try:
+        return Id128Text.decode(value)
+    except ValueError as error:
+        raise ClaimTransitionError("Generation must be a lowercase 128-bit hex value.") from error
 
 
 def _resource(value: object) -> str:
@@ -177,11 +177,8 @@ class WakeClaim:
         return MessageReference(self.source_seq, self.source_message_id)
 
     def __post_init__(self) -> None:
-        from .bus_publication import StableLookupText
-        from .wire_metadata import WireRootIdText
-
-        WireRootIdText.decode(self.wire_root_id)
-        StableLookupText.decode(self.recipient_lookup)
+        Id128Text.decode(self.wire_root_id)
+        Id128Text.decode(self.recipient_lookup)
         _generation(self.operation_id)
         try:
             FieldCodec.decode(Literal[1], self.version)
@@ -199,15 +196,13 @@ class WakeClaim:
         except ValueError as error:
             raise ClaimTransitionError("Wake claim_scope version or revision is invalid.") from error
         TurnId.for_registration(self.turn_id)
-        if (
-            type(self.wake_assignment_id) is not str
-            or not self.wake_assignment_id.startswith("cohort-v1:")
-            or len(self.wake_assignment_id) != len("cohort-v1:") + 64
-            or any(
-                character not in "0123456789abcdef" for character in self.wake_assignment_id[10:]
-            )
-        ):
-            raise ClaimTransitionError("Wake claim ID is invalid.")
+        try:
+            assignment = FieldCodec.decode(str, self.wake_assignment_id)
+            if not assignment.startswith("cohort-v1:"):
+                raise ValueError("Unknown wake claim codec")
+            Sha256Text.from_text(assignment.removeprefix("cohort-v1:"))
+        except ValueError as error:
+            raise ClaimTransitionError("Wake claim ID is invalid.") from error
 
 
 @dataclass(frozen=True, slots=True)

@@ -182,7 +182,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     result = invoke_tool(
         comms,
         "comms_inbox",
-        {"thread": "b", "ack": False, "goal_id": goal.id, "wait_for": ["a"]}, caller=NoThreadCaller(),
+        {"thread": "b", "ack": False, "standby": {"goal_id": goal.id, "wait_for": ["a"]}}, caller=NoThreadCaller(),
     )
     assert result["standby_review"] == {
         "complete": False,
@@ -283,7 +283,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     )
     before = stored_inputs(dispositions.root)
     result = invoke_tool(
-        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}, caller=NoThreadCaller()
+        comms, "comms_inbox", {"thread": "b", "standby": {"goal_id": goal.id, "wait_for": ["a"]}}, caller=NoThreadCaller()
     )
     review = result["standby_review"]
     assert [row["text"] for row in review["messages"]] == [messages[1].body]
@@ -323,7 +323,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
         invoke_tool(comms, "comms_goal", report, caller=ThreadCaller("b"))
     assert stored_inputs(dispositions.root) == after_arrival
     fresh = invoke_tool(
-        comms, "comms_inbox", {"thread": "b", "goal_id": goal.id, "wait_for": ["a"]}, caller=NoThreadCaller()
+        comms, "comms_inbox", {"thread": "b", "standby": {"goal_id": goal.id, "wait_for": ["a"]}}, caller=NoThreadCaller()
     )["standby_review"]
     assert fresh["reviewed_inputs"] == [f"bus:{messages[1].seq}", f"bus:{late.seq}"]
     invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": fresh["reviewed_inputs"]}, caller=ThreadCaller("b"))

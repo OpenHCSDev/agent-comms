@@ -16,10 +16,8 @@ from typing import TYPE_CHECKING
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordinator import Coordination
 
-from .bus_publication import StableLookupText
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, Id128Text
 from .declared_family import DeclaredFamily
-from .wire_metadata import WireRootIdText
 from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .native_pi import NativeContextProof, NativePiUnavailable
@@ -117,8 +115,8 @@ def read_historical_native_inputs(
     from .native_entries import NativeEvidenceScope
 
     with NativeEvidenceScope.borrow(source_reads) as source_reads:
-        WireRootIdText.decode(wire_root_id)
-        StableLookupText.decode(recipient_lookup)
+        Id128Text.decode(wire_root_id)
+        Id128Text.decode(recipient_lookup)
         FieldCodec.decode(int, source_seq)
         if source_seq <= 0:
             raise ValueError("historical input requires a positive source sequence")

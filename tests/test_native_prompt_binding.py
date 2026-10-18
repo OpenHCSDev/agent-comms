@@ -95,7 +95,7 @@ def _root(tmp_path: Path):
 
 
 async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatch):
-    from agent_comms import native_prompt_binding as binding
+    import agent_comms.native_prompt_binding as binding
 
     root, root_id, _, _, _ = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
@@ -122,7 +122,7 @@ async def test_suppressed_binding_insert_denies_native_send(tmp_path, monkeypatc
 
 
 async def test_uncertain_binding_commit_denies_native_send_and_retry(tmp_path, monkeypatch):
-    from agent_comms import private_sidecar
+    import agent_comms.private_sidecar as private_sidecar
 
     root, root_id, _, _, _ = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
@@ -246,7 +246,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
 
 @pytest.fixture
 def journal_without_sql(monkeypatch):
-    from agent_comms import private_send_stage
+    import agent_comms.private_send_stage as private_send_stage
     from agent_comms.coordination_database import StoreBusy
 
     journal_checks = []
@@ -726,7 +726,7 @@ async def test_full_stage_digest_mismatch_is_unproven_and_never_replayed(tmp_pat
 async def test_live_gate_refuses_persisted_sidecar_identity_tamper(
     tmp_path, monkeypatch, stage, field, value
 ):
-    from agent_comms import native_prompt_binding as binding_module
+    import agent_comms.native_prompt_binding as binding_module
 
     root, root_id, _, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="FULL")
@@ -787,7 +787,7 @@ async def test_owner_change_between_reserve_and_bind_refuses_and_never_launches(
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
 
-    from agent_comms import private_send_claim
+    import agent_comms.private_send_claim as private_send_claim
 
     real_bind = private_send_claim.bind_expected_prompt
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import json
+import re
 import types
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
@@ -11,10 +12,11 @@ from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import cached_property, lru_cache, reduce
+from functools import cache, cached_property, lru_cache, reduce
 from operator import or_
 from pathlib import Path
 from typing_extensions import TypeAliasType
+from uuid import uuid4
 from typing import (
     Annotated,
     Any,
@@ -67,7 +69,7 @@ class FieldPlan:
     key: str
     required: bool
     reject_null: bool
-    choices: object
+    choices: Callable[[], Iterable[str]] | None
     value: ValueDecoder[object]
     annotation: object
     declared: Field
@@ -76,6 +78,7 @@ class FieldPlan:
         fields.append(self)
         return (self.key,)
 
+    @property
     def wire_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
@@ -97,13 +100,46 @@ class FieldPlan:
             schema["default"] = FieldCodec.encode(declared.default, annotation)
         return {self.key: schema}
 
-    def decoded(self, data):
-        if self.key not in data:
+    def default(self) -> object:
+        declared = self.declared
+        return declared.default if declared.default is not MISSING else (
+            declared.default_factory() if declared.default_factory is not MISSING else MISSING
+        )
+
+    def omitted(self, value: object) -> bool:
+        metadata = self.declared.metadata
+        return bool(metadata.get("wire_omit_default") and value == self.default())
+
+    def captured(self, data: object) -> dict[str, object]:
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object.")
+        return {self.name: data[self.key]} if self.key in data else {}
+
+    def raw(self, data: object) -> object:
+        values = self.captured(data)
+        if self.name not in values:
+            raise MalformedRecord(f"Missing required field {self.key}")
+        return values[self.name]
+
+    def decoded(self, data: object) -> dict[str, object]:
+        captured = self.captured(data)
+        if self.name not in captured:
             return {}
-        value = data[self.key]
+        value = captured[self.name]
+        if self.reject_null and value is None:
+            raise MalformedRecord(f"Null field {self.key}")
         if self.choices is not None and value not in self.choices():
             raise MalformedRecord(f"Field {self.key} must be one of: {', '.join(self.choices())}")
         return {self.name: self.value.decode(value)}
+
+    def read(self, data: object) -> object:
+        values = self.decoded(data)
+        if self.name in values:
+            return values[self.name]
+        default = self.default()
+        if default is MISSING:
+            raise MalformedRecord(f"Missing required field {self.key}")
+        return default
 
 
 class InlineFieldPlan(FieldPlan):
@@ -122,15 +158,17 @@ class InlineFieldPlan(FieldPlan):
         fields.extend(self.record.fields)
         return self.record.init_required_keys
 
+    @cached_property
     def wire_keys(self) -> tuple[str, ...]:
         return tuple(entry.key for entry in self.record.fields)
 
     def encoded(self, value, *, key=None):
         return value
 
-    def decoded(self, data):
-        inlined = {key: data[key] for key in self.wire_keys() if key in data}
-        return {self.name: self.value.decode(inlined)}
+    def captured(self, data: object) -> dict[str, object]:
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object.")
+        return {self.name: {key: data[key] for key in self.wire_keys if key in data}}
 
 
 class InlineFamilyPlan(InlineFieldPlan):
@@ -143,6 +181,7 @@ class InlineFamilyPlan(InlineFieldPlan):
     def contribute(self, fields):
         return (self.family.family_discriminator,)
 
+    @cached_property
     def wire_keys(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys((self.family.family_discriminator, *(
             entry.key for member in self.family.members_with(self.family)
@@ -304,36 +343,53 @@ class JsonShapeFamily(WireValue):
     selection and recursive conversion. Rendering stays with the value owners.
     Its wire value is the declared shape itself, so it answers
     ``external_json_shape`` True and decodes through ``from_wire``.
+    Each family class owns the map from JSON type to the member beneath it that
+    owns that type, filled as members are defined; a bad declaration fails then.
     """
 
     external_json_shape = True
 
     accepts_null = True
 
+    _json_owners: ClassVar[dict[type, tuple[type, object]]]
+
+    def __init_subclass__(cls, **options: object) -> None:
+        super().__init_subclass__(**options)
+        if JsonShapeFamily in cls.__bases__ and not issubclass(cls, DeclaredFamily):
+            raise TypeError("A JSON shape family requires a declared family")
+        cls._json_owners = {}
+        if issubclass(cls, JsonShapeMember):
+            shape, annotation = cls._json_shape()
+            owners = [base for base in cls.__mro__ if issubclass(base, JsonShapeFamily)
+                      and "_json_owners" in vars(base)]
+            if any(shape in base._json_owners for base in owners):
+                raise TypeError(f"Two {cls.__name__} owners for {shape.__name__}")
+            for base in owners:
+                base._json_owners[shape] = (cls, annotation)
+
     @classmethod
-    def _value_annotation(cls, member):
-        if tuple(item.name for item, _ in FieldCodec.record_fields(member)) != ("value",):
+    def _json_shape(cls) -> tuple[type, object]:
+        hints = {name: hint for name, hint in get_type_hints(cls, include_extras=True).items()
+                 if hint is not ClassVar and get_origin(hint) is not ClassVar}
+        if tuple(hints) != ("value",):
             raise TypeError("A JSON shape must declare one value field")
-        return FieldCodec._types(member)["value"]
+        annotation = hints["value"]
+        shape = get_origin(annotation) or annotation
+        if shape in (tuple, frozenset):
+            shape = list
+        if shape not in (dict, list, str, int, float, bool, type(None)):
+            raise TypeError(f"Unsupported JSON shape declaration: {cls.__name__}")
+        return shape, annotation
 
     @classmethod
     def from_wire(cls, data):
-        if not issubclass(cls, DeclaredFamily):
-            raise TypeError("A JSON shape family requires a declared family")
-        owners = []
-        for member in cls.members_with(JsonShapeMember):
-            annotation = cls._value_annotation(member)
-            shape = get_origin(annotation) or annotation
-            if shape in (tuple, frozenset):
-                shape = list
-            if shape not in (dict, list, str, int, float, bool, type(None)):
-                raise TypeError(f"Unsupported JSON shape declaration: {member.__name__}")
-            if type(data) is shape:
-                owners.append((member, annotation))
-        if len(owners) != 1:
-            raise MalformedRecord(f"Expected one {cls.__name__} owner for {type(data).__name__}")
-        member, annotation = owners[0]
-        result = member.from_json_value(FieldCodec.decode(annotation, data))
+        try:
+            member, annotation = cls._json_owners[type(data)]
+        except KeyError:
+            raise MalformedRecord(
+                f"Expected one {cls.__name__} owner for {type(data).__name__}") from None
+        owner = cast(type[JsonShapeMember], member)
+        result = owner.from_json_value(FieldCodec.decode(annotation, data))
         if not isinstance(result, cls):
             raise TypeError("A JSON shape factory must return its own family")
         return result
@@ -342,24 +398,48 @@ class JsonShapeFamily(WireValue):
         return self.value
 
 
-class TextRepresentation(FieldRepresentation):
-    """External text scalars share strict decoding at the canonical boundary."""
+class TextRepresentation[V](FieldRepresentation):
+    """External text scalars share strict decoding at the canonical boundary.
+
+    Its schema names the representation, so text with no declared spelling never shares a stored
+    form with plain ``str`` or with another representation; SpelledText declares one.
+    """
 
     @classmethod
-    def decode(cls, value: object) -> object:
+    def decode(cls, value: object) -> V:
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls.from_text(FieldCodec.decode(str, value))
 
     @classmethod
     @abstractmethod
-    def from_text(cls, value: str) -> object: ...
+    def from_text(cls, value: str) -> V: ...
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
-        return FieldCodec.value_schema(str)
+        return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
 
 
-class PathText(TextRepresentation):
+class SpelledText(TextRepresentation[str]):
+    """Text with one declared spelling: what decoding accepts and what its schema reports."""
+
+    spelling: ClassVar[re.Pattern[str]]
+
+    @classmethod
+    def encode(cls, value: object) -> str:
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if cls.spelling.fullmatch(value) is None:
+            raise MalformedRecord(f"{cls.__name__} is spelled {cls.spelling.pattern}")
+        return value
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
+
+
+class PathText(TextRepresentation[Path]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, Path):
@@ -371,7 +451,7 @@ class PathText(TextRepresentation):
         return Path(value)
 
 
-class TimestampText(TextRepresentation):
+class TimestampText(TextRepresentation[datetime]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, datetime):
@@ -381,6 +461,36 @@ class TimestampText(TextRepresentation):
     @classmethod
     def from_text(cls, value: str) -> datetime:
         return datetime.fromisoformat(value)
+
+
+class Id128Text(SpelledText):
+    """A 128-bit identity: an input, turn, bus root, recipient lookup or claim generation."""
+
+    spelling = re.compile("[0-9a-f]{32}")
+
+    @classmethod
+    def mint(cls) -> str:
+        return uuid4().hex
+
+
+class Hex256Text(SpelledText):
+    """256 bits written as 64 lowercase hex digits."""
+
+    spelling = re.compile("[0-9a-f]{64}")
+
+
+class Sha256Text(Hex256Text):
+    """A SHA-256 digest."""
+
+
+class Token256Text(Hex256Text):
+    """A random 256-bit secret token."""
+
+
+class GitCommitText(SpelledText):
+    """A git commit, abbreviated to no fewer than seven digits."""
+
+    spelling = re.compile("[0-9a-f]{7,40}")
 
 
 class Projected(property):
@@ -411,7 +521,6 @@ class FieldCodec(Sealed):
     the single record codec and declaration-derived schema.
     """
 
-    _declaration_cache_capacity = 256
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
@@ -452,7 +561,7 @@ class FieldCodec(Sealed):
         return representation
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
@@ -480,7 +589,7 @@ class FieldCodec(Sealed):
         return next(key for item, key in cls.record_fields(record) if item.name == name)
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _types(declaration: type) -> dict[str, Any]:
         return get_type_hints(declaration, include_extras=True)
 
@@ -568,22 +677,15 @@ class FieldCodec(Sealed):
         hints = cls._types(type(value))
         result: dict[str, object] = {}
         plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
-        for field, key in cls.record_fields(type(value)):
+        for field, _key in cls.record_fields(type(value)):
             current = getattr(value, field.name)
-            if not field.metadata.get("wire_exclude") and not cls._omitted(field, current):
+            if not field.metadata.get("wire_exclude") and not plans[field.name].omitted(current):
                 result.update(plans[field.name].encoded(cls.encode(current, hints[field.name])))
         result.update(
             (member.wire_name, cls.encode(getattr(value, name)))
             for name, member in cls._projections(type(value), "wire").items()
         )
         return result
-
-    @staticmethod
-    def _omitted(field: Field[object], current: object) -> bool:
-        default = field.default if field.default is not MISSING else (
-            field.default_factory() if field.default_factory is not MISSING else MISSING
-        )
-        return bool(field.metadata.get("wire_omit_default")) and current == default
 
     @classmethod
     def decode_record(cls, target: type[T], data: object) -> T:
@@ -593,6 +695,22 @@ class FieldCodec(Sealed):
     @classmethod
     def decode(cls, target: type[T], data: object) -> T:
         return cast(T, compile_decoder(target).decode(data))
+
+    @classmethod
+    def record_member[Member: DeclaredFamily](
+        cls, family: type[Member], data: object
+    ) -> tuple[type[Member], dict]:
+        """Read a record's declared selector without decoding its payload."""
+        return _FamilyRecordDecoder(family).member(data)
+
+    @classmethod
+    def record_data(cls, record: type, data: object) -> dict:
+        """Validate the envelope independently of reading its declared payloads."""
+        return _RecordDecoder(record).checked(data)
+
+    @classmethod
+    def field_plan(cls, record: type, name: str) -> FieldPlan:
+        return next(item for item in cls._record_plan(record).bindings if item.name == name)
 
     @staticmethod
     def parse(text: str | bytes) -> object:
@@ -699,7 +817,7 @@ class FieldCodec(Sealed):
             plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
             for field, key in cls.record_fields(type(value)):
                 current = getattr(value, field.name)
-                if not field.metadata.get(f"{view}_exclude") and not cls._omitted(field, current):
+                if not (field.metadata.get(f"{view}_exclude") or plans[field.name].omitted(current)):
                     encoded = cls.project(current, view, hints[field.name])
                     result.update(plans[field.name].encoded(
                         encoded, key=field.metadata.get(f"{view}_name", key)
@@ -723,7 +841,6 @@ class FieldCodec(Sealed):
         bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
-        reject_null_keys: frozenset[str]
         accepted_keys: frozenset[str]
 
         def schema_fields(self, properties, required):
@@ -733,7 +850,7 @@ class FieldCodec(Sealed):
             return properties
 
     @classmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
         """Resolve every per-row type decision for one record declaration once."""
         declared = cls.record_fields(record)
@@ -759,7 +876,7 @@ class FieldCodec(Sealed):
                 required_keys.extend(keys)
             if entry.declared.default is MISSING and entry.declared.default_factory is MISSING:
                 init_required_keys.extend(keys)
-        wire_keys = [key for entry in entries for key in entry.wire_keys()]
+        wire_keys = [key for entry in entries for key in entry.wire_keys]
         if len(set(wire_keys)) != len(wire_keys) or (
             issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
         ):
@@ -769,7 +886,6 @@ class FieldCodec(Sealed):
             bindings=entries,
             required_keys=tuple(required_keys),
             init_required_keys=tuple(init_required_keys),
-            reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
             accepted_keys=frozenset(wire_keys) | computed,
         )
 
@@ -781,7 +897,7 @@ class FieldCodec(Sealed):
         return InlineFamilyPlan if family else InlineFieldPlan
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
         # Cache immutable declarations only. Each consumer still invokes the
         # original property on the current record; projected values are never cached.
@@ -969,8 +1085,10 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
 
 def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
     """A wire name the family does not declare is malformed data."""
-    with MalformedRecord.refusing(f"Invalid {family.__name__} name"):
+    try:
         return family.decode(name)
+    except ValueError as error:
+        raise MalformedRecord(str(error)) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -1125,10 +1243,10 @@ class _DictDecoder(ValueDecoder[Any]):
         return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
 
 @dataclass(frozen=True, slots=True)
-class _FamilyRecordDecoder(ValueDecoder[Any]):
+class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
-    family: type[DeclaredFamily]
+    family: type[Member]
 
     @staticmethod
     def document_member(declared: object) -> type[DeclaredFamily] | None:
@@ -1158,17 +1276,20 @@ class _FamilyRecordDecoder(ValueDecoder[Any]):
     def argument_payload(self, text: object) -> object:
         return {self.family.family_discriminator: text}
 
-    def decode(self, data):
+    def member(self, data: object) -> tuple[type[Member], dict]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a family object.")
         tag = self.family.family_discriminator
         name = data.get(tag)
         if not isinstance(name, str):
             raise MalformedRecord(f"Expected a string family {tag}.")
-        member = _declared_member(self.family, name)
-        return _member_decoder(member).decode(
-            {key: value for key, value in data.items() if key != tag}
-        )
+        return _declared_member(self.family, name), {
+            key: value for key, value in data.items() if key != tag
+        }
+
+    def decode(self, data):
+        member, payload = self.member(data)
+        return _member_decoder(member).decode(payload)
 
 @dataclass(frozen=True, slots=True)
 class _RecordDecoder(ValueDecoder[Any]):
@@ -1177,7 +1298,7 @@ class _RecordDecoder(ValueDecoder[Any]):
 
     record: type
 
-    def decode(self, data):
+    def checked(self, data: object) -> dict:
         target = self.record
         plan = FieldCodec._record_plan(target)
         if not isinstance(data, dict):
@@ -1192,11 +1313,13 @@ class _RecordDecoder(ValueDecoder[Any]):
         unknown = data.keys() - plan.accepted_keys
         if unknown:
             raise MalformedRecord(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
-        null = plan.reject_null_keys & data.keys()
-        if any(data[key] is None for key in null):
-            raise MalformedRecord(f"Null field for {target.__name__}")
+        return data
+
+    def decode(self, data):
+        data = self.checked(data)
+        target = self.record
         values = {}
-        for entry in plan.bindings:
+        for entry in FieldCodec._record_plan(target).bindings:
             values.update(entry.decoded(data))
         return FieldCodec.construct(target, values)
 

@@ -33,8 +33,8 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
-from .field_codec import FieldCodec, MalformedRecord
-from .native_input_record import FullNativeExecution, NativeInputIdentity, NativeInputIdText
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, Token256Text
+from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput
 from .native_tool_call import (
     CoordinationBusy,
@@ -54,7 +54,6 @@ from .turn_context import InstructionFile
 _MAX_CONTENT = 128 * 1024
 _MAX_REQUEST = _MAX_CONTENT + 8192
 _CALL_ID = re.compile(r"[A-Za-z0-9_-]{1,128}\Z")
-_TOKEN = re.compile(r"[0-9a-f]{64}\Z")
 _TOOL_SOURCE_SHA = "136695f78d636886725c22c1bd7373d1f18d1b6001f4192d3afe9ec3a1ba102b"
 
 _LOG = logging.getLogger(__name__)
@@ -187,7 +186,7 @@ def consume_selected_slot(directory: Path, input_id: str, call_id: str) -> None:
     An existing slot is never reopened or reclaimed, even after a process crash.
     """
     try:
-        NativeInputIdText.decode(input_id)
+        Id128Text.decode(input_id)
     except MalformedRecord as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
     if type(call_id) is not str or not _CALL_ID.fullmatch(call_id):
@@ -250,7 +249,7 @@ def selected_tool_mode_for_owner(
     tracked input. Never derive this mode from user/model/wake-injected text.
     """
     try:
-        NativeInputIdText.decode(input_id)
+        Id128Text.decode(input_id)
         FieldCodec.decode(str, owner_name)
     except MalformedRecord as error:
         raise SelectedToolDenied("Selected mode has no typed owner attempt") from error
@@ -313,7 +312,7 @@ def _require_sent_full_input(
 def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> None:
     """Corroborate a live owner result; a persisted acknowledgement alone grants nothing."""
     try:
-        NativeInputIdText.decode(input_id)
+        Id128Text.decode(input_id)
     except MalformedRecord as error:
         raise SelectedToolDenied("Selected input identity is invalid") from error
     acknowledgement = Path(directory).absolute() / "selected-tool-ledger" / (input_id + ".done")
@@ -500,8 +499,10 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
         return True
 
     def __init__(self, directory: Path, token: str) -> None:
-        if type(token) is not str or not _TOKEN.fullmatch(token):
-            raise ValueError("Selected tool transport requires a random 256-bit token")
+        try:
+            Token256Text.decode(token)
+        except MalformedRecord as error:
+            raise ValueError("Selected tool transport requires a random 256-bit token") from error
         self.path = Path(directory).absolute() / "s"
         self._resources = ExitStack()
         self.token = token

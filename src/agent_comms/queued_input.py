@@ -22,9 +22,10 @@ from .coordination_errors import IdentityConflict, StaleRevision
 from .coordination_session import ReadNativeCoordinationSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
+from .field_codec import Id128Text
 from .goals import GoalDeclaration, NoGoal
 from .image_inputs import ImageInput
-from .input_attempt import ACPInputIdText, InputAttempt, ReservedInput
+from .input_attempt import InputAttempt, ReservedInput
 from .input_disposition import InputDispositions
 from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .store_files import _store_lock
@@ -137,7 +138,7 @@ class QueuedInput:
             text or prompt or "[image prompt]",
             echo,
             context,
-            ACPInputIdText.new() if input_id is None else ACPInputIdText.decode(input_id),
+            Id128Text.mint() if input_id is None else Id128Text.decode(input_id),
             prompt,
             images,
             controller,
@@ -377,7 +378,7 @@ class DeliveredInput(QueuedInput):
                         reserved.append((
                             cls(
                                 text=row.source_text, echo=False, context=context,
-                                input_id=ACPInputIdText.new(), prompt=rendered.text,
+                                input_id=Id128Text.mint(), prompt=rendered.text,
                                 bus_key=key, message=message, assignment=paused,
                             ),
                             InputContent(text=rendered.text, contributions=rendered.contributions),

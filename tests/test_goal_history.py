@@ -7,7 +7,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import store_files
+import agent_comms.store_files as store_files
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
     ClearGoalAction,

@@ -8,13 +8,13 @@ from dataclasses import replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
 from acp import RequestError
 
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
+from .field_codec import Id128Text
 from .goal_attempts import GoalTurnPermit, NoLaunchPermit
 from .goals import Goal
 from .messages import Message
@@ -129,7 +129,7 @@ class OwnedTurn:
         return True
 
     def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
-        self.turn_id = uuid4().hex
+        self.turn_id = Id128Text.mint()
         self.routing = TurnRouting(
             tuple(origin.reference for origin in self.origins),
             MessageRoute(self.thread_name, self.reply_targets) if self.reply_targets else None,

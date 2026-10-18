@@ -26,8 +26,8 @@ from .cohort_schema import assert_cohort_schema
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .private_send_rules import NativeIdentityCheck
 from .native_input_owner import ParticipantOwner
-from .native_input_record import NativeInputRecord, NativeInputIdText, NativeInputExecution
-from .field_codec import FieldCodec, MalformedRecord
+from .native_input_record import NativeInputExecution, NativeInputRecord
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .native_pi import read_tracked_input_digest
 from .native_entries import NativeEvidenceRead
 from .native_runtime_input import NativeRuntimeInput
@@ -135,7 +135,7 @@ def bind_expected_prompt(
     envelope exactly as ``AgentSession._claimNativeInput`` computes it — NOT
     the bare prompt bytes.
     """
-    NativeInputIdText.decode(input_id)
+    Id128Text.decode(input_id)
     if not FieldCodec.decode(str, prompt):
         raise ValueError("prompt binding requires nonempty original text")
     digest = native_request_digest(prompt)
