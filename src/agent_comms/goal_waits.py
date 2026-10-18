@@ -122,7 +122,7 @@ class RecordedGoalWait(GoalWait):
         )
         return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
 
-    def current_for(self, goal: Goal, owner: RecordedThreadIncarnation) -> bool:
+    def current_for(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> bool:
         """A retained wait can survive edits, but not replacement of its owner.
 
         Callers select the row by goal ID before asking this question. A newer
@@ -298,13 +298,11 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         return removed
 
     def resolve(self, goal: GoalDeclaration) -> GoalWait:
-        return goal.project(lambda current: self.for_goal(current, self.read()), NoGoalWait)
+        return self.for_goal(goal, self.read())
 
     @staticmethod
-    def for_goal(goal: Goal, rows: dict[str, RecordedGoalWait]) -> GoalWait:
-        if not goal.state.active:
-            return NoGoalWait()
-        return rows.get(goal.id, NoGoalWait())
+    def for_goal(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:
+        return rows.get(goal.active().reported_id(), NoGoalWait())
 
     @classmethod
     def execution(
@@ -318,9 +316,9 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         )
 
     @staticmethod
-    def current_waits(goal: Goal, rows: dict[str, RecordedGoalWait],
+    def current_waits(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
                       owner: RecordedThreadIncarnation) -> tuple[RecordedGoalWait, ...]:
-        wait = rows.get(goal.id)
+        wait = rows.get(goal.reported_id())
         return (wait,) if wait is not None and wait.current_for(goal, owner) else ()
 
     @classmethod
@@ -348,9 +346,8 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
             seen.add(name)
             thread = snapshot.threads[name]
             goal = thread.goal.active()
-            wait = next(iter(goal.project(
-                lambda current: cls.current_waits(current, rows, thread.incarnation.require_recorded()),
-                lambda: (),
+            wait = next(iter(cls.current_waits(
+                goal, rows, thread.incarnation.require_recorded(),
             )), None)
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
@@ -362,9 +359,8 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                     pending.append(owner)
                     continue
                 peer_goal = peer.goal.active()
-                peer_wait = next(iter(peer_goal.project(
-                    lambda current: cls.current_waits(current, rows, peer.incarnation.require_recorded()),
-                    lambda: (),
+                peer_wait = next(iter(cls.current_waits(
+                    peer_goal, rows, peer.incarnation.require_recorded(),
                 )), None)
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn

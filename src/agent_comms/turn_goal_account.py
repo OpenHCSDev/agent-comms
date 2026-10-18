@@ -127,13 +127,10 @@ class TurnGoalAccount:
         return snapshot.canonical_name(self.owner.name)
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
-        goal = self.comms.registry.require(self.thread_name).goal
-        if not goal.active().project(lambda current: self._charge_usage(current, event), lambda: False):
+        goal_id = self.comms.registry.require(self.thread_name).goal.active().reported_id()
+        permit = self.originated.get(goal_id, self.permit)
+        if not permit.charge_for(goal_id, self.comms.goals, str(event.response_id), event.usage.to_wire()):
             self.unattributed_usage.append((str(event.response_id), event.usage))
-
-    def _charge_usage(self, goal: Goal, event: events.ProviderUsage) -> bool:
-        permit = self.originated.get(goal.id, self.permit)
-        return permit.charge_for(goal.id, self.comms.goals, str(event.response_id), event.usage.to_wire())
 
     def tool_ended(self, event: events.ToolEnd) -> None:
         if event.ok:
