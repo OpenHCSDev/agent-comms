@@ -16,9 +16,10 @@ A verdict without a reason is refused; a send-back must cite a real message from
 the commander to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
 """
 import hashlib, json, os, re, sys, time
+from abc import abstractmethod
 from dataclasses import dataclass
 
-from ..todos import AcceptedVerdict, BluntText, SendBackVerdict, StrikeReason
+from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason
 from ..tools import CommsVerdictTool
 from . import order
 from ..cli_commands import option
@@ -91,21 +92,6 @@ def roast(thread, lines, text, fix, slop):
     print('roast sent to the unit and #comms: ' + order.post([thread, '#comms'], body))
 
 
-def edit_order(edit, msg):
-    """Resolve an edit to its held order; never record a verdict without that Todo."""
-    candidates = order.open_todos(edit['thread'])
-    if msg is not None:
-        cited = next((m for m in my_messages(edit['thread']) if m['id'] == msg), None)
-        if cited is None:
-            sys.exit(f'Refused: edit {edit["id"]}: {msg} is not a message from {ME} to {edit["thread"]}')
-        if found := re.search(r'\bP\d+\b', cited['text']):
-            candidates = [todo for todo in candidates if todo.id == found.group()]
-    if len(candidates) != 1:
-        sys.exit(f'Refused: edit {edit["id"]} by {edit["thread"]} needs one open order Todo; '
-                 f'found {[todo.id for todo in candidates]}; cite its P-number with --msg')
-    return candidates[0]
-
-
 def alarm():
     while True:
         late = [e for e in unjudged() if time.time() - e['at'] > 300]
@@ -140,44 +126,36 @@ class AlarmVerb(JudgeVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class OkVerb(JudgeVerb, RuledVerb):
+class VerdictVerb(JudgeVerb, RuledVerb):
     """Every verdict, mine or a fork's, is made after reviewing paper 1's
-    correct-maintenance results."""
-    help = "the edit serves the order"
+    correct-maintenance results. Each member declares the facts its verdict carries as required options."""
     ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")
-    why: str = option("--why", default="")
-    msg: str | None = option("--msg", default=None, help="BUSID of my message to the unit")
-    serves: str | None = option("--serves", default=None, help="exact words of the order")
+    why: str = option("--why")
+    msg: str = option("--msg", help="BUSID of my order message to the unit")
     lines: tuple[str, ...] = option(
-        "--line", default=(), parser_default_factory=list, action="append",
-        metavar="LINE", help="an exact diff line; repeat for each")
-    roast: str | None = option(
-        "--roast", default=None, help="blunt, why it is stupid, with because")
-    fix: str | None = option("--fix", default=None, help="owner and replacing shape")
-    no_owner: str | None = option("--no-owner", default=None)
+        "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
-    def slop(self) -> order.Slop | None:
-        return None
+    @abstractmethod
+    def operation(self, todo, edit_id) -> OrderVerdict: ...
 
-    def operation(self, todo, edit_id):
-        return AcceptedVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
-                               todo.assignment, edit_id, quote=self.serves or '')
+    @abstractmethod
+    def check_edits(self, edits) -> None: ...
 
-    def check_edits(self, edits):
-        for edit in edits:
-            diff = ''.join('+' + line + '\n' for h in edit['hunks'] for line in h['new'].splitlines())
-            path = edit.get('path') or ''
-            after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
-            if added := order.forwarders_added(diff, after):
-                sys.exit(f'Refused: edit {edit["id"]} adds forwarders {added[:5]}; it goes back with judge back, never ok')
-            if (extra := branches_added(edit)) > 0 and not (
-                    self.no_owner and len(self.no_owner.split()) >= 12 and re.search(r'\bbecause\b', self.no_owner)
-                    and re.search(r'\S+\.py:\d+', self.no_owner)):
-                sys.exit(f'Refused: edit {edit["id"]} adds {extra} branch(es); send it back or give --no-owner '
-                         'with 12+ words, because and file:line proving no type could own it')
+    @abstractmethod
+    def report(self, todos) -> None: ...
 
-    def report(self, todos):
-        pass
+    def held_order(self, edit):
+        """Resolve an edit to the order my cited message names; never record a verdict without that Todo."""
+        cited = next((m for m in my_messages(edit['thread']) if m['id'] == self.msg), None)
+        if cited is None:
+            sys.exit(f'Refused: edit {edit["id"]}: {self.msg} is not a message from {ME} to {edit["thread"]}')
+        candidates = order.open_todos(edit['thread'])
+        if found := re.search(r'\bP\d+\b', cited['text']):
+            candidates = [todo for todo in candidates if todo.id == found.group()]
+        if len(candidates) != 1:
+            sys.exit(f'Refused: edit {edit["id"]} by {edit["thread"]} needs one open order Todo; '
+                     f'found {[todo.id for todo in candidates]}; cite the message that names its P-number')
+        return candidates[0]
 
     def run(self) -> None:
         if len(self.why.split()) < 6:
@@ -189,13 +167,11 @@ class OkVerb(JudgeVerb, RuledVerb):
         if unread := [token for token in self.ids
                       if token != f'{token.split(":")[0]}:{check_code(edits[token.split(":")[0]])}']:
             sys.exit(f'Refused: wrong or missing read codes {unread}; read each edit to its "=== end" line')
-        if not self.lines:
-            sys.exit('Refused: quote, with --line, the exact diff line each edit is judged by')
         for i in ids:
             text = ''.join(h['old'] + h['new'] for h in edits[i]['hunks'])
             if not any(line in text for line in self.lines):
                 sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
-        selected = {i: edit_order(edits[i], self.msg) for i in ids}
+        selected = {i: self.held_order(edits[i]) for i in ids}
         self.check_edits([edits[i] for i in ids])
         # Validate the whole batch through the operation owner before its first write.
         for i, todo in selected.items():
@@ -209,8 +185,49 @@ class OkVerb(JudgeVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class BackVerb(OkVerb):
+class OkVerb(VerdictVerb):
+    help = "the edit serves the order"
+    serves: str = option("--serves", help="exact words of the order")
+
+    def operation(self, todo, edit_id):
+        return AcceptedVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
+                               todo.assignment, edit_id, quote=self.serves)
+
+    def check_edits(self, edits):
+        for edit in edits:
+            diff = ''.join('+' + line + '\n' for h in edit['hunks'] for line in h['new'].splitlines())
+            path = edit.get('path') or ''
+            after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
+            if added := order.forwarders_added(diff, after):
+                sys.exit(f'Refused: edit {edit["id"]} adds forwarders {added[:5]}; it goes back with judge back, never ok')
+            if (extra := branches_added(edit)) > 0:
+                self.own_branches(edit, extra)
+
+    def own_branches(self, edit, extra) -> None:
+        sys.exit(f'Refused: edit {edit["id"]} adds {extra} branch(es); send it back, or judge it with ok-unowned '
+                 'and --no-owner proving no type could own them')
+
+    def report(self, todos):
+        pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class OkUnownedVerb(OkVerb):
+    help = "the edit serves the order and its added branches have no type that could own them"
+    no_owner: str = option("--no-owner", help="12+ words with because and file:line")
+
+    def own_branches(self, edit, extra) -> None:
+        if not (len(self.no_owner.split()) >= 12 and re.search(r'\bbecause\b', self.no_owner)
+                and re.search(r'\S+\.py:\d+', self.no_owner)):
+            sys.exit(f'Refused: edit {edit["id"]} adds {extra} branch(es); --no-owner needs 12+ words, '
+                     'because and file:line proving no type could own them')
+
+
+@dataclass(frozen=True, kw_only=True)
+class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to #comms"
+    roast: str = option("--roast", help="blunt, why it is stupid, with because")
+    fix: str = option("--fix", help="owner and replacing shape")
     slop_kind: str = option("--slop", help="|".join(order.Slop.KINDS))
     fact: str = option("--fact", help="the required fact, 4+ words")
     at: str = option("--at", help="PATH:LINE where it is restated")
@@ -226,12 +243,10 @@ class BackVerb(OkVerb):
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 
     def check_edits(self, edits):
-        if not self.roast or len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
+        if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
             sys.exit('Refused: --roast needs 12+ words with because, naming the duplicated fact and its owner')
-        if not self.fix or len(self.fix.split()) < 8:
+        if len(self.fix.split()) < 8:
             sys.exit('Refused: --fix needs 8+ words naming the owner and replacing shape')
-        if self.msg is None:
-            sys.exit('Refused: cite a commander message with --msg for the send-back')
         self.slop()
         order.refuse(self.roast, BluntText)
         order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)

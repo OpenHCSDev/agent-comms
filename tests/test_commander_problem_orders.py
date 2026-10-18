@@ -1,6 +1,7 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
 import os
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -802,6 +803,30 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     assert judged.strikes[0].reason == why
     revised = comms.registry.require('worker').goal
     assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+
+
+VERDICT_LINES = {
+    'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
+    'ok-unowned': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner' --no-owner proof",
+    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
+            " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
+}
+
+
+def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander, commander_script):
+    """Every verdict member refuses a line missing any fact it declares, and its verdict reads back from the order."""
+    comms, caller = commander
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    assert set(judge.VerdictVerb.names()) == set(VERDICT_LINES)
+    create(commander, 'P1')
+    for name, line in VERDICT_LINES.items():
+        argv = [name, *shlex.split(line)]
+        for at in [i for i, token in enumerate(argv) if token.startswith('--')]:
+            with pytest.raises(SystemExit):
+                judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
+        operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
+        CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
+        assert comms.goals.todos.get('P1').verdicts[-1] == operation
 
 
 def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
