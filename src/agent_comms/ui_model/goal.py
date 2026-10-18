@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from agent_comms.goal_presentation import ThreadGoalExecution
@@ -41,17 +41,13 @@ class GoalDisplay(ABC):
 class GoalUnavailable(GoalDisplay):
     last_confirmed: GoalDeclaration
 
-    @property
-    def can_control(self) -> bool:
-        return False
+    can_control: ClassVar[bool] = False
 
     @property
     def snapshot(self) -> GoalDeclaration:
         return self.last_confirmed
 
-    @property
-    def visible(self) -> bool:
-        return True
+    visible: ClassVar[bool] = True
 
     def standby(self, execution: ThreadGoalExecution) -> bool:
         return False

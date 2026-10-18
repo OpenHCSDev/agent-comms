@@ -484,29 +484,12 @@ class NoGoal(NullMember, GoalDeclaration):
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return False
 
-    @property
-    def can_control(self) -> bool:
-        return False
-
-    @property
-    def visible(self) -> bool:
-        return False
-
-    @property
-    def shows_document(self) -> bool:
-        return False
-
-    @property
-    def shows_progress(self) -> bool:
-        return False
-
-    @property
-    def objective(self) -> str:
-        return ""
-
-    @property
-    def progress(self) -> str:
-        return ""
+    can_control: ClassVar[bool] = False
+    visible: ClassVar[bool] = False
+    shows_document: ClassVar[bool] = False
+    shows_progress: ClassVar[bool] = False
+    objective: ClassVar[str] = ""
+    progress: ClassVar[str] = ""
 
     def standby(self, execution: ThreadGoalExecution) -> bool:
         return False
@@ -561,9 +544,7 @@ class Goal(RecordMember, GoalDeclaration):
     def defers_following_to(self, current: GoalDeclaration) -> bool:
         return not self.state.active and super().defers_following_to(current)
 
-    @property
-    def shows_document(self) -> bool:
-        return True
+    shows_document: ClassVar[bool] = True
 
     @property
     def shows_progress(self) -> bool:
@@ -576,13 +557,8 @@ class Goal(RecordMember, GoalDeclaration):
     def details_heading(self, execution: ThreadGoalExecution) -> str:
         return execution.details_heading(self.heading(execution))
 
-    @property
-    def can_control(self) -> bool:
-        return True
-
-    @property
-    def visible(self) -> bool:
-        return True
+    can_control: ClassVar[bool] = True
+    visible: ClassVar[bool] = True
 
     def standby(self, execution: ThreadGoalExecution) -> bool:
         return execution.waiting_for(self)

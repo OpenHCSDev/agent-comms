@@ -350,7 +350,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
             goal = thread.goal.active()
             wait = next(iter(goal.project(
                 lambda current: cls.current_waits(current, rows, thread.incarnation.require_recorded()),
-                tuple,
+                lambda: (),
             )), None)
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
@@ -364,7 +364,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 peer_goal = peer.goal.active()
                 peer_wait = next(iter(peer_goal.project(
                     lambda current: cls.current_waits(current, rows, peer.incarnation.require_recorded()),
-                    tuple,
+                    lambda: (),
                 )), None)
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn

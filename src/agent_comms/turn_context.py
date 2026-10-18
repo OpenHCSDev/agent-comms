@@ -1263,7 +1263,9 @@ class TurnContext(DeclaredReply):
 
     @staticmethod
     def render_segments(segments: tuple[ContextSegment, ...], *, images=()) -> RenderedInput:
-        prompt_parts, provider, contributions = [], {}, []
+        prompt_parts: list[str] = []
+        provider: dict[str, object] = {}
+        contributions: list[InputContributionCoordinates] = []
         offset = 0
         for segment in segments:
             start = len(prompt_parts)
