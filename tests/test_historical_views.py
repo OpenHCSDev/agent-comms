@@ -112,7 +112,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     _, _, live, source = migrated
     viewer = live.messaging.user_identity(str(live.root))
     page = live.views.channel_display_page(
-        "#team", before=HistoryCursor(source.key, 100), viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name, live.registry.snapshot()), limit=3
+        "#team", before=HistoryCursor(source.key, 100), viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name), limit=3
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
     snapshot = live.registry.snapshot()
@@ -279,7 +279,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     assert {p.name: p.read_bytes() for p in old.root.iterdir() if p.is_file()} == original
     assert not (Path(source.root) / "unknown-input.json").exists()
     page = live.views.channel_display_page(
-        "#team", before=HistoryCursor(source.key, 100), viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name, live.registry.snapshot())
+        "#team", before=HistoryCursor(source.key, 100), viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name)
     )
     path = Path(source.root) / "bus.jsonl"
     path.write_bytes(path.read_bytes() + b"\n")

@@ -27,7 +27,7 @@ from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
     AnonymousViewer, ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection, DisplayViewer,
-    DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope,
+    DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope, NamedViewer,
 )
 from .registration import Registration
 from .registry_provenance import RegistryProvenance
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
 class HistoryView(ABC):
     """A requested view binds its predicate once to each original registry."""
 
-    viewer: str | None = None
+    viewer: DisplayViewer = AnonymousViewer()
 
     @abstractmethod
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
@@ -58,20 +58,7 @@ class HistoryView(ABC):
 
     def display_evidence(self, page: MessagePage, presentation: BusPresentation):
         """Paint evidence belongs to the selected view, never executor delivery."""
-        if self.viewer is None:
-            return None
-        source = page.messages[0].source
-        source.validate()
-        return HistoricalDisplay(
-            source,
-            presentation.bus.reads.capture(
-                self.viewer,
-                page.messages,
-                presentation.registry.snapshot(),
-                Path(source.root) / "bus.jsonl",
-                conversation_snapshot=source.provenance,
-            ),
-        )
+        return self.viewer.display_evidence(page, presentation)
 
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
@@ -142,11 +129,7 @@ class ChannelHistory(HistoryView):
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
-    reader: DisplayViewer = AnonymousViewer()
-
-    @property
-    def viewer(self) -> str | None:
-        return self.reader.history_name
+    viewer: DisplayViewer = AnonymousViewer()
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
@@ -160,7 +143,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
         )
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.channel_page(self.channel.name, viewer=self.reader, **paging)
+        return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope.capture(self.channel, snapshot)
@@ -200,8 +183,8 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         )
 
     @property
-    def viewer(self) -> str:
-        return self.first
+    def viewer(self) -> NamedViewer:
+        return NamedViewer(self.first)
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         from .read_basis import DMDisplayBasis

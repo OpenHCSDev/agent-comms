@@ -22,7 +22,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
     original = c.messaging.send_message('sender', viewer, 'current source')
 
     def measured():
-        with c.bus.snapshot(viewer=NamedViewer(viewer, c.registry.snapshot())) as (basis, source):
+        with c.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
             scope = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
             with OpenedRouteCounts(
                 c.bus.log.path, source, basis.registry, {viewer: scope}
@@ -59,7 +59,7 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
     c.registry.declare(c.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
     original = c.messaging.send_message('sender', viewer, 'assigned source')
-    with c.bus.snapshot(viewer=NamedViewer(viewer, c.registry.snapshot())) as (basis, source):
+    with c.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         from agent_comms.registry_provenance import RegistryProvenance
 
         recorded = RegistryProvenance.capture(basis.registry)
