@@ -75,7 +75,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     service = Comms(stage/'wire', private_initial_writes=True)
     if continue_existing:
         with service.bus.log.locked():
-            root_id = service.bus.log._private_marker_unlocked().root_id
+            root_id = service.bus.log.private_marker_unlocked().root_id
     else:
         root_id = service.messaging.initialize_private_initial_protocol()
     binary = Path(sys.executable).with_name('pi-comms-native')

@@ -34,7 +34,7 @@ async def _accept_visible_deliveries(
     def accept(resource: Coordination) -> int:
         with bus.log.certified_read() as source:
             _require_no_private_owner_rename(bus.log.path.parent)
-            marker = bus.log._private_marker_unlocked()
+            marker = bus.log.private_marker_unlocked()
             if marker.root_id != root_id:
                 raise IdentityConflict("private initial wire root changed")
             authorized_after = max(after_seq, marker.claimed_after_seq)

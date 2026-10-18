@@ -137,7 +137,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
         """
         _require_bound_stores(bus, store)
         completed: list[RecoverySnapshot] = []
-        wire_root_id = bus.log._private_marker_unlocked().root_id
+        wire_root_id = bus.log.private_marker_unlocked().root_id
         with store.session.read():
             execution_ids = tuple(SqlValue.for_annotation(str).read(
                 store.session._connection.execute(
@@ -176,7 +176,7 @@ class PublicationAppendDispatches(ResponseTable, TypedTable):
                         attempt.attempt_ordinal, frozen.exact_target,
                     ):
                         raise PublicationUncertain("no matching durable append dispatch")
-                    matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
+                    matched, _, _ = bus.log.keyed_publication_unlocked(intent)
                     if matched is None:
                         raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")
                     completed.append(
@@ -402,7 +402,7 @@ def _require_cohort_assignments(
     _assert_response_schema(db)
     assert_cohort_schema(db)
     snapshot.require_wire_responses()
-    metadata = bus.log._private_marker_unlocked()
+    metadata = bus.log.private_marker_unlocked()
     if metadata.root_id != wire_root_id:
         raise IdentityConflict("cohort bus root changed")
     originals = {initial.message.seq: initial for initial in bus.log.delivery_cohorts_unlocked(
@@ -505,7 +505,7 @@ def prepare_fenced_response(
     with store.session.boundary(bus) as boundary:
         registry_snapshot = boundary.registry
         owner_witness.require_live(registry_snapshot, fence)
-        metadata = bus.log._private_marker_unlocked()
+        metadata = bus.log.private_marker_unlocked()
         # The acquired canonical bus barrier verifies its sealed prefix, with
         # complete recovery/refusal on source or sidecar revision changes.
         with store.session.transaction() as db:
@@ -580,7 +580,7 @@ def _terminal_replay(
         raise StaleFence("finished response is not this owner's original attempt")
     intent, acknowledgement = snapshot.require_published_evidence(exact_target)
     _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=snapshot.completed_response())
-    matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
+    matched, _, _ = bus.log.keyed_publication_unlocked(intent)
     if matched is None or matched.reference != acknowledgement.reference:
         raise PublicationUncertain("published SQL acknowledgement has no exact durable bus row")
     return AlreadyApplied(snapshot)
@@ -604,7 +604,7 @@ def _settle_fenced_response(
     with store.session.boundary(bus) as boundary:
         registry_snapshot = boundary.registry
         owner_witness.require_live(registry_snapshot, fence)
-        metadata = bus.log._private_marker_unlocked()
+        metadata = bus.log.private_marker_unlocked()
         wire_root_id = metadata.root_id
         first_dispatch = False
         if allow_append:
@@ -641,7 +641,7 @@ def _settle_fenced_response(
             dispatch = PublicationAppendDispatches.one(db, execution_id=fence.execution_id, exact_target=exact_target)
             if dispatch is None or not dispatch.matches(wire_root_id, fence, exact_target):
                 raise PublicationUncertain("no matching durable append dispatch")
-            matched, _, _ = bus.log._keyed_receipt_unlocked(intent)
+            matched, _, _ = bus.log.keyed_publication_unlocked(intent)
             if matched is None:
                 if not first_dispatch:
                     raise PublicationUncertain("no keyed bus acknowledgement; no resend authorized")

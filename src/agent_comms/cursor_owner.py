@@ -41,7 +41,7 @@ class CursorOwner(RegistryOwner):
         return self.thread.incarnation.lookup
 
     def require_live(self, bus: MessageBus, registry: RegistrySnapshot, reason: str) -> None:
-        if bus.log._private_marker_unlocked().root_id != self.wire_root_id:
+        if bus.log.private_marker_unlocked().root_id != self.wire_root_id:
             raise StaleFence(reason)
         self.require_snapshot(registry, reason)
 

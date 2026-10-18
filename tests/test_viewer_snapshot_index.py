@@ -243,7 +243,7 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
     viewer = comms.messaging.user_identity(str(tmp_path))
     comms.messaging.send_message("bob", viewer.name, "direct")
     comms.messaging.send_message("bob", "#team", "channel")
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
     opened = []
 
     @contextmanager
@@ -252,7 +252,7 @@ def test_viewer_snapshot_acquires_one_bus_cut(tmp_path, monkeypatch):
             opened.append(source)
             yield source
 
-    monkeypatch.setattr(comms.bus.log, "_opened_wire_snapshot", observed)
+    monkeypatch.setattr(comms.bus.log, "opened_wire_snapshot", observed)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     assert snapshot.unread == {"bob": 1}
     assert snapshot.channel_unread["#team"] == 1
@@ -479,7 +479,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     comms.messaging.send("bob", "#team", "first")
     appended = []
-    original = comms.bus.log._opened_wire_snapshot
+    original = comms.bus.log.opened_wire_snapshot
 
     @contextmanager
     def append_before_open(*args, **kwargs):
@@ -490,7 +490,7 @@ def test_append_between_revision_and_opened_bus_boundary_uses_captured_records(
         with original(*args, **kwargs) as boundary:
             yield boundary
 
-    monkeypatch.setattr(comms.bus.log, '_opened_wire_snapshot', append_before_open)
+    monkeypatch.setattr(comms.bus.log, 'opened_wire_snapshot', append_before_open)
     snapshot = comms.views.viewer_snapshot(str(tmp_path))
     team = snapshot.channels["#team"]
     assert snapshot.channel_unread["#team"] == 2
@@ -626,11 +626,11 @@ def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, t
     row = ObservationWireRecord(RecordedContextManifestWireObservation(recorded))
     log.path.write_text(json.dumps(row.to_wire()) + '\n')
     log.path.chmod(0o600)
-    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert type(source) is OpenedWireSnapshot
         assert list(source.public_records()) == []
     log.path.write_text(json.dumps({'observation': {'kind': 'unknown'}}) + '\n')
-    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         with pytest.raises((ValueError, TypeError, KeyError)):
             list(source.public_records())
         with pytest.raises((ValueError, TypeError, KeyError)):
@@ -646,10 +646,10 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
     # This is the original durable state between reservation and append.
     # No second input or fabricated successful append resolves that uncertainty.
     with comms.bus.log.locked():
-        marker = comms.bus.log._private_marker_unlocked()
+        marker = comms.bus.log.private_marker_unlocked()
         marker.last_seq += 1
         comms.bus.log.write_metadata_unlocked(marker)
-    with comms.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+    with comms.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert isinstance(source, ScannedWireSnapshot)
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
     with comms.bus.snapshot(viewer=NamedViewer('Alice')) as (basis, source):

@@ -78,13 +78,13 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
             record = conversation.record(case.root_id, changed, intent)
             rows = case.bus.log.path.read_bytes().splitlines(keepends=True)
             case.bus.log.path.write_bytes(b"".join(rows[:-1]) + json.dumps(record).encode() + b"\n")
-            marker = case.bus.log._private_marker_unlocked()
+            marker = case.bus.log.private_marker_unlocked()
             verified = list(case.bus.log.verified_records_unlocked(marker))
             assert verified[-1].message == changed  # Full strict durable acknowledgement validation succeeds.
             with pytest.raises(
                 RelationViolationError, match="checkpoint prefix tail changed"
             ):
-                case.bus.log._keyed_receipt_unlocked(intent)
+                case.bus.log.keyed_publication_unlocked(intent)
         # The public locked read refuses changed bytes at its earlier warm barrier.
         with pytest.raises(RelationViolationError, match="checkpoint prefix tail changed"):
             case.bus.log.read_keyed_response(intent)

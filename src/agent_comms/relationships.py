@@ -867,7 +867,7 @@ class ThreadRelationships:
         with self._lock:
             if revision == self._recent_revision:
                 return self._recent, self._limited
-            with self.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+            with self.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
                 return self._opened_recent_messages(source)
 
 

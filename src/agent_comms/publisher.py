@@ -97,7 +97,7 @@ class Publisher:
     ) -> Message:
         snapshot = snapshot or self._registry.snapshot()
         if original_source is not None:
-            original_source.require_marker(self.log._private_marker_unlocked())
+            original_source.require_marker(self.log.private_marker_unlocked())
         message.require_task_publication(sender, snapshot, original_source)
 
         def resolve_mention(name: str) -> str | None:
@@ -228,7 +228,7 @@ class Publisher:
         ):
             raise RelationViolationError("Bound claims require the selected wake boundary.")
         with nullcontext(_bus_lock) if _bus_lock is not None else self.log.locked() as bus_lock:
-            metadata = self.log._private_marker_unlocked()
+            metadata = self.log.private_marker_unlocked()
             if not metadata.claims:
                 raise RelationViolationError("Claim read barrier is unavailable.")
             snapshot = (
@@ -270,7 +270,7 @@ class Publisher:
                 source.prepare_claim(transition)  # pre-append conflict is synchronous
             stored = replace(stored, claim_transition=transition)
             try:
-                self.log._append_private_unlocked(metadata, stored.to_wire())
+                self.log.append_private_unlocked(metadata, stored.to_wire())
             except (OSError, RelationViolationError) as error:
                 raise ClaimEnvelopeUnknownError(
                     "Claim envelope outcome UNKNOWN; inspect durable bus; do not replay."
@@ -307,7 +307,7 @@ class Publisher:
             ExitStack() as resources,
         ):
             _require_no_private_owner_rename(self.log.path.parent)
-            metadata = self.log._private_marker_unlocked()
+            metadata = self.log.private_marker_unlocked()
             metadata.access.require_append()
             from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
@@ -419,10 +419,10 @@ class Publisher:
                 for thread, lookup in zip(selected, lookups, strict=True):
                     store.participants.register(lookup, thread.name, thread.name, committed=True)
             if _human_origin is None:
-                self.log._append_private_unlocked(metadata, row)
+                self.log.append_private_unlocked(metadata, row)
             else:
                 try:
-                    self.log._append_private_unlocked(metadata, row)
+                    self.log.append_private_unlocked(metadata, row)
                 except BaseException as error:
                     # Even cancellation/interrupt after entry can follow a durable
                     # reservation or row. Never claim absence or retry this ID.
@@ -444,7 +444,7 @@ class Publisher:
 
         if self._private_response_writes is not True:
             raise RelationViolationError("Private response publication is disabled.")
-        matched, previous_sequence, metadata = self.log._keyed_receipt_unlocked(intent)
+        matched, previous_sequence, metadata = self.log.keyed_publication_unlocked(intent)
         if matched is not None:
             return matched
         message = intent.message
@@ -474,5 +474,5 @@ class Publisher:
             raise RelationViolationError("Stored response does not match publication intent.")
         row = conversation.record(metadata.root_id, stored, intent)
         CommittedDelivery.from_wire(row, metadata.root_id)
-        self.log._append_private_unlocked(metadata, row)
+        self.log.append_private_unlocked(metadata, row)
         return stored

@@ -170,7 +170,7 @@ class BusPageIndex:
         """Prepare a freshly opened source; incomplete source is an error."""
         from .wire_log import CurrentSnapshotOpening, WireLog
 
-        with WireLog(self.bus_path)._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source, _store_lock(self.bus_path):
+        with WireLog(self.bus_path).opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source, _store_lock(self.bus_path):
             self.prepare(source)
         return True
 

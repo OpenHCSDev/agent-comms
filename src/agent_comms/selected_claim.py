@@ -151,7 +151,7 @@ def _selected_claim_boundary(
             raise IdentityConflict("Selected wake owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
-        metadata = bus.log._private_marker_unlocked()
+        metadata = bus.log.private_marker_unlocked()
         if metadata.root_id != claim_scope.wire_root_id:
             raise IdentityConflict("Selected wake belongs to another wire root")
         if claim_scope.source_seq <= metadata.claimed_after_seq:
@@ -323,7 +323,7 @@ def write_selected_claimed_file(
             raise IdentityConflict("Selected write owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
-        marker = bus.log._private_marker_unlocked()
+        marker = bus.log.private_marker_unlocked()
         if marker.root_id != claim_scope.wire_root_id:
             raise IdentityConflict("Selected write belongs to another private root")
         initial = _committed_source(bus_lock, claim_scope, "Selected write source is not committed")
