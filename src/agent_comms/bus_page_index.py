@@ -21,7 +21,6 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
-from .read_ledger import ReadLedger
 from .read_basis import ChannelDisplayScope, ReadCursor
 from .store_files import SharedLock, _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
@@ -217,7 +216,7 @@ class BusPageIndex:
                 if last_sequence is not None and message.seq <= last_sequence:
                     raise RelationViolationError("Wire sequences are not increasing.")
                 rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target,
-                                       message.timestamp, ReadLedger.human(message.sender_role),
+                                       message.timestamp, message.sender_role.human_reads(True),
                                        tuple(mention.thread for mention in message.mentions)))
                 last_sequence = message.seq
         through = opened.position

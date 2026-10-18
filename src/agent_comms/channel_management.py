@@ -178,7 +178,7 @@ class ChannelManagement:
         updated = self.registry.require(thread.name)
         with self.catalog.editing() as document:
             document.remember_tags(add, time.time())
-        if thread.role.executable and thread.tags != updated.tags:
+        if thread.role.executes(thread.tags != updated.tags):
             channels = {
                 **previous_channels,
                 **self.catalog.read().views(self.registry.all_threads()),
@@ -253,8 +253,7 @@ class ChannelManagement:
                 view = document.require_channel(channel, snapshot.threads)
                 if pinned and (
                     not view.matches(thread.tags)
-                    or not thread.role.executable
-                    or not snapshot.statuses[thread.name].visible
+                    or not thread.role.executes(snapshot.statuses[thread.name].visible)
                 ):
                     raise ValueError(
                         f"Thread {thread.name!r} is not a member of {view.name}."

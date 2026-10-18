@@ -90,7 +90,7 @@ class ProcessState(WireValue):
     @abstractmethod
     def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
     @abstractmethod
-    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool: ...
+    def needs_maintenance_claim(self, role: type[ThreadRole], status: ThreadStatus) -> bool: ...
     @abstractmethod
     def conflicts_with(self, previous: ProcessState) -> bool: ...
 
@@ -159,7 +159,7 @@ class NoProcess(ProcessState):
     def allows_goal_observation(self, status: ThreadStatus) -> bool:
         return False
 
-    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
+    def needs_maintenance_claim(self, role: type[ThreadRole], status: ThreadStatus) -> bool:
         return False
 
     def conflicts_with(self, previous: ProcessState) -> bool:
@@ -243,8 +243,8 @@ class ProcessIdentity(ProcessState):
     def allows_goal_observation(self, status: ThreadStatus) -> bool:
         return status.active
 
-    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
-        return role.executable and status.active
+    def needs_maintenance_claim(self, role: type[ThreadRole], status: ThreadStatus) -> bool:
+        return role.executes(status.active)
 
     def conflicts_with(self, previous: ProcessState) -> bool:
         return self != previous

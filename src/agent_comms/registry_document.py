@@ -51,7 +51,7 @@ class RosterVisibility:
     archived: bool = False
 
     def shows(self, thread: Thread, status: ThreadStatus) -> bool:
-        return thread.role.executable and status.in_view(self)
+        return thread.role.executes(status.in_view(self))
 
 
 DEFAULT_ROSTER = RosterVisibility()
@@ -665,7 +665,7 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
         )
 
     def displayed_recipient_effect(self, reads, message, thread: Thread, *, document=None):
-        if not reads.human(thread.role):
+        if not thread.role.human_reads(True):
             return ()
         return super().displayed_recipient_effect(reads, message, thread, document=document)
 
@@ -726,8 +726,8 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             raise RelationViolationError("Stopping owner was removed") from error
         if current.incarnation != expected.incarnation:
             raise RelationViolationError("Stopping owner incarnation changed")
-        expected.role.require_executable()
-        current.role.require_executable()
+        expected.role.require_executable(RelationViolationError("Stopping owner was not an agent"))
+        current.role.require_executable(RelationViolationError("Stopping owner is not an agent"))
         if current.process_identity != expected.process_identity:
             raise RelationViolationError("Stopping owner process changed")
         if self.claimed_generations[expected.name] != claim_scope:

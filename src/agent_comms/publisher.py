@@ -106,11 +106,7 @@ class Publisher:
         def resolve_mention(name: str) -> str | None:
             canonical = snapshot.canonical_name(name)
             thread = snapshot.threads.get(canonical)
-            if (
-                thread is not None
-                and thread.role.executable
-                and snapshot.statuses[canonical].visible
-            ):
+            if thread is not None and thread.role.executes(snapshot.statuses[canonical].visible):
                 return canonical
             return None
 
@@ -422,12 +418,12 @@ class ResponseWrites(PrivateWrites):
         sender, target = self._validate_publish_request(
             message, registry_snapshot=registry_snapshot
         )
-        if registry_snapshot is None:
-            executable = self._registry.require(sender).role.executable
-        else:
-            executable = registry_snapshot.threads[sender].role.executable
-        if not executable:
-            raise RelationViolationError("Keyed response sender must be executable.")
+        role = (
+            self._registry.require(sender).role
+            if registry_snapshot is None
+            else registry_snapshot.threads[sender].role
+        )
+        role.require_executable(RelationViolationError("Keyed response sender must be executable."))
         if intent.publication_key != canonical_publication_key(intent.execution_id, target.name):
             raise RelationViolationError("Response publication key does not match its route.")
         last_sequence = max(metadata.last_seq, previous_sequence)

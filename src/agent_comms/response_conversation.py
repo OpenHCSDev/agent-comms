@@ -67,7 +67,7 @@ class ResponseConversation:
                 raise IdentityConflict("Response conversation differs from original route")
             audience = source.audience
             participants = list(audience.recipients)
-            if source.message.sender_role.executable:
+            if source.message.sender_role.executes(True):
                 participants.append(FrozenRecipient(audience.sender_lookup, audience.sender_name))
             if self.responder not in audience.recipients:
                 raise IdentityConflict("Responder was not in original frozen audience")

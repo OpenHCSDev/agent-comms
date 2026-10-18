@@ -243,8 +243,9 @@ class OwnerLifecycle:
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
-            if not thread.role.executable:
-                raise RelationViolationError("A human participant cannot become an executor.")
+            thread.role.require_executable(
+                RelationViolationError("A human participant cannot become an executor.")
+            )
             if thread.process_alive:
                 return thread
             owned = replace(thread, process_identity=identity, active_turn=None)
@@ -259,7 +260,7 @@ class OwnerLifecycle:
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
-            if not thread.role.executable or not self.registry.status(thread.name).active:
+            if not thread.role.executes(self.registry.status(thread.name).active):
                 raise RelationViolationError("Explicit start is required for a stopped agent.")
             return (
                 thread
@@ -276,7 +277,7 @@ class OwnerLifecycle:
             thread = self.registry.require(name)
             thread.execution.require_native()
             status = self.registry.status(thread.name)
-            if not thread.role.executable or not status.visible:
+            if not thread.role.executes(status.visible):
                 raise RelationViolationError("Only visible agent threads can be started.")
             if thread.process_alive:
                 if not status.active:

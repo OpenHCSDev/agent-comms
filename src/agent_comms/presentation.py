@@ -285,7 +285,7 @@ class MessageNotification:
         if source.audience.recipients or not viewer.sees_direct_read(source):
             return None
         target = CommandTarget.named(message.target).direct_peer(snapshot)
-        if target is None or not reads.human(target.role):
+        if target is None or not target.role.human_reads(True):
             return None
         recipient = FrozenRecipient(target.incarnation.lookup, target.name)
         displayed_to = reads.displayed_recipient(

@@ -59,7 +59,7 @@ def bind_goal_mentions(
                     token=token
                 )
             )
-        elif not peer.role.executable:
+        elif not peer.role.executes(True):
             bindings.append(NonExecutableMentionBinding(token=token))
         else:
             bindings.append(

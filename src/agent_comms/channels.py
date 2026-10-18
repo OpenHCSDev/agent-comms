@@ -33,7 +33,7 @@ class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
         by_tag: dict[str, list[Thread]] = defaultdict(list)
         executable = []
         for thread in threads:
-            if thread.role.executable:
+            if thread.role.executes(True):
                 executable.append(thread)
                 for tag in thread.tags:
                     by_tag[tag].append(thread)

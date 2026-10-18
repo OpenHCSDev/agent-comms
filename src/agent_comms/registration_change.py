@@ -104,7 +104,7 @@ class UpdatedRegistration(RegistrationChange):
 
     @property
     def needs_maintenance_claim(self) -> bool:
-        return self.thread.role.executable and (
+        return self.thread.role.executes(
             self.previous.process_identity != self.thread.process_identity
             or self.previous_status.starts_owner(self.status)
         )
@@ -151,7 +151,7 @@ class ExplicitOwnerChange(RegistrationChange):
 
     @property
     def needs_maintenance_claim(self) -> bool:
-        return self.thread.role.executable
+        return self.thread.role.executes(True)
 
     @property
     def installed_thread(self) -> Thread:

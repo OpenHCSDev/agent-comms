@@ -186,8 +186,9 @@ class OptionalAwarenessProjection:
     ) -> OptionalAwarenessResult:
         if owner.process_identity != ProcessIdentity.capture(os.getpid()):
             raise ProjectionUnavailableError("selected owner is not this process")
-        if not owner.role.executable:
-            raise ProjectionUnavailableError("selected owner is not executable")
+        owner.role.require_executable(
+            ProjectionUnavailableError("selected owner is not executable")
+        )
         turn = owner.active_turn
         if turn is None or turn.claimed_generation != self.expected_claimed_generation:
             raise ProjectionUnavailableError("selected owner turn changed")
