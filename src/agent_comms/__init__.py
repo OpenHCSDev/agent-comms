@@ -6,7 +6,7 @@ from .exporting import (
     WireExportBoundary,
     WireExportFormat,
     WireExportLimit,
-    WireExportReceipt,
+    WireExportProvenance,
     WireExportScope,
     WireTranscriptExporter,
 )
@@ -16,7 +16,7 @@ from .historical_views import (
     HistoryCursor,
     HistorySource,
 )
-from .importing import ImportLimits, ImportReceipt, ImportSnapshot
+from .importing import ImportLimits, ThreadImported, ImportSnapshot
 from .mentions import MentionQuery
 from .read_basis import Conversation, DisplayedConversation, HistoricalDisplay
 from .read_ledger import ReadLedger
@@ -35,12 +35,12 @@ __all__ = [
     "Conversation",
     "MentionQuery",
     "ImportLimits",
-    "ImportReceipt",
+    "ThreadImported",
     "ImportSnapshot",
     "WireExportBoundary",
     "WireExportFormat",
     "WireExportLimit",
-    "WireExportReceipt",
+    "WireExportProvenance",
     "WireExportScope",
     "WireTranscriptExporter",
     "Registration",

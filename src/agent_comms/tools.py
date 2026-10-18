@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Type
+from typing import TYPE_CHECKING, ClassVar, TextIO, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .cli_commands import (
@@ -14,6 +15,7 @@ from .cli_commands import (
     PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
     ThreadsCliCommand, _json_object, option,
 )
+from .cli_result import CliResult
 from .thread_execution import (
     ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
     StartOwnerControl, ThreadCommandAvailability,
@@ -678,7 +680,8 @@ class CommsThreadsTool(ToolRequest):
     active_only: bool = tool_field("Exclude stopped threads", default=False)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> JsonObject:
-        return caller.listing(comms, ThreadsCliCommand(active_only=self.active_only).apply(comms))
+        threads = ThreadsCliCommand(active_only=self.active_only).apply(comms)
+        return caller.listing(comms, FieldCodec.encode(threads))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1042,12 +1045,17 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
         return ArchiveCliCommand(name=self.name).apply(comms)
 
 
+@dataclass(frozen=True)
+class ToolCatalogResult(CliResult):
+    tools: tuple[JsonObject, ...]
+
+
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
 
-    def apply(self, ctx: Comms) -> JsonObject:
-        return {"tools": tool_catalog()}
+    def apply(self, ctx: Comms) -> ToolCatalogResult:
+        return ToolCatalogResult(tuple(tool_catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1064,6 +1072,12 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
     def apply(self, ctx: Comms) -> JsonObject:
         return invoke_tool(ctx, self.tool, self.arguments,
                            caller=ToolCaller.from_actor(self.caller))
+
+    def run(self, ctx: Comms, output: TextIO) -> int:
+        """The tool protocol's own reply, the one every adapter receives, not a CLI result."""
+        json.dump(self.apply(ctx), output, indent=2)
+        output.write("\n")
+        return 0
 
 
 def tool_catalog() -> list[JsonObject]:

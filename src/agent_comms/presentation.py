@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
+from .cli_result import CliResult
 from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
@@ -613,7 +614,7 @@ class ChannelView:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadRecord:
+class ThreadRecord(CliResult):
     """A thread's wire record; every reader of one thread writes these fields from here."""
     thread: Thread
     status: ThreadStatus
@@ -636,6 +637,9 @@ class ThreadRecord:
             GoalWaits.execution(thread.goal, waits, snapshot, agents),
             pending=None if pending is None else pending[thread.name],
         ) for thread in threads)
+
+    def encoded(self) -> object:
+        return self.to_wire()
 
     def to_wire(self) -> dict[str, object]:
         return {

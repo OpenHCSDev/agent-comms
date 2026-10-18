@@ -20,7 +20,7 @@ from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
 from agent_comms.field_codec import FieldCodec
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness
-from agent_comms.importing import ImportBuffer, ImportReceipt, ImportSnapshot, ImportedSessionMetadata
+from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.thread_identity import ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
@@ -233,7 +233,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
     assert tuple(ref.public_text(comms) for ref in refs) == (
         "Historical base π.\n", "Historical developer λ.\n")
-    assert FieldCodec.decode(ImportReceipt, acknowledgement.to_wire()) == acknowledgement
+    assert FieldCodec.decode(ThreadImported, acknowledgement.to_wire()) == acknowledgement
     assert acknowledgement.harness is CodexHarness
     saved = [json.loads(line) for line in Path(acknowledgement.session_file).read_text().splitlines()]
     metadata = next(record["data"] for record in saved if record["type"] == "custom")
