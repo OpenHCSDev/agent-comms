@@ -9,29 +9,26 @@ from agent_comms.bus_activity_index import BusActivityIndex
 from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, DisplaySnapshot
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_path import FileRevision
-from agent_comms.read_basis import ChannelDisplayScope
+from agent_comms.read_basis import ChannelDisplayScope, ReadCursor
 from agent_comms.message_bus import MessageBus
-from agent_comms.wire_log import AbsentWireSnapshot, OpenedWireSnapshot
+from agent_comms.wire_log import AbsentWireSnapshot, CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
 
 
 @contextmanager
 def opened(path, *indexes):
     prepared = tuple((index, index.prepare()) for index in indexes)
-    with path.open("rb") as stream:
-        source = OpenedWireSnapshot(
-            WireMetadata(last_seq=2, claimed_after_seq=2), 0,
-            stream, FileRevision.from_file(stream),
-        )
-        source.capture_append_indexes(prepared)
+    path.chmod(0o600)
+    log = WireLog(path)
+    log.write_metadata_unlocked(WireMetadata(last_seq=2, claimed_after_seq=2, writer_protocol_version=1, wire_root_id="0" * 32))
+    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening(), prepared_indexes=prepared) as source:
         yield source
 
 
 def semantics():
     return DisplayMetricScope(
         (ChannelDisplayScope("#team", frozenset({"#team"})),),
-        frozenset({"viewer"}), frozenset(),
+        frozenset({"viewer"}), ReadCursor(),
     )
 
 

@@ -11,6 +11,7 @@ import pytest
 from agent_comms.bus_activity_index import ActivityCheckpoint, BusActivityIndex
 from agent_comms.bus_projection import AppendCheckpoint
 from agent_comms.private_path import FileRevision
+from agent_comms.wire_log import CurrentSnapshotOpening
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
@@ -203,7 +204,7 @@ def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wi
     assert len(indexes) == baseline + 1
     assert wired.views.presentation.display_index("PR111") is first
     assert len(indexes) == baseline + 1
-    with wired.bus.log._opened_wire_snapshot(need_sequence=False) as source:
+    with wired.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert source._append_checkpoints == {}
     with wired.views.presentation.snapshot(viewer="PR111") as (_basis, source):
         assert set(source._append_checkpoints) == set(indexes)

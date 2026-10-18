@@ -8,8 +8,6 @@ The original bus, coordinator and live owner must be verified independently.
 
 from __future__ import annotations
 
-import json
-import os
 import sqlite3
 import time
 from abc import ABC, abstractmethod
@@ -18,9 +16,6 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from .bus_projection import AppendCheckpoint
-from .bus_publication import (
-    unique_wire_object,
-)
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
 from .delivery_policy import KeyedResponseAcknowledgement
@@ -29,7 +24,7 @@ from .field_codec import FieldCodec
 from .private_path import FileIdentity, FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake_policy import WakePolicy
-from .wire_log import WireSnapshot, OpenedWireSnapshot, WireLog
+from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
 from .wire_record import WireRecord
 
@@ -344,7 +339,7 @@ class WakeCandidateIndex(TypedStore):
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
         try:
-            with self.log._opened_wire_snapshot(need_sequence=False) as source:
+            with self.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
                 root_id = source.metadata.root_id
                 with self.writing() as db:
                     # TypedStore installs schema atomically. Capture the stored
@@ -399,15 +394,11 @@ class WakeCandidateIndex(TypedStore):
     def _verified_checkpoint(self, root_id: str) -> CandidateCheckpoint:
         """Check one WAL checkpoint row against its bounded source prefix-tail witness."""
         try:
-            marker = self.log._private_marker_unlocked()
-            if marker.root_id != root_id:
-                raise ProjectionRebuildRequiredError("candidate private root changed")
-            with self.snapshot() as db:
-                with self.log.path.open("rb") as stream:
-                    stat = os.fstat(stream.fileno())
-                    source = OpenedWireSnapshot(marker, marker.last_seq, stream, FileRevision.from_stat(stat))
-                    checkpoint = ResumeIndex().start(CandidateCheckpoint.current(db), source, root_id)
-                return checkpoint
+            with self.log._opened_wire_snapshot(opening=SavedPrefixOpening()) as source:
+                if source.metadata.root_id != root_id:
+                    raise ProjectionRebuildRequiredError("candidate private root changed")
+                with self.snapshot() as db:
+                    return ResumeIndex().start(CandidateCheckpoint.current(db), source, root_id)
         except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
             raise ProjectionUnavailableError("candidate checkpoint unavailable") from error
 
@@ -480,12 +471,9 @@ class WakeCandidateIndex(TypedStore):
                      after_seq=after_seq, required_through_seq=required_through_seq,
                      limit=limit, delivery_only=delivery_only)
         try:
-            with self.snapshot() as db:
+            with self.log._opened_wire_snapshot(opening=SavedPrefixOpening()) as source, self.snapshot() as db:
                 checkpoint = CandidateCheckpoint.current(db).require_fresh(request)
-                with self.log.path.open("rb") as stream:
-                    source = OpenedWireSnapshot(self.log._private_marker_unlocked(), checkpoint.last_seq,
-                                                stream, FileRevision.from_file(stream))
-                    checkpoint.require_source(source, request.root_id)
+                checkpoint.require_source(source, request.root_id)
                 data = Candidate.read(
                     db.execute(
                         f'SELECT * FROM "{Candidate.declared_name}" '

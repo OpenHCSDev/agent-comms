@@ -11,10 +11,11 @@ from agent_comms.bus_route_counts import BusRouteCounts, RouteIndexRebuilding
 from agent_comms.comms import wire
 from agent_comms.routing import DeliveryMessage
 from agent_comms.threads import Thread
+from agent_comms.wire_log import CurrentSnapshotOpening
 
 
 def _open_source(comms):
-    return comms.bus.log._opened_wire_snapshot(need_sequence=False)
+    return comms.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening())
 
 
 def _sync(comms, decode=None):

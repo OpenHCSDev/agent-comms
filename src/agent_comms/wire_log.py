@@ -476,6 +476,51 @@ class ConversationSourceWindowRequest:
             return tuple(request.capture(source, lookup) for request in requests)
 
 
+class SnapshotOpening(ABC):
+    @abstractmethod
+    def capture(self, log: WireLog, resources: ExitStack): ...
+
+
+class CurrentSnapshotOpening(SnapshotOpening):
+    def through(self, log: WireLog, lock: StoreLock) -> int:
+        return 0
+
+    @contextmanager
+    def capture(self, log: WireLog, resources: ExitStack):
+        with log.locked(shared=True) as lock:
+            metadata = (
+                log._private_marker_unlocked()
+                if log.path.exists() or log.metadata_path.exists()
+                else WireMetadata()
+            )
+            through = self.through(log, lock)
+            opened = log._open_snapshot_unlocked(resources, metadata, through)
+            if lock.source is not None:
+                source = lock.certified_read()
+                source.require_marker(metadata)
+                source.require_open_prefix()
+                opened = opened.checked(source)
+        yield opened
+
+
+class SequencedSnapshotOpening(CurrentSnapshotOpening):
+    def through(self, log: WireLog, lock: StoreLock) -> int:
+        return log._committed_sequence_unlocked(lock)
+
+
+class SavedPrefixOpening(SnapshotOpening):
+    """Capture bytes only; the saved checkpoint must verify its own original prefix.
+
+    This never certifies the current tail or grants publication/input authority.
+    An interrupted later append cannot invalidate an already verified prefix.
+    """
+
+    @contextmanager
+    def capture(self, log: WireLog, resources: ExitStack):
+        metadata = log._private_marker_unlocked()
+        yield log._open_snapshot_unlocked(resources, metadata, 0)
+
+
 class WireLog:
     lock_rank = 1
 
@@ -483,14 +528,6 @@ class WireLog:
         # Construction is read-only and needs no registry or publication settings.
         self.path = Path(path)
         self._append_indexes: list[BusAppendIndex] = []
-
-    def same_file(self, identity: FileIdentity) -> bool:
-        """Compare the current path, without opening a history read inside a writer."""
-        try:
-            observed = self.path.stat()
-        except FileNotFoundError:
-            return False
-        return FileIdentity.from_stat(observed) == identity
 
     def register_append_index(self, index: BusAppendIndex[Checkpoint]) -> BusAppendIndex[Checkpoint]:
         """Register one index owner for automatic capture with every opened cut."""
@@ -794,37 +831,23 @@ class WireLog:
 
     @contextmanager
     def _opened_wire_snapshot(
-        self, *, need_sequence: bool = True,
+        self, *,
         prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | None], ...] = (),
+        opening: SnapshotOpening = SequencedSnapshotOpening(),
     ):
-        """Keep a fixed opened inode and byte boundary after releasing the bus locks."""
+        """Keep one owned descriptor/cut; acquisition follows its source contract."""
         with ExitStack() as resources:
-            with self.locked(shared=True) as lock:
-                metadata = (
-                    self._private_marker_unlocked()
-                    if self.path.exists() or self.metadata_path.exists()
-                    else WireMetadata()
-                )
-                through = self._committed_sequence_unlocked(lock) if need_sequence else 0
-                try:
-                    stream = resources.enter_context(self.path.open("rb"))
-                except FileNotFoundError:
-                    opened = AbsentWireSnapshot(metadata, through)
-                else:
-                    revision = FileRevision.from_file(stream)
-                    opened = OpenedWireSnapshot(metadata, through, stream, revision)
-                if lock.source is not None:
-                    source = lock.certified_read()
-                    source.require_marker(metadata)
-                    # A reserved but unappended sequence blocks new input,
-                    # not the original committed bytes of this read-only cut.
-                    source.require_open_prefix()
-                    # Bind the retained descriptor to this exact checked inode/cut.
-                    opened = opened.checked(source)
-            # Transfer candidate records without reading files or hashing here.
-            # Consumers validate after the caller's outer locks are released.
-            opened.capture_append_indexes(prepared_indexes)
-            yield opened
+            with opening.capture(self, resources) as opened:
+                opened.capture_append_indexes(prepared_indexes)
+                yield opened
+
+    def _open_snapshot_unlocked(self, resources: ExitStack, metadata: WireMetadata, through: int) -> WireSnapshot:
+        """The sole descriptor acquisition and absent/present snapshot selection."""
+        try:
+            stream = resources.enter_context(self.path.open("rb"))
+        except FileNotFoundError:
+            return AbsentWireSnapshot(metadata, through)
+        return OpenedWireSnapshot(metadata, through, stream, FileRevision.from_file(stream))
 
     @contextmanager
     def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
@@ -833,15 +856,13 @@ class WireLog:
         Uncertified streams retain the same complete validation algorithm.
         This resource is a fixed read, not permission to append or start input.
         """
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
+        with self._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             yield opened.records()
 
     @contextmanager
-    def _record_snapshot(
-        self, *, need_sequence: bool = True
-    ) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
+    def _record_snapshot(self) -> Iterator[tuple[int, Iterator[tuple[Message, int]]]]:
         """Explicit sequential history borrows the original opened byte boundary."""
-        with self._opened_wire_snapshot(need_sequence=need_sequence) as opened:
+        with self._opened_wire_snapshot() as opened:
             yield opened.through, opened.public_records()
 
     @contextmanager
@@ -851,7 +872,7 @@ class WireLog:
             yield through, (message for message, _ in records)
 
     def messages_for_references(self, references):
-        with self._opened_wire_snapshot(need_sequence=False) as opened:
+        with self._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             return opened.messages_for_references(references)
 
     def deliveries_for_references(self, references):

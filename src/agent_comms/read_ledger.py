@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from .channel_targets import CommandTarget
 from .locked_store import LockedStore, RootFile
-from .private_path import FileIdentity, FileRevision
+from .private_path import FileIdentity, FileRevision, ObservedPath
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
 from .sealed import Sealed
 from .thread_identity import RecordedThreadIncarnation
@@ -143,8 +143,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         self, viewer: str, snapshot: RegistryProvenance, *, document: ReadDocument | None = None
     ) -> ReadCursor:
         document = self.read() if document is None else document
-        from .wire_log import WireLog
-        return document.cursor(viewer, snapshot, WireLog(self.path.with_name("bus.jsonl")))
+        return document.cursor(viewer, snapshot, ObservedPath.at(self.path.with_name("bus.jsonl")))
 
     def displayed_recipient(
         self, original: CommittedDelivery, recipient, snapshot: RegistrySnapshot, *, document=None

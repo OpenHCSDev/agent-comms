@@ -16,7 +16,7 @@ from .read_basis import (
     ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
     MessageDisplayScope, NoDisplaySelection, ReadCursor,
 )
-from .wire_log import WireSnapshot
+from .wire_log import CurrentSnapshotOpening, WireSnapshot
 
 if TYPE_CHECKING:
     from .historical_views import HistoryCursor
@@ -195,7 +195,7 @@ class MessageReadRequest[T](ABC):
     def indexed(self, index, source: WireSnapshot) -> T: ...
 
     def read(self, log) -> T:
-        with log._opened_wire_snapshot(need_sequence=False) as source:
+        with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             return self.read_opened(source)
 
     def read_opened(self, source: WireSnapshot) -> T:

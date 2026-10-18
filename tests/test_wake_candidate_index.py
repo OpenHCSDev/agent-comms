@@ -22,6 +22,7 @@ from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohor
 from agent_comms.coordination_tables.publications import canonical_publication_key
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
+from agent_comms.private_path import FileRevision
 from agent_comms.threads import Thread
 from agent_comms.typed_table import TypedTable
 from agent_comms.wake_candidate_index import (
@@ -47,10 +48,13 @@ def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, res
     start.wait()
     try:
         index = WakeCandidateIndex(Comms(Path(root)).bus.log)
-        outcome = index.catch_up_committed_append(
-            index.notify_committed_append(root_id=root_id, through_bytes=through_bytes),
-            start=FirstBuild(), max_rows=256, max_bytes=8 * 1024 * 1024,
-        )
+        hint = index.notify_committed_append(root_id=root_id, through_bytes=through_bytes)
+        while True:
+            outcome = index.catch_up_committed_append(
+                hint, start=FirstBuild(), max_rows=256, max_bytes=8 * 1024 * 1024,
+            )
+            if outcome.caught_up:
+                break
     except BaseException as error:
         results.put(("error", type(error).__name__, str(error)))
     else:
@@ -548,10 +552,14 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
             after_seq=0,
             required_through_seq=message.seq,
         )
-    for start in (ResumeIndex(), RebuildIndex()):
-        with pytest.raises(ProjectionUnavailableError):
-            index.maintain(start=start)
-    # Rebuilding a disposable index cannot certify a replaced canonical bus.
+    with pytest.raises(ProjectionUnavailableError):
+        index.maintain(start=ResumeIndex())
+    # The canonical barrier, not the disposable index, repairs an identical
+    # original prefix at its new inode. Only then may explicit rebuild adopt it.
+    with comms.bus.log.certified_read() as certified:
+        certified.require_current()
+        assert certified.witness.revision == FileRevision.from_stat(source.stat())
+    assert index.maintain(start=RebuildIndex())
 
 
 def _as_response(row, root_id, execution_id):

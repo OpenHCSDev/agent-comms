@@ -16,7 +16,7 @@ from pathlib import Path
 from .bus_route_counts import BusRouteCounts
 from .coordination_errors import CoordinationError
 from .routing import DeliveryMessage
-from .wire_log import WireLog
+from .wire_log import CurrentSnapshotOpening, WireLog
 from .wake_candidate_index import FirstBuild, WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)
@@ -84,7 +84,7 @@ def _drain_candidate(root: Path) -> None:
                 result = index.catch_up_committed_append(
                     hint, start=FirstBuild()
                 )
-                with log._opened_wire_snapshot(need_sequence=False) as snapshot:
+                with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
                     route_result = routes.sync(
                         snapshot,
                         lambda record: DeliveryMessage.from_wire(record, root_id=snapshot.metadata.root_id),
