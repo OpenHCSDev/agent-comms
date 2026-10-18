@@ -120,8 +120,8 @@ def test_mounted_viewer_snapshot_reopens_without_scanning_bus(wired, monkeypatch
 def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired, monkeypatch):
     first = wired.messaging.send_message("PR111", "#base", "channel clock")
     wired.messaging.send_message("fixer", "PR111", "direct clock")
-    expected = wired.bus.activity_clocks()
-    assert expected.channels["#base"].last_message == first.timestamp
+    with wired.bus.opened_activity() as expected:
+        assert expected.channels["#base"].last_message == first.timestamp
     fresh = wire(wired.root)
     parsed = []
     original = Message.from_wire
@@ -131,13 +131,14 @@ def test_activity_clocks_reuse_the_original_boundary_and_extend_on_append(wired,
         return original(record)
 
     monkeypatch.setattr(Message, "from_wire", measured)
-    assert fresh.bus.activity_clocks() == expected
+    with fresh.bus.opened_activity() as clocks:
+        assert clocks == expected
     assert parsed == []
     appended = wired.messaging.send_message("PR111", "#base", "appended clock")
     parsed.clear()  # Publisher validation belongs to a different lifetime.
-    clocks = fresh.bus.activity_clocks()
-    assert clocks.channels["#base"].last_message == appended.timestamp
-    assert clocks.sent["PR111"] == appended.timestamp
+    with fresh.bus.opened_activity() as clocks:
+        assert clocks.channels["#base"].last_message == appended.timestamp
+        assert clocks.sent["PR111"] == appended.timestamp
     assert parsed == [appended.seq]
 
 
@@ -169,7 +170,8 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
     # The historical reader did not overwrite the newer published checkpoint.
     parsed.clear()
     fresh = wire(wired.root)
-    assert fresh.bus.activity_clocks().sent["fixer"] == appended.timestamp
+    with fresh.bus.opened_activity() as clocks:
+        assert clocks.sent["fixer"] == appended.timestamp
     assert parsed == []
 
 
@@ -292,7 +294,8 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     checkpoint.write_text(json.dumps(cached))
     reopened = wire(wired.root)
     assert reopened.views.viewer_snapshot(str(wired.root)).last_sent["fixer"] > 0.0
-    assert reopened.bus.activity_clocks().channels["#base"].last_message > 0.0
+    with reopened.bus.opened_activity() as clocks:
+        assert clocks.channels["#base"].last_message > 0.0
 
     bus_path = wired.bus.log.path
     replacement = bus_path.with_name("replacement.jsonl")
