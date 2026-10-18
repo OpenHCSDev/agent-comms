@@ -749,7 +749,7 @@ class TranscriptNotification(WireModel, ABC, metaclass=RegisteredWireMeta):
     threadId: str
 
     @abstractmethod
-    def apply(self, stream: ItemStream) -> TranscriptUpdate | None: ...
+    def apply(self, stream: ItemStream) -> TranscriptUpdate: ...
 
 
 class TurnHeader(WireModel):
@@ -825,13 +825,13 @@ class ItemStream:
     def __init__(self, thread: str):
         self.thread = thread
 
-    def receive(self, notification: RpcNotification) -> TranscriptUpdate | None:
+    def receive(self, notification: RpcNotification) -> tuple[TranscriptUpdate, ...]:
         declarations = TranscriptNotification.__registry_config__.registry_dict
         if notification.method not in declarations:
             # Usage, account, raw/private reasoning and other control
             # events are not transcript content. Known methods declare a type.
-            return None
+            return ()
         event = declarations[notification.method].model_validate(notification.params)
         if event.threadId != self.thread:
-            return None
-        return event.apply(self)
+            return ()
+        return (event.apply(self),)

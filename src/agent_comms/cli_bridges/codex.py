@@ -105,14 +105,8 @@ class CodexAppServer(CodexHistory, OnlineHistory):
                 yield update
 
     async def entries(self, codex: CodexConnection) -> list[ItemEntry]:
-        """Every item of the thread, newest first."""
-        entries: list[ItemEntry] = []
-        cursor = None
-        while True:
-            page = ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread, cursor=cursor)))
-            entries.extend(page.data)
-            if (cursor := page.nextCursor) is None:
-                return entries
+        """The newest page, newest first; older published items stay in Core's transcript."""
+        return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread))).data
 
     async def seen(self, codex: CodexConnection) -> AsyncIterator[TranscriptUpdate]:
         resumed = ResumedThread.model_validate(await codex.call(ResumeThread(threadId=self.thread)))
@@ -138,18 +132,13 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--socket', default=str(cls.SOCKET))
 
-    async def entries(self, codex: CodexConnection) -> list[ItemEntry]:
-        """A restarted bridge publishes again only the newest page."""
-        return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread))).data
-
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
         async with CodexConnection.open(self.socket) as codex:
             async for update in self.seen(codex):
                 yield update
             stream = ItemStream(self.thread)
             async for notification in codex.notifications():
-                update = stream.receive(notification)
-                if update is not None:
+                for update in stream.receive(notification):
                     yield update
 
     async def deliver(self, message: Message) -> type[Outcome]:
