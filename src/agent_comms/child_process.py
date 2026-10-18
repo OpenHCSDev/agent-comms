@@ -290,13 +290,13 @@ class ProcessIdentity(ProcessState):
 NO_PROCESS = NoProcess()
 
 
-class GroupLeader(ProcessIdentity):
+class GroupLeader(ProcessIdentity, declared_name=None):
     def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
         return tuple(member for member in platform.members_of_group(self.pid)
                      if member.start_time >= self.start_time)
 
 
-class GroupMember(ProcessIdentity):
+class GroupMember(ProcessIdentity, declared_name=None):
     def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
         return (self,) if platform.matches(self) else ()
 
