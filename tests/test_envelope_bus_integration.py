@@ -427,7 +427,7 @@ def test_saved_colliding_creation_id_blocks_claim_write_before_append(tmp_path: 
         threads["bob"] = replace(threads["bob"], created_at=threads["alice"].created_at)
         edit.commit()
     comms = Comms(comms.root)
-    with pytest.raises(RelationViolationError, match="Snapshot lookup index differs from its threads"):
+    with pytest.raises(RelationViolationError, match=r"^Registry creation identities collide\.$"):
         comms.messaging.send_message(
             "bob", "alice", "Cannot release under duplicate ID", releases=["a.py"]
         )

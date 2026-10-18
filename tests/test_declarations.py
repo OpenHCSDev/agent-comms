@@ -448,8 +448,9 @@ class TestRegistration:
         assert (root / "bus_meta.json").exists()
         with pytest.raises(RelationViolationError, match="guard is pending"):
             Registration(root / "registry.json")
-        with pytest.raises(RelationViolationError, match="read-only"):
+        with pytest.raises(RelationViolationError, match=r"^Private bus checkpoint is missing or redirected\.$"):
             comms.messaging.initialize_private_initial_protocol()  # never auto-repair
+        assert not (root / "private_bus_checkpoint.sqlite3").exists()
 
     @pytest.mark.skipif(sys.platform != "linux", reason="fault injection uses Linux /proc/self/fd")
     @pytest.mark.parametrize("stage", ["pending", "commit"])

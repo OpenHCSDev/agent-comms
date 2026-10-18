@@ -26,7 +26,10 @@ def test_claim_claim_tolerates_metadata_and_finished_captured_turn(tmp_path):
     generation = registry.snapshot().owner_generations['owner']
     assert registry.release_turn(leased.turn_lease)[0]
     registry.register(replace(registry.require('owner'), title='metadata', tags=frozenset({'new'})))
-    with pytest.raises(RelationViolationError, match='declaration'):
+    with pytest.raises(
+        RelationViolationError,
+        match=r'^live owner source changed: registry_turn: The exact captured active turn changed\.$',
+    ):
         registry.lease_live_turn_with_generation(
             captured, 'second', expected_owner_generation=generation,
         )
