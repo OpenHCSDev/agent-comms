@@ -3,9 +3,10 @@
 Each unit owns at most MAX_WORKTREES checkouts named <worktrees>/<unit> or <worktrees>/<unit>--<suffix>, and one
 scratch directory <scratch>/<unit>/. Tests run on the shared virtualenv of the <repo>-check checkout with
 PYTHONPATH=src; no per-worktree venv, no .artifacts, no clone. Below FLOOR_GB free on the configured disk nothing
-that allocates disk may run. order (send/done/overdue) and tool_watch both enforce through this module.
+that allocates disk may run. order (send/done/overdue) enforces through this module; tool_watch through
+Core's StorageRule.
 """
-import os, re, shlex, shutil, subprocess
+import os, re, shutil, subprocess
 
 from .config import CommanderConfig
 
@@ -59,70 +60,3 @@ def over_quota(unit: str) -> str | None:
     if gb > UNIT_CAP_GB:
         return f'{unit} uses {gb:.1f} GB of checkouts and scratch (cap {UNIT_CAP_GB} GB)'
     return None
-
-
-NO_VALUE_FLAGS = r'(?:--detach|-d|--force|-f|--no-checkout|--checkout|--lock|-q|--quiet|--no-track|--track|--guess-remote|--orphan)'
-
-
-def command_violations(unit: str, command: str) -> list[str]:
-    """What this shell command does that the storage rules forbid, judged from its words."""
-    found = []
-    if re.search(r'\bgit\s+clone\b', command):
-        found.append('git clone (use a worktree of the existing checkout)')
-    for m in re.finditer(r'\bgit\s+(?:-C\s+\S+\s+)?worktree\s+add\s+((?:' + NO_VALUE_FLAGS + r'\s+|-\S+\s+\S+\s+)*)(\S+)', command):
-        path = m.group(2)
-        name = os.path.basename(os.path.normpath(path))
-        if not (path.startswith(WT + '/') and owns(unit, name)):
-            found.append(f'worktree {path} is not {WT}/{unit}--<suffix>')
-    for m in re.finditer(r'\bgit\s+(?:-C\s+\S+\s+)?worktree\s+(move|remove)\s+(?:(?:--force|-f)\s+)*(\S+)', command):
-        name = os.path.basename(os.path.normpath(m.group(2)))
-        if not owns(unit, name):
-            found.append(f'worktree {m.group(1)} of {m.group(2)}, which is not {unit}\'s checkout')
-    verbs = r"(switch|checkout|commit|merge|reset|stash)(?![\w-])"
-    for m in [*re.finditer(r'\bcd\s+(' + WT + r'/[^\s/;&|]+)[^;\n]*?\bgit\s+' + verbs, command),
-              *re.finditer(r'\bgit\s+-C\s+(' + WT + r'/[^\s/;&|]+)\s+' + verbs, command)]:
-        name = os.path.basename(os.path.normpath(m.group(1)))
-        if not owns(unit, name) and not name.endswith('-check'):
-            found.append(f'git {m.group(2)} in {m.group(1)}, which is not {unit}\'s checkout')
-    if re.search(r'\buv\s+(venv|sync)\b|-m\s+venv\b|\bvirtualenv\b', command):
-        found.append('creates a virtualenv (use the shared <repo>-check/.venv with PYTHONPATH=src)')
-    if any('.artifacts' in t for t in destinations(command)) or re.search(r'--(prefix|target)[= ]\S*\.artifacts', command):
-        found.append('writes .artifacts inside a checkout')
-    for target in destinations(command):
-        if target.startswith('/'):
-            found += [v for v in write_violations(unit, target) if '.artifacts' not in v]
-    runs = [part for part in re.split(r'&&|\|\||[;|\n]', command) if not re.search(r'(?<!\S)(--help|-h)(?!\S)', part)]  # asking a tool for its help allocates nothing
-    if any(ALLOCATES.search(part) for part in runs) and free_gb() < FLOOR_GB:
-        found.append(f'allocates disk while {CONFIG.disk} has {free_gb():.1f} GB free (floor {FLOOR_GB} GB)')
-    return found
-
-
-def destinations(command: str) -> list[str]:
-    """Paths a shell command writes: every mkdir/touch argument, the last cp/mv/rsync/install argument, tee and > targets."""
-    out = [m.group(1) for m in re.finditer(r'>>?\s*([^\s;&|)]+)', command)]
-    for part in re.split(r'&&|\|\||[;|\n]', command):
-        try:
-            words = [w for w in shlex.split(part, posix=True) if not w.startswith('-')]
-        except ValueError:
-            words = part.split()
-        while words and ('=' in words[0] or words[0] in ('sudo', 'cd')):
-            words = words[2:] if words[0] == 'cd' else words[1:]
-        if not words:
-            continue
-        verb, args = os.path.basename(words[0]), [w for w in words[1:] if not w.startswith('>')]
-        if verb in ('mkdir', 'touch', 'tee'):
-            out += args
-        elif verb in ('cp', 'mv', 'rsync', 'install', 'ln') and len(args) >= 2:
-            out.append(args[-1])
-    return out
-
-
-def write_violations(unit: str, path: str) -> list[str]:
-    path = os.path.normpath(path or '')
-    if path.startswith(SCRATCH + '/'):
-        name = path[len(SCRATCH) + 1:].split('/')[0]
-        if not owns(unit, name):
-            return [f'writes {path} (only {SCRATCH}/{unit}/ is yours)']
-    if '/.artifacts/' in path:
-        return [f'writes {path} inside .artifacts']
-    return []

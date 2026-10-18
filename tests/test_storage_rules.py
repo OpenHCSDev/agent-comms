@@ -153,6 +153,8 @@ def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch)
     ('ffmpeg -i input output', 'AllocateStorageEffect'),
     ('git -C repo worktree add --detach extra origin/main', 'CheckoutStorageEffect'),
     ('git worktree remove --force extra', 'RemoveCheckoutStorageEffect'),
+    ('git worktree move extra elsewhere', 'ForbiddenStorageEffect'),
+    ('pip install --help\nmkdir target', 'WriteStorageEffect'),
     ('mkdir -p target', 'WriteStorageEffect'),
     ('cp source target', 'WriteStorageEffect'),
     ("cat <<'PY'\ngit clone remote target\nPY\nmkdir target", 'WriteStorageEffect'),

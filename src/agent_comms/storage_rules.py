@@ -225,6 +225,8 @@ class AllocatesOnCommands(ShellProgram):
     prefixes = ((),)
 
     def decode(self, args, cwd):
+        if not {'--help', '-h'}.isdisjoint(args):
+            return ()  # asking a tool for its help allocates nothing
         return (AllocateStorageEffect(),) if self.matches(args, self.prefixes) else ()
 
 
@@ -257,8 +259,8 @@ class RemovesCheckout(ShellProgram):
 
 class GitProgram(ForbidsCommands, AddsCheckout, RemovesCheckout):
     names = frozenset({'git'})
-    forbidden = (('clone',),)
-    reason = 'git clone is forbidden; use an existing repository'
+    forbidden = (('clone',), ('worktree', 'move'))
+    reason = 'git clone and git worktree move are forbidden; add and remove worktrees instead'
 
     def effects(self, args, cwd):
         while args and args[0] in ('-C', '-c', '--git-dir', '--work-tree'):
