@@ -163,7 +163,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         return entry.events, publications
 
     @classmethod
-    def publication_revision(cls, root, reader, owner_lookup):
+    def publication_revision(cls, root, reader, owner_lookup) -> PublishedReplyRevision:
         """Read only this native source's committed original reply relations.
 
         Published evidences and their input/attempt links are immutable. Their
