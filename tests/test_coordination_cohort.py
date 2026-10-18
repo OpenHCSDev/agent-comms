@@ -19,7 +19,7 @@ from agent_comms.assignment_states import (
     DeliveredAssignment,
     FullPendingAssignment,
 )
-from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
+from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, AgentOrigin
 from agent_comms.cohort_schema import CohortDeliveryReceipts, install_private_cohort_schema
 from agent_comms.comms import Comms
 from agent_comms.coordination_cohort import (
@@ -336,7 +336,7 @@ def test_all_channel_excludes_sender_and_nonexecutors_and_control_is_not_forgeab
     with pytest.raises(RelationViolationError, match="initial issuer"):
         comms.bus.publisher.publish_initial_cohort(
             Message(sender="sender", target="#all", body="system", type=InfoKind),
-            control="system_control",
+            control="system_control", origin=AgentOrigin(),
         )
     assert comms.bus.log.latest_sequence() == 0
     sent = comms.messaging.send_initial_cohort("sender", "#all", "ordinary")
