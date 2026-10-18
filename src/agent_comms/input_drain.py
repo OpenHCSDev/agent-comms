@@ -49,7 +49,6 @@ from .threads import Thread
 from .turn_input_source import OriginalTurnInput, AcceptedFollowingInput
 from .wire_metadata import WireMetadata
 from .wire_watch import WatchSource, WireWatch
-from .goal_presentation import GoalExecutionState
 from .goal_waits import GoalWaits
 from .errors import RelationViolationError, UnregisteredThreadError
 from .turn_context import TurnContext, UserFollowupSegment
@@ -265,17 +264,6 @@ class InputObservation:
             lambda completed: self._retire_observer(session_id, completed)
         )
 
-    def _in_standby(self, session_id: str) -> bool:
-        """The published goal execution waits on other threads.
-
-        A standby projects its targets' turns and its closed-group recovery
-        walks the whole wait graph, so other threads' entries concern it.
-        """
-        _goal, execution = self.effects.turns.goals.goal_execution_signatures.get(
-            session_id, (None, None),
-        )
-        return execution is not None and execution.state is GoalExecutionState.STANDBY
-
     async def _own_entry(self, session_id: str) -> RegistryEntryRevision:
         return await Coordination.run_worker(partial(
             self.comms.registry.entry, self.sessions.require(session_id),
@@ -319,7 +307,7 @@ class InputObservation:
                 entry_current = idle and revision.registry == settled.revision.registry
                 if idle and not entry_current:
                     # A standby's wait graph reads other threads' entries.
-                    idle = not self._in_standby(session_id)
+                    idle = not self.effects.turns.goals.in_standby(session_id)
                     if idle:
                         read = await self._own_entry(session_id)
                         # Settle at the revision the entry was read from, not
@@ -364,7 +352,7 @@ class InputObservation:
                         # A stored model change precedes the messages the same tick hands over.
                         await self.sessions.config.sync_thread(session_id)
                         drained = await self.drain_inbox(session_id)
-                        if self._in_standby(session_id):
+                        if self.effects.turns.goals.in_standby(session_id):
                             # Recovery reads only stores in the revision, so it runs
                             # when one of them changed, not on a clock.
                             await Coordination.run_worker(partial(

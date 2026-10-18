@@ -186,15 +186,23 @@ class GoalRevision:
 class GoalCheckpoint(DeclaredFamily, affix="GoalCheckpoint"):
     """Captured goal identity, not a goal record or execution permission."""
 
+    @abstractmethod
+    def require_identity(self, goal_id: str) -> None: ...
+
 
 @dataclass(frozen=True)
 class AbsentGoalCheckpoint(GoalCheckpoint, declared_name="absent"):
-    pass
+    def require_identity(self, goal_id: str) -> None:
+        raise ValueError("Goal execution identity does not match its declaration")
 
 
 @dataclass(frozen=True)
 class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
+
+    def require_identity(self, goal_id: str) -> None:
+        if self.revision.id != goal_id:
+            raise ValueError("Goal execution identity does not match its declaration")
 
 
 class CheckResult(DeclaredFamily, affix="CheckResult"):
