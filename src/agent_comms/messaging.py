@@ -186,8 +186,7 @@ class Messaging:
                 task, role=NoticeRole())
 
     def _publish_user_under_wire_lock(self, user, target, body, task, *, role=ConversationRole()):
-        publisher: InitialWrites = self.bus.publisher
-        return publisher.publish_ordinary(
+        return self.bus.publisher.publish_ordinary(
             Message(user.name, target, body, InfoKind, task=task, role=role),
             origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
