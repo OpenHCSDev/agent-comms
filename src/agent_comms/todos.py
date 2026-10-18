@@ -11,19 +11,18 @@ import sqlite3
 import time
 import asyncio
 from collections.abc import Iterator
-from contextlib import closing, contextmanager
+from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
 from typing import ClassVar
 
-from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
 from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedRow, TypedTable
+from .typed_table import Column, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
 from .goals import OrderCheck
@@ -554,11 +553,6 @@ class Todo(TypedTable):
         )
 
 
-@dataclass(frozen=True)
-class _TodoTable(TypedRow):
-    name: str
-
-
 def _text(value: str, label: str, limit: int) -> str:
     if type(value) is not str or not value.strip() or len(value) > limit:
         raise TodoError(f"{label} must be nonempty and at most {limit} characters.")
@@ -593,7 +587,8 @@ def _repo(value: str) -> str:
     return value.lower()
 
 
-class TodoStore:
+@dataclass(frozen=True, slots=True)
+class TodoStore(TypedStore):
     """One SQLite row owns both todo state and its exclusive assignment.
 
     Assignment identity and revision deduplicate known operations. An uncertain
@@ -601,75 +596,46 @@ class TodoStore:
     This store never launches a child.
     """
 
-    def __init__(self, root: Path):
-        directory = Path(root).resolve(strict=True)
-        if not directory.is_dir():
-            raise TodoError("Todo root must already exist.")
-        self.path = directory / "todos.sqlite3"
-        with closing(self._connect()) as db:
-            db.execute("PRAGMA journal_mode=WAL")
-            db.execute("BEGIN IMMEDIATE")
-            tables = _TodoTable.read(
-                db.execute("SELECT name FROM sqlite_master WHERE type='table'")
-            )
-            if not tables:
-                Todo.create(db)
-            elif tables != [_TodoTable(FieldCodec.encode(Todo))]:
-                raise TodoError("Todo storage requires the one-shot durable migration.")
-            # Decode exactly the current declared columns; no runtime converters.
-            Todo.select(db, where="0")
-            db.execute("COMMIT")
+    root: Path
+    filename: ClassVar[str] = "todos.sqlite3"
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo,)
 
-    def _connect(self) -> sqlite3.Connection:
-        db = CoordinationStore.writer(self.path, isolation_level=None)
-        db.execute("PRAGMA synchronous=FULL")
-        return db
-
-    @contextmanager
-    def _write(self) -> Iterator[sqlite3.Connection]:
-        with closing(self._connect()) as db:
-            try:
-                db.execute("BEGIN IMMEDIATE")
-                yield db
-                db.execute("COMMIT")
-            except BaseException:
-                if db.in_transaction:
-                    db.execute("ROLLBACK")
-                raise
+    def _select(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        """Rows in creation order; an absent store has none, and a read never creates one."""
+        if not self.path.exists():
+            return ()
+        with self.snapshot() as db:
+            return self._rows(db, where, parameters)
 
     @staticmethod
-    def _current(db: sqlite3.Connection, todo_id: str) -> Todo:
-        row = Todo.one(db, id=todo_id)
-        if row is None:
+    def _rows(db: sqlite3.Connection, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        return tuple(Todo.read(db.execute(
+            f"SELECT * FROM {Todo.declared_name} WHERE {where} ORDER BY rowid", parameters)))
+
+    @classmethod
+    def _one(cls, rows: tuple[Todo, ...], todo_id: str) -> Todo:
+        if not rows:
             raise TodoError(f"Unknown todo: {todo_id}.")
-        return row
+        return rows[0]
+
+    @classmethod
+    def _current(cls, db: sqlite3.Connection, todo_id: str) -> Todo:
+        return cls._one(cls._rows(db, "id=?", (todo_id,)), todo_id)
 
     def get(self, todo_id: str) -> Todo:
         _text(todo_id, "Todo ID", 128)
-        with closing(self._connect()) as db:
-            return self._current(db, todo_id)
+        return self._one(self._select("id=?", (todo_id,)), todo_id)
 
     def list(self, repo: str) -> tuple[Todo, ...]:
-        with closing(self._connect()) as db:
-            return tuple(
-                Todo.read(
-                    db.execute(
-                        f"SELECT * FROM {Todo.declared_name} WHERE repo=? ORDER BY rowid",
-                        (_repo(repo),),
-                    )
-                )
-            )
+        return self._select("repo=?", (_repo(repo),))
 
     def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        with closing(self._connect()) as db:
-            return tuple(Todo.select(db,
-                where="json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? AND json_extract(assignment,'$.generation')=?",
-                parameters=(owner.name, owner.created_at, goal_id)))
+        return self._select(
+            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
+            "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        with closing(self._connect()) as db:
-            return tuple(Todo.select(db, where="creator=? AND creator_created=?",
-                parameters=(commander.name, commander.created_at)))
+        return self._select("creator=? AND creator_created=?", (commander.name, commander.created_at))
 
     def create(
         self,
@@ -705,7 +671,7 @@ class TodoStore:
             deadline=deadline,
             order=order,
         )
-        with self._write() as db:
+        with self.writing() as db:
             proposed.insert_if_absent(db)
             current = self._current(db, todo_id)
             current.require_same_creation(proposed)
@@ -713,7 +679,7 @@ class TodoStore:
             return current
 
     def apply(self, todo_id: str, command: TodoOperation) -> Todo:
-        with self._write() as db:
+        with self.writing() as db:
             current = self._current(db, todo_id)
             result = command.apply(current)
             if result == current:
