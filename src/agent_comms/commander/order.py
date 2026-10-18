@@ -47,7 +47,6 @@ B = str(CONFIG.root)
 CLI = str(CONFIG.cli)
 OUTGOING = (FairText, HierarchyText, PlainText)  # every commander text passes each one
 
-
 def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
     if refused := [r for family in families if (r := family.refused(text))]:
@@ -371,7 +370,7 @@ def strike(unit, why, caught=f'{ME} at review'):
     todo = COMMS.goals.todos.get(task)
     if not todo.state.open or todo.assignment.owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-    refuse(why, *OUTGOING)  # the strike is posted to #comms; it is refused before Core records it
+    refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
     call(CommsTodoTool(id=task, operation=StrikeTodo(
         todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, f'{why} (caught by {caught})')))
     n = struck(COMMS.goals.todos.get(task), unit)
