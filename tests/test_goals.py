@@ -3,6 +3,7 @@
 import pytest
 
 from agent_comms.comms import wire
+from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import (
     ActiveGoalAction,
@@ -16,10 +17,11 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal
+from agent_comms.goals import Goal, NoGoal
+from agent_comms.task_sources import GoalTaskScope, TurnTaskScope
 from agent_comms.threads import Thread
-from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import ToolRequest
 
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
@@ -47,13 +49,47 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         )
     assert comms.registry.require("worker").goal == replacement
     comms.goals.update_goal("worker", ClearGoalAction())
-    assert wire(tmp_path).registry.require("worker").goal is None
+    assert wire(tmp_path).registry.require("worker").goal == NoGoal()
     with pytest.raises(ValueError, match="No goal"):
         comms.goals.update_goal("worker", ActiveGoalAction())
     with pytest.raises(ValueError, match="requires"):
         comms.goals.update_goal("worker", SetGoalAction(text=" "))
     with pytest.raises(ValueError, match="Unknown"):
         GoalAction.decode("nonsense")
+
+
+def test_no_goal_set_goal_and_cleared_goal_each_answer_from_the_member(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
+
+    def stored() -> Thread:
+        return wire(tmp_path).registry.require("worker")
+
+    def absent(thread: Thread) -> None:
+        assert thread.goal == NoGoal()
+        assert thread.wake_context()["current_goal"] is None
+        assert thread.task_scope == TurnTaskScope(project=str(tmp_path))
+        with pytest.raises(RelationViolationError, match="No goal is set"):
+            thread.goal.require()
+
+    absent(stored())
+    goal = comms.goals.update_goal("worker", SetGoalAction(text="Ship the release"))
+    thread = stored()
+    assert thread.goal.require() == thread.goal.require().require_id(goal.id) == goal
+    assert thread.wake_context()["current_goal"] == {
+        "text": "Ship the release", "status": "active", "progress": goal.progress,
+    }
+    scope = thread.task_scope
+    assert scope == GoalTaskScope(project=str(tmp_path), goal=goal.checkpoint)
+    scope.require_context(thread)
+    comms.goals.update_goal("worker", ClearGoalAction())
+    absent(stored())
+    with pytest.raises(RelationViolationError, match="No goal is set"):
+        scope.require_context(stored())
+    replacement = comms.goals.update_goal("worker", SetGoalAction(text="Ship the patch"))
+    assert stored().task_scope == GoalTaskScope(project=str(tmp_path), goal=replacement.checkpoint)
+    with pytest.raises(RelationViolationError, match="replaced or cleared"):
+        scope.require_context(stored())
 
 
 def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, monkeypatch):
@@ -83,7 +119,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     with pytest.raises(ValueError, match="cannot be resumed"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale blocked update"}, caller=ThreadCaller("worker"))
     comms.goals.update_goal("worker", SetGoalAction(text="Replacement goal"))
-    with pytest.raises(ValueError, match="cannot be resumed"):
+    with pytest.raises(ValueError, match="goal was replaced or cleared"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller("worker"))
 
 

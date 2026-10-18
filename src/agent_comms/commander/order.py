@@ -82,9 +82,14 @@ def todos():
     return COMMS.goals.todos.for_commander(COMMS.registry.require(ME).incarnation)
 
 
-def open_todos(unit=None):
-    """Problems not yet closed and held by a unit, optionally only those held by one unit."""
-    return [t for t in todos() if t.state.open and t.holder and unit in (None, t.holder)]
+def held_orders() -> tuple[Todo, ...]:
+    """This commander's open orders that a unit holds."""
+    return COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+
+
+def held_by(unit: str) -> tuple[Todo, ...]:
+    """This commander's open orders held by one unit."""
+    return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
 
 
 def progress() -> dict[str, OrderProgress]:
@@ -247,7 +252,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
     owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
     check = (line := re.search(r'(?m)^Check:(.*)$', body)) and OrderCheck.parse(line[1])
-    listed = {t.id: t for t in todos() if t.state.open}
+    listed = {t.id: t for t in todos()}
     if not group:
         problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
     elif not new and (missing := [pid for pid in group if pid not in listed]):
@@ -406,7 +411,8 @@ def problem(text, unit, due, order_file, request):
         sys.exit('Refused: the order file needs a "Problem: NEW" line; a problem is never logged without its order')
     if len(text.split()) < 8:
         sys.exit('Refused: describe the problem (8+ words): what is wrong, what it costs')
-    pid = f'P{max([int(t.id[1:]) for t in todos() if t.id[1:].isdigit()] + [0]) + 1}'
+    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
+    pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
         send(unit, due, order_file, request, new=(pid, text))
@@ -437,7 +443,7 @@ def board():
              '| Problem | Owner file | Owner | Order | Due | Progress | Delivered '
              '| Owner last acted |',
              '|---|---|---|---|---|---|---|---|']
-    listed, read = (t for t in todos() if t.state.open), progress()
+    listed, read = todos(), progress()
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
         unit, last = t.holder, t.released[-1:]
         owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
@@ -445,8 +451,9 @@ def board():
                      f'{hhmm(t.deadline)} | {read[t.id].line if t.id in read else "-"} | '
                      f'{"no" if t.pending else "yes, install pending"} | '
                      f'{unit and last_activity(unit) or "-"} |')
+    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
     lines += ['', '## Withdrawn orders', '',
-              *(f'- {line}' for t in todos() for line in t.order.withdrawals(t))]
+              *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
     open(BOARD, 'w').write('\n'.join(lines) + '\n')
 
 
@@ -535,7 +542,7 @@ def first_calls():
     lines = open(ACTIVITY).read().splitlines()[-4000:]
     watched = {line[9:].split(' ', 1)[0] for line in lines}
     missing = []
-    for todo in open_todos():
+    for todo in held_orders():
         unit, order = todo.assignment.owner, todo.order
         if not todo.pending or unit not in watched:
             continue  # tool_watch cannot see this unit's harness; its clock is the commit deadline
@@ -562,11 +569,13 @@ def hunt(where, why, sent=None):
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
     if sent:
-        todo = next((t for t in open_todos() if t.order.id == sent), None) or sys.exit(
+        held = held_orders()
+        todo = next((t for t in held if t.order.id == sent), None) or sys.exit(
             f'Refused: {sent} is not an open tracked order; send it first. {HuntVerb.usage()}')
     else:
         named = set(re.findall(r'\bP\d+\b', why))
-        todo = next((t for t in open_todos() if t.id in named), None) or sys.exit(
+        held = held_orders()
+        todo = next((t for t in held if t.id in named), None) or sys.exit(
             'Refused: a clean hunt is recorded on its open problem; name the P-number in --why. '
             + HuntVerb.usage())
     ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
@@ -577,7 +586,8 @@ def hunt(where, why, sent=None):
 
 
 def hunts():
-    return [h for t in todos() for h in t.hunts]
+    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
+    return [h for t in history for h in t.hunts]
 
 
 def next_hunt():
@@ -598,11 +608,13 @@ def next_hunt():
     return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
 
 
-def replied(unit, since):
-    """The unit's latest message to me after the order, so an overdue alarm is read against what it said."""
+def reply(unit: str, since: float) -> dict | None:
+    """The unit's latest message to me after ``since``, or None."""
+    if not os.path.exists(f'{B}/bus.jsonl'):
+        return None
     with open(f'{B}/bus.jsonl', 'rb') as f:
-        f.seek(max(0, os.path.getsize(f.name) - 3_000_000))
-        lines = f.read().splitlines()[1:]
+        f.seek(start := max(0, os.path.getsize(f.name) - 3_000_000))
+        lines = f.read().splitlines()[bool(start):]
     latest = None
     for line in lines:
         try:
@@ -612,43 +624,55 @@ def replied(unit, since):
         to = str(m.get('to'))
         if m.get('from') == unit and float(m.get('ts', 0)) > since and (ME in to or '#comms' in to):
             latest = m
+    return latest
+
+
+def replied(latest: dict | None) -> str:
+    """The reply an overdue alarm is read against."""
     if latest is None:
         return '; no reply since the order'
     at = time.strftime('%H:%M', time.localtime(float(latest['ts'])))
     return f'; REPLIED {at} [{latest["id"]}]: {" ".join(str(latest.get("text")).split())[:160]} -- read it before pushing'
 
 
-def deadline_lines(held: list[Todo]) -> list[str]:
-    """Late units under OVERDUE with their progress; progress drawing no strike prints its own line.
-
-    An open order whose work stopped moving prints STALL with its progress line, whatever is due."""
+def deadline_lines(held: list[Todo], since: float = 0.0) -> list[str]:
+    """Each order that entered lateness (OVERDUE or DUE PASSED), changed it by a reply or push, or
+    entered STALL after the previous poll at ``since``; a tick where nothing changed is silent."""
     now = time.time()
     pending = [t for t in held if t.pending]
-    past = [t for t in pending if t.deadline.recorded_at('An order deadline') < now]
     read = progress() if pending else {}
-    late = [f'{t.holder} (due {hhmm(t.deadline)}, order {t.order.id}, {read[t.id].line}'
-            f'{replied(t.holder, t.order.at.recorded_at("An order"))})'
-            for t in past if read[t.id].strikes]
-    stalled = [f'STALL {t.id} {t.holder}: {read[t.id].line} -> push it now or reassign'
-               for t in pending if read[t.id].stalled(t.order.at.recorded_at('An order'), now)]
-    passed = [f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {read[t.id].line}'
-              for t in past if not read[t.id].strikes]
+    late, stalled, passed = [], [], []
+    for t in pending:
+        ordered, work = t.order.at.recorded_at('An order'), read[t.id]
+        if (entered := work.stalled_since(ordered)) is not None and since < entered < now:
+            stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
+        if (crossed := t.late_since(now)) is None:
+            continue
+        answer = reply(t.holder, ordered) if work.strikes else None
+        if since < max(crossed, work.moved or 0, float(answer.get('ts', 0)) if answer else 0):
+            if work.strikes:
+                due = f'due {hhmm(t.deadline)}, order {t.order.id}'
+                late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
+            else:
+                passed.append(f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {work.line}')
     alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
              'missed = order strike, 2 strikes = fire')
     return [alarm] * bool(late) + stalled + passed
 
 
 def overdue():
+    since = 0.0  # the previous poll: a line prints once, when its state is entered after it
     while True:
+        now = time.time()
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
-        held = open_todos()
+        held = held_orders()
         stale = [f'{t.id} {t.assignment.owner} (last {seen})' for t in held
                  if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
         if stale:
             print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
-        for line in deadline_lines(held):
+        for line in deadline_lines(held, since):
             print(line, flush=True)
         # Units leave finished PRs open and wander off. An open PR naming an ordered problem that
         # nobody has touched for 5 minutes is a stall, whatever the unit says it is doing.
@@ -665,8 +689,9 @@ def overdue():
                         idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        for _ in HuntDue.violations(COMMS, ME):
+        for _ in HuntDue.broken(COMMS, ME, since):
             print(HuntVerb.due(next_hunt()), flush=True)
+        since = now
         time.sleep(60)
 
 

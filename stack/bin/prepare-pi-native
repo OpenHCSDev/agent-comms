@@ -30,6 +30,13 @@ done
 
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
+# agent_comms and the patch scripts run under the stack environment `uv sync
+# --project stack` installs, never an ambient python3 lacking its dependencies.
+python="$stack_root/.venv/bin/python"
+if [[ ! -x "$python" ]]; then
+    printf 'The stack environment is unavailable; run uv sync --project %s first.\n' "$stack_root" >&2
+    exit 1
+fi
 manifest="$stack_root/pi-native.sha256"
 build_id=$(sha256sum "$manifest" | cut -c1-16)
 target="$stack_root/.pi-native-$build_id"
@@ -38,7 +45,7 @@ bedrock=node_modules/@earendil-works/pi-ai/dist/api/bedrock-converse-stream.js
 verify() (
     cd -- "$1/node_modules/@earendil-works/pi-coding-agent"
     sha256sum --check --status "$manifest" &&
-        PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package "$PWD"
+        "$python" -m agent_comms.native_package "$PWD"
 )
 
 publish() {
@@ -53,7 +60,7 @@ publish() {
     deployment_package="$deployment/node_modules/@earendil-works/pi-coding-agent"
     if [[ -e "$deployment" ]]; then
         verify "$deployment"
-        PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package \
+        "$python" -m agent_comms.native_package \
             --install-sources "$deployment_package" "$repo_root"
     else
         deployment_stage=$(mktemp -d "$publish_root/.native-current-$build_id.stage.XXXXXXXX")
@@ -62,7 +69,7 @@ publish() {
         cp -a --reflink=auto -- "$prepared/node_modules/@earendil-works/pi-coding-agent" \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent"
         verify "$deployment_stage"
-        PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package \
+        "$python" -m agent_comms.native_package \
             --install-sources \
             "$deployment_stage/node_modules/@earendil-works/pi-coding-agent" "$repo_root"
         mv -- "$deployment_stage" "$deployment"
@@ -126,11 +133,11 @@ mv -- "$scratch_root/node_modules" "$stage/node_modules"
 cp -- "$stock/$bedrock" "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
 compaction=dist/core/compaction/compaction.js
 session=dist/core/agent-session.js
-python3 "$stack_root/patch-native-steering.py" \
+"$python" "$stack_root/patch-native-steering.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 manager=dist/core/session-manager.js
 services=dist/core/agent-session-services.js
-python3 "$stack_root/patch-native-model-config.py" \
+"$python" "$stack_root/patch-native-model-config.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/$services"
 rpc=dist/modes/rpc/rpc-mode.js
 # One SessionManager storage owner; replace eager loaders and their consumers together.
@@ -142,24 +149,24 @@ cp -- "$stack_root/native-proof-journal.mjs" "$native_package/dist/core/native-p
 cp -- "$stack_root/native-proof-schema.mjs" "$native_package/dist/core/native-proof-schema.js"
 cp -- "$repo_root/src/agent_comms/pi_project_bootstrap.mjs" \
     "$stage/node_modules/@earendil-works/pi-coding-agent/dist/agent-comms-project-bootstrap.mjs"
-python3 "$stack_root/patch-native-compaction-brief.py" "$native_package/$session"
-python3 "$stack_root/patch-native-compaction-wip.py" "$native_package/$session"
-python3 "$stack_root/patch-native-compaction-cap.py" "$native_package"
-python3 "$stack_root/patch-native-turn-context.py" \
+"$python" "$stack_root/patch-native-compaction-brief.py" "$native_package/$session"
+"$python" "$stack_root/patch-native-compaction-wip.py" "$native_package/$session"
+"$python" "$stack_root/patch-native-compaction-cap.py" "$native_package"
+"$python" "$stack_root/patch-native-turn-context.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
-python3 "$stack_root/patch-native-file-artifact.py" \
+"$python" "$stack_root/patch-native-file-artifact.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
 patch --batch --fuzz=0 --no-backup-if-mismatch -p1 \
     -d "$stage/node_modules/@earendil-works/pi-coding-agent" < "$stack_root/native-request-progress-adapters.patch"
-python3 "$stack_root/patch-native-request-observation.py" \
+"$python" "$stack_root/patch-native-request-observation.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent"
-python3 "$stack_root/prepare-native-import-boundary.py" \
+"$python" "$stack_root/prepare-native-import-boundary.py" \
     "$stage/node_modules/@earendil-works/pi-coding-agent" \
     ${PI_MCP_DEPENDENCY_PACKAGE:+"$PI_MCP_DEPENDENCY_PACKAGE"}
-PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package --share-resources \
+"$python" -m agent_comms.native_package --share-resources \
     "$stage/node_modules/@earendil-works/pi-coding-agent" "$stack_root"
 if [[ "$update_pins" == true ]]; then
-    PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package --write-manifest "$native_package"
+    "$python" -m agent_comms.native_package --write-manifest "$native_package"
     build_id=$(sha256sum "$manifest" | cut -c1-16)
     target="$stack_root/.pi-native-$build_id"
 fi
@@ -167,7 +174,7 @@ if ! verify "$stage"; then
     printf 'The built native tree differs from %s. If a source or the stock release\n' "$manifest" >&2
     printf 'changed on purpose, run %s --update-pins and commit the manifest.\n' "$0" >&2
     printf 'Built tree: %s (npm %s)\n' \
-        "$(PYTHONPATH="$repo_root/src${PYTHONPATH:+:$PYTHONPATH}" python3 -m agent_comms.native_package --digest \
+        "$("$python" -m agent_comms.native_package --digest \
             "$stage/node_modules/@earendil-works/pi-coding-agent")" "$(npm --version)" >&2
     exit 1
 fi

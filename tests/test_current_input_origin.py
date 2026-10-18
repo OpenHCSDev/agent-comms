@@ -13,7 +13,7 @@ from agent_comms.acp_extension import QueuePromptRequest, decode_request, encode
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_states import ActiveGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, PresentGoalCheckpoint
+from agent_comms.goals import AbsentGoalCheckpoint, Goal, GoalRevision, NoGoal, PresentGoalCheckpoint
 from agent_comms.input_attempt import ReservedInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.input_origin import HumanInputOrigin, UnattributedInputOrigin, WireInputOrigin
@@ -160,7 +160,7 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     comms.registry.register(replace(owner, goal=goal))
     present = capture(comms)
     assert present.goal == PresentGoalCheckpoint(goal.checkpoint)
-    assert comms.registry.require("beta").require_goal_checkpoint(goal.checkpoint) == goal
+    assert comms.registry.require("beta").goal.require_checkpoint(goal.checkpoint) == goal
     assert FieldCodec.encode(GoalRevision(goal.id, goal.revision)) == {
         "id": "original-goal", "revision": 4,
     }
@@ -192,10 +192,10 @@ async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope
     current = comms.registry.require("beta")
     comms.registry.register(replace(current, goal=replace(goal, revision=5)))
     assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
-    comms.registry.register(replace(comms.registry.require("beta"), goal=None))
+    comms.registry.register(replace(comms.registry.require("beta"), goal=NoGoal()))
     assert not restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     with pytest.raises(ValueError, match="goal changed"):
-        comms.registry.require("beta").require_goal_checkpoint(goal.checkpoint)
+        comms.registry.require("beta").goal.require_checkpoint(goal.checkpoint)
 
 
 async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tmp_path):

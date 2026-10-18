@@ -7,6 +7,7 @@ import pytest
 from agent_comms.todos import (CommittedProgress, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
     PullRequest, PullRequests, PushedProgress, UnreadProgress)
 
+from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
 from test_commander_problem_orders import create
 
@@ -107,7 +108,7 @@ def test_board_and_overdue_print_a_merged_order_as_done_not_late(commander, comm
     create(commander, 'P1', deadline=1)
     merged = (PullRequest(8, 'P1: fix', 'b' * 40, 'd' * 40, 500.0, 500.0),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state: merged if state == 'merged' else ())
-    assert script.deadline_lines(script.open_todos()) == [
+    assert script.deadline_lines(script.held_orders()) == [
         f'DUE PASSED P1 worker (due {script.hhmm(script.COMMS.goals.todos.get("P1").deadline)}): '
         'merged as ddddddddd, record done']
     script.board()
@@ -142,5 +143,19 @@ def test_work_that_stops_moving_stalls(progress, now, stalled):
 def test_a_stalled_order_prints_stall_with_its_progress(commander, commander_script):
     script, _ = commander_script
     create(commander, 'P1', deadline=time.time() + 3600)
-    assert script.deadline_lines(script.open_todos()) == [
+    assert script.deadline_lines(script.held_orders()) == [
         'STALL P1 worker: no commit since the order -> push it now or reassign']
+
+
+def test_overdue_is_announced_once_per_crossing(commander, commander_script):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1')  # ordered at 100 and due at 1000; it stalled at 700, before the watch
+    polls, since = [], 800.0
+    for _ in range(3):
+        polls, since = polls + script.deadline_lines(script.held_orders(), since), time.time()
+    assert len(polls) == 1 and polls[0].startswith('OVERDUE: worker (due ')
+    comms.messaging.send_message('worker', 'lead', 'on it', InfoKind)
+    replied = script.deadline_lines(script.held_orders(), since)
+    assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
+    assert script.deadline_lines(script.held_orders(), time.time()) == []

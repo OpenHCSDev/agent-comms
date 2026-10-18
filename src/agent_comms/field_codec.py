@@ -248,32 +248,23 @@ class WireValue(WireForm):
         return cls.from_wire(value)
 
 
-class SubclassUnion(WireValue):
-    """An untagged wire union derives its alternatives from direct declarations."""
+class SubclassUnion(DeclaredFamily, WireValue):
+    """An untagged wire family; each union declares its own root with affix=""."""
 
     accepts_null = True
     external_json_shape = True
-    _decoder: ClassVar[UnionDecoder[Self]]
-    _members: ClassVar[dict[str, type[Self]]]
 
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        if SubclassUnion in cls.__bases__:
-            cls._members = {}
-            return
-        for base in cls.__bases__:
-            if SubclassUnion in base.__bases__:
-                # Slots rebuilds keep the member's name, including for nested classes.
-                base._members[cls.__name__] = cls
-                base._decoder = ValueDecoder.for_members(tuple(base._members.values()))
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return False
 
     @classmethod
     def from_wire(cls, data: object) -> Self:
-        return cls._decoder.decode(data)
+        return ValueDecoder.for_members(cls.members_with(cls)).decode(data)
 
     @classmethod
     def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(cls._decoder.target)
+        return FieldCodec.value_schema(ValueDecoder.for_members(cls.members_with(cls)).target)
 
 
 class NullMember(WireValue):
@@ -292,6 +283,23 @@ class NullMember(WireValue):
     @classmethod
     def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type(None))
+
+
+class RecordMember(WireValue):
+    """A wire union's record case uses the declared record codec."""
+
+    accepts_null = False
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return FieldCodec.decode_record(cls, data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.record_schema(cls)
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode_record(self)
 
 
 class InlineRecord(WireValue):
@@ -652,10 +660,7 @@ class FieldCodec(Sealed):
 
     @staticmethod
     def _tag(value: object) -> dict[str, object]:
-        if isinstance(value, DeclaredFamily):
-            root = cast(type[DeclaredFamily], type(value)._family_root)
-            return {root.family_discriminator: value.declared_name}
-        return {}
+        return value.record_tag() if isinstance(value, DeclaredFamily) else {}
 
     @classmethod
     def encode_fields(cls, value: object) -> dict[str, object]:
@@ -915,6 +920,7 @@ class ValueDecoder[T](ABC):
         return cls(target)
 
     @classmethod
+    @cache
     def for_members[M](cls, members: tuple[type[M], ...]) -> UnionDecoder[M]:
         return UnionDecoder(
             reduce(or_, members),
@@ -1230,6 +1236,8 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         if get_origin(declared) is dict and get_args(declared)[0] is str:
             declared = get_args(declared)[1]
         if not (isinstance(declared, type) and issubclass(declared, DeclaredFamily)):
+            return None
+        if not declared.decodes_tagged_records():
             return None
         members = declared._member_declarations()
         if declared not in members or any(

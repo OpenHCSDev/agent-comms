@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .field_codec import NullMember, RecordMember, SubclassUnion
 from .locked_store import JsonDocument
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from .child_process import ProcessState
 
 
-class TurnDeclaration(SubclassUnion):
+class TurnDeclaration(SubclassUnion, affix=""):
     """A recorded active turn or the idle state."""
 
     phase: TurnPhase
@@ -117,7 +117,7 @@ class NoTurn(NullMember, TurnDeclaration):
 
 
 @dataclass(frozen=True)
-class ActiveTurn(TurnDeclaration):
+class ActiveTurn(RecordMember, TurnDeclaration):
     id: str
     owner_pid: int
     started_at: float = field(default_factory=time.time)
@@ -210,17 +210,6 @@ class ActiveTurn(TurnDeclaration):
             and turn_generation > 0
         )
 
-    @classmethod
-    def from_wire(cls, data: Mapping) -> ActiveTurn:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
-
 
 @dataclass(frozen=True)
 class TurnState:
@@ -274,7 +263,7 @@ class TurnLeaseFence(TurnFence):
     record: StoredTurnRecord = field(kw_only=True)
 
 
-class TurnRecord(SubclassUnion):
+class TurnRecord(SubclassUnion, affix=""):
     """A stored turn reference or the declared absence of one; never a phase cache."""
 
     @abstractmethod
@@ -312,19 +301,8 @@ class NoTurnRecord(NullMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnReference(TurnRecord):
+class StoredTurnReference(RecordMember, TurnRecord):
     """Wire presence only; the registry's thread supplies the turn identity."""
-
-    @classmethod
-    def from_wire(cls, data: object) -> StoredTurnReference:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
 
     def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
         return StoredTurnRecord.for_identity(registry_path, identity)
@@ -341,7 +319,7 @@ class StoredTurnReference(TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference):
+class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
     identity: TurnIdentity = field(metadata={"wire_transient": True})

@@ -10,12 +10,12 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily
@@ -25,6 +25,9 @@ from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
 from .typed_table import Column, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
+
+if TYPE_CHECKING:
+    from .turn_digests import TurnBound
 
 
 @dataclass(frozen=True)
@@ -156,16 +159,15 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
     unique = (("thread", "seq"),)
 
     @classmethod
-    def recent_turn_ids(cls, connection: Connection, thread: str, last: int) -> tuple[str, ...]:
-        """Find recent identities without decoding bodies or grouping the full history."""
-        identities: dict[str, None] = {}
+    def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[str]:
+        """Yield identities newest first without decoding bodies or grouping the full history."""
+        identities: set[str] = set()
         with closing(cls.stream(connection, row_type=ExternalTurn, thread=thread,
                                 order_by=("seq",), descending=True)) as rows:
             for row in rows:
-                identities[row.turn_id] = None
-                if len(identities) >= last:
-                    break
-        return tuple(identities)
+                if row.turn_id not in identities:
+                    identities.add(row.turn_id)
+                    yield row.turn_id
 
 
 @dataclass(frozen=True)
@@ -272,14 +274,16 @@ class StoreRead(TranscriptSource):
             for row in rows:
                 yield ExternalRecord(row.seq, row.events)
 
-    def turns(self, last: int) -> tuple[TurnDigest, ...]:
-        return tuple(
-            TurnDigest(turn_id, tuple(
-                event
-                for row in ExternalItemRow.select(
-                    self.connection, thread=self.transcript.lookup, turn_id=turn_id, order_by=("seq",))
-                for event in row.events))
-            for turn_id in ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup, last))
+    def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
+        with closing(ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup)) as ids:
+            return bound.take(
+                TurnDigest(turn_id, tuple(
+                    event
+                    for row in ExternalItemRow.select(
+                        self.connection, thread=self.transcript.lookup, turn_id=turn_id,
+                        order_by=("seq",))
+                    for event in row.events))
+                for turn_id in ids)
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, TypedStore):

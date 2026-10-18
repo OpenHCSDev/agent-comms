@@ -39,14 +39,14 @@ from .goal_actions import (
     GoalPrecondition,
     ModelInvocable,
     OrderGoalAction,
-    SetGoalAction,
+    SetGoalAction, TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
-from .goals import Goal, OrderCheck
+from .goals import Goal, GoalDeclaration, OrderCheck
 from .standing_rules import StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
@@ -71,7 +71,8 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
-from .turn_digests import ThreadTurns, TurnDigestRead
+from .order_work import OrderWork
+from .turn_digests import LastTurns, ThreadTurns, TurnsSince
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
 from .tool_output import (
@@ -131,7 +132,7 @@ class ProjectSet(ToolResult):
 
 @dataclass(frozen=True)
 class GoalSet(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
     instruction: str
 
 
@@ -142,7 +143,7 @@ class GoalProgress(ToolResult, GoalSnapshot):
 
 @dataclass(frozen=True)
 class GoalRead(ToolResult):
-    goal: Goal | None
+    goal: GoalDeclaration
 
 
 @dataclass(frozen=True)
@@ -644,32 +645,24 @@ class CommsGoalTool(ThreadToolRequest):
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
     goal_id: str = tool_field("Goal identity provided in the turn context")
-    status: type[GoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
+    status: type[TransitionGoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
     progress: str = tool_field("Progress summary; blocked requires a nonempty explicit reason")
-    wait_for: list[str] | None = tool_field(
+    wait_for: tuple[str, ...] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None
     )
-    reviewed_inputs: list[str] | None = tool_field(
+    reviewed_inputs: tuple[str, ...] | None = tool_field(
         "Exact unresolved inputId keys inspected and handled for this goal; standby only",
         default=None,
     )
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
-        command = self.status(
-            progress=self.progress,
-            **{
-                key: value
-                for key, value in (
-                    ("wait_for", self.wait_for),
-                    ("reviewed_inputs", self.reviewed_inputs),
-                )
-                if value
-            },
-        )
         command = replace(
-            command,
+            self.status(progress=self.progress),
             expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
+            **{key: value for key, value in (
+                ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
+            ) if value},
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
@@ -688,9 +681,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal_for(goal_id)
-        if current is None:
-            raise ValueError("This goal cannot be resumed; refresh its state.")
+        current = comms.registry.require(name).goal.require().require_id(goal_id)
         current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
@@ -703,7 +694,8 @@ class CommsResumeGoalTool(ThreadToolRequest):
                 progress=progress,
             ),
         )
-        if goal is None or not goal.state.active or goal.progress != progress:
+        goal = goal.require()
+        if not goal.state.active or goal.progress != progress:
             raise ValueError("Goal changed during resume; refresh its state.")
         return GoalRead(goal)
 
@@ -721,7 +713,7 @@ class CommsEditGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).require_goal(goal_id)
+        current = comms.registry.require(name).goal.require().require_id(goal_id)
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(
@@ -788,7 +780,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
         orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
-                  if todo.state.open and todo.holder == self.unit]
+                  if todo.holder == self.unit]
         if not orders:
             raise ValueError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
@@ -810,16 +802,17 @@ class CommsTodoListTool(ThreadReadTool):
         listed = tuple(comms.goals.todos.for_commander(actor))
         pulls, storage = PullRequests(), comms.registry.storage_rule
         return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
-                                 for todo in listed if todo.state.open and todo.holder})
+                                 for todo in listed if todo.holder})
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsStandingRulesTool(ThreadReadTool):
     label = "Read broken standing rules"
     description = "Every standing rule the commander breaks now, one line each, derived on read."
+    after: float = tool_field("Only rules broken since this time; 0 lists every one", default=0.0)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.subject(self.thread))
+        broken = StandingRule.broken(comms, caller.subject(self.thread), self.after)
         return StandingRulesRead(tuple(rule.line() for rule in broken))
 
 
@@ -899,7 +892,7 @@ class CommsProblemCloseTool(ThreadToolRequest):
     label = "Close installed problem"
     description = "Record installed application evidence and close only a problem with no open order."
     problem: str = tool_field("Problem ID")
-    works: str = tool_field("What worked in the installed application, 8+ words")
+    works: str = tool_field("What worked in the app, quoting the order's Works when run")
     artifact: str = tool_field("Existing verification artifact file")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:
@@ -915,10 +908,24 @@ class CommsProblemCloseTool(ThreadToolRequest):
 class CommsTurnsTool(ThreadReadTool):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
-    last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
+    last: int = tool_field("Number of newest turns", default=LastTurns.count)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(caller.subject(self.thread), last=self.last)
+        return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderWorkTool(ReadTool, ToolRequest):
+    label = "Order work"
+    description = ("Read every tool call the problem's assignee made since its order, newest "
+                   "first, from the unit's own turn records.")
+    problem: str = tool_field("Problem ID")
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
+        todo = comms.goals.todos.get(self.problem)
+        since = todo.order.at.recorded_at("An order")
+        turns = comms.transcripts.turns(todo.held().owner, TurnsSince(since))
+        return OrderWork.read(self.problem, turns.thread, since, turns.turns)
 
 
 @dataclass(frozen=True, kw_only=True)

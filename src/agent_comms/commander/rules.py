@@ -43,22 +43,28 @@ def rules() -> list[str]:
     return found
 
 
-def last(who: str = ME) -> dict | None:
+def last(who: str = ME) -> tuple[dict | None, list[dict]]:
     rows = [r for r in (json.loads(l) for l in open(LOG)) if r.get('who', ME) == who] if os.path.exists(LOG) else []
     return next((r for r in reversed(rows) if r['kind'] == 'review'), None), rows
 
 
-def stale(who: str = ME) -> str | None:
-    """Why this commander's actions are refused now, or None when its last review is answered and fresh."""
+def refused(who: str = ME) -> tuple[str, float] | None:
+    """Why this commander's actions are refused now and since when, or None when fresh."""
     review, rows = last(who)
     if review is None:
-        return f'no rule review recorded for {who}'
-    answered = {r['n'] for r in rows if r['kind'] == 'answer' and r['at'] >= review['at']}
+        return f'no rule review recorded for {who}', 0.0
+    at = review['at']
+    answered = {r['n'] for r in rows if r['kind'] == 'answer' and r['at'] >= at}
     if missing := [n for n in range(1, len(review["drawn"]) + 1) if n not in answered]:
-        return f'drawn rules {missing} of the {time.strftime("%H:%M", time.localtime(review["at"]))} review are unanswered'
-    if time.time() - review['at'] > MAX_AGE:
-        return f'last rule review was {int((time.time() - review["at"]) / 60)} min ago (max {MAX_AGE // 60})'
+        drawn = time.strftime("%H:%M", time.localtime(at))
+        return f'drawn rules {missing} of the {drawn} review are unanswered', at
+    if (age := time.time() - at) > MAX_AGE:
+        return f'last rule review was {int(age / 60)} min ago (max {MAX_AGE // 60})', at + MAX_AGE
     return None
+
+
+def stale(who: str = ME) -> str | None:
+    return refusal[0] if (refusal := refused(who)) else None
 
 
 def require(who: str = ME):

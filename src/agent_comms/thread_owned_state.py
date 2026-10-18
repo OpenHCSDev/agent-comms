@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import sys
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .threads import Thread
 
 
-class ThreadOwnedState(ABC):
+class ThreadOwnedState(DeclaredFamily):
     """A store holding state that exists only for its thread declarations.
 
     Declaring a store here makes its rows part of the thread's lifetime:
@@ -28,25 +28,12 @@ class ThreadOwnedState(ABC):
         """Remove every row these stopped declarations own; idempotent."""
 
     @classmethod
-    def declared_owners(cls) -> tuple[type[ThreadOwnedState], ...]:
-        found: list[type[ThreadOwnedState]] = []
-        pending = list(cls.__subclasses__())
-        while pending:
-            owner = pending.pop()
-            pending.extend(owner.__subclasses__())
-            # dataclass(slots=True) replaces its declaration; the module
-            # binding is the declared owner, not the discarded original.
-            if getattr(sys.modules[owner.__module__], owner.__qualname__, None) is owner:
-                found.append(owner)
-        return tuple(dict.fromkeys(found))
-
-    @classmethod
     def require_complete(cls, held: Iterable[ThreadOwnedState]) -> None:
         """Fail before any removal when a declared owner is not consulted."""
         held = tuple(held)
         missing = sorted(
             owner.__qualname__
-            for owner in cls.declared_owners()
+            for owner in cls.members_with(cls)
             if not any(isinstance(store, owner) for store in held)
         )
         if missing:
