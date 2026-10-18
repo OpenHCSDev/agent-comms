@@ -4,19 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cutover.carry import Carried, TodoRows
+from cutover import carry
 
 from agent_comms.todos import Todo
 
 
-class TodoOpenIndexes(TodoRows):
+class TodoOpenIndexes(carry.TodoRows):
     after = "carry_todo_verdicts"
 
     @classmethod
-    def carry(cls, root: Path, *, apply: bool) -> Carried:
+    def carry(cls, root: Path, *, apply: bool) -> carry.Carried:
         with cls.todo_rows(root, apply=apply) as db:
             if db is None:
-                return Carried(0)
+                return carry.Carried(0)
             query = "SELECT name FROM sqlite_master WHERE type='index'"
             before = set(db.execute(query))
             Todo.create(db, if_not_exists=True)
