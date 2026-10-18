@@ -10,7 +10,7 @@ from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation
-from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, StoppedThreadPresentationStatus
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -141,6 +141,9 @@ class IdleThreadStatus(ActiveThreadPresence, ThreadStatus):
 class StoppedThreadStatus(ThreadStatus):
     stopped = True
     receiving = False
+
+    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
+        return replace(super().presentation(title, activity), status=StoppedThreadPresentationStatus())
 
     def require_stopped(self) -> None:
         pass
