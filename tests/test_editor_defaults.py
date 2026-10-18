@@ -42,11 +42,10 @@ def test_fork_default_retains_annotated_thinking_representation(tmp_path):
 
 @pytest.mark.asyncio
 async def test_unconfigured_catalog_default_is_an_actual_editor_choice(monkeypatch, tmp_path):
-    from acp.schema import SessionConfigSelectOption
-    from agent_comms.config_options import ConfigOptions, ThinkingLevelConfigOption
+    from agent_comms.config_options import CatalogChoice, ConfigOptions, ThinkingLevelConfigOption
 
     async def discover(self, selection):
-        return [SessionConfigSelectOption(name='High', value='high')]
+        return [CatalogChoice(name='High', value='high')]
 
     monkeypatch.setattr(ThinkingLevelConfigOption, 'discover', discover)
     command = ForkCliCommand(name='', parent='saved', project=str(tmp_path),

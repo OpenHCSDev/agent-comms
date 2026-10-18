@@ -225,8 +225,7 @@ class CatalogTargetField(ChoiceTargetField):
         options = await catalog.display_choices(selection)
         decoder = compile_decoder(self.annotation)
         return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
-            value=decoder.encode_editor(decoder.decode(
-                None if item.value == catalog.unconfigured_value else item.value))) for item in options))
+            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
