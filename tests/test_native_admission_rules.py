@@ -1,4 +1,5 @@
 """Named private claim_scope refusals against production-created SQLite rows."""
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from binding_reads import binding_rows
 
 import os
@@ -31,12 +32,9 @@ tmp_path = private_root_fixture
 
 
 @pytest.mark.parametrize("direct", [False, True])
-async def test_durable_private_claim_names_each_changed_authority(
-    tmp_path, monkeypatch, direct
-):
+async def test_durable_private_claim_names_each_changed_authority(tmp_path, monkeypatch, direct, *, native_runtime_package):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     observed = []
 
     class InspectedError(Exception):
@@ -169,6 +167,6 @@ async def test_durable_private_claim_names_each_changed_authority(
     )
     with pytest.raises(InspectedError):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=tmp_path
+            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=native_runtime_package
         ).run()
     assert observed == [True]
