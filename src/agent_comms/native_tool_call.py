@@ -12,7 +12,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
+
+
+if TYPE_CHECKING:
+    from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -235,3 +239,90 @@ class NativeToolCall(ABC):
 
     @abstractmethod
     def claim_failed(self) -> None: ...
+
+
+class ToolTransport(ABC):
+    """Tool events and child reuse for one turn's selected transport."""
+
+    @property
+    @abstractmethod
+    def retainable(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def active_tools(self) -> set[str]: ...
+
+    @property
+    def selected_call_id(self) -> str | None:
+        return None
+
+    @abstractmethod
+    def accept_round(self, turn, content) -> bool: ...
+
+    @abstractmethod
+    def tool_started(self, event: ToolExecutionStart) -> None: ...
+
+    @abstractmethod
+    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None: ...
+
+    @abstractmethod
+    def assert_complete(self) -> None: ...
+
+
+
+class NoToolSocket(ToolTransport):
+    @property
+    def retainable(self) -> bool:
+        return True
+
+    @property
+    def expected_pid(self):
+        raise SelectedToolDenied("A turn without tools has no tool process")
+
+    @expected_pid.setter
+    def expected_pid(self, pid: int) -> None:
+        pass
+
+    @property
+    def active_tools(self) -> set[str]:
+        return set()
+
+    def accept_round(self, turn, content) -> bool:
+        return False
+
+    def tool_started(self, event: ToolExecutionStart) -> None:
+        raise SelectedToolDenied("Native Pi tool preceded tracked context proof")
+
+    def tool_finished(self, event: ToolExecutionEnd, input_id: str) -> None:
+        raise SelectedToolDenied("Native Pi tool has no owner policy")
+
+    def assert_complete(self) -> None:
+        pass
+
+
+
+class NativeToolMode(ABC):
+    """Owner-bound native tool policy shared by selected and normal coding turns."""
+
+    @abstractmethod
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        """Return the native tool selection and reviewed extension."""
+
+    @abstractmethod
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        """Open this turn's transport in its resource lifetime."""
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return self
+
+
+
+class NoNativeTools(NativeToolMode):
+    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+        return ("--no-tools",)
+
+    async def open_transport(self, turn, ownership) -> ToolTransport:
+        return NoToolSocket()
+
+    def or_else(self, factory: Callable[[], NativeToolMode]) -> NativeToolMode:
+        return factory()

@@ -30,7 +30,7 @@ from .jsonl_stream import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
-from .selected_tool_broker import NativeToolMode, NoNativeTools
+from .native_tool_call import NativeToolMode, NoNativeTools
 
 if TYPE_CHECKING:
     from . import pi_events as pi

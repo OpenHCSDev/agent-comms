@@ -27,8 +27,8 @@ from .envelope_claim_transitions import (
 from .native_tool_call import NativeToolCall, SelectedToolDenied
 from .native_tools import NativeExecutableTool
 from .storage_rules import StorageDecision
+from .native_tool_call import NativeToolMode
 from .selected_tool_broker import (
-    NativeToolMode,
     OwnerToolSocket,
     consume_selected_slot,
     record_selected_terminal,

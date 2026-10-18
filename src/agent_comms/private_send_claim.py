@@ -32,7 +32,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
 from .tracked_turn import TrackedTurnSession
-from .selected_tool_broker import NativeToolMode, NoNativeTools
+from .native_tool_call import NativeToolMode, NoNativeTools
 from .turn_context import RenderedInput
 
 if TYPE_CHECKING:
