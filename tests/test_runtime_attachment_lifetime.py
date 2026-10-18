@@ -101,15 +101,14 @@ async def test_unaccepted_session_load_retires_original_socket(tmp_path, ending)
             assert request["action"] == "subscribe"
             entered.set()
             if ending == "invalid_ready":
-                writer.write((json.dumps(FieldCodec.encode(OwnerAnnouncement())) + "\n").encode())
-                writer.write(b'{"ready": {}}\n')
+                writer.write(OwnerAnnouncement().wire())
+                writer.write(b'{"kind": "owner_ready", "ready": {}, "configOptions": []}\n')
                 await writer.drain()
             elif ending == "unannounced":
                 writer.write((json.dumps(_UNANNOUNCED_FIRST_LINE) + "\n").encode())
                 await writer.drain()
             elif ending == "other_core":
-                other = FieldCodec.encode(OwnerAnnouncement(_OTHER_COMMIT))
-                writer.write((json.dumps(other) + "\n").encode())
+                writer.write(OwnerAnnouncement(core_commit=_OTHER_COMMIT).wire())
                 await writer.drain()
             assert await reader.read() == b""
         except BaseException as error:
