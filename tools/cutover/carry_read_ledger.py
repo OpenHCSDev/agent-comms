@@ -38,7 +38,7 @@ def carried(raw: dict) -> ReadDocument:
         transcripts[(viewer, source, inode)] = through
     return ReadDocument(
         messages,
-        FieldCodec.decode(RecordedBusIdentity, raw["bus_identity"]),
+        RecordedBusIdentity.from_wire(raw["bus_identity"]),
         transcripts,
         raw["notice"],
     )

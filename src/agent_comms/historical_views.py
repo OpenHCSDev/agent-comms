@@ -136,7 +136,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
         channel = catalog.require_channel(target, snapshot.threads)
         return ChannelSelection(
             viewer=snapshot.require(viewer).incarnation,
-            bus_identity=views.bus.reads.bus_identity(views.bus.log.path),
+            bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
             scope=ChannelDisplayScope.capture(channel, snapshot), history_revision=history_revision,
         )
 
@@ -174,7 +174,7 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         root = views.root.stat()
         return DMSelection(
             root_identity=(root.st_dev, root.st_ino),
-            bus_identity=views.bus.reads.bus_identity(views.bus.log.path),
+            bus_identity=RecordedBusIdentity.capture(views.bus.log.path),
             worktree=worktree, requested_peer=target,
             viewer=snapshot.require(viewer).incarnation, peer=peer,
             scope=DMDisplayScope.capture(viewer, target, snapshot), history_revision=history_revision,

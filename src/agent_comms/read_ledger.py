@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
-from .private_path import FileRevision, ObservedPath
+from .private_path import ObservedPath
 from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .read_basis import Conversation, DisplayBasis, DisplayedConversation, ReadCursor
 from .sealed import Sealed
@@ -64,10 +64,6 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         return ReadDocument()
 
     @staticmethod
-    def bus_identity(path: Path) -> RecordedBusIdentity:
-        return RecordedBusIdentity.capture(path)
-
-    @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, Conversation)
 
@@ -92,7 +88,7 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
                 DisplayedConversation(conversation, tuple(sorted(set(sequences))))
                 for conversation, sequences in grouped.items()
             ),
-            self.bus_identity(bus_path),
+            RecordedBusIdentity.capture(bus_path),
         )
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
@@ -103,7 +99,8 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
         def advance(document: ReadDocument) -> ReadDocument:
             messages = (
-                dict(document.messages) if document.bus_identity.matches(displayed.bus_identity) else {}
+                dict(document.messages)
+                if document.bus_identity.matches(displayed.bus_identity) else {}
             )
             conversations = dict(messages.get(displayed.viewer_identity, {}))
             for item in displayed.conversations:
@@ -111,7 +108,8 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             messages[displayed.viewer_identity] = conversations
             return (
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
-                if messages != document.messages or not document.bus_identity.matches(displayed.bus_identity)
+                if messages != document.messages
+                or not document.bus_identity.matches(displayed.bus_identity)
                 else document
             )
 

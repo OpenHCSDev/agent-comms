@@ -383,7 +383,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
-            bus_identity = bus.reads.bus_identity(bus.log.path)
+            bus_identity = RecordedBusIdentity.capture(bus.log.path)
         # Native input writes use this same wire lock. Scoped page/read queries
         # use opened source snapshots, not live input permission.
         page = bounds.conversation(scope).read(bus.log)
@@ -403,7 +403,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 bus_identity=bus_identity,
                 displayed=displayed,
             )
-            basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
+            basis.validate_identity(document.snapshot(), RecordedBusIdentity.capture(bus.log.path))
             return replace(page, display_basis=basis)
 
     def selection(self, history_revision: FileRevision | None) -> SelectedDisplay:
@@ -457,7 +457,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 peer,
                 through,
                 snapshot,
-                bus.reads.bus_identity(bus.log.path),
+                RecordedBusIdentity.capture(bus.log.path),
             )
             self.mark(bus.reads, through)
 

@@ -1,5 +1,7 @@
 """The bus identity recorded by read evidence, using its existing wire shape."""
 
+from __future__ import annotations
+
 from abc import abstractmethod
 from pathlib import Path
 
@@ -9,7 +11,7 @@ from .private_path import AbsentPath, FileIdentity, ObservedPath, PresentPath
 
 class RecordedBusIdentity(SubclassUnion, ObservedPath):
     @staticmethod
-    def capture(path: Path) -> "RecordedBusIdentity":
+    def capture(path: Path) -> RecordedBusIdentity:
         try:
             return RecordedBus(FileIdentity.from_stat(path.stat()))
         except FileNotFoundError:
@@ -24,7 +26,7 @@ class RecordedBus(PresentPath, RecordedBusIdentity):
         return source.same_file(self.identity)
 
     @classmethod
-    def from_wire(cls, data: object) -> "RecordedBus":
+    def from_wire(cls, data: object) -> RecordedBus:
         parts = FieldCodec.decode(list[int], data)
         if len(parts) != 2:
             raise MalformedRecord("A recorded bus requires device and inode.")
