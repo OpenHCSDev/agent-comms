@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from abc import ABC, abstractmethod
 from dataclasses import field, dataclass, replace
 from contextlib import aclosing
@@ -587,7 +586,7 @@ class InputDrain(InputObservation):
         return LiveQueueScope(
             session_id,
             ClaimedIdentity(owner.incarnation, claim_scope),
-            owner.pid,
+            owner.require_process().pid,
         )
 
     def next_revision(self, session_id: str) -> int:
@@ -635,7 +634,7 @@ class InputDrain(InputObservation):
         """Derive delivery notices from existing owner queues; never create new authority."""
         entry = (await self._own_entry(session_id)).entry
         owner = entry.thread
-        if owner.pid != os.getpid() or not entry.status.running:
+        if not owner.process_identity.runs_here() or not entry.status.running:
             return None
         keys = set(self.input_keys(session_id))
         keys.update(

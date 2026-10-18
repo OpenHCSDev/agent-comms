@@ -1,5 +1,6 @@
 """One original decision/correction journey through declared tools and wire ownership."""
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.messages import NoticeRole
 import os
 import json
@@ -318,7 +319,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     comms.registry.register(replace(owner, goal=replace(owner.goal, revision=2)))
     message = Message("alpha", "#team", declaration.text, InfoKind, task=declaration)
     with pytest.raises(ValueError, match="goal changed"):
-        comms.bus.publisher.publish_ordinary(message)
+        comms.bus.publisher.publish_ordinary(message, origin=AgentOrigin())
     assert not list(comms.bus.full_history_page().messages)
 
 
@@ -363,7 +364,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     before = (comms.root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="human sender"):
         comms.bus.publisher.publish_ordinary(
-            Message(owner.name, "#team", "A peer is not the user", InfoKind, task=declaration))
+            Message(owner.name, "#team", "A peer is not the user", InfoKind, task=declaration), origin=AgentOrigin())
     assert (comms.root / "bus.jsonl").read_bytes() == before
     corrected = comms.messaging.send_user_message(
         "#team", "Retract the old path choice. Never replay UNKNOWN.",

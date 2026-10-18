@@ -29,11 +29,17 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, UnionDecoder, ValueDecoder, WireValue
+from .errors import RelationViolationError
 from .sealed import Sealed
 
 if TYPE_CHECKING:
+    from .registration_change import RegistrationChange, UpdatedRegistration
     from .store_files import LockMode
+    from .thread_identity import ThreadIncarnation, ThreadRole
+    from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .thread_status import ThreadStatus
+    from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -54,8 +60,157 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
+class ProcessState(WireValue):
+    """An exact recorded process or a worker which has never started."""
+
+    accepts_null = True
+    external_json_shape = True
+    _decoder: ClassVar[UnionDecoder[ProcessState]]
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if ProcessState in cls.__bases__:
+            ProcessState._decoder = ValueDecoder.for_members(tuple(ProcessState.__subclasses__()))
+
+    @classmethod
+    def from_wire(cls, data: object) -> ProcessState:
+        return cls._decoder.decode(data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(cls._decoder.target)
+
+    def to_wire(self) -> object:
+        return FieldCodec.encode_record(self)
+
+    @abstractmethod
+    def allows_owner_start(self) -> bool: ...
+    @abstractmethod
+    def allows_inactive_stop(self) -> bool: ...
+    @abstractmethod
+    def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
+    @abstractmethod
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool: ...
+    @abstractmethod
+    def conflicts_with(self, previous: ProcessState) -> bool: ...
+
+    @abstractmethod
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange: ...
+
+    @abstractmethod
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange: ...
+
+    @abstractmethod
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation: ...
+
+    @abstractmethod
+    def attachment_process(self, previous: ProcessState) -> ProcessState: ...
+
+    @abstractmethod
+    def offline(self) -> bool: ...
+
+    @abstractmethod
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity: ...
+
+    @abstractmethod
+    def alive(self) -> bool: ...
+
+    @abstractmethod
+    def runs_here(self) -> bool: ...
+    @abstractmethod
+    def owns_turn(self, turn: ActiveTurn) -> bool: ...
+
+    @abstractmethod
+    def signal(self, signum: int) -> None: ...
+
+    @abstractmethod
+    def require_release_by(self, process: ProcessIdentity) -> None: ...
+
+    @abstractmethod
+    def pid_fields(self) -> dict[str, int]: ...
+
+
 @dataclass(frozen=True)
-class ProcessIdentity:
+class NoProcess(ProcessState):
+    @classmethod
+    def from_wire(cls, data: object) -> NoProcess:
+        FieldCodec.decode(type(None), data)
+        return cls()
+
+    def to_wire(self) -> None:
+        return None
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(type(None))
+
+    def allows_owner_start(self) -> bool:
+        return True
+
+    def allows_inactive_stop(self) -> bool:
+        return True
+
+    def allows_goal_observation(self, status: ThreadStatus) -> bool:
+        return False
+
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
+        return False
+
+    def conflicts_with(self, previous: ProcessState) -> bool:
+        return False
+
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return change
+
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return change
+
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
+        return ordinary
+
+    def attachment_process(self, previous: ProcessState) -> ProcessState:
+        return previous
+
+    def offline(self) -> bool:
+        return False
+
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity:
+        raise RelationViolationError(message)
+
+    def alive(self) -> bool:
+        return False
+
+    def runs_here(self) -> bool:
+        return False
+
+    def owns_turn(self, turn: ActiveTurn) -> bool:
+        return False
+
+    def signal(self, signum: int) -> None:
+        pass
+
+    def require_release_by(self, process: ProcessIdentity) -> None:
+        # Stopping before the first start still produces a valid release.
+        pass
+
+    def pid_fields(self) -> dict[str, int]:
+        return {}
+
+
+@dataclass(frozen=True)
+class ProcessIdentity(ProcessState):
     pid: int
     start_time: int
 
@@ -63,9 +218,50 @@ class ProcessIdentity:
         if self.pid <= 0 or self.start_time <= 0:
             raise ValueError("A positive PID and platform start time are required")
 
-    @staticmethod
-    def capture(pid: int) -> ProcessIdentity:
+    @classmethod
+    def pid_argument(cls, value: str) -> dict[str, object]:
+        return FieldCodec.encode_record(cls.capture(int(value)))
+
+    @classmethod
+    def capture(cls, pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
+
+    @classmethod
+    def from_wire(cls, data: object) -> ProcessIdentity:
+        return FieldCodec.decode_record(cls, data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.record_schema(cls)
+
+    def allows_owner_start(self) -> bool:
+        return False
+
+    def allows_inactive_stop(self) -> bool:
+        return self.runs_here()
+
+    def allows_goal_observation(self, status: ThreadStatus) -> bool:
+        return status.active
+
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
+        return role.executable and status.active
+
+    def conflicts_with(self, previous: ProcessState) -> bool:
+        return self != previous
+
+    def offline(self) -> bool:
+        return not self.alive()
+
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
+        return binding.native_presentation(ordinary)
+
+    def attachment_process(self, previous: ProcessState) -> ProcessState:
+        return self
+
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity:
+        return self
 
     @staticmethod
     def in_group(pid: int, start_time: int, pgid: int) -> ProcessIdentity:
@@ -79,8 +275,37 @@ class ProcessIdentity:
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
+    def runs_here(self) -> bool:
+        return os.getpid() == self.pid
+
+    def owns_turn(self, turn: ActiveTurn) -> bool:
+        return turn.owner_pid == self.pid
+
+    def signal(self, signum: int) -> None:
+        Platform.current().send(self, signum)
+
+    def require_release_by(self, process: ProcessIdentity) -> None:
+        if self != process:
+            raise RelationViolationError("Only the registered owner may release itself.")
+
+    def pid_fields(self) -> dict[str, int]:
+        return {"pid": self.pid}
+
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return previous.restarted_registration(change, incarnation)
+
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return change.restarted() if incarnation != change.previous.incarnation else change
+
     def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
         return ()  # A stored, exited identity cannot grant group ownership.
+
+
+NO_PROCESS = NoProcess()
 
 
 class GroupLeader(ProcessIdentity):

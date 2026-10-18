@@ -204,7 +204,7 @@ class SessionLifecycle:
     ) -> LoadSessionResponse:
         self.reject_foreign_mcp(mcp_servers)
         thread = await self._acquire_loaded(cwd, session_id)
-        if thread.pid != os.getpid():
+        if not thread.process_identity.runs_here():
             return await self.attach_owner(thread, session_id)
         await self._bind_loaded(thread, session_id)
         async with self.config.session_options(thread.name) as options:
@@ -223,9 +223,10 @@ class SessionLifecycle:
         """
         self.launched_owners.add(session_id)
         thread = await self._acquire_loaded(cwd, session_id)
-        if thread.pid != os.getpid():
+        if not thread.process_identity.runs_here():
             raise RelationViolationError(
-                f"Headless owner {os.getpid()} did not acquire {thread.name!r}; it belongs to {thread.pid}"
+                f"Headless owner {os.getpid()} did not acquire {thread.name!r}; "
+                f"it belongs to {thread.process_identity}"
             )
         from .attempt_recovery import RecoveryMonitorCapability
 
@@ -240,7 +241,7 @@ class SessionLifecycle:
         thread = await Coordination.run_worker(partial(self.validated_thread, cwd, session_id))
         if not (
             self.bindings.get(session_id) == thread.name
-            and thread.pid == os.getpid()
+            and thread.process_identity.runs_here()
             and (await Coordination.run_worker(partial(self.comms.registry.status, thread.name))).active
         ):
             thread = await Coordination.run_worker(partial(
@@ -275,8 +276,9 @@ class SessionLifecycle:
                 })
             except (OSError, RuntimeError, TypeError, ValueError) as error:
                 raise RequestError.invalid_params(
-                    {"reason": f"Unable to attach to {thread.name!r} owner {thread.pid}: {error}",
-                     **failed_command.failure_metadata()}
+                    {"reason": (
+                        f"Unable to attach to {thread.name!r} owner {thread.process_identity}: {error}"
+                     ), **failed_command.failure_metadata()}
                 ) from error
             finally:
                 if self.proxies.get(session_id) is not proxy:
@@ -297,7 +299,7 @@ class SessionLifecycle:
             name = thread.name
             if (
                 name != cached_name
-                or thread.pid != os.getpid()
+                or not thread.process_identity.runs_here()
                 or not entry.status.running
             ):
                 await self.effects.turns.close_idle_backend(session_id, thread)
@@ -365,7 +367,7 @@ class SessionLifecycle:
     def release_registered_owner(self, name: str) -> None:
         snapshot = self.comms.registry.snapshot()
         thread = snapshot.require(name)
-        if thread.pid == os.getpid() and snapshot.status(thread.name).running:
+        if thread.process_identity.runs_here() and snapshot.status(thread.name).running:
             self.comms.owners.stop(thread.name)
 
     async def release_owned(self) -> None:

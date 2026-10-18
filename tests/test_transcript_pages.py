@@ -111,7 +111,7 @@ def test_new_fork_projects_parent_history_and_instruction_until_own_session_exis
 
     child_path = tmp_path / "child.jsonl"
     transcript(child_path, 1)
-    comms.threads.attach_session(comms.registry.require("child"), str(child_path))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("child")), str(child_path), process=attachment_owner.process_identity)
     assert [event.text for event in comms.transcripts.thread_transcript_page("child").events] == [
         "Record 0"
     ]
@@ -131,7 +131,7 @@ def test_inherited_scroll_window_survives_child_session_persistence(tmp_path):
     through = page.after
     own_path = tmp_path / "child.jsonl"
     transcript(own_path, 1)
-    comms.threads.attach_session(comms.registry.require("child"), str(own_path))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("child")), str(own_path), process=attachment_owner.process_identity)
     seen = [event.text for event in page.events if event.declared_name == "assistant"]
     while page.has_older:
         page = comms.transcripts.thread_transcript_page(

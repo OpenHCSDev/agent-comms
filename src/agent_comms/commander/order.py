@@ -570,7 +570,8 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         verbs = parser.add_subparsers(dest='command', required=True)
         for member in cls.members_with(cls):
             member.add_parser(verbs)
-        return cls.from_namespace(parser.parse_args(argv))
+        args = parser.parse_args(argv)
+        return cls.decode(args.command).from_namespace(args)
 
 
 class RuledVerb(CommanderVerb):

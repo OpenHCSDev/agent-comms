@@ -18,7 +18,7 @@ from agent_comms.coordination_tables.publications import (
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     CommittedDelivery,
-    HumanOrigin,
+    InitialOrigin,
     initial_sideband,
 )
 from .channel_targets import CommandTarget, NamedTarget
@@ -31,7 +31,6 @@ from .envelope_claim_transitions import (
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
-    HumanInitialUnknownError,
     RelationViolationError,
     UnregisteredThreadError,
 )
@@ -120,9 +119,7 @@ class Publisher:
             mentions=ThreadMention.find(message.body, resolve_mention),
         )
 
-    def publish_ordinary(
-        self, message: Message, *, _human_origin: HumanOrigin | None = None
-    ) -> Message:
+    def publish_ordinary(self, message: Message, *, origin: InitialOrigin) -> Message:
         """Publish through the canonical audience/decision writer.
 
         A truly fresh root is initialized once under the bus lock. Existing
@@ -131,8 +128,6 @@ class Publisher:
         """
         from .active_route import guard_original_root_write
 
-        if _human_origin is not None and type(_human_origin) is not HumanOrigin:
-            raise RelationViolationError("Human origin must be a typed local USER identity.")
         with guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
             if not self.log.read_metadata_unlocked().private:
                 # Refuse invalid input before creating a protocol on a fresh
@@ -140,9 +135,7 @@ class Publisher:
                 # snapshot that selects the audience below.
                 self._validate_publish_request(message)
                 self._initialize_private_protocol_unlocked()
-            return self.publish_initial_cohort(
-                message, _bus_lock=bus_lock, _human_origin=_human_origin
-            )
+            return self.publish_initial_cohort(message, origin=origin, _bus_lock=bus_lock)
 
     def initialize_private_protocol(self) -> str:
         """Marker issuer for a NEW, isolated bus root only.
@@ -281,9 +274,9 @@ class Publisher:
         self,
         message: Message,
         *,
+        origin: InitialOrigin,
         control: str = "ordinary",
         _bus_lock: StoreLock | None = None,
-        _human_origin: HumanOrigin | None = None,
     ) -> Message:
         """Commit public envelope and FULL N private decisions in the SAME fsynced row.
 
@@ -295,8 +288,6 @@ class Publisher:
 
         if self._private_initial_writes is not True:
             raise RelationViolationError("Private initial publication is disabled.")
-        if _human_origin is not None and type(_human_origin) is not HumanOrigin:
-            raise RelationViolationError("Human initial requires a typed local USER origin.")
         if message.claim_transition is not None:
             raise RelationViolationError("An initial cohort cannot carry resource claims.")
         classification = ControlClassification(control)
@@ -338,15 +329,7 @@ class Publisher:
             # The kind owns its own validation; one publication check, before
             # any sequence reservation, refusing with what is missing.
             message.type.require_publishable(message, Path(sender_thread.worktree))
-            if _human_origin is None:
-                if not sender_thread.role.executable:
-                    raise RelationViolationError(
-                        "Initial sender must be a visible registered executable."
-                    )
-            else:
-                _human_origin.require_registered(snapshot)
-                if message.sender != _human_origin.sender:
-                    raise RelationViolationError("Local USER origin differs from registered identity.")
+            origin.require_sender(message, sender_thread, snapshot)
             target, message, names = target.initial_delivery(sender, message, snapshot, catalog)
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
@@ -359,8 +342,7 @@ class Publisher:
                 snapshot=snapshot,
                 original_source=source,
             )
-            if _human_origin is not None:
-                source.require_new_human_message(sender, stored.message_id)
+            origin.require_source(source, sender, stored.message_id)
             revision = hashlib.sha256(
                 repr(
                     (
@@ -418,17 +400,7 @@ class Publisher:
                     store.participants.register(sender_lookup, sender, sender, committed=True)
                 for thread, lookup in zip(selected, lookups, strict=True):
                     store.participants.register(lookup, thread.name, thread.name, committed=True)
-            if _human_origin is None:
-                self.log.append_private_unlocked(metadata, row)
-            else:
-                try:
-                    self.log.append_private_unlocked(metadata, row)
-                except BaseException as error:
-                    # Even cancellation/interrupt after entry can follow a durable
-                    # reservation or row. Never claim absence or retry this ID.
-                    raise HumanInitialUnknownError(
-                        metadata.root_id, stored.seq, stored.message_id
-                    ) from error
+            origin.append(self.log, metadata, row, stored)
             return stored
 
     def _publish_keyed_response_unlocked(

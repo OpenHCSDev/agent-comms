@@ -43,7 +43,7 @@ def test_bound_input_overrides_turn_wide_annotation_without_attributing_quotes(t
     path = tmp_path / "new-session.jsonl"
     append_input(path, "b" * 32, raw_second)
     append_input(path, "c" * 32, quote)
-    comms.threads.attach_session("worker", str(path))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
     # Older settlement code labels all records with the initial origin.
     comms.transcripts.routes.record(
         str(path), ("bbbbbbbb", "cccccccc"), TurnRouting((first,), None)
@@ -70,7 +70,7 @@ def test_bound_route_rejects_changed_text_and_conflicting_rebind(tmp_path):
         )
     path = tmp_path / "changed.jsonl"
     append_input(path, "a" * 32, "unrelated input")
-    comms.threads.attach_session("worker", str(path))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(path), process=attachment_owner.process_identity)
     comms.transcripts.routes.record(str(path), ("aaaaaaaa",), route)
     event = comms.transcripts.thread_transcript_page("worker").events[0]
     assert event.text == "unrelated input" and event.routing is None

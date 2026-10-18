@@ -14,8 +14,8 @@ from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.transcripts import NativeTranscriptCursor
 from agent_comms.view_unread import (
-    BudgetSpent, IndexSlice, ReplyIndex, ReplyIndexUpdate, RevisionMoved,
-    TranscriptReadState, TranscriptReply,
+    BudgetSpent, IdleReplyPreparation, IndexSlice, ReplyIndex, ReplyIndexUpdate,
+    ResumeAfter, ResumeFromStart, RevisionMoved, TranscriptReadState, TranscriptReply,
 )
 from native_unread_fixture import completed_counts, completed_snapshot
 
@@ -34,6 +34,24 @@ def setup_thread(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset({'ci'}), str(tmp_path), session_file=str(source)))
     return comms, source
+
+
+def test_reply_resume_orders_current_sources_without_an_empty_source_marker(tmp_path):
+    needed = {}
+    for name in ("one", "two", "three"):
+        path = tmp_path / name
+        path.touch()
+        source = str(path)
+        needed[source] = (ReplyIndex(source=source), FileRevision.capture(path))
+    names = tuple(needed)
+    reads = tuple(needed.values())
+    assert ResumeFromStart().order(needed) == reads
+    assert ResumeAfter(names[1]).order(needed) == (reads[2], reads[0], reads[1])
+    assert ResumeAfter(names[-1]).order(needed) == reads
+    assert ResumeAfter(str(tmp_path / "removed")).order(needed) == reads
+    assert ResumeFromStart().order({}) == ()
+    assert ResumeAfter(names[0]).order({}) == ()
+    assert IdleReplyPreparation.future.result().resume == ResumeFromStart()
 
 
 def test_prepare_results_distinguish_budget_and_revision_without_collecting_deltas(tmp_path):

@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
@@ -110,7 +111,7 @@ def test_human_duplicate_check_includes_retained_rows_without_delivery_pointers(
             f'SELECT COUNT(*) FROM "{DeliverySources.declared_name}"').fetchone()[0] == 0
     with pytest.raises(RelationViolationError, match='already exists'):
         comms.bus.publisher.publish_ordinary(original,
-            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree))
+            origin=HumanOrigin(user.name, user.created_at, user.worktree))
     fresh = comms.messaging.send_user_message('Alice', 'New private input', worktree=str(tmp_path))
     assert fresh.seq == 2
 
@@ -444,7 +445,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     comms, _ = _root(tmp_path)
     for index in range(1002):
         comms.bus.publisher.publish_initial_cohort(
-            Message("sender", "#team", f"@Alice item-{index} " + "x" * 7900, InfoKind)
+            Message("sender", "#team", f"@Alice item-{index} " + "x" * 7900, InfoKind), origin=AgentOrigin()
         )
     assert comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
     lookup = RecordedThreadIncarnation("fixture", 17002.0).lookup
@@ -469,7 +470,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
         )
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
             comms.bus.publisher.publish_initial_cohort(
-                Message("sender", "Alice", "lagged-row", InfoKind)
+                Message("sender", "Alice", "lagged-row", InfoKind), origin=AgentOrigin()
             )
     cold_start = time.monotonic()
     recovered, page, more = _page(comms, lookup, after=1000)

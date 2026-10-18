@@ -12,6 +12,7 @@ from urllib.parse import quote
 
 import aiohttp
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.child_process import ProcessIdentity
 from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
@@ -78,7 +79,7 @@ class Attach(Watch):
         from agent_comms.cli_commands import RegisterCliCommand
 
         RegisterCliCommand(name=bridge.binding.bus, worktree=str(bridge.options.directory),
-                           pid=self.pid).apply(wire(bridge.binding.root))
+                           process=ProcessIdentity.capture(self.pid)).apply(wire(bridge.binding.root))
         super().start(bridge, tasks)
 
 
