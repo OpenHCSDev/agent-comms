@@ -12,30 +12,17 @@ from agent_comms.native_session_reopen import NativeSessionIdentity, SessionIden
 from agent_comms.selected_session import SelectedSession
 
 
-@pytest.fixture
-def artifact(tmp_path, monkeypatch):
-    deployment = tmp_path / 'native'
-    deployment.mkdir(mode=0o700)
-    root = deployment / 'node_modules/@earendil-works/pi-coding-agent'
-    (root / 'dist').mkdir(parents=True)
-    (root / 'dist/cli.js').write_text('// This test never starts Node.\n')
-    manifest = tmp_path / 'pin'
-    manifest.write_text(native_package.TREE_PREFIX + native_package.package_tree_digest(root) + '\n')
-    monkeypatch.setattr(native_package, 'MANIFEST', manifest)
-    return root
-
-
-def test_acquired_artifact_owns_path_and_derived_cli(artifact):
+def test_acquired_artifact_owns_path_and_derived_cli(declared_native_package):
     with pytest.raises(TypeError, match="required positional argument: 'path'"):
         VerifiedNativePackage()
-    verified = VerifiedNativePackage.acquire(artifact)
-    assert verified.path == artifact
-    assert verified.cli == artifact / 'dist/cli.js'
+    verified = VerifiedNativePackage.acquire(declared_native_package)
+    assert verified.path == declared_native_package
+    assert verified.cli == declared_native_package / 'dist/cli.js'
     with pytest.raises(dataclasses.FrozenInstanceError):
         verified.path = Path('/changed')
 
 
-def test_one_digest_for_managed_catalog_tracked_and_saved_header(artifact, tmp_path, monkeypatch):
+def test_one_digest_for_managed_catalog_tracked_and_saved_header(declared_native_package, tmp_path, monkeypatch):
     calls = []
     digest = native_package.package_tree_digest
 
@@ -44,7 +31,7 @@ def test_one_digest_for_managed_catalog_tracked_and_saved_header(artifact, tmp_p
         return digest(root)
 
     monkeypatch.setattr(native_package, 'package_tree_digest', counted)
-    package = VerifiedNativePackage.acquire(artifact)
+    package = VerifiedNativePackage.acquire(declared_native_package)
     # This construction-only check has no installed worker launcher and starts no child.
     monkeypatch.setattr(NativeArguments, 'owner_launcher', classmethod(lambda cls, runtime: str(package.cli)))
     work = tmp_path / 'work'
@@ -71,23 +58,23 @@ def test_one_digest_for_managed_catalog_tracked_and_saved_header(artifact, tmp_p
         assert str(package.cli) in managed.argv
         assert str(package.cli) in catalog.argv
         assert str(package.cli) in tracked.argv
-    assert calls == [artifact]
+    assert calls == [declared_native_package]
 
 
 @pytest.mark.parametrize('change', ['private-root', 'symlink-ancestor', 'dependency'])
-def test_acquisition_preserves_launch_trust_checks(artifact, tmp_path, change):
+def test_acquisition_preserves_launch_trust_checks(declared_native_package, tmp_path, change):
     if change == 'private-root':
-        artifact.parents[2].chmod(0o755)
+        declared_native_package.parents[2].chmod(0o755)
         expected = 'owner-only'
-        path = artifact
+        path = declared_native_package
     elif change == 'symlink-ancestor':
         link = tmp_path / 'redirected'
-        link.symlink_to(artifact.parents[2], target_is_directory=True)
+        link.symlink_to(declared_native_package.parents[2], target_is_directory=True)
         path = link / 'node_modules/@earendil-works/pi-coding-agent'
         expected = 'unsafe ancestor'
     else:
-        (artifact / 'dist/cli.js').write_text('// changed dependency\n')
-        path = artifact
+        (declared_native_package / 'dist/cli.js').write_text('// changed dependency\n')
+        path = declared_native_package
         expected = 'differs from pinned'
     with pytest.raises(NativePackageError, match=expected):
         VerifiedNativePackage.acquire(path)

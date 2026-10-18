@@ -41,8 +41,8 @@ def test_fork_default_retains_annotated_thinking_representation(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_unconfigured_catalog_default_is_an_actual_editor_choice(monkeypatch, tmp_path):
-    from agent_comms.config_options import CatalogChoice, ConfigOptions, ThinkingLevelConfigOption
+async def test_unconfigured_catalog_default_is_an_actual_editor_choice(monkeypatch, tmp_path, configured_catalog):
+    from agent_comms.config_options import CatalogChoice, ThinkingLevelConfigOption
 
     async def discover(self, selection):
         return [CatalogChoice(name='High', value='high')]
@@ -51,7 +51,7 @@ async def test_unconfigured_catalog_default_is_an_actual_editor_choice(monkeypat
     command = ForkCliCommand(name='', parent='saved', project=str(tmp_path),
                              model=None, thinking_level=NoThinkingOverride)
     field = next(item for item in command.editable_fields if item.name == 'thinking_level')
-    prepared = await field.prepare(ConfigOptions.configured(), command)
+    prepared = await field.prepare(configured_catalog, command)
     assert ('Not configured', prepared.editor_default) in prepared.choices
     assert prepared.editor_default == 'null'
     assert ('High', '"high"') in prepared.choices
