@@ -174,7 +174,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert all(message.type is ClaimNoticeKind for message in claims)
         snapshot = comms.registry.snapshot()
         dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
-        assert ConversationMessagePageRequest(dm_scope).read(comms.bus.log).messages == ()
+        assert comms.bus.log.read_page(ConversationMessagePageRequest(dm_scope)).messages == ()
         raw_channel = comms.views.channel_history_page("#team").messages
         assert [message.body for message in raw_channel] == ["@Alice investigate"]
         channel = comms.views.channel_display_page("#team").messages

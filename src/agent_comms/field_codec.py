@@ -682,7 +682,7 @@ class FieldCodec(Sealed):
         return cast(T, _RecordDecoder(target).decode(data))
 
     @classmethod
-    def decode_selected(cls, target: type[T], data: object, selections, *, fields=None) -> T:
+    def decode_selected(cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]) -> T:
         """Decode selected mapping keys by their declaring record and field, not wire shape."""
         return cast(T, _RecordDecoder(target).decode_selected(data, selections, fields=fields))
 
@@ -930,7 +930,9 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def decode(self, data: object) -> T: ...
 
-    def decode_selected(self, data, selections):
+    field_names: tuple[str, ...] = ()
+
+    def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
         return self.decode(data)
 
     def decode_keys(self, data, keys, selections):
@@ -1244,7 +1246,8 @@ class _DictDecoder(ValueDecoder[Any]):
 
     def decode_keys(self, data, keys, selections):
         encoded = tuple(FieldCodec.encode(key) for key in keys)
-        return {self.key.decode(key): self.value.decode_selected(value, selections)
+        return {self.key.decode(key): self.value.decode_selected(
+                    value, selections, fields=self.value.field_names)
                 for key, value in self.entries(data) if key in encoded}
 
 @dataclass(frozen=True, slots=True)
@@ -1320,15 +1323,19 @@ class _RecordDecoder(ValueDecoder[Any]):
             raise MalformedRecord(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
         return data
 
-    def decode(self, data):
-        return self.decode_selected(data, {})
+    @property
+    def field_names(self) -> tuple[str, ...]:
+        return tuple(entry.name for entry in FieldCodec._record_plan(self.record).bindings)
 
-    def decode_selected(self, data, selections, *, fields=None):
+    def decode(self, data):
+        return self.decode_selected(data, {}, fields=self.field_names)
+
+    def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
         data = self.checked(data)
         target = self.record
         values = {}
         for entry in FieldCodec._record_plan(target).bindings:
-            if fields is not None and entry.name not in fields:
+            if entry.name not in fields:
                 continue
             key = (target, entry.name)
             values.update(entry.decoded_selected(data, selections[key], selections)

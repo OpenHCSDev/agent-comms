@@ -703,8 +703,6 @@ class MessageDisplayScope(ABC):
     @property
     def index_predicate(self) -> tuple[str, tuple]:
         targets = self.index_targets
-        if targets is None:
-            return "1", ()
         return "target IN (" + ",".join("?" for _ in targets) + ")", tuple(targets)
 
     @property

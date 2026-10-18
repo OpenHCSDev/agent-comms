@@ -262,7 +262,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     for i in range(6):
         comms.messaging.send("alice", "#team", str(i))
     scope = AlternateMessages("alternating", None)
-    page = MessagePageRequest(scope).read(comms.bus.log)
+    page = comms.bus.log.read_page(MessagePageRequest(scope))
     document = comms.bus.reads.read()
     with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
         basis = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
