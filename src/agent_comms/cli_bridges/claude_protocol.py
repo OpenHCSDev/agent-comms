@@ -120,7 +120,7 @@ class ClaudeReaderPhase(ABC):
     def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
 
     @abstractmethod
-    def missing_tool(self, tool_id: str) -> ToolCall | None: ...
+    def missing_tool(self, tool_id: str) -> tuple[TranscriptUpdate, ...]: ...
 
     @abstractmethod
     def unturned_finish(self) -> tuple[TranscriptUpdate, ...]: ...
@@ -138,8 +138,8 @@ class CatchUp(ClaudeReaderPhase):
         session.phase = Live()
         return self.pending
 
-    def missing_tool(self, tool_id: str) -> ToolCall | None:
-        return None
+    def missing_tool(self, tool_id: str) -> tuple[TranscriptUpdate, ...]:
+        return ()
 
     def unturned_finish(self) -> tuple[TranscriptUpdate, ...]:
         return ()
@@ -152,7 +152,7 @@ class Live(ClaudeReaderPhase):
     def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return ()
 
-    def missing_tool(self, tool_id: str) -> ToolCall | None:
+    def missing_tool(self, tool_id: str) -> tuple[TranscriptUpdate, ...]:
         raise ValueError(f'Claude result has no tool start: {tool_id}')
 
     def unturned_finish(self) -> tuple[TranscriptUpdate, ...]:
@@ -168,11 +168,13 @@ class ClaudeSession:
     def started(self, call: ToolCall) -> None:
         self.tools[call.id] = call
 
-    def result_for(self, tool_id: str) -> ToolCall | None:
+    def tool_result(self, tool_id: str, text: str, ok: bool) -> tuple[TranscriptUpdate, ...]:
         try:
-            return self.tools.pop(tool_id)
+            call = self.tools.pop(tool_id)
         except KeyError:
             return self.phase.missing_tool(tool_id)
+        return (*self.finished(tool_id, call.finished(text, ok)),
+                ActiveItem(self.turn, tool_id, ActivityState.WORKING, ''))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[TranscriptUpdate, ...]:
         if not self.turn:
@@ -510,12 +512,7 @@ class ToolResult(UserBlock, ContentBlocks):
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        call = session.result_for(self.tool_use_id)
-        if call is None:
-            return ()  # Only an initial window may lack the original tool start.
-        text = '\n'.join(part.result_text() for part in self.content)
-        return (*session.finished(self.tool_use_id, call.finished(text, not self.is_error)),
-                ActiveItem(session.turn, self.tool_use_id, ActivityState.WORKING, ''))
+        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error)
 
 
 class UserMessage(ContentBlocks):

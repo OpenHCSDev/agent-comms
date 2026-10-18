@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
 
 from pydantic import JsonValue, TypeAdapter, Field, model_validator
 from metaclass_registry import RegistryConfig
@@ -45,6 +45,9 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
+
+if TYPE_CHECKING:
+    from .claude_protocol import ClaudeReaderPhase
 
 
 @dataclass(frozen=True)
@@ -244,7 +247,7 @@ class ThreadOutput:
 class TranscriptUpdate(ABC):
     """One change a CLI reports about its thread."""
 
-    def during(self, phase) -> tuple[TranscriptUpdate, ...]:
+    def during(self, phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
         return (self,)
 
     @abstractmethod
@@ -270,7 +273,7 @@ class TranscriptUpdate(ABC):
 class StatusUpdate(TranscriptUpdate):
     """Reader phases decide when current activity is published."""
 
-    def during(self, phase) -> tuple[TranscriptUpdate, ...]:
+    def during(self, phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
         return phase.status(self)
 
 
