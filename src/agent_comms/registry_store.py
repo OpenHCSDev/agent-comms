@@ -182,10 +182,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
 
     def _bind_thread(self, thread: Thread) -> Thread:
         record = thread.turn_record
-        if not isinstance(record, StoredTurnRecord):
-            return thread
-        identity = TurnIdentity(thread.incarnation, thread.turn_generation)
-        bound = record.bound_to(self.path, identity)
+        bound = record.bound_to(self.path, TurnIdentity(thread.incarnation, thread.turn_generation))
         return thread if bound is record else replace(thread, turn_record=bound)
 
     def _bind_document(self, document: RegistryDocument) -> RegistryDocument:
@@ -203,7 +200,6 @@ class RegistryStore(LockedStore[RegistryDocument]):
             yield RegistryEdit(self, original.copy(), original)
 
     def save_unlocked(self, document: RegistryDocument) -> None:
-        document = self._bind_document(document)
         raw = self._encode(document)
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
