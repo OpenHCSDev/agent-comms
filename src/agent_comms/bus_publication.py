@@ -172,33 +172,34 @@ class CommittedDelivery(MessageWireRecord):
         if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
             raise MalformedRecord("Delivery decisions do not match the full committed N.")
         acknowledgement = policy.require_acknowledgement(wire_root_id, message)
-        return cls(
-            wire_root_id,
-            message,
-            candidate,
-            decisions,
-            raw.decisions_digest,
-            raw.control.value,
-            RESOLVER_VERSION,
-            POLICY_VERSION,
-            acknowledgement=acknowledgement,
-        )
+        return cls.proved(wire_root_id, message, policy, decisions, acknowledgement)
 
     @classmethod
     def recorded(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
         """A row the private bus row store indexed, so attest proved it when it entered."""
         policy = DeliveryPolicy.from_sideband(record[PRIVATE_WIRE_FIELD])
+        decisions = tuple(map(RecipientDecision.from_wire, policy.initial.decisions))
+        message = Message.from_committed_wire(record)
+        return cls.proved(wire_root_id, message, policy, decisions, policy.acknowledgement)
+
+    @classmethod
+    def proved(
+        cls, wire_root_id: str, message: Message, policy: DeliveryPolicy,
+        decisions: tuple[RecipientDecision, ...],
+        acknowledgement: KeyedResponseAcknowledgement | None,
+    ) -> CommittedDelivery:
+        """The delivery a proved policy declares for its message."""
         raw = policy.initial
         return cls(
             wire_root_id,
-            Message.from_committed_wire(record),
+            message,
             raw.audience,
-            tuple(map(RecipientDecision.from_wire, raw.decisions)),
+            decisions,
             raw.decisions_digest,
             raw.control.value,
             raw.resolver_version,
             raw.policy_version,
-            acknowledgement=policy.acknowledgement,
+            acknowledgement=acknowledgement,
         )
 
     def deliveries(self) -> tuple[CommittedDelivery, ...]:
