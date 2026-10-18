@@ -56,7 +56,8 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
+from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, StrikeReason, Todo,
+                    TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -740,6 +741,18 @@ class CommsTodoTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         todo = comms.goals.change_problem(self.id, self.operation, caller.name)
         return TodoChanged(todo, todo.strike_count)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsFireTool(ThreadToolRequest):
+    label = "Fire unit"
+    description = ("Release every open problem the unit holds in one operation, recording one plain "
+                   "reason on each; only their commander may invoke this tool.")
+    unit: str = tool_field("Unit thread to fire")
+    reason: StrikeReason = tool_field("What the unit did, plainly")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+        return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
 
 
 @dataclass(frozen=True, kw_only=True)

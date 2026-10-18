@@ -60,6 +60,11 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             return self.todos.apply(problem, prepared)
 
+    def fire(self, unit, reason, commander):
+        actor = self.registry.require(commander).incarnation
+        with _store_lock(self._wire_lock_path):
+            return self.todos.fire(unit, actor, reason)
+
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
             private = self.root / "goal-private"

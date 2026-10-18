@@ -1036,6 +1036,21 @@ class TodoStore(TypedStore):
             result.upsert(db)
             return self._current(db, todo_id)
 
+    def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
+        """Release every open problem the unit holds from this commander in one write; each
+        records the same reason, and its order and strikes stay."""
+        with self.writing() as db:
+            held = tuple(todo for todo in self._rows(
+                db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
+                (unit, actor.name, actor.created_at)) if todo.state.open)
+            if not held:
+                raise TodoError(f"{unit} holds no open problem.")
+            released = tuple(ReleaseTodo(todo.revision, actor, todo.assignment, reason).apply(todo)
+                             for todo in held)
+            for todo in released:
+                todo.upsert(db)
+            return released
+
     def assign(
         self,
         todo_id: str,

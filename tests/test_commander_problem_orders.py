@@ -19,13 +19,13 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+from agent_comms.tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
 from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
+    Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -444,6 +444,17 @@ def test_order_fire_releases_every_open_problem_the_unit_holds(commander, comman
     assert capsys.readouterr().out.splitlines() == [f'{pid}: released from worker: {FIRED}' for pid in ('P1', 'P2')]
     script.board()
     assert (tmp_path / 'board.md').read_text().count(f'unassigned: released from worker: {FIRED}') == 2
+
+
+def test_one_fire_call_releases_both_open_orders_with_its_reason(commander):
+    comms, caller = commander
+    held = (create(commander, 'P1'), create(commander, 'P2', 'printf 2', 2))
+    with pytest.raises(TodoError, match='holds no open problem'):
+        CommsFireTool(unit='worker', reason=StrikeReason(FIRED)).apply(comms, ThreadCaller('worker'))
+    fired = CommsFireTool(unit='worker', reason=StrikeReason(FIRED)).apply(comms, caller).todos
+    assert fired == tuple(map(comms.goals.todos.get, ('P1', 'P2')))
+    assert [(t.assignment, t.revision, t.released[0].previous, t.released[0].reason.text) for t in fired] == [
+        (None, before.revision + 1, before.assignment, FIRED) for before in held]
 
 
 @pytest.mark.parametrize('step, name, column', [

@@ -31,11 +31,11 @@ from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
                      CommsTodoCreateTool, CommsTodoTool)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
+                     RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo)
 from . import capacity, rules, storage
 from .config import CommanderConfig, Repo
@@ -706,15 +706,12 @@ def withdraw(pid: str, why: str, superseded_by: str | None = None) -> None:
 
 
 def fire(unit: str, why: str) -> None:
-    """Core releases every open problem the unit holds, one call each; orders and strikes stay."""
-    actor = COMMS.registry.require(ME).incarnation
+    """Core releases every open problem the unit holds in one call; orders and strikes stay."""
     try:
         reason = StrikeReason(why)
     except ValueError as refused:
         sys.exit(f'Refused: {refused}')
-    for todo in open_todos(unit) or sys.exit(f'Refused: {unit} holds no open problem.'):
-        release = ReleaseTodo(todo.revision, actor, todo.assignment, reason)
-        call(CommsTodoTool(id=todo.id, operation=release))
+    for todo in call(CommsFireTool(unit=unit, reason=reason)).todos:
         print(f'{todo.id}: released from {unit}: {why}')
 
 
