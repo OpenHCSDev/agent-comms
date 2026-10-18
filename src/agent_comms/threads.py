@@ -4,26 +4,39 @@ from __future__ import annotations
 
 import os
 import time
-from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import (
-    SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField,
-)
 from .goals import (
-    AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
+    AbsentGoalCheckpoint,
+    Goal,
+    GoalCheckpoint,
+    GoalRevision,
+    PresentGoalCheckpoint,
 )
-from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel
+from .pi_vocabulary import (
+    SERVICE_TIER_ENVIRONMENT,
+    NoThinkingOverride,
+    ServiceTier,
+    ThinkingChoice,
+    ThinkingLevelField,
+)
+from .registration_inheritance import (
+    InheritEmpty,
+    InheritMissing,
+    InheritPrevious,
+    InheritThinkingLevel,
+)
 from .storage_rules import StoragePath, StorageRoots, StorageRule
+from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
-    ThreadProvenance,
     AgentThreadRole,
+    ThreadProvenance,
     ThreadRole,
     TurnId,
     TurnIdentity,
@@ -195,7 +208,8 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None, thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        self, *, model: str | None = None,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
         return replace(
@@ -210,7 +224,7 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: type[ThinkingLevel],
+        self, *, model: str | None, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(

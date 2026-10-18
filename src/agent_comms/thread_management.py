@@ -38,7 +38,7 @@ from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
-from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
     PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
     RegistryPrivacy, _require_no_private_owner_rename,
@@ -56,7 +56,7 @@ class NewThreadSpec:
     name: str
     project: str
     model: str
-    thinking_level: type[ThinkingLevel]
+    thinking_level: ThinkingLevelField
     task: LaunchInput = field(default_factory=LaunchInput)
     tags: frozenset[str] | None = None
 
@@ -240,7 +240,7 @@ class ThreadManagement:
         worktree: str,
         process: ProcessState = NO_PROCESS,
         model: str | None = None,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         auto_title_pending: bool = False,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
@@ -331,7 +331,7 @@ class ThreadManagement:
 
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride, service_tier: ServiceTier | None = None,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride, service_tier: ServiceTier | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -351,7 +351,7 @@ class ThreadManagement:
             return updated
 
     def initialize_native_configuration(
-        self, name: str, *, model: str | None, thinking_level: type[ThinkingLevel],
+        self, name: str, *, model: str | None, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):

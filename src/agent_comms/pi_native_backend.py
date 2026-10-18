@@ -355,7 +355,7 @@ class PiNativeBackend(
             arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
                 state.thinking_level
             ).argv
-        selected, level = state.model.display_name, state.thinking_level.declared_name
+        selected, level = state.model.display_name, state.thinking_level.wire_value()
         if selected is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         return selected, level

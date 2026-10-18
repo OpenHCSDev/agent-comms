@@ -7,8 +7,8 @@ command catalog. Existing CLI spellings belong to the store_files.
 from __future__ import annotations
 
 import argparse
-import json
 import asyncio
+import json
 import os
 import re
 import shlex
@@ -21,27 +21,30 @@ from itertools import dropwhile, takewhile
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_type_hints
 
-from acp.schema import SessionConfigSelectOption
 from acp.exceptions import RequestError
+from acp.schema import SessionConfigSelectOption
 
 from .activity import ActivityState
-from .channels import Channel
-from .channel_targets import CommandTarget, ResolvedChannel
-from .cli_result import CliResult
-from .tool_result import ToolResult
 from .catalog_document import CatalogDocument
-from .registry_document import RegistrySnapshot
+from .change_report import ChangeReport
+from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
+from .channel_targets import CommandTarget, ResolvedChannel
+from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .command import Command
+from .cli_bridges.claude import ClaudeTranscript
+from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
-from .field_codec import FieldCodec, PathText, compile_decoder
+from .cli_result import CliResult
+from .command import Command
 from .comms import Comms
 from .config_options import (
-    CatalogConfigOption, CatalogSelection, ConfigOptions,
-    ModelConfigOption, ThinkingLevelConfigOption,
+    CatalogConfigOption,
+    CatalogSelection,
+    ConfigOptions,
+    ModelConfigOption,
+    ThinkingLevelConfigOption,
 )
 from .declared_family import DeclaredFamily
-from .read_basis import WatchAcknowledgment, OnReadWatchAcknowledgment
 from .exporting import (
     ChannelScope,
     DmScope,
@@ -52,37 +55,48 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .cli_bridges.claude import ClaudeTranscript
-from .cli_bridges.history import History, OfflineHistory, OnlineHistory
+from .field_codec import FieldCodec, PathText, compile_decoder
 from .harness_install import Harness, HarnessInstalled
-from .importing import ImportLimits, ImportedSessionMetadata, ThreadImported
+from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
+from .message_reference import MessageReference
 from .page_traversal import OlderTraversal, PageCursor
-from .schema_report import StoreSchemaReport, StoreSchemaReports
-from .shared_ledger import LedgerDocument
-from .tool_caller import ToolCaller
-from .turn_context import (
-    CodexRolloutProvenance, ContextManifest, ContextManifestChange, ContextSegment,
-    ContributionCoordinates, NextContextTurn, Provenance, TurnContext,
-)
-from .native_turn_context import NativeContextData
-from .runtime import RuntimeConnection, socket_path
-from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
-from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
+from .native_turn_context import NativeContextData
+from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
-from .change_report import ChangeReport
-from .message_reference import MessageReference
+from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
+from .registry_document import RegistrySnapshot
+from .runtime import RuntimeConnection, socket_path
+from .schema_report import StoreSchemaReport, StoreSchemaReports
+from .shared_ledger import LedgerDocument
+from .thread_execution import (
+    ArchiveOwnerControl,
+    ExternalThreadExecution,
+    NativeOwnerCommand,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+    ThreadCommandAvailability,
+    ThreadExecution,
+)
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_status import ThreadStatus
 from .threads import Thread
-from .thread_execution import (
-    ArchiveOwnerControl, ExternalThreadExecution, NativeOwnerCommand,
-    OwnerLifecycleControl, StartOwnerControl, ThreadCommandAvailability, ThreadExecution,
+from .tool_caller import ToolCaller
+from .tool_result import ToolResult
+from .turn_context import (
+    CodexRolloutProvenance,
+    ContextManifest,
+    ContextManifestChange,
+    ContextSegment,
+    ContributionCoordinates,
+    NextContextTurn,
+    Provenance,
+    TurnContext,
 )
-from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
-from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
+from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
+from .working_memory_questions import SpanAnswer
 
 
 def _duration_seconds(value: str) -> float:
@@ -700,7 +714,7 @@ class DeclaredOptions(Command):
     def add_parser(cls, subparsers: Any) -> None:
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
             metadata = declared.metadata
             group = metadata["group"]
@@ -709,7 +723,8 @@ class DeclaredOptions(Command):
                 if group not in groups:
                     groups[group] = parser.add_mutually_exclusive_group(required=True)
                 owner = groups[group]
-            decoder = compile_decoder(hints[declared.name])
+            annotation = hints[declared.name]
+            decoder = compile_decoder(annotation)
             options = {**decoder.argument_options(), **metadata["parser_options"]}
             if metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
@@ -722,7 +737,9 @@ class DeclaredOptions(Command):
             else:
                 options["required"] = True
             if "default" in options:
-                options["default"] = decoder.argument_text(FieldCodec.encode(options["default"]))
+                options["default"] = decoder.argument_text(
+                    FieldCodec.encode(options["default"], annotation)
+                )
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
@@ -1382,8 +1399,9 @@ class InstallCliCommand(CliCommand):
     commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .commander.config import CommanderConfig, Repo
         from importlib.resources import files
+
+        from .commander.config import CommanderConfig, Repo
 
         home = Path.home()
         project = self.project.resolve()
@@ -1396,7 +1414,7 @@ class InstallCliCommand(CliCommand):
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )
         return InstallResult(str(config.write(home)), {
-            type(harness).require_name(): harness.install(ctx, self.commander, project)
+            type(harness).declared_name: harness.install(ctx, self.commander, project)
             for harness in Harness.present(home)})
 
 
@@ -1694,7 +1712,7 @@ class ContextCliCommand(CliCommand):
     @classmethod
     def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         super().add_parser(subparsers)
-        parser = subparsers.choices[cls.require_name()]
+        parser = subparsers.choices[cls.declared_name]
         parser.add_argument("--turn", type=int, default=argparse.SUPPRESS)
         parser.add_argument("--diff", action="store_true")
         parser.add_argument("--imported", action="store_true")

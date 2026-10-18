@@ -39,7 +39,7 @@ from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied, ToolTransport
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
-from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
@@ -274,7 +274,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         worktree: Path,
         session: SelectedSession,
         model: SelectedModel,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         environment: Mapping[str, str] = MappingProxyType({}),
         model_wait: TurnWait = DEFAULT_MODEL_WAIT,
         prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,

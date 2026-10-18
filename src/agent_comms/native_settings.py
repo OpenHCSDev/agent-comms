@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 from .cli_options import JsonFlagRecord
-from .pi_vocabulary import HighThinkingLevel, ThinkingLevel
+from .pi_vocabulary import HighThinkingLevel, ThinkingLevelField
 
 
 @dataclass(frozen=True)
@@ -13,4 +13,4 @@ class NativeThreadDefaults(JsonFlagRecord):
 
     value_flag: ClassVar[str] = "--native-settings"
     model: str = "openai-codex/gpt-6.1-sol"
-    thinking_level: type[ThinkingLevel] = HighThinkingLevel
+    thinking_level: ThinkingLevelField = HighThinkingLevel

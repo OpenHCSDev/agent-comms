@@ -21,7 +21,6 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         namespace: dict[str, Any],
         *,
         affix: str | None = None,
-        declared_name: str | None = None,
         discovery_package: str | None = None,
         **class_options: Any,
     ) -> _FamilyMeta:
@@ -53,7 +52,9 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
                 r"([a-z0-9])([A-Z])", r"\1_\2", re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1_\2", stem)
             ).lower()
             # A slots dataclass recreates its declaration with the derived name in its namespace.
-            namespace["declared_name"] = declared_name or namespace.get("declared_name", derived)
+            namespace["declared_name"] = class_options.pop(
+                "declared_name", namespace.get("declared_name", derived)
+            )
             if namespace["declared_name"] == "":
                 raise TypeError("A family member must have a nonempty name.")
         config = (
@@ -82,13 +83,14 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
 
     Declare a root with ``affix=\"Scope\"`` (or omit it for unstripped names).
     Abstract intermediate classes are excluded by AutoRegisterMeta. An explicit
-    ``declared_name = None`` uses its existing unnamed-class exclusion. Override a
+    ``declared_name=None`` in the class header uses its unnamed-class exclusion.
+    Override a
     stored spelling only with ``declared_name=`` at the member declaration.
     A distributed family declares its member package with ``discovery_package``;
     the existing registry acquires those declarations on decode or schema reads.
     """
 
-    declared_name: ClassVar[str | None]
+    declared_name: ClassVar[str]
     family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]
@@ -115,15 +117,8 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return cast(type[Self], member)
 
     @classmethod
-    def require_name(cls) -> str:
-        name = cls.declared_name
-        if name is None:
-            raise ValueError(f"{cls.__name__} is an unnamed declaration.")
-        return name
-
-    @classmethod
     def names(cls) -> tuple[str, ...]:
-        return tuple(member.require_name() for member in cls.members_with(cls))
+        return tuple(member.declared_name for member in cls.members_with(cls))
 
     @classmethod
     def field_value(cls, value) -> type[Self]:
