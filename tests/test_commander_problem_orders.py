@@ -8,7 +8,7 @@ from dataclasses import replace
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -401,3 +401,26 @@ def test_todo_voids_carry_keeps_every_stored_strike(commander):
     assert TodoVoids.carry(comms.root, apply=True).changed == 1
     assert TodoVoids.carry(comms.root, apply=False).changed == 0
     assert comms.goals.todos.get('P1') == struck
+
+
+def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
+    """An order saved before closing runs is refused until the carry gives it the mechanical run it implied."""
+    import json
+    import sqlite3
+    from contextlib import closing
+    from cutover.carry_order_run import OrderRuns
+    from agent_comms.todos import TodoStore
+    comms, _caller = commander
+    saved = create(commander, 'P1')
+    path = TodoStore.path_in(comms.root)
+    with closing(sqlite3.connect(path)) as db:
+        (order,), = db.execute('SELECT "order" FROM todo WHERE id = ?', ('P1',))
+        db.execute('UPDATE todo SET "order" = ? WHERE id = ?',
+                   (json.dumps({k: v for k, v in json.loads(order).items() if k != 'run'}), 'P1'))
+        db.commit()
+    with pytest.raises(MalformedRecord, match='run'):
+        comms.goals.todos.get('P1')
+    assert OrderRuns.carry(comms.root, apply=False).detail == {'mechanical': 1, 'application': 0}
+    assert OrderRuns.carry(comms.root, apply=True).changed == 1
+    assert OrderRuns.carry(comms.root, apply=False).changed == 0
+    assert comms.goals.todos.get('P1') == saved
