@@ -66,17 +66,17 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
             and self.revision.holds_cut(revision, self.revision.size)
         )
 
-    def prepare(self, revision: FileRevision, budget: IndexSlice) -> ReplyIndexUpdate | None:
+    def prepare(self, revision: FileRevision, budget: IndexSlice) -> ReplyIndexResult:
         """Decode a captured native cut only; this worker never opens SQLite."""
         if not budget.available:
-            return None
+            return BudgetSpent()
         resume = self.continues(revision)
         through, total = (self.through, self.total) if resume else (0, 0)
         complete = False
         replies: list[TranscriptReply] = []
         with Path(self.source).open("rb") as stream:
             if not revision.opened_by(stream):
-                return None
+                return RevisionMoved()
             stream.seek(through)
             for _ in range(budget.source_records):
                 if through == revision.size:
@@ -213,13 +213,37 @@ class IndexSlice:
         self.records_left -= 1
 
 
+class ReplyIndexResult(ABC):
+    """A prepared delta or the specific reason no delta could be prepared."""
+
+    @abstractmethod
+    def collect(self, updates: list[ReplyIndexUpdate]) -> None: ...
+
+
+class BudgetSpent(ReplyIndexResult):
+    """No slice remains; leave the stored prefix for the next batch."""
+
+    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
+        pass
+
+
+class RevisionMoved(ReplyIndexResult):
+    """The opened file no longer matches the cut; observe a fresh revision."""
+
+    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
+        pass
+
+
 @dataclass(frozen=True)
-class ReplyIndexUpdate:
+class ReplyIndexUpdate(ReplyIndexResult):
     """A native-only prepared delta, authorized against one stored prefix."""
 
     before: ReplyIndex
     after: ReplyIndex
     replies: tuple[TranscriptReply, ...]
+
+    def collect(self, updates: list[ReplyIndexUpdate]) -> None:
+        updates.append(self)
 
     def commit(self, database: sqlite3.Connection) -> None:
         current = ReplyIndex.one(database, source=self.after.source) or ReplyIndex(
@@ -253,11 +277,9 @@ class ReplyIndexBatch:
                 break
             last_source = index.source
             try:
-                update = index.prepare(revision, budget)
+                index.prepare(revision, budget).collect(updates)
             except FileNotFoundError:
                 continue  # A later source observation sees the missing file.
-            if update is not None:
-                updates.append(update)
         return cls(tuple(updates), last_source)
 
 
