@@ -110,7 +110,7 @@ class Thread(ThreadProvenance):
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
-        return self.project_resume_due and not self.executing and self.goal.active() is None
+        return self.goal.owes_project_resume(self)
 
     @property
     def turn_state(self) -> TurnState:
@@ -261,31 +261,22 @@ class Thread(ThreadProvenance):
 
     @property
     def task_scope(self):
-        from .task_sources import GoalTaskScope, TurnTaskScope
-
-        goal = self.goal.active()
-        return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
-                if goal is not None else TurnTaskScope(project=self.worktree))
+        return self.goal.task_scope(self)
 
     def context_goal_segments(self, goals):
         """Project this declaration's active goal without a second goal state."""
-        from .turn_context import GoalSegment
-
-        goal = self.goal.active()
-        return (GoalSegment.capture(self, goal, goals),) if goal is not None else ()
+        return self.goal.context_segments(self, goals)
 
     def wake_context(self) -> dict[str, object]:
         """This captured thread owns its selected-wake work and goal projection."""
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
-            "current_goal": self.goal.wake_context(),
+            "current_goal": FieldCodec.encode(self.goal.wake_context()),
         }
 
     def retained_task_facts(self):
-        from .retained_task_facts import GoalTaskFact
-
-        return tuple(GoalTaskFact(goal) for goal in self.goal)
+        return self.goal.retained_task_facts()
 
     def continuation_goal(self, original: Thread) -> Goal | None:
         """The current active goal still belongs to this captured project/goal."""

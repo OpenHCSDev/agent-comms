@@ -366,7 +366,20 @@ class GoalDeclaration(WireValue):
         return AbsentGoalCheckpoint()
 
     def wake_context(self):
-        return None
+        return self
+
+    def owes_project_resume(self, thread) -> bool:
+        return thread.project_resume_due and not thread.executing
+
+    def task_scope(self, thread):
+        from .task_sources import TurnTaskScope
+        return TurnTaskScope(project=thread.worktree)
+
+    def context_segments(self, thread, goals):
+        return ()
+
+    def retained_task_facts(self):
+        return ()
 
     def registration_value(self, previous):
         return previous
@@ -437,6 +450,22 @@ class Goal(GoalDeclaration):
 
     def wake_context(self):
         return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+
+    def owes_project_resume(self, thread) -> bool:
+        return not self.state.active and super().owes_project_resume(thread)
+
+    def task_scope(self, thread):
+        from .task_sources import GoalTaskScope
+        return (GoalTaskScope(project=thread.worktree, goal=self.checkpoint)
+                if self.state.active else super().task_scope(thread))
+
+    def context_segments(self, thread, goals):
+        from .turn_context import GoalSegment
+        return (GoalSegment.capture(thread, self, goals),) if self.state.active else ()
+
+    def retained_task_facts(self):
+        from .retained_task_facts import GoalTaskFact
+        return (GoalTaskFact(self),)
 
     def registration_value(self, previous):
         return self
