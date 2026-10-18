@@ -42,12 +42,12 @@ from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
+from .field_codec import MalformedRecord
 from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
-from .field_codec import MalformedRecord
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
