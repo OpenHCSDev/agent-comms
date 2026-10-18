@@ -22,6 +22,7 @@ from agent_comms.coordination_tables.participants import (
     ParticipantAliases,
     Participants,
 )
+from agent_comms.field_codec import MalformedRecord
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,7 +95,7 @@ class ParticipantStore:
             raise ValueError("committed must be a boolean")
         for value in (lookup, display_name, owner_thread, alias or lookup):
             if not isinstance(value, str) or not 1 <= len(value) <= MAX_IDENTIFIER_CHARS:
-                raise ValueError("participant identity must be bounded and nonempty")
+                raise MalformedRecord("participant identity must be bounded and nonempty")
         primary = alias or lookup
         with self.session.transaction() as db:
             existing = Participants.one(self.session._connection, participant_lookup=lookup)
