@@ -74,8 +74,7 @@ class CommanderConfig(BaseModel):
         for directory in (self.state, self.state / 'forks', self.state / 'orders', self.worktrees,
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
-        for name, empty in (('deadlines.json', '{}'), ('problems.json', '{}'), ('closed.jsonl', ''),
-                            ('activity.log', ''), ('sent.jsonl', ''), ('strikes.jsonl', '')):
+        for name, empty in (('activity.log', ''), ('sent.jsonl', '')):
             if not (self.state / name).exists():
                 (self.state / name).write_text(empty)
         return path

@@ -2,7 +2,7 @@
 import json, re, time
 
 from .config import CommanderConfig
-from .order import DEADLINES, jargon_in, strike  # one jargon list
+from .order import jargon_in, open_todos, strike  # one jargon list
 
 CONFIG = CommanderConfig.installed()
 
@@ -13,7 +13,7 @@ def judge(d):
         return
     if words := jargon_in(text):
         # HARD RULE: jargon in a unit message is a strike the moment it is read.
-        tasks = sorted({f for o in json.load(open(DEADLINES)).get(sender, []) for f in o.get('facts', [])}) or sorted(set(re.findall(r'\bP\d+\b', text)))[:1]
+        tasks = sorted(t.id for t in open_todos(sender)) or sorted(set(re.findall(r'\bP\d+\b', text)))[:1]
         print(f"JARGON {sender} [{d.get('id')}]: {', '.join(words)}", flush=True)
         if tasks:
             try:

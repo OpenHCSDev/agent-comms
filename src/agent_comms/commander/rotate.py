@@ -2,7 +2,7 @@
 import json, os, subprocess, time
 from datetime import datetime
 
-from . import capacity, judge, rules
+from . import capacity, judge, order, rules
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
@@ -39,12 +39,14 @@ def broken_rules(owed):
 def main(a):
     turn = 0
     while True:
-        owed = json.load(open(f'{ROOT}/deadlines.json'))
-        units = sorted(u for u, v in owed.items() if v)
+        owed = {}
+        for todo in order.open_todos():
+            owed.setdefault(todo.assignment.owner, []).append(todo)
+        units = sorted(owed)
         if units:
             unit = units[turn % len(units)]
             turn += 1
-            orders = ', '.join(f"{'+'.join(e['facts'])} due {e['due']}" for e in owed[unit])
+            orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)}" for t in owed[unit])
             print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {unjudged(unit)} -> read its git state and newest turn, judge, push or hunt", flush=True)
         for line in broken_rules(owed):
             print(f"  RULE {line}", flush=True)

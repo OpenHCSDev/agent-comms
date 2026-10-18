@@ -64,7 +64,7 @@ def over_quota(unit: str) -> str | None:
 NO_VALUE_FLAGS = r'(?:--detach|-d|--force|-f|--no-checkout|--checkout|--lock|-q|--quiet|--no-track|--track|--guess-remote|--orphan)'
 
 
-def command_violations(unit: str, command: str, disk_allowed: bool = False) -> list[str]:
+def command_violations(unit: str, command: str) -> list[str]:
     """What this shell command does that the storage rules forbid, judged from its words."""
     found = []
     if re.search(r'\bgit\s+clone\b', command):
@@ -92,7 +92,7 @@ def command_violations(unit: str, command: str, disk_allowed: bool = False) -> l
         if target.startswith('/'):
             found += [v for v in write_violations(unit, target) if '.artifacts' not in v]
     runs = [part for part in re.split(r'&&|\|\||[;|\n]', command) if not re.search(r'(?<!\S)(--help|-h)(?!\S)', part)]  # asking a tool for its help allocates nothing
-    if any(ALLOCATES.search(part) for part in runs) and free_gb() < FLOOR_GB and not disk_allowed:
+    if any(ALLOCATES.search(part) for part in runs) and free_gb() < FLOOR_GB:
         found.append(f'allocates disk while {CONFIG.disk} has {free_gb():.1f} GB free (floor {FLOOR_GB} GB)')
     return found
 
