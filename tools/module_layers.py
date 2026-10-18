@@ -41,7 +41,9 @@ LAYERS = (
     Layer("coordination", ("goal_", "attempt_", "coordination_", "wake_")),
     Layer("context", ("working_", "context_segments", "instructions")),
     Layer("turns", ("turn_", "input_", "session_", "selected_")),
-    Layer("runtime", ("native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges")),
+    Layer(
+        "runtime", ("native_", "pi_", "acp_", "agent_", "runtime_", "_pi_helpers", "cli_bridges")
+    ),
     Layer("ui_model", (), top=True),
     Layer("cli", ("cli_", "tool_", "tools"), top=True),
     Layer("commander", (), top=True),
@@ -57,6 +59,41 @@ class Import:
     line: int
 
 
+class ImportNames(ast.NodeVisitor):
+    """Records each agent_comms module one source file names in an import statement
+    or a literal import_module call."""
+
+    def __init__(self, package: Package, module: str, path: Path, found: list[Import]) -> None:
+        self.package, self.module, self.found = package, module, found
+        self.parent = module if path.name == "__init__.py" else module.rpartition(".")[0]
+
+    def record(self, node: ast.stmt | ast.expr, *names: str) -> None:
+        for name in names:
+            target = self.package.resolve(name)
+            if target is not None and target != PACKAGE:
+                self.found.append(Import(self.module, target, node.lineno))
+
+    def visit_Import(self, node: ast.Import) -> None:
+        self.record(node, *(alias.name for alias in node.names))
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        parts = self.parent.split(".")
+        base = ".".join(parts[: len(parts) - node.level + 1]) if node.level else ""
+        stem = ".".join(part for part in (base, node.module or "") if part)
+        self.record(node, *(f"{stem}.{alias.name}" for alias in node.names))
+
+    def visit_Call(self, node: ast.Call) -> None:
+        if (
+            isinstance(node.func, ast.Attribute)
+            and node.func.attr == "import_module"
+            and node.args
+            and isinstance(node.args[0], ast.Constant)
+            and isinstance(node.args[0].value, str)
+        ):
+            self.record(node, node.args[0].value)
+        self.generic_visit(node)
+
+
 class Package:
     """The agent_comms source tree: its modules, their imports and their layers."""
 
@@ -67,14 +104,22 @@ class Package:
     @cached_property
     def files(self) -> dict[str, Path]:
         return {
-            ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(".__init__"): path
+            ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(
+                ".__init__"
+            ): path
             for path in sorted((self.src / PACKAGE).rglob("*.py"))
         }
 
     @cached_property
     def top_level(self) -> tuple[str, ...]:
         """Each top-level module and subpackage: the units the layer map assigns."""
-        return tuple(sorted({".".join(name.split(".")[:2]) for name in self.files if name != PACKAGE}))
+        return tuple(
+            sorted({".".join(name.split(".")[:2]) for name in self.files if name != PACKAGE})
+        )
+
+    @cached_property
+    def subpackages(self) -> tuple[str, ...]:
+        return tuple(unit for unit in self.top_level if self.files[unit].name == "__init__.py")
 
     def unit(self, module: str) -> str:
         return ".".join(module.split(".")[:2])
@@ -87,29 +132,10 @@ class Package:
 
     @cached_property
     def imports(self) -> tuple[Import, ...]:
-        found = []
+        found: list[Import] = []
         for module, path in self.files.items():
-            package = module if path.name == "__init__.py" else module.rpartition(".")[0]
-            for node in ast.walk(ast.parse(path.read_text(), str(path))):
-                for name in self.named(node, package):
-                    target = self.resolve(name)
-                    if target is not None and target != PACKAGE:
-                        found.append(Import(module, target, node.lineno))
-        return tuple(found)
-
-    def named(self, node: ast.AST, package: str) -> tuple[str, ...]:
-        match node:
-            case ast.Import(names=names):
-                return tuple(alias.name for alias in names)
-            case ast.ImportFrom(module=module, level=0, names=names) if module:
-                return tuple(f"{module}.{alias.name}" for alias in names)
-            case ast.ImportFrom(module=module, level=level, names=names):
-                base = ".".join(package.split(".")[: len(package.split(".")) - level + 1])
-                stem = f"{base}.{module}" if module else base
-                return tuple(f"{stem}.{alias.name}" for alias in names)
-            case ast.Call(func=ast.Attribute(attr="import_module"), args=[ast.Constant(value=str(name)), *_]):
-                return (name,)
-        return ()
+            ImportNames(self, module, path, found).visit(ast.parse(path.read_text(), str(path)))
+        return tuple(sorted(set(found), key=lambda edge: (edge.source, edge.line, edge.target)))
 
     @cached_property
     def layers(self) -> dict[str, Layer]:
@@ -136,7 +162,10 @@ class Package:
         order = {layer: index for index, layer in enumerate(LAYERS)}
         found = []
         for edge in self.imports:
-            source, target = self.layers[self.unit(edge.source)], self.layers[self.unit(edge.target)]
+            source, target = (
+                self.layers[self.unit(edge.source)],
+                self.layers[self.unit(edge.target)],
+            )
             if source is not target and (target.top or order[target] > order[source]):
                 found.append(edge)
         return tuple(found)
@@ -167,16 +196,16 @@ class Package:
         lines = [
             "# Module layers",
             "",
-            "Generated by `python tools/module_layers.py > docs/layout/MODULE_LAYERS.md`; do not edit by hand.",
+            "Generated by `python tools/module_layers.py > docs/layout/MODULE_LAYERS.md`;"
+            " do not edit by hand.",
             "",
             "Layers in order: " + ", ".join(f"`{layer.name}`" for layer in LAYERS) + ". "
-            "Each layer imports only the layers before it; `ui_model`, `cli` and `commander` sit on top, "
+            "Each layer imports only the layers before it; "
+            "`ui_model`, `cli` and `commander` sit on top, "
             "and nothing outside a top layer imports it. A module no prefix in "
             "`plans/remaining-slop-plan.md` (Order 1) claims takes the highest layer it imports.",
             "",
-            f"{len(self.top_level)} top-level units "
-            f"({sum(1 for u in self.top_level if self.files[u].name != '__init__.py')} modules, "
-            f"{sum(1 for u in self.top_level if self.files[u].name == '__init__.py')} subpackages); "
+            f"{len(self.top_level)} top-level units ({len(self.subpackages)} of them subpackages); "
             f"{len(self.violations)} violating imports; {len(self.unreached)} deletion candidates.",
             "",
         ]
@@ -185,12 +214,20 @@ class Package:
             lines += [f"## {layer.name} ({len(units)})", ""]
             lines += [f"- `{unit.removeprefix(PACKAGE + '.')}`" for unit in units]
             lines.append("")
-        lines += ["## Violating imports", "", "| File:line | Imports | Layer | Into layer |", "|---|---|---|---|"]
+        lines += [
+            "## Violating imports",
+            "",
+            "| File:line | Imports | Layer | Into layer |",
+            "|---|---|---|---|",
+        ]
         for edge in self.violations:
             path = self.files[edge.source].relative_to(self.src.parent)
+            source, target = (
+                self.layers[self.unit(edge.source)],
+                self.layers[self.unit(edge.target)],
+            )
             lines.append(
-                f"| `{path}:{edge.line}` | `{edge.target}` | {self.layers[self.unit(edge.source)].name} "
-                f"| {self.layers[self.unit(edge.target)].name} |"
+                f"| `{path}:{edge.line}` | `{edge.target}` | {source.name} | {target.name} |"
             )
         lines += [
             "",
