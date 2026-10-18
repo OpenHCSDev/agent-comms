@@ -1,4 +1,5 @@
 """Installed native 429 exhaustion reaches one completed user-visible failure."""
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -81,9 +82,9 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
                  "--no-extensions", "--no-skills", "--no-context-files"]
     agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
     updates = []
 
     class Client:

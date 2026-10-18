@@ -86,7 +86,7 @@ def show(thread=None):
     for e in pending:
         by_thread.setdefault(e['thread'], []).append(e)
     for name, edits in by_thread.items():
-        orders = order.COMMS.goals.todos.held_for_commander(order.COMMS.registry.require(ME).incarnation, name)
+        orders = order.held_by(name)
         intent = '\n'.join(todo.order.instructions(todo) for todo in orders) or 'NO OPEN ORDER TODO'
         print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
         for e in edits:
@@ -165,8 +165,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         cited = next((m for m in my_messages(edit['thread']) if m['id'] == self.msg), None)
         if cited is None:
             sys.exit(f'Refused: edit {edit["id"]}: {self.msg} is not a message from {ME} to {edit["thread"]}')
-        candidates: tuple[Todo, ...] = order.COMMS.goals.todos.held_for_commander(
-            order.COMMS.registry.require(ME).incarnation, edit['thread'])
+        candidates = order.held_by(edit['thread'])
         if found := re.search(r'\bP\d+\b', cited['text']):
             candidates = tuple(todo for todo in candidates if todo.id == found.group())
         if len(candidates) != 1:

@@ -5,6 +5,7 @@ These tests do not prove a provider spend ceiling, copied-Pi trust or release.
 
 from __future__ import annotations
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from conftest import publish_initial
 import asyncio
 import multiprocessing
@@ -36,12 +37,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _fake_package(package):
-    """Supply the actual extension bytes; only the provider boundary is faked."""
-    dist = Path(package) / "dist"
-    dist.mkdir(parents=True, exist_ok=True)
-    extension = Path(__file__).parents[1] / "src/agent_comms/channel_coding_tools.mjs"
-    (dist / extension.name).write_bytes(extension.read_bytes())
+
 
 
 @pytest.fixture(autouse=True)
@@ -72,11 +68,7 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
     import agent_comms.nk_foreground as foreground
 
     model, calls = _fake_model(decision=decision)
-    with (
-        patch.object(foreground, "_trusted_package", side_effect=_fake_package),
-        patch("agent_comms.native_pi._trusted_package", side_effect=_fake_package),
-        patch.object(TrackedTurnSession, "execute", model),
-    ):
+    with patch.object(TrackedTurnSession, 'execute', model):
         try:
             owner = reserve_foreground_owner(
                 root,
@@ -84,7 +76,7 @@ def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL"
                 name=name,
                 task="arithmetic owner" if name == "beta" else "documentation owner",
                 tags=frozenset({"team"}),
-                native_package=root / "fake-pi",
+                native_package=VerifiedNativePackage.acquire(pinned_native_package()),
                 opt_in=True,
             )
             pipe.send(("ready", os.getpid()))
@@ -195,55 +187,51 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(private_comms, s
             duplicate_parent.close()
 
 
-def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(private_comms, sender) -> None:
+def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(private_comms, sender, *, native_runtime_package) -> None:
     comms, root = private_comms, private_comms.root
     root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
+    owner = reserve_foreground_owner(
+        root,
+        wire_root_id=root_id,
+        name="beta",
+        task="arithmetic owner",
+        tags=frozenset({"team"}),
+        native_package=native_runtime_package,
+        opt_in=True,
+    )
+    comms.registry.declare(
+        comms.registry.new_thread('alpha', frozenset({'team'}), str(root / 'work'), process_identity=ProcessIdentity.capture(os.getpid()))
+    )
+    message = publish_initial(comms, "sender", "#team", "@beta Compute 17+25.")
+    _accept(root, root_id, comms, message)
+    failing, attempts = _fake_model(fail_on=1)
     with (
-        patch("agent_comms.nk_foreground._trusted_package", side_effect=_fake_package),
-        patch("agent_comms.native_pi._trusted_package", side_effect=_fake_package),
+        patch("agent_comms.tracked_turn.TrackedTurnSession.execute", failing),
+        pytest.raises(RuntimeError),
     ):
-        owner = reserve_foreground_owner(
+        asyncio.run(owner.run_go("GO 0"))
+    assert len(attempts) == 1
+    with pytest.raises(PublicationActivationBlocked, match="exactly one GO"):
+        asyncio.run(owner.run_go("GO 0"))
+    assert len(attempts) == 1
+    with pytest.raises(RelationViolationError, match="already exists"):
+        reserve_foreground_owner(
             root,
             wire_root_id=root_id,
             name="beta",
             task="arithmetic owner",
             tags=frozenset({"team"}),
-            native_package=root / "fake-pi",
+            native_package=native_runtime_package,
             opt_in=True,
         )
-        comms.registry.declare(
-            comms.registry.new_thread('alpha', frozenset({'team'}), str(root / 'work'), process_identity=ProcessIdentity.capture(os.getpid()))
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        assert (
+            store.session._connection.execute(
+                f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
+            ).fetchone()[0]
+            == 1
         )
-        message = publish_initial(comms, "sender", "#team", "@beta Compute 17+25.")
-        _accept(root, root_id, comms, message)
-        failing, attempts = _fake_model(fail_on=1)
-        with (
-            patch("agent_comms.tracked_turn.TrackedTurnSession.execute", failing),
-            pytest.raises(RuntimeError),
-        ):
-            asyncio.run(owner.run_go("GO 0"))
-        assert len(attempts) == 1
-        with pytest.raises(PublicationActivationBlocked, match="exactly one GO"):
-            asyncio.run(owner.run_go("GO 0"))
-        assert len(attempts) == 1
-        with pytest.raises(RelationViolationError, match="already exists"):
-            reserve_foreground_owner(
-                root,
-                wire_root_id=root_id,
-                name="beta",
-                task="arithmetic owner",
-                tags=frozenset({"team"}),
-                native_package=root / "fake-pi",
-                opt_in=True,
-            )
-        with Coordination(str(root / "coordination.sqlite3")) as store:
-            assert (
-                store.session._connection.execute(
-                    f"SELECT count(*) FROM {NativeRuntimeInput.declared_name}"
-                ).fetchone()[0]
-                == 1
-            )
-        assert not (root / "read_markers.json").exists()
+    assert not (root / "read_markers.json").exists()
 
 
 def test_cli_main_ready_then_single_go_offline_model_boundary(
@@ -255,8 +243,6 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
         comms.registry.new_thread('alpha', frozenset({'team'}), str(root / 'work'), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     fake, calls = _fake_model()
-    monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", _fake_package)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", fake)
     commands: list[int] = []
 
@@ -305,7 +291,6 @@ def test_explicit_stop_is_not_falsely_reported_as_registry_stopped(
 ) -> None:
     comms, root = private_comms, private_comms.root
     root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
-    monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
     monkeypatch.setattr(foreground, "_read_go_command", lambda _timeout: "STOP")
     events: list[dict[str, object]] = []
     monkeypatch.setattr(foreground, "_emit", events.append)
@@ -353,50 +338,49 @@ def test_partial_go_frame_times_out_without_provider(monkeypatch: pytest.MonkeyP
         os.close(write_fd)
 
 
-def test_private_root_marker_and_no_owner_replacement(private_comms, sender) -> None:
+def test_private_root_marker_and_no_owner_replacement(private_comms, sender, *, native_runtime_package) -> None:
     comms, root = private_comms, private_comms.root
     root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
-    with patch("agent_comms.nk_foreground._trusted_package", side_effect=_fake_package):
-        with pytest.raises(PublicationActivationBlocked):
-            reserve_foreground_owner(
-                root,
-                wire_root_id=root_id,
-                name="beta",
-                task="task",
-                tags=frozenset({"team"}),
-                native_package=root / "fake-pi",
-                opt_in=False,
-            )
-        with pytest.raises(RelationViolationError):
-            reserve_foreground_owner(
-                root,
-                wire_root_id="wrong",
-                name="beta",
-                task="task",
-                tags=frozenset({"team"}),
-                native_package=root / "fake-pi",
-                opt_in=True,
-            )
-        assert "beta" not in comms.registry.all_threads()
-        first = reserve_foreground_owner(
+    with pytest.raises(PublicationActivationBlocked):
+        reserve_foreground_owner(
             root,
             wire_root_id=root_id,
             name="beta",
             task="task",
             tags=frozenset({"team"}),
-            native_package=root / "fake-pi",
+            native_package=native_runtime_package,
+            opt_in=False,
         )
-        assert first.name == "beta"
-        with pytest.raises(RelationViolationError, match="already exists"):
-            reserve_foreground_owner(
-                root,
-                wire_root_id=root_id,
-                name="beta",
-                task="replacement",
-                tags=frozenset({"team"}),
-                native_package=root / "fake-pi",
-                opt_in=True,
-            )
-        assert comms.registry.require("beta").task == "task"
-        with pytest.raises(ValueError, match="Expected one GO"):
-            asyncio.run(first.run_go("GO 0\n"))
+    with pytest.raises(RelationViolationError):
+        reserve_foreground_owner(
+            root,
+            wire_root_id="wrong",
+            name="beta",
+            task="task",
+            tags=frozenset({"team"}),
+            native_package=native_runtime_package,
+            opt_in=True,
+        )
+    assert "beta" not in comms.registry.all_threads()
+    first = reserve_foreground_owner(
+        root,
+        wire_root_id=root_id,
+        name="beta",
+        task="task",
+        tags=frozenset({"team"}),
+        native_package=native_runtime_package,
+    )
+    assert first.name == "beta"
+    with pytest.raises(RelationViolationError, match="already exists"):
+        reserve_foreground_owner(
+            root,
+            wire_root_id=root_id,
+            name="beta",
+            task="replacement",
+            tags=frozenset({"team"}),
+            native_package=native_runtime_package,
+            opt_in=True,
+        )
+    assert comms.registry.require("beta").task == "task"
+    with pytest.raises(ValueError, match="Expected one GO"):
+        asyncio.run(first.run_go("GO 0\n"))

@@ -368,7 +368,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     artifact = repo.parent / 'seen.png'
     artifact.write_text('x')
     script.close('P1', 'the installed app shows the counter at one after restart', str(artifact))
-    assert not comms.goals.todos.get('P1').state.open and script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == ()
+    assert not comms.goals.todos.get('P1').state.open and script.held_orders() == ()
     assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
                 'sent.jsonl', 'hunts.jsonl'} & {
         path.name for path in (repo.parent / 'state').iterdir()}
@@ -490,7 +490,7 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    assert script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == () and 'Problem: NEW' in body.read_text()
+    assert script.held_orders() == () and 'Problem: NEW' in body.read_text()
 
 
 def test_commander_refuses_a_check_that_prints_no_count(commander_script):
@@ -503,7 +503,7 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='the check printed no integer'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    assert script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == ()
+    assert script.held_orders() == ()
 
 
 def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander):
@@ -556,7 +556,7 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
     script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')
     withdrawn = comms.goals.todos.get('P1')
-    assert script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == () and not withdrawn.pending and script.struck(withdrawn, 'worker') == 0
+    assert script.held_orders() == () and not withdrawn.pending and script.struck(withdrawn, 'worker') == 0
     line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
     assert (tmp_path / 'board.md').read_text().count(line) == 1
     assert line in (tmp_path / 'narrative.md').read_text()
