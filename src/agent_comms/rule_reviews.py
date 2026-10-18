@@ -32,7 +32,7 @@ class DrawnRule(TypedTable):
 
 @dataclass(frozen=True)
 class RuleAnswer(TypedTable):
-    """What a reviewer's tick does about drawn rule ``n``; a drawn rule without one is unanswered."""
+    """What a reviewer's tick does about drawn rule ``n``; without one the rule is unanswered."""
 
     reviewer: str = field(metadata={"sql": Column(primary_key=True)})
     n: int = field(metadata={"sql": Column(primary_key=True, check="n>0")})
