@@ -102,15 +102,21 @@ class CatalogConfigOption(ConfigOption):
                 self.catalogs[key] = await self.discover(thread)
             return self.catalogs[key]
 
-    async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
+    unconfigured_value = ""
+
+    async def display_choices(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         choices = await self.choices(thread)
-        configured = self.current_value(thread)
-        selected = configured if configured is not None else ""
-        if configured is None:
-            choices = [SessionConfigSelectOption(
-                value=selected, name="Not configured"
+        if self.current_value(thread) is None:
+            return [SessionConfigSelectOption(
+                value=self.unconfigured_value, name="Not configured"
             ), *choices]
-        else:
+        return choices
+
+    async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
+        choices = await self.display_choices(thread)
+        configured = self.current_value(thread)
+        selected = configured if configured is not None else self.unconfigured_value
+        if configured is not None:
             try:
                 self.require_value(selected, choices)
             except InvalidConfigChoice as error:

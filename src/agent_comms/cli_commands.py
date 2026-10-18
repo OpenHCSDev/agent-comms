@@ -221,10 +221,12 @@ class CatalogTargetField(ChoiceTargetField):
         return (self.catalog,)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
-        options = await catalogs.catalog_for(self.catalog).choices(selection)
+        catalog = catalogs.catalog_for(self.catalog)
+        options = await catalog.display_choices(selection)
         decoder = compile_decoder(self.annotation)
         return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
-            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
+            value=decoder.encode_editor(decoder.decode(
+                None if item.value == catalog.unconfigured_value else item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}

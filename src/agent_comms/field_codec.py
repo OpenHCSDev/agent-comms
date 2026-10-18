@@ -924,7 +924,7 @@ class ValueDecoder[T](ABC):
 
     def encode_editor(self, value):
         encoded = FieldCodec.encode(value, self.target)
-        return None if encoded is None else json.dumps(encoded)
+        return json.dumps(encoded)
 
     def decode_editor(self, value):
         return None if value is None else json.loads(value)
@@ -1012,7 +1012,6 @@ class _RealDecoder(_NumberDecoder):
 class _NullDecoder(_ExactScalarDecoder):
     __slots__ = ()
     annotations = (type(None),)
-    editor_annotation = type(None)
 
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder(ValueDecoder[Any]):
@@ -1035,10 +1034,6 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 @dataclass(frozen=True, slots=True)
 class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
     annotations = (Any, object)
-
-    @classmethod
-    def from_annotation(cls, target, args):
-        return cls(target)
 
     @staticmethod
     @lru_cache(maxsize=1)
