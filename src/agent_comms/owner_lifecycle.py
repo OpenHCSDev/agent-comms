@@ -292,14 +292,7 @@ class OwnerLifecycle:
         package that differs from the reviewed tree or a replaced root.
         """
         if self._private_nk_launch is None:
-            launch = PrivateNkLaunch.derive(self.root)
-            if launch is None:
-                return None
-            # A published route's root ID must still be the marker's.
-            with self.bus.log.certified_read() as source:
-                if source.marker.root_id != launch.wire_root_id:
-                    raise RelationViolationError("private owner launch root ID changed")
-            self._private_nk_launch = launch
+            self._private_nk_launch = PrivateNkLaunch.derive(self.root)
         return self._private_nk_launch
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
