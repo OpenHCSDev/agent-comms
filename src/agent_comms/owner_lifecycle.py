@@ -15,6 +15,7 @@ from uuid import uuid4
 
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, ProcessState
 from .cli_result import CliResult
+from .tool_result import ToolResult
 from .coordination_errors import PublicationActivationBlocked
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
@@ -97,7 +98,7 @@ class OwnerRestartResult:
 
 
 @dataclass(frozen=True, slots=True)
-class OwnerStartResult(CliResult):
+class OwnerStartResult(CliResult, ToolResult):
     thread: str
     pid: int
     launched: bool

@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .cli_result import CliResult
+from .field_codec import FieldCodec, WireValue
+from .tool_result import ToolResult
 from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
@@ -543,7 +545,8 @@ class BusPresentation:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelView:
+class ChannelView(WireValue, ToolResult):
+    """Wire form: the channel's own fields beside its roster; agent counts stay in process."""
     channel: Channel
     members: tuple[str, ...]
     last_activity: float = 0
@@ -612,6 +615,17 @@ class ChannelView:
             "last_user_input": self.last_user_input,
             "pinned_members": sorted(self.pinned_members),
         }
+
+    @classmethod
+    def from_wire(cls, data: dict[str, object]) -> ChannelView:
+        roster = ("members", "last_activity", "last_user_input", "pinned_members")
+        declared = {key: value for key, value in data.items() if key not in roster}
+        member = Channel.decode(FieldCodec.decode(str, declared[Channel.family_discriminator]))
+        channel = FieldCodec.decode(member, declared)
+        return cls(channel, FieldCodec.decode(tuple[str, ...], data["members"]),
+                   FieldCodec.decode(float, data["last_activity"]),
+                   FieldCodec.decode(float, data["last_user_input"]),
+                   FieldCodec.decode(frozenset[str], data["pinned_members"]))
 
 
 @dataclass(frozen=True, slots=True)
