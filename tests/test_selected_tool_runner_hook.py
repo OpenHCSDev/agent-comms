@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import replace
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -29,19 +27,6 @@ from agent_comms.selected_tool_broker import (
 )
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_coordinated_runtime import _fake_model, _root
-
-
-@pytest.fixture
-def private_root():
-    if (
-        os.name != "posix"
-        or not Path("/var/tmp").is_dir()
-        or Path("/var").is_symlink()
-        or Path("/var/tmp").is_symlink()
-    ):
-        pytest.skip("private selected runner needs a physical /var/tmp")
-    with TemporaryDirectory(prefix="ac-tool-hook-", dir="/var/tmp") as dirname:
-        yield Path(dirname)
 
 
 @pytest.fixture
@@ -77,10 +62,10 @@ def nominal_broker_stub(monkeypatch):
 
 
 def test_owner_configuration_requires_nominal_intent_and_private_binding(
-    private_root, nominal_broker_stub
+    private_directory, nominal_broker_stub
 ):
     intent_type, _mode_type, _bound = nominal_broker_stub
-    wire = private_root / "wire"
+    wire = private_directory / "wire"
     wire.mkdir(mode=0o700)
     comms = Comms(wire)
     with pytest.raises(TypeError, match="nominal owner intent"):
@@ -94,11 +79,11 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
 
 @pytest.mark.asyncio
 async def test_operator_plan_and_tool_intent_are_exclusive(
-    private_root, monkeypatch, nominal_broker_stub
+    private_directory, monkeypatch, nominal_broker_stub
 ):
     intent_type, _mode_type, _bound = nominal_broker_stub
-    root, root_id, _comms, _initial, _ = _root(private_root, direct=True)
-    path = private_root / "existing.py"
+    root, root_id, _comms, _initial, _ = _root(private_directory, direct=True)
+    path = private_directory / "existing.py"
     path.write_text("before")
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     with pytest.raises(IdentityConflict, match="cannot share an operator file plan"):
@@ -106,7 +91,7 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
-            native_package=private_root,
+            native_package=private_directory,
             selected_tool_intent=intent_type(),
             selected_existing_file_write=SelectedExistingFileWrite(
                 ExistingFileClaim(Path(path)), b"after"
@@ -117,9 +102,9 @@ async def test_operator_plan_and_tool_intent_are_exclusive(
 
 @pytest.mark.asyncio
 async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instruction(
-    private_root, monkeypatch
+    private_directory, monkeypatch
 ):
-    root, root_id, _comms, _initial, _ = _root(private_root, direct=True)
+    root, root_id, _comms, _initial, _ = _root(private_directory, direct=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model()
     kwargs_seen = []
@@ -131,7 +116,7 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
     monkeypatch.setattr(TrackedTurnSession, "execute", observed)
     assert (
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="beta", native_package=private_root
+            root=root, wire_root_id=root_id, owner_name="beta", native_package=private_directory
         ).run()
     ).publications
     assert len(calls) == 1
@@ -143,9 +128,9 @@ async def test_default_full_has_normal_coding_tools_and_cooperative_claim_instru
 
 
 @pytest.mark.asyncio
-async def test_real_owner_selected_tool_writes_existing_file_once(private_root, monkeypatch):
-    root, root_id, comms, _initial, _people = _root(private_root, direct=True, claims=True)
-    path = private_root / "notes.txt"
+async def test_real_owner_selected_tool_writes_existing_file_once(private_directory, monkeypatch):
+    root, root_id, comms, _initial, _people = _root(private_directory, direct=True, claims=True)
+    path = private_directory / "notes.txt"
     path.write_text("before", encoding="utf-8")
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model()
@@ -161,7 +146,7 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
         root=root,
         wire_root_id=root_id,
         owner_name="beta",
-        native_package=private_root,
+        native_package=private_directory,
         selected_tool_intent=SelectedToolIntent(),
     ).run()
     assert result is not None and result.publications
@@ -176,10 +161,10 @@ async def test_real_owner_selected_tool_writes_existing_file_once(private_root, 
 
 @pytest.mark.asyncio
 async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
-    private_root, monkeypatch, nominal_broker_stub
+    private_directory, monkeypatch, nominal_broker_stub
 ):
     intent_type, mode_type, bound = nominal_broker_stub
-    root, root_id, comms, initial, people = _root(private_root, direct=True)
+    root, root_id, comms, initial, people = _root(private_directory, direct=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model()
     kwargs_seen = []
@@ -199,7 +184,7 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
         root=root,
         wire_root_id=root_id,
         owner_name="beta",
-        native_package=private_root,
+        native_package=private_directory,
         selected_tool_intent=intent_type(),
     ).run()
     assert result is not None and result.publications
@@ -218,17 +203,17 @@ async def test_nominal_full_binds_exact_reserved_owner_input_and_gated_prompt(
 
 @pytest.mark.asyncio
 async def test_wrong_intent_or_observer_cannot_create_tool_mode(
-    private_root, monkeypatch, nominal_broker_stub
+    private_directory, monkeypatch, nominal_broker_stub
 ):
     intent_type, _mode_type, bound = nominal_broker_stub
-    root, root_id, _comms, _initial, _ = _root(private_root, mentioned=True)
+    root, root_id, _comms, _initial, _ = _root(private_directory, mentioned=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     with pytest.raises(TypeError, match="nominal owner intent"):
         await runtime.SelectedExecution(
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
-            native_package=private_root,
+            native_package=private_directory,
             selected_tool_intent=object(),
         ).run()
     assert (
@@ -236,7 +221,7 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
             root=root,
             wire_root_id=root_id,
             owner_name="alpha",
-            native_package=private_root,
+            native_package=private_directory,
             selected_tool_intent=intent_type(),
         ).run()
         is None
@@ -245,9 +230,9 @@ async def test_wrong_intent_or_observer_cannot_create_tool_mode(
 
 
 @pytest.mark.asyncio
-async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nominal_broker_stub):
+async def test_opted_in_triage_remains_no_tools(private_directory, monkeypatch, nominal_broker_stub):
     intent_type, _mode_type, bound = nominal_broker_stub
-    root, root_id, _comms, _initial, _ = _root(private_root)
+    root, root_id, _comms, _initial, _ = _root(private_directory)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     kwargs_seen = []
@@ -261,11 +246,11 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
         root=root,
         wire_root_id=root_id,
         owner_name="alpha",
-        native_package=private_root,
+        native_package=private_directory,
         selected_tool_intent=intent_type(),
     ).run()
     assert len(calls) == len(kwargs_seen) == 1
-    assert kwargs_seen[0]["selected_tool_mode"].launch_arguments(private_root) == ("--no-tools",)
+    assert kwargs_seen[0]["selected_tool_mode"].launch_arguments(private_directory) == ("--no-tools",)
     assert "selected_claimed_write" not in calls[0][1]
     assert not bound
 
@@ -273,10 +258,10 @@ async def test_opted_in_triage_remains_no_tools(private_root, monkeypatch, nomin
 @pytest.mark.asyncio
 @pytest.mark.parametrize("failure", ["unknown", "wrong_input", "stale_epoch"])
 async def test_selected_full_failure_never_reissues_or_forges_response(
-    private_root, monkeypatch, nominal_broker_stub, failure
+    private_directory, monkeypatch, nominal_broker_stub, failure
 ):
     intent_type, _mode_type, bound = nominal_broker_stub
-    root, root_id, comms, _initial, _people = _root(private_root, direct=True)
+    root, root_id, comms, _initial, _people = _root(private_directory, direct=True)
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     fake, calls = _fake_model(fail_on=1 if failure == "unknown" else None)
 
@@ -300,7 +285,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
-            native_package=private_root,
+            native_package=private_directory,
             selected_tool_intent=intent_type(),
         ).run()
     assert (
@@ -308,7 +293,7 @@ async def test_selected_full_failure_never_reissues_or_forges_response(
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
-            native_package=private_root,
+            native_package=private_directory,
             selected_tool_intent=intent_type(),
         ).run()
         is None
