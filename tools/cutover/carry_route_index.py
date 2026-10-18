@@ -2,6 +2,8 @@
 
 Only the saved route source row changes shape; every route row is copied as is.
 A bus without a v5 index, or one that already has its v6 index, has nothing to carry.
+The saved rows belong to one bus file: a copy or restore of the bus leaves the
+v6 index for its reader to build.
 """
 from __future__ import annotations
 
@@ -47,7 +49,9 @@ class RouteIndexV6(Carry):
                 raise ValueError("Route rows exist without a saved source")
             with WireLog(index.bus_path)._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as cut:
                 if not all(row.matches_source(cut) for row in recorded):
-                    raise ValueError("Saved route index does not match this bus")
+                    # Rows saved for another bus file (a copy, a restore) are not this
+                    # bus's; its reader builds the v6 index from history instead.
+                    return Carried(0, {"rebuilt_by_reader": True})
             if apply:
                 with _store_lock(index.path):
                     descriptor, temporary = tempfile.mkstemp(prefix="route-carry-", suffix=".sqlite3", dir=root)
@@ -65,7 +69,9 @@ class RouteIndexV6(Carry):
                             destination.rollback()
                             raise
                     os.replace(temporary, index.path)
-        return Carried(1, {**counts, "source_rows": len(recorded)}, (index.path.name,) if apply else ())
+        rewritten = tuple(path.name for path in root.glob(f"{index.path.name}*"))
+        rewritten += tuple(path.name for path in root.glob(f"{old.name}-*"))
+        return Carried(1, {**counts, "source_rows": len(recorded)}, rewritten if apply else ())
 
 
 if __name__ == "__main__":

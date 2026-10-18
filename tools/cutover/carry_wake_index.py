@@ -2,6 +2,8 @@
 
 The only declared difference is that policy value, so every saved row decodes
 unchanged. An index already in the current declaration has nothing to carry.
+The saved rows belong to one bus file: on a copy or restore of the bus the index
+starts empty in the current declaration and its reader builds it.
 """
 from __future__ import annotations
 
@@ -10,7 +12,8 @@ from pathlib import Path
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.store_files import _store_lock
-from agent_comms.wake_candidate_index import CandidateCheckpoint, WakeCandidateIndex
+from agent_comms.wake_candidate_index import (CandidateCheckpoint, ProjectionRebuildRequiredError,
+                                              WakeCandidateIndex)
 from agent_comms.wire_log import CurrentSnapshotOpening, WireLog
 
 from cutover.carry import Carried, Carry
@@ -43,7 +46,12 @@ class WakePolicyUnmentioned(Carry):
             rows = {owner: owner.select(db) for owner in index.rows}
             saved = CandidateCheckpoint.current(db)
         with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
-            saved.require_source(snapshot, snapshot.metadata.root_id)
+            try:
+                saved.require_source(snapshot, snapshot.metadata.root_id)
+            except ProjectionRebuildRequiredError:
+                # Rows saved for another bus file (a copy, a restore) are not this
+                # bus's: the index starts empty and its reader builds it.
+                rows = {owner: [] for owner in rows}
         if apply:
             with _store_lock(index.path), closing(CoordinationStore.writer(index.path)) as db:
                 db.execute("BEGIN IMMEDIATE")
@@ -60,7 +68,8 @@ class WakePolicyUnmentioned(Carry):
                     db.rollback()
                     raise
         detail = {owner.declared_name: len(values) for owner, values in rows.items()}
-        return Carried(1, {**detail, "through": saved.byte_offset}, (index.path.name,) if apply else ())
+        rewritten = tuple(path.name for path in root.glob(f"{index.path.name}*")) if apply else ()
+        return Carried(1, detail, rewritten)
 
 
 if __name__ == "__main__":
