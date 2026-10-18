@@ -50,7 +50,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
             return cls.for_name(name).parse_arguments(decoded)
-        except (TypeError, ValueError):
+        except (MalformedRecord, SelectedToolDenied):
             return None
 
     def reads(self) -> str:

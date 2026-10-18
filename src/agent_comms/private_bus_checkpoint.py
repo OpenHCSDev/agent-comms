@@ -806,7 +806,7 @@ class ContextManifestReference:
         page = RecordedContextManifestSources.for_owner(log, name, registry,
             cursor=BeforeContextManifest(self.source, self.offset + 1), limit=1)
         if len(page.resources) != 1 or page.resources[0].pointer.offset != self.offset:
-            raise ValueError("Recorded context reference is absent from this owner")
+            raise MalformedRecord("Recorded context reference is absent from this owner")
         return page.resources[0].value
 
 

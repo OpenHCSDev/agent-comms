@@ -25,7 +25,7 @@ from acp.exceptions import RequestError
 from acp.schema import RequestPermissionResponse
 
 from .jsonl_stream import JsonlStreamReader
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .owner_protocol import OwnerAnnouncement, OwnerReady
 from .runtime_requests import RuntimeRequest, SubscribeRuntimeRequest
 from .registry_document import RegistryEntry
@@ -482,7 +482,12 @@ class RuntimeProxy(RuntimeConnection):
                 data = FieldCodec.decode(dict[str, Any], FieldCodec.parse(line))
                 _raise_owner_error(data)
                 if "ready" in data:
-                    ready = FieldCodec.decode(OwnerReady, data)
+                    try:
+                        ready = FieldCodec.decode(OwnerReady, data)
+                    except MalformedRecord as error:
+                        raise MalformedRecord(
+                            "Owner subscription ready requires a valid controllerToken."
+                        ) from error
                     presented = await Coordination.run_worker(
                         partial(present_session, ready.ready, self.session_id)
                     )

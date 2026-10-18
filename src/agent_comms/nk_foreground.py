@@ -52,7 +52,7 @@ class ForegroundOwner:
     async def run_go(self, line: str) -> CoordinatedTurn | None:
         match = _GO.fullmatch(line)
         if match is None:
-            raise ValueError("Expected one GO <nonnegative sequence> command")
+            raise MalformedRecord("Expected one GO <nonnegative sequence> command")
         if self._started:
             raise PublicationActivationBlocked("Foreground owner accepts exactly one GO")
         self._started = True  # Before the first await: even an uncertain attempt is spent.
@@ -91,7 +91,7 @@ def reserve_foreground_owner(
         raise PublicationActivationBlocked("Foreground N/K requires a private /var/tmp root")
     _private_session_dir(root)
     if type(wire_root_id) is not str or not wire_root_id:
-        raise ValueError("A private wire-root ID is required")
+        raise MalformedRecord("A private wire-root ID is required")
     package = Path(native_package).absolute()
     _trusted_package(package)  # Reject before touching the recipient registry.
     worktree = root / "work"
@@ -136,14 +136,14 @@ def _read_go_command(timeout: int) -> str:
             raise TimeoutError("Explicit GO did not complete before the foreground deadline")
         byte = os.read(descriptor, 1)
         if not byte:
-            raise ValueError("Incomplete GO command")
+            raise MalformedRecord("Incomplete GO command")
         if byte == b"\n":
             try:
                 return frame.decode("ascii", errors="strict")
             except UnicodeDecodeError as error:
-                raise ValueError("GO command must be ASCII") from error
+                raise MalformedRecord("GO command must be ASCII") from error
         frame.extend(byte)
-    raise ValueError("GO command exceeds the private frame limit")
+    raise MalformedRecord("GO command exceeds the private frame limit")
 
 
 def main(argv: Sequence[str] | None = None) -> int:

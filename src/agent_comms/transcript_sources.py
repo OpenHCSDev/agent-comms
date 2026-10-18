@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
+from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
 from .typed_table import TypedStore
@@ -54,7 +55,7 @@ class WireFrontier(DeclaredFamily, affix="WireFrontier"):
 
     def at(self, sequence):
         if sequence:
-            raise ValueError("Native-only cursor cannot advance an assigned wire source")
+            raise MalformedRecord("Native-only cursor cannot advance an assigned wire source")
         return self
 
     def within(self, parent):

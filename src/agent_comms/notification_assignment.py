@@ -14,7 +14,7 @@ from .coordination_schema import COORDINATION_SCHEMA_VERSION
 from .coordination_tables.assignments import WakeAssignment
 from .coordination_tables.publications import PublicationEvidence
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .message_reference import MessageReference
 from .notification_progress import AnsweredProgress, AssignmentProgress, QueuedProgress, SentProgress, ShownToModelProgress
 from .typed_table import BooleanStorage, SQLiteUserVersion, TypedRow, sql_literal
@@ -70,7 +70,7 @@ class AssignmentResponse(DeclaredFamily, affix="Response"):
         if seq is None and message_id is None and received_at_ms is None:
             return UnansweredResponse()
         if seq is None or message_id is None or received_at_ms is None:
-            raise ValueError("Published response evidence is incomplete")
+            raise MalformedRecord("Published response evidence is incomplete")
         return AnsweredResponse(MessageReference(seq, message_id), received_at_ms)
 
     @abstractmethod

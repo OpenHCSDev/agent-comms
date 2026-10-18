@@ -316,7 +316,7 @@ class SqlValue:
         """Read a single-column projection without losing empty or nullable results."""
         try:
             if cursor.description is None or len(cursor.description) != 1:
-                raise ValueError("Scalar projection requires exactly one SQLite column")
+                raise MalformedRecord("Scalar projection requires exactly one SQLite column")
             return [self.decode(row[0]) for row in cursor]
         finally:
             cursor.close()

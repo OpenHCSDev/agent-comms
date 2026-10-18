@@ -251,7 +251,7 @@ class OpenedWireSnapshot(WireSnapshot):
         """Complete rows whose starts fall within the requested original cut."""
         stop = self.boundary if before_offset is None else min(before_offset, self.boundary)
         if after_offset < 0 or stop < 0:
-            raise ValueError("Wire row offsets must be nonnegative")
+            raise MalformedRecord("Wire row offsets must be nonnegative")
         self.stream.seek(after_offset)
         while self.stream.tell() < stop:
             offset = self.stream.tell()
