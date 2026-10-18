@@ -50,7 +50,7 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity, RecipientActivity
     from .comms import Comms
-    from .ui_model.observation import ThreadsObserved
+    from .ui_model.observation import ReadNotifications, ThreadsObserved
     from .bus_publication import CommittedDelivery
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
@@ -748,8 +748,33 @@ def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]]):
     return field(metadata={"paths": paths})
 
 
+class ReadState:
+    __slots__ = ()
+
+    def _changed_since(self, earlier: WireRevision) -> bool:
+        return True
+
+    bus_source_changed_since = _changed_since
+    _registrations_changed_from = _changed_since
+    stores_changed_since = _changed_since
+    status_changed_since = _changed_since
+    sidebar_changed_since = _changed_since
+    external_transcripts_changed_since = _changed_since
+    notifications_changed_since = _changed_since
+
+    def registrations_changed_since(self, earlier: ReadState) -> bool:
+        return True
+
+    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
+        return True
+
+
+class NoRevision(ReadState):
+    __slots__ = ()
+
+
 @dataclass(frozen=True, slots=True)
-class WireRevision:
+class WireRevision(ReadState):
     """One observation of every Comms store a view derives from, by name."""
 
     registry: tuple[FileRevision, ...] = revision_source(lambda views: (views.registry.store.path,))
@@ -771,7 +796,6 @@ class WireRevision:
 
     @classmethod
     def empty(cls) -> WireRevision:
-        """No stores have been observed yet; source groups come from their declarations."""
         return cls(**{source.name: () for source in fields(cls) if "paths" in source.metadata},
                    expiry_tick=0, through_seq=0)
 
@@ -851,8 +875,10 @@ class WireRevision:
     def expiry_period(self) -> int:
         return self.expiry_tick // self.expiry_seconds
 
-    def registrations_changed_since(self, earlier: WireRevision) -> bool:
-        """A thread registration or a channel declaration changed."""
+    def registrations_changed_since(self, earlier: ReadState) -> bool:
+        return earlier._registrations_changed_from(self)
+
+    def _registrations_changed_from(self, earlier: WireRevision) -> bool:
         return (self.registry, self.catalog) != (earlier.registry, earlier.catalog)
 
     def stores_changed_since(self, earlier: WireRevision) -> bool:
@@ -877,6 +903,9 @@ class WireRevision:
     def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
         """CLI drafts and finished items changed, independently of coordination status."""
         return self.external_transcripts != earlier.external_transcripts
+
+    def notification_read_changed(self, request: ReadNotifications, current: WireRevision) -> bool:
+        return request.changed_since(current, self)
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
         """Recipient state depends on assignments, presence, bus replies and read marks."""
