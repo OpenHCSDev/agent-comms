@@ -9,6 +9,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.native_transcript import NativeTranscript
 from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
@@ -163,7 +164,8 @@ def test_sidebar_native_counts_use_the_original_captured_read_document(tmp_path)
     capture = CoordinationSnapshot.capture
 
     def painted_after_capture(*args, **kwargs):
-        comms.views.transcript_reads.mark_read(viewer, str(source), source.stat().st_size)
+        comms.views.transcript_reads.mark_read(
+            viewer, str(source), source.stat().st_size, NativeTranscript(source).cut())
         return capture(*args, **kwargs)
 
     with (
@@ -180,7 +182,7 @@ def test_ready_native_sources_share_bulk_rows_and_one_predecessor_snapshot(tmp_p
     for number in range(20):
         source = tmp_path / f"session-{number}.jsonl"
         append(source)
-        state.mark_read("viewer", str(source), source.stat().st_size)
+        state.mark_read("viewer", str(source), source.stat().st_size, NativeTranscript(source).cut())
         append(source)
         sources[str(number)] = (str(source),)
     expected = dict.fromkeys(sources, 1)
@@ -365,7 +367,7 @@ def test_bounded_batches_resume_after_process_exit_and_preserve_read_cursor(tmp_
         append(source)
     path = tmp_path / "read_ledger.json"
     first = TranscriptReadState(path)
-    first.mark_read("viewer", str(source), source.stat().st_size)
+    first.mark_read("viewer", str(source), source.stat().st_size, NativeTranscript(source).cut())
     sources = {"worker": (str(source),)}
     partial = first.counts("viewer", sources, document=first.reads.read())
     assert partial.pending == {"worker"} and "worker" not in partial.counts

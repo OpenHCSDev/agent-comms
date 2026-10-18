@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
+from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .private_path import FileRevision
@@ -80,15 +81,8 @@ class SessionCut(RecordsCut):
         # Native drafts belong to the ACP stream, not this saved-record reader.
         return self.holds(current, self.offset)
 
-    def mark_read(self, reads, viewer: str, source: str, through: int) -> None:
-        from .view_unread import TranscriptChanged
-
-        if not 0 <= through <= self.offset:
-            raise TranscriptChanged("Transcript changed; refresh before marking it read.")
-        self.record_read(reads, viewer, source, through)
-
     @abstractmethod
-    def record_read(self, reads, viewer: str, source: str, through: int) -> None: ...
+    def mark_read(self, reads, viewer: str, source: str, through: int) -> None: ...
 
     @abstractmethod
     def publication_revision(self, root, reader, recipient): ...
@@ -101,7 +95,7 @@ class MissingSessionCut(SessionCut):
     def contains(self, current: SessionCut, through: int) -> bool:
         return through == 0
 
-    def record_read(self, reads, viewer: str, source: str, through: int) -> None:
+    def mark_read(self, reads, viewer: str, source: str, through: int) -> None:
         # No file means no written transcript, just as unread counts return zero.
         pass
 
@@ -123,7 +117,9 @@ class PresentSessionCut(SessionCut):
         # A session is append-only within one inode; replacement changes the cut.
         return self.revision.holds_cut(current.revision, through)
 
-    def record_read(self, reads, viewer: str, source: str, through: int) -> None:
+    def mark_read(self, reads, viewer: str, source: str, through: int) -> None:
+        if not 0 <= through <= self.offset:
+            raise TranscriptChanged()
         reads.mark_transcript(viewer, source, self.revision.identity.inode,
                               through, self.revision.size)
 

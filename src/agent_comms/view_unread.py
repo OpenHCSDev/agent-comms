@@ -22,7 +22,7 @@ from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
 from .launch_runtime import ThreadLaunch
 from .native_entries import NativeEntry
-from .native_transcript import NativeTranscript
+from .native_transcript import SessionCut
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
 from .store_files import SharedLock, _store_lock
@@ -33,10 +33,6 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 _INDEX_VERSION = 4
-
-
-class TranscriptChanged(ValueError):
-    """A captured transcript cursor cannot mark the current saved file read."""
 
 
 class ReplyIndexTable:
@@ -631,8 +627,8 @@ class TranscriptReadState(ThreadOwnedState):
             total.record(name, result, pending)
         return TranscriptUnread(result, frozenset(pending))
 
-    def mark_read(self, viewer: str, source: str, through: int) -> None:
-        NativeTranscript(Path(source)).cut().mark_read(self.reads, viewer, source, through)
+    def mark_read(self, viewer: str, source: str, through: int, cut: SessionCut) -> None:
+        cut.mark_read(self.reads, viewer, source, through)
 
 
 _shared_lock = RLock()
