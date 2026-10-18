@@ -70,10 +70,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
 
 @dataclass(frozen=True)
-class UndeclaredTool(ToolDeclaration):
+class UndeclaredTool(ToolDeclaration, declared_name=None):
     """An external name is visible as supplied, without becoming a declaration."""
 
-    declared_name = None
     name: str
 
     @property

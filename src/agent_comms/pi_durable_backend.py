@@ -132,8 +132,7 @@ class TaskFailed(DurablePiEvent):
         return (Error(self.message),)
 
 
-class HostQuery(PiCommand):
-    declared_name = None
+class HostQuery(PiCommand, declared_name=None):
     strict_response = True
 
 

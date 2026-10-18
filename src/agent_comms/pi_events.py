@@ -63,7 +63,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     @classmethod
     def wire_kind(cls) -> str:
         """The Pi ``type`` this member converts."""
-        return cls.declared_name
+        return FieldCodec.decode(str, FieldCodec.encode(cls))
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
@@ -128,12 +128,11 @@ class PiEvent(PiPayload, DeclaredFamily):
         return False
 
 
-class NativePiEvent(PiEvent):
-    declared_name = None
+class NativePiEvent(PiEvent, declared_name=None):
+    pass
 
 
-class DurablePiEvent(PiEvent):
-    declared_name = None
+class DurablePiEvent(PiEvent, declared_name=None):
 
     @staticmethod
     def unowned_event(event):
@@ -272,8 +271,7 @@ class ModelRequestProgress(NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryEnd(PiEvent):
-    declared_name = None
+class RetryEnd(PiEvent, declared_name=None):
     attempt: int
 
     def __post_init__(self) -> None:
@@ -495,7 +493,7 @@ class ExtensionUiRequest(NativePiEvent):
 
     @classmethod
     def wire_kind(cls) -> str:
-        return ExtensionUiRequest.declared_name
+        return FieldCodec.decode(str, FieldCodec.encode(ExtensionUiRequest))
 
     @classmethod
     def wire_case(cls, wire):
