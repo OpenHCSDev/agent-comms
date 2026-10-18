@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .activity import ObservedActivity
 from .errors import RelationViolationError
 from .routing import TurnRouting
-from .field_codec import FieldCodec, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SubclassUnion
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
@@ -75,24 +75,12 @@ class TurnDeclaration(SubclassUnion):
 
 
 @dataclass(frozen=True)
-class NoTurn(TurnDeclaration):
+class NoTurn(NullMember, TurnDeclaration):
     phase: ClassVar[TurnPhase] = IdlePhase()
     id = None
     started_at = None
     executing = False
     report_turn = ""
-
-    @classmethod
-    def from_wire(cls, data: object) -> NoTurn:
-        FieldCodec.decode(type(None), data)
-        return cls()
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(type(None))
-
-    def to_wire(self) -> None:
-        return None
 
     def require_active(self) -> ActiveTurn:
         raise RelationViolationError("registry owner has no active turn")

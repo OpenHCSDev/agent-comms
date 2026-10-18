@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SubclassUnion
 from .errors import RelationViolationError
 from .sealed import Sealed
 
@@ -120,19 +120,7 @@ class ProcessState(SubclassUnion):
 
 
 @dataclass(frozen=True)
-class NoProcess(ProcessState):
-    @classmethod
-    def from_wire(cls, data: object) -> NoProcess:
-        FieldCodec.decode(type(None), data)
-        return cls()
-
-    def to_wire(self) -> None:
-        return None
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(type(None))
-
+class NoProcess(NullMember, ProcessState):
     def allows_owner_start(self) -> bool:
         return True
 

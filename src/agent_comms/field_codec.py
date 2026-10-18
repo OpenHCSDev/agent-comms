@@ -167,6 +167,24 @@ class SubclassUnion(WireValue):
         return FieldCodec.value_schema(cls._decoder.target)
 
 
+class NullMember(WireValue):
+    """One declared empty member owns the JSON null representation."""
+
+    accepts_null = True
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        FieldCodec.decode(type(None), data)
+        return cls()
+
+    def to_wire(self) -> None:
+        return None
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(type(None))
+
+
 class InlineRecord(WireValue):
     """A typed field represented by its declared object's sibling wire fields."""
 
