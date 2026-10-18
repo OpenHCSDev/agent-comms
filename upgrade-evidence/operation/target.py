@@ -16,7 +16,8 @@ from agent_comms.active_route import ActiveRoute, _publish_active_route_locked, 
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceState
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceState, InstallingPhase, ReadyPhase
+from agent_comms.store_files import _store_lock
 from agent_comms.native_package import pinned_native_package, verify_native_package
 from agent_comms.owner_restart import OwnerRestartHandoff, StoppedOwnerBatch
 
@@ -47,6 +48,17 @@ def main():
     snapshot = comms.registry.snapshot()
     for owner in handoff.owners:
         owner.require_current(snapshot)
+    # Carry the operator's two already-owned checkouts as storage facts. They
+    # existed before the new allocation naming rule; no new checkout is created.
+    operator = snapshot.require('codex-agent-comms')
+    roots = operator.storage_roots.adding(Path('/home/ts/wt/comms-update-latest')).adding(
+        Path('/home/ts/wt/comms-update-original'))
+    comms.registry.storage_rule.require_quota(roots)
+    with comms.registry.store.editing() as edit:
+        current = edit.document.require(operator.name)
+        assert current.incarnation == operator.incarnation and current.storage_roots == operator.storage_roots
+        edit.document.threads[operator.name] = replace(current, storage_roots=roots)
+        edit.commit()
     route = ActiveRoute(root, old_route.wire_root_id, package)
     _publish_active_route_locked(route, Path.home() / '.local/state/agent-comms/active-route.json',
                                  route_fd, expected=old_route)
@@ -57,7 +69,9 @@ def main():
                        AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package))
     target = replace(handoff, runtime=RestartEnvironment.inherit(environment).without_pythonpath(),
                      launch_runtime=runtime)
-    MaintenanceBarrier(root / 'registry.json').clear_stopped(hold, wire_fd)
+    assert hold.phase is InstallingPhase
+    with _store_lock(root / 'registry.json'):
+        MaintenanceBarrier(root / 'registry.json')._advance_unlocked(hold, ReadyPhase)
     results = target.launch(comms.owners, runtime)
     outcome = {'state': 'installed', 'root': str(root), 'native_package': str(package),
                'core': __import__('subprocess').check_output(['git', '-C', str(repo), 'rev-parse', 'HEAD'], text=True).strip(),

@@ -20,7 +20,7 @@ The two Core identity declarations remain distinct source/wheel cases. Deleting 
 
 - 28 native-package tests passed, including source build-artifact interference and installed missing-resource failure.
 - Candidate native package prepared and whole-tree verified. Candidate ACP/Toad imports work.
-- On a disposable copy of the retained root, all 13 storage records carried, publication/wait carry completed, and the new RegistryDocument decoded. Original root untouched by rehearsal.
+- On a disposable copy of the retained root, all 13 storage records carried, publication/wait carry completed, and the new RegistryDocument decoded. A second rehearsal included an original-format goal: both copies of its goal record carried, and new Core read the migrated goal and retained input dispositions. Original root untouched by rehearsal.
 
 ## One-shot operation
 
@@ -30,4 +30,4 @@ Only the all-stopped callback closes the old Toad frontend normally, takes the o
 
 target.py uses the existing carries, validates the retired owner witnesses, atomically updates the existing route (same root ID), clears the exact maintenance hold, and restores only the previously running owners. Original sessions, stopped agents and uncertain input dispositions are not replayed or discarded. verify.py checks JSONL retained prefixes, runtime entry points and official ACP attachment without sending a prompt. The standard persistent-goal owner continues this author's actual physical Toad acceptance after restart; no new queue or reminder store is created.
 
-A failure after fencing relinquishes custody with the maintenance hold retained and an exact failure receipt; no uncertain publication, launch or input is retried. Original preimages, operation source and receipts remain until acceptance. Do not delete them while this operation or resumed author needs them.
+A failure records an exact receipt. The existing cutover recovery owner may restore the authentic original runtime only when main source, its native manifest and the original registry schema are proved unchanged; otherwise stopped custody is relinquished with maintenance held. No uncertain publication, launch or input is retried. Original preimages, operation source and receipts remain until acceptance. Do not delete them while this operation or resumed author needs them.

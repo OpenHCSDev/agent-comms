@@ -31,8 +31,9 @@ from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
-from agent_comms.maintenance_barrier import MaintenanceOperator
+from agent_comms.maintenance_barrier import MaintenanceOperator, DrainingPhase, PausedPhase, InstallingPhase, ReadyPhase
 from agent_comms.owner_cutover import MaintainedOwnerCutover
+from agent_comms.store_files import _store_lock
 from watchdog.events import FileSystemEventHandler
 from watchdog.observers import Observer
 
@@ -86,6 +87,25 @@ class Upgrade(MaintainedOwnerCutover):
             backup.chmod(0o700)
             (EVIDENCE / 'original-active-route.json').write_bytes(active_route_path().read_bytes())
             (EVIDENCE / 'original-native-manifest').write_bytes((MAIN / 'stack/pi-native.sha256').read_bytes())
+            candidate = Path(subprocess.check_output([str(CANDIDATE/'stack/.venv/bin/python'),'-c',
+                'from agent_comms.native_package import pinned_native_package; print(pinned_native_package())'],text=True).strip())
+            source_backup=EVIDENCE/'native-source-preimages';source_backup.mkdir(mode=0o700)
+            declarations=json.loads((candidate/'dist/agent-comms-imports.json').read_text())
+            originals=[]
+            for entry in declarations['extensionEntries']:
+                for source in entry.get('sources',[]):
+                    path=Path(source['path']);record={'path':str(path),'present':path.exists() or path.is_symlink()}
+                    if path.is_symlink():record['symlink']=os.readlink(path)
+                    if path.is_file():
+                        saved=source_backup/str(len(originals));saved.write_bytes(path.read_bytes());saved.chmod(0o600)
+                        record['preimage']=saved.name
+                    originals.append(record)
+            (source_backup/'index.json').write_text(json.dumps(originals,indent=2))
+            # Incompatible installation is explicit: actual stopped/route custody
+            # is already held, so advance the existing phase owner under registry.
+            with _store_lock(stopped.lifecycle.registry.store.path):
+                self.maintenance_hold=stopped.lifecycle.maintenance._advance_unlocked(self.maintenance_hold,PausedPhase)
+                self.maintenance_hold=stopped.lifecycle.maintenance._advance_unlocked(self.maintenance_hold,InstallingPhase)
             # No commit, reset or clean in live main. The one reviewed old local
             # manifest difference is preserved above, then superseded by this build.
             dirty = subprocess.check_output(['git','-C',str(MAIN),'status','--porcelain'],text=True)
@@ -104,8 +124,6 @@ class Upgrade(MaintainedOwnerCutover):
                     raise RuntimeError('Autostash has unreviewed changes; preserve it')
                 run('git','-C',str(MAIN),'stash','drop','stash@{0}')
             run('uv','sync','--project',str(MAIN/'stack'),'--locked')
-            candidate = Path(subprocess.check_output([str(CANDIDATE/'stack/.venv/bin/python'),'-c',
-                'from agent_comms.native_package import pinned_native_package; print(pinned_native_package())'],text=True).strip())
             deployment = MAIN/'stack'/candidate.relative_to(CANDIDATE/'stack')
             if deployment.exists():
                 raise RuntimeError('Refusing to overwrite a native deployment')
@@ -126,11 +144,29 @@ class Upgrade(MaintainedOwnerCutover):
         finally:
             os.close(route_fd)
 
+    def recover(self, stopped):
+        # Recovery is allowed only before any source/runtime/schema publication.
+        # Prove the original files and schema, not a guessed exception category.
+        head=subprocess.check_output(['git','-C',str(MAIN),'rev-parse','HEAD'],text=True).strip()
+        dirty=subprocess.check_output(['git','-C',str(MAIN),'status','--porcelain'],text=True)
+        rows=json.loads((stopped.lifecycle.root/'registry.json').read_text())['threads']
+        if (not head.startswith('04e06f6f')
+                or any(line[3:]!='stack/pi-native.sha256' for line in dirty.splitlines())
+                or (MAIN/'stack/pi-native.sha256').read_bytes()!=(ORIGINAL/'stack/pi-native.sha256').read_bytes()
+                or any('storage_roots' in row or 'previous_worktrees' not in row for row in rows.values())):
+            raise RuntimeError('Original source/schema no longer certified unchanged; leave stopped')
+        if self.maintenance_hold.phase is DrainingPhase:
+            stopped.lifecycle.maintenance.clear_stopped(self.maintenance_hold,stopped.wire_descriptor)
+        else:
+            with _store_lock(stopped.lifecycle.registry.store.path):
+                stopped.lifecycle.maintenance._advance_unlocked(self.maintenance_hold,ReadyPhase)
+        return stopped.handoff.restore(stopped.lifecycle)
+
     def failed(self, failure):
         (EVIDENCE/'failure.txt').write_text(repr(failure.__cause__))
-        # A changed or uncertain installation is never replayed or rolled back
-        # on exception text. Retained originals and the maintenance hold remain.
-        self.leave_stopped(failure)
+        # The existing cutover owner invokes recover once and leaves the exact
+        # stopped phase held if unchanged-original proof fails. No input retries.
+        self.restore_unchanged(failure)
 
 
 def main():
