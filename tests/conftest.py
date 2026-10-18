@@ -103,6 +103,44 @@ def declared_native_package(tmp_path_factory, monkeypatch) -> Path:
 
 
 @pytest.fixture
+def native_package_artifact(tmp_path, monkeypatch):
+    """A construction-only artifact with real layout, ancestry and tree verification."""
+    from agent_comms import native_package
+
+    deployment = tmp_path / "native"
+    deployment.mkdir(mode=0o700)
+    package = deployment / "node_modules/@earendil-works/pi-coding-agent"
+    (package / "dist").mkdir(parents=True)
+    (package / "dist/cli.js").write_text("// This fixture never starts Node.\n")
+    manifest = tmp_path / "pin"
+    manifest.write_text(native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n")
+    monkeypatch.setattr(native_package, "MANIFEST", manifest)
+    return package
+
+
+@pytest.fixture
+def verified_native_package(native_package_artifact):
+    from agent_comms.native_package import VerifiedNativePackage
+
+    return VerifiedNativePackage.acquire(native_package_artifact)
+
+
+@pytest.fixture
+def configured_catalog(verified_native_package, tmp_path, monkeypatch):
+    """Unit catalogs own an explicit artifact, not the developer interpreter's runtime."""
+    from agent_comms.config_options import ConfigOptions
+    from agent_comms.native_arguments import NativeArguments
+
+    catalog = ConfigOptions(
+        NativeArguments.default_binary, NativeArguments.parse(()),
+        RestartEnvironment(native_config=tmp_path / "config", agent_directory=tmp_path / "config"),
+        verified_native_package,
+    )
+    monkeypatch.setattr(ConfigOptions, "configured", classmethod(lambda cls: catalog))
+    return catalog
+
+
+@pytest.fixture
 def private_comms(private_directory):
     """One throwaway private bus, built as production builds one.
 
