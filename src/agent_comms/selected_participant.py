@@ -15,6 +15,7 @@ from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_cohort import _claim_record, pending_sealed_assignments
 from .coordination_errors import IdentityConflict, StaleFence
+from .native_arguments import SelectedModel
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
@@ -46,8 +47,7 @@ class SelectedParticipant(MroDispatch):
     lookup: str
     batch: SelectedSourceBatch
     sent_outcomes: tuple[SentMessageOutcome, ...]
-    provider: str
-    model: str
+    model: SelectedModel
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
 
     @handles(CompactionEvent)
@@ -135,7 +135,7 @@ class SelectedParticipant(MroDispatch):
             yield None
             return
         identity = ParticipantOwner(owner.thread, participant.participant_generation)
-        provider, model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
+        model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
         lease = cls.lease(comms, owner)
         try:
             leased = await Coordination.run_worker(lambda: next(lease))
@@ -151,7 +151,6 @@ class SelectedParticipant(MroDispatch):
                 participant.lookup,
                 batch,
                 sent_outcomes,
-                provider,
                 model,
                 on_compaction=on_compaction,
             )
@@ -230,14 +229,8 @@ class SelectedParticipant(MroDispatch):
         return owner, participant, pending, sent_outcomes
 
     @staticmethod
-    def configured_model(comms: Comms, name: str) -> tuple[str, str]:
-        model_selection = comms.threads.resolve_thread_model(name)
-        if not model_selection or "/" not in model_selection:
-            raise IdentityConflict("Selected owner has no configured provider/model")
-        provider, model = model_selection.split("/", 1)
-        if not provider or not model:
-            raise IdentityConflict("Selected owner's configured provider/model is incomplete")
-        return provider, model
+    def configured_model(comms: Comms, name: str) -> SelectedModel:
+        return SelectedModel.decode(comms.threads.resolve_thread_model(name))
 
     @staticmethod
     def lease(comms: Comms, owner: RegistryOwner) -> Generator[RegistryOwner, None, None]:

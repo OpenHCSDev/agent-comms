@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from . import agent_events as events
 from . import turn_failure as failures
 from .acp_failure import FailureSource, UnrecordedFailureSource, ProviderRetryResult
+from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -57,9 +58,9 @@ class TurnOutput:
             self.failure = None
         self.error_message = None
 
-    def raise_if_failed(self, proof, provider: str, model: str) -> None:
+    def raise_if_failed(self, proof, model: SelectedModel) -> None:
         if self.failure is not None:
-            self.declared_failure.raise_native(proof, provider, model)
+            self.declared_failure.raise_native(proof, model)
 
     @property
     def declared_failure(self) -> failures.TurnFailure:

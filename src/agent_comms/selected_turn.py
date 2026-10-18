@@ -213,7 +213,6 @@ class SelectedAttempt:
             await participant.transition(PromptAcceptancePhase())
             result = await request.claim_scope.execute(
                 execution,
-                provider=participant.provider,
                 model=participant.model,
                 observe_event=self.observe_event,
                 selected_tool_mode=action.mode(tools),
@@ -275,7 +274,6 @@ class SelectedConsideration:
             await participant.transition(PromptAcceptancePhase())
             result = await request.claim_scope.execute(
                 execution,
-                provider=participant.provider,
                 model=participant.model,
                 observe_event=participant.dispatch,
             )

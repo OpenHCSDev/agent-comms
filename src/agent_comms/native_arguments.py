@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 import shlex
 from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
@@ -10,7 +11,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import ClassVar
 
+from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
 
 
@@ -72,10 +75,40 @@ class ProviderArgument(NamedOption, ValueArgument):
 
 
 class ModelArgument(NamedOption, ValueArgument):
-    def qualified(self, provider: str | None) -> str:
-        if provider is None or self.value.startswith(provider + "/"):
-            return self.value
-        return provider + "/" + self.value
+    pass
+
+
+@dataclass(frozen=True)
+class SelectedModel:
+    provider: str
+    model: str
+
+    def __post_init__(self) -> None:
+        for value in (self.provider, self.model):
+            FieldCodec.decode(str, value)
+            if not value:
+                raise IdentityConflict("Selected owner's configured provider/model is incomplete")
+            if re.fullmatch(r"[^\s-]\S*", value) is None:
+                raise IdentityConflict("Provider/model must be single non-option tokens")
+
+    @classmethod
+    def decode(cls, selection: str | None) -> SelectedModel:
+        if not selection or "/" not in selection:
+            raise IdentityConflict("Selected owner has no configured provider/model")
+        provider, model = selection.split("/", 1)
+        return cls(provider, model)
+
+    @property
+    def qualified(self) -> str:
+        return f"{self.provider}/{self.model}"
+
+    @property
+    def arguments(self) -> tuple[NativeArgument, ...]:
+        return ProviderArgument(self.provider), ModelArgument(self.model)
+
+    @property
+    def argv(self) -> tuple[str, ...]:
+        return tuple(token for argument in self.arguments for token in argument.argv)
 
 
 class ThinkingArgument(NamedOption, ValueArgument):
@@ -217,10 +250,11 @@ class NativeArguments:
 
     @property
     def model(self) -> str | None:
-        selected = next(
-            (entry for entry in reversed(self.entries) if isinstance(entry, ModelArgument)), None
-        )
-        return selected.qualified(self.value(ProviderArgument)) if selected is not None else None
+        selected = self.value(ModelArgument)
+        provider = self.value(ProviderArgument)
+        if selected is None or provider is None:
+            return selected
+        return SelectedModel(provider, selected.removeprefix(provider + "/")).qualified
 
     @property
     def thinking(self) -> str | None:
@@ -234,9 +268,8 @@ class NativeArguments:
     def with_model(self, selected: str | None) -> NativeArguments:
         if selected is None or "/" not in selected:
             return self
-        provider, model = selected.split("/", 1)
         return self.replace(ProviderArgument).replace(
-            ModelArgument, ProviderArgument(provider), ModelArgument(model)
+            ModelArgument, *SelectedModel.decode(selected).arguments
         )
 
     def with_thinking(self, selected: str | None) -> NativeArguments:

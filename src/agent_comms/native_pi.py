@@ -21,7 +21,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .coordination_database import CoordinationStore
-from .native_arguments import NativeArguments
+from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
 from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
 from .launch_runtime import LaunchRuntime, RestartEnvironment
@@ -349,12 +349,11 @@ class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
 
     def __init__(
-        self, detail: str, context: NativeContextProof, provider: str, model: str,
+        self, detail: str, context: NativeContextProof, model: SelectedModel,
         failure: TurnFailure,
     ):
         super().__init__(f"Native Pi assistant did not finish successfully: {detail}")
         self.context = context
-        self.provider = provider
         self.model = model
         self.failure = failure
         # Provider text may contain arbitrary response bodies. Only complete
@@ -368,7 +367,7 @@ class NativePiTerminalFailure(NativePiUnavailable):
             flags=re.IGNORECASE,
         )
         self.public_message = (
-            f"{provider}/{model}: {match.group(1) if match else 'request failed'}."
+            f"{model.qualified}: {match.group(1) if match else 'request failed'}."
         )
 
 
@@ -583,8 +582,7 @@ class NativePiRpcLaunch:
         *,
         worktree: Path,
         session: SelectedSession,
-        provider: str,
-        model: str,
+        model: SelectedModel,
         thinking_level: str | None = None,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode | None = None,
@@ -597,13 +595,6 @@ class NativePiRpcLaunch:
         and model-delivery proofs remain separate per-attempt observations.
         """
         session_dir, session_file = session.directory, session.path
-        try:
-            for value in (provider, model):
-                FieldCodec.decode(str, value)
-                if re.fullmatch(r"[^\s-]\S*", value) is None:
-                    raise ValueError("Provider/model must be single non-option tokens")
-        except (TypeError, ValueError) as error:
-            raise NativePiUnavailable("Native Pi requires an explicit provider and model") from error
         if selected_tool_mode is not None:
             from .selected_tool_broker import NativeToolMode
 
@@ -630,10 +621,7 @@ class NativePiRpcLaunch:
             *tool_arguments,
             "--session-dir",
             str(session_dir),
-            "--provider",
-            provider,
-            "--model",
-            model,
+            *model.argv,
         ]
         arguments.extend(session.launch_arguments(thinking_level))
         if session_file is not None:

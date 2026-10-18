@@ -6,6 +6,8 @@ or commit never becomes a fresh send attempt.
 
 from __future__ import annotations
 
+from .native_arguments import SelectedModel
+
 import asyncio
 import sqlite3
 import threading
@@ -134,8 +136,7 @@ class PrivateSendClaim:
         self,
         execution,
         *,
-        provider: str,
-        model: str,
+        model: SelectedModel,
         selected_tool_mode: NativeToolMode | None = None,
         observe_event: Callable[[PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
         following: FollowingInputs = FollowingInputs(),
@@ -155,7 +156,6 @@ class PrivateSendClaim:
                 context_contributions=self.prompt.contributions,
                 worktree=Path(self.owner.thread.worktree).absolute(),
                 session=self.session,
-                provider=provider,
                 model=model,
                 thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
                 environment=self.owner.thread.native_environment(
