@@ -32,6 +32,10 @@ from agent_comms.mro_dispatch import MroDispatch, handles
 
 
 class Measure(DeclaredFamily, affix="Measure"):
+    @staticmethod
+    def environment(root: str) -> dict[str, str]:
+        return dict(os.environ)
+
     @classmethod
     @abstractmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
@@ -148,10 +152,6 @@ class CheckedRevision(Measure):
     @abstractmethod
     def command(root: str, selected: list[str]) -> list[str]:
         """The checker's arguments after `python -m`."""
-
-    @staticmethod
-    def environment(root: str) -> dict[str, str]:
-        return dict(os.environ)
 
     @classmethod
     def findings(cls, repo: Path, ref: str, head: str, root: str, changed: set[str]) -> Counter[str]:
@@ -1059,7 +1059,10 @@ class UncarriedRecordFormat(Measure):
     representations with the same wire spelling are the same format.
     """
 
-    probe: typing.ClassVar[str] = "import sys, stored_formats; stored_formats.main(sys.argv[1:])"
+    probe: typing.ClassVar[str] = (
+        "import sys; sys.path[:0] = sys.argv[1:3]; "
+        "import stored_formats; stored_formats.main(sys.argv[3:])"
+    )
 
     @staticmethod
     def declares_version(source: bytes) -> bool:
@@ -1087,9 +1090,9 @@ class UncarriedRecordFormat(Measure):
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             # Extracted source is stamped with its commit the way a build stamps it.
             WheelStamp(revision(repo, ref)).write(Path(scratch) / root / "package_stamp.py")
-            path = os.pathsep.join([str(Path(scratch) / package), str(Path(__file__).parent)])
-            result = subprocess.run([sys.executable, "-c", cls.probe, *modules], cwd=scratch,
-                                    env={**os.environ, "PYTHONPATH": path},
+            result = subprocess.run([sys.executable, "-c", cls.probe,
+                                     str(Path(scratch) / package), str(Path(__file__).resolve().parent),
+                                     *modules], cwd=scratch, env=cls.environment(root),
                                     capture_output=True, text=True, check=True, timeout=300)
         return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
