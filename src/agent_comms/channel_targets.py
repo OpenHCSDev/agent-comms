@@ -3,12 +3,29 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 from enum import StrEnum
 
 from .errors import RelationViolationError, UnregisteredThreadError
 from .response_policy import CollectivePolicy, DirectPolicy, InformationalPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience
+
+if TYPE_CHECKING:
+    from .channels import Channel
+    from .thread_status import ThreadStatus
+    from .threads import Thread
+
+
+@dataclass(frozen=True)
+class ResolvedThread:
+    thread: Thread
+    status: ThreadStatus
+
+
+@dataclass(frozen=True)
+class ResolvedChannel:
+    channel: Channel
+    members: tuple[ResolvedThread, ...]
 
 
 class BuiltinChannel(StrEnum):
@@ -149,13 +166,12 @@ class ThreadTarget(NamedTarget):
     def pending_count(self, counts, snapshot, catalog):
         return counts.get(snapshot.require(self.name).name, 0)
 
-    def resolve(self, snapshot, catalog):
+    def resolve(self, snapshot, catalog) -> ResolvedThread:
         thread = snapshot.require(self.name)
-        return thread, snapshot.status(thread.name)
+        return ResolvedThread(thread, snapshot.status(thread.name))
 
-    def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog):
-        thread, status = resolved
-        return declaration.thread_bindings(comms, thread, status, channel, catalog=catalog)
+    def bindings(self, declaration, comms, channel, resolved: ResolvedThread, *, snapshot, catalog):
+        return declaration.thread_bindings(comms, resolved.thread, resolved.status, channel, catalog=catalog)
 
     def validate(self, message):
         if message.sender == self.name and message.type.conversation_message:
@@ -224,14 +240,14 @@ class ChannelTarget(NamedTarget):
     def pending_count(self, counts, snapshot, catalog):
         return catalog.resolve(self.name).pending_count(counts)
 
-    def resolve(self, snapshot, catalog):
+    def resolve(self, snapshot, catalog) -> ResolvedChannel:
         channel = catalog.resolve(self.name)
-        members = tuple((thread, snapshot.status(thread.name))
+        members = tuple(ResolvedThread(thread, snapshot.status(thread.name))
                         for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
                         if channel.matches(thread.tags))
-        return channel, members
+        return ResolvedChannel(channel, members)
 
-    def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog):
+    def bindings(self, declaration, comms, channel, resolved: ResolvedChannel, *, snapshot, catalog):
         return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender=None):
