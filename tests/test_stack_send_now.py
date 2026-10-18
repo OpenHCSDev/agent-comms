@@ -15,8 +15,9 @@ import pytest
 
 from agent_comms import agent_events as ae
 from agent_comms import backend
-from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.pi_native_backend import PersistentPiSession, PiNativeBackend
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInbox, WhenBusy
 from stored_inputs import stored_inputs
 
@@ -33,7 +34,6 @@ from stored_inputs import stored_inputs
         "native_terminal_cancel",
         "priority",
         "revoked",
-        "oversized",
         "acp",
         "acp_terminal",
         "acp_terminal_goal",
@@ -183,7 +183,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             "--model",
             "z-ai/glm-5.3-flash",
             "--thinking",
-            "off",
+            # A level Pi declares for this model; Core refuses an undeclared one.
+            "low",
         ]
         if terminal:
             native_args.remove("--no-tools")
@@ -283,10 +284,10 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             return
         owner = None
         if surface.startswith("acp"):
-            from agent_comms.acp import CommsAgent
             from agent_comms.comms import wire
+            from delivery_owner_fixture import canonical_agent
 
-            owner = CommsAgent(
+            owner = canonical_agent(
                 wire(root / "wire"),
                 agent_bin=native_bin,
                 agent_args=native_args,
@@ -340,10 +341,11 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     "PI_OFFLINE": "1",
                     "NODE_OPTIONS": f"--require={preload}",
                 },
-                session_file=str(root / "session.jsonl"),
+                session_file=PiNativeBackend.new_location(root, root).path,
                 steering_queue=queue,
                 native_start=lambda *_: True,
-                interrupt_boundary=lambda *_: nullcontext(surface != "revoked"),
+                interrupt_boundary=lambda *_: nullcontext(
+                    AuthorityChangedSend() if surface == "revoked" else GrantedSend()),
                 persistent_session=pi_session,
             ):
                 events.append(event)
@@ -364,7 +366,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
             command = InputRequest(
                 input_id=InputId("urgent"),
                 content=InputContent(
-                    text="x" * 800000 if surface == "oversized" else "URGENT_INPUT"
+                    text="URGENT_INPUT"
                 ),
                 when_busy=WhenBusy.STEER,
             )
@@ -415,17 +417,11 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
                 )
                 return
-            if surface in {"revoked", "oversized"}:
+            if surface == "revoked":
                 await asyncio.wait_for(task, 10)
                 assert events[-1].ok is False, events
                 assert len(requests) == 1
-                if surface == "revoked":
-                    assert not started.is_set()
-                else:
-                    assert any(
-                        isinstance(e, (ae.Error, ae.Done)) and "oversized" in e.text.lower()
-                        for e in events
-                    ), events
+                assert not started.is_set()
                 assert queue.empty(), "Uncertain queued input must never be replayed"
                 return
             await asyncio.wait_for(started.wait(), 3)

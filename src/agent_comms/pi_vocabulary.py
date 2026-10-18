@@ -36,6 +36,11 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
         return True
 
     @classmethod
+    def interrupted(cls, session):
+        """An abort the user asked for by sending now: the request was replaced, not failed."""
+        return session.explicit_interrupt and cls.explicit_abort
+
+    @classmethod
     async def apply(cls, session, message):
         session.output.error_message = None
         tokens = message.measured_tokens
@@ -94,7 +99,8 @@ class FailedPiStop(FinishedPiStop):
 
     @classmethod
     async def apply(cls, session, message):
-        session.output.record_failure(cls.declared_failure(message))
+        if not cls.interrupted(session):
+            session.output.record_failure(cls.declared_failure(message))
         async for event in super().apply(session, message):
             yield event
 
@@ -121,9 +127,7 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
     async def apply(cls, session, message):
         async for event in super().apply(session, message):
             yield event
-        if not (session.explicit_interrupt and cls.explicit_abort) and (
-            session.watchdog.phase.holds_refusal_reports
-        ):
+        if not cls.interrupted(session) and session.watchdog.phase.holds_refusal_reports:
             # A refusal the recovery is re-requesting is interim evidence; the
             # recovery's own end event reports the final outcome.
             return
@@ -133,7 +137,7 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
             (message.error_message or "").strip() or f"Model request {cls.declared_name}",
             message.diagnostics, source=NativeMessageFailureSource(message),
         )
-        if not (session.explicit_interrupt and cls.explicit_abort):
+        if not cls.interrupted(session):
             yield error
 
 
