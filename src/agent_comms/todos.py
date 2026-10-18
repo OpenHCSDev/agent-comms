@@ -446,10 +446,19 @@ class PlainText(OrderWords):
 
 
 class StrikeReason(PlainText):
-    """What a unit did, plainly, in enough words to stand on the public record."""
+    """What a unit did, plainly, in enough words to stand on the public record. A unit's
+    wording is answered by a correction, never a strike: a reason whose every quoted span
+    is jargon is about wording alone."""
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+    @classmethod
+    def refused(cls, text: str) -> str | None:
+        cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
+        if cited and all(PlainText.found(span) for span in cited):
+            return f"{cited} is the unit's wording; send it a correction, not a strike."
+        return super().refused(text)
 
 
 class OrderText(OrderWords):

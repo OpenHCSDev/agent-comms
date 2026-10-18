@@ -19,7 +19,7 @@ from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
-    CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
+    CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
@@ -75,6 +75,8 @@ def scenario(comms: Comms, project, monkeypatch):
         problem="P1", order=order, request="request", deadline=RecordedEventTime(1000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P1"))}, lead
     yield CommsTodoListTool, {"thread": "lead"}, lead
+    yield CommsCorrectWordingTool, {"unit": "worker", "message_id": "m1",
+                                    "text": "The canonical ownership changed"}, lead
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
     yield CommsTodoTool, {"id": "P1", "operation": FieldCodec.encode(StrikeTodo(
