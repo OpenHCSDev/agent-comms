@@ -89,7 +89,7 @@ def wire_source(db, assignment_id: str, original: Message, mode: WakePolicy):
     from agent_comms.bus_publication import CommittedDelivery, decisions_digest, decisions_wire
     from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
     from agent_comms.selected_source_batch import SelectedSource
-    from agent_comms.wake import WakeDecision
+    from agent_comms.wake_policy import WakeDecision
 
     audience = freeze_audience(original, (FrozenRecipient("owner", "Owner"),),
                                "0" * 64, sender_lookup="sender",

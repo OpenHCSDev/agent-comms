@@ -1,18 +1,16 @@
-"""Owner and frontend change in lockstep: the Core commit (git archive export-subst) is the protocol."""
+"""Owner and frontend change in lockstep: the built Core commit is the protocol."""
 from __future__ import annotations
 
-import subprocess
 from abc import abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 
 from acp import RequestError
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from ._native.core_stamp import STAMP
 
-if (CORE_COMMIT := "$Format:%H$").startswith("$Format"):  # A source checkout has no archive stamp.
-    CORE_COMMIT = subprocess.check_output(("git", "rev-parse", "HEAD"), cwd=Path(__file__).parent, text=True).strip()
+CORE_COMMIT = STAMP.commit()
 
 
 @dataclass(frozen=True)

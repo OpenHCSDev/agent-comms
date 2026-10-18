@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
-from .channels import BuiltinChannelView, Channel, SavedView, SavedViewChannel, TagChannel, ViewPredicate
+from .channels import BuiltinChannelView, Channel, Channels, SavedView, SavedViewChannel, TagChannel, ViewPredicate
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .errors import UnknownChannelError
 from .thread_identity import ThreadProvenance
@@ -67,12 +67,12 @@ class CatalogDocument:
     def all_tags(self, threads: Mapping[str, ThreadProvenance]) -> frozenset[str]:
         return self.tags.union(*(thread.tags for thread in threads.values()))
 
-    def views(self, threads: Mapping[str, ThreadProvenance]) -> dict[str, Channel]:
+    def views(self, threads: Mapping[str, ThreadProvenance]) -> Channels:
         first_seen: dict[str, float] = {}
         for thread in threads.values():
             for tag in thread.tags:
                 first_seen[tag] = min(first_seen.get(tag, thread.created_at), thread.created_at)
-        result = {kind.value: self.resolve(kind.value) for kind in BuiltinChannel}
+        result = Channels((kind.value, self.resolve(kind.value)) for kind in BuiltinChannel)
         for tag in sorted(self.tags.union(first_seen)):
             name = f"#{tag}"
             result[name] = self.resolve(name, created_at=first_seen.get(tag, 0.0))

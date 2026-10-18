@@ -28,7 +28,7 @@ from .goal_attempts import (
     StaleAttemptError,
     UnresolvedAttemptError,
 )
-from .goal_presentation import GoalExecution
+from .goal_presentation import ThreadGoalExecution
 from .goals import Goal, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
@@ -49,7 +49,7 @@ class GoalScheduler:
         self.comms = comms
         self.effects = effects
         self.pending_goal_origins: dict[str, str] = {}
-        self.goal_execution_signatures: dict[str, tuple[Goal | None, GoalExecution | None]] = {}
+        self.goal_execution_signatures: dict[str, tuple[Goal | None, ThreadGoalExecution]] = {}
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
@@ -216,6 +216,13 @@ class GoalScheduler:
         await self.schedule_goal(session_id)
         await self.sync_goal_execution(session_id, name)
         return resumed
+
+    def in_standby(self, session_id: str) -> bool:
+        try:
+            _goal, execution = self.goal_execution_signatures[session_id]
+        except KeyError:
+            return False
+        return execution.standby()
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
         event = await Coordination.run_worker(partial(

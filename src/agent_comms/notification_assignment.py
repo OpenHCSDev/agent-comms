@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
     from .bus_publication import CommittedDelivery
     from .presentation import MessageNotification
-    from .wake import NoWakeDecision, WakeDecision
+    from .wake_policy import RecipientDecision
 
 
 @dataclass(frozen=True)
@@ -196,7 +196,7 @@ class NotificationSource(DeclaredFamily, affix="NotificationSource"):
 @dataclass(frozen=True)
 class UnrecordedNotificationSource(NotificationSource):
     recipient: FrozenRecipient
-    decision: WakeDecision | NoWakeDecision
+    decision: RecipientDecision
 
     def project(self, observation: RecipientActivity):
         return self.decision.initial_notification(self.recipient, observation=observation)

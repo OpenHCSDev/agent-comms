@@ -24,17 +24,12 @@ keywords = ["agents", "coordination", "message-bus", "acp", "multi-agent"]
 
 dependencies = [
     "aiohttp>=3.14",
+    "agent-client-protocol>=0.8",
     "metaclass-registry>=0.4.0",
     "pydantic>=2.13",
 ]
 
 [project.optional-dependencies]
-acp = [
-    "agent-client-protocol>=0.8",
-]
-all = [
-    "agent-client-protocol>=0.8",
-]
 dev = [
     "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@120c04fb9a0eb4afafab6d621d1c5fd421bb7552#subdirectory=skills/refactor-audit",
     "pytest>=7.0",
@@ -44,7 +39,6 @@ dev = [
     "black==26.5.1",
     "ruff==0.16.0",
     "mypy==2.3.0",
-    "agent-client-protocol>=0.8",
 ]
 
 [project.urls]
@@ -64,6 +58,9 @@ agent-comms-opencode-bridge = "agent_comms.cli_bridges.opencode:main"
 agent-comms-commander = "agent_comms.commander.cli:main"
 opencode-comms = "agent_comms.cli_bridges.opencode_launch:main"
 
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/agent_comms"]
 
@@ -76,7 +73,7 @@ allow-direct-references = true
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "src", "tests", "extensions", "README.md", "LICENSE",
+    "src", "tests", "extensions", "README.md", "LICENSE", "hatch_build.py",
     ".pi/APPEND_SYSTEM.md", "stack/APPEND_SYSTEM.md",
     "stack/pi-native.sha256",
 ]

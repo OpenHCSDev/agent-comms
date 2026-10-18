@@ -15,12 +15,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
 from agent_comms.wake_candidate_index import (
-    CandidateCatchUp,
-    CandidatePage,
-    CommittedAppendHint,
-    ProjectionRebuildRequiredError,
-    ProjectionUnavailableError,
-    WakeCandidateIndex,
+    CandidateCatchUp, CandidatePage, CommittedAppendHint, ProjectionRebuildRequiredError, ProjectionUnavailableError, WakeCandidateIndex, FirstBuild, RebuildIndex, ResumeIndex,
 )
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="private bus requires POSIX")
@@ -76,7 +71,7 @@ def test_hint_is_pure_and_crash_after_bus_before_wal_catches_up(tmp_path: Path) 
     # Simulate process loss of volatile hint; explicit fresh post-commit catch-up
     # from the canonical source recovers derived candidates, not native inputs.
     reopened = WakeCandidateIndex(comms.bus.log)
-    outcome = reopened.catch_up_committed_append(hint, bootstrap_new=True)
+    outcome = reopened.catch_up_committed_append(hint, start=FirstBuild())
     assert outcome == CandidateCatchUp(len(before), True, False)
     assert [row.source_seq for row in _page(reopened, root_id, lookup, first.seq).entries] == [1]
     assert reopened.catch_up_committed_append(hint) == outcome  # no WAL rewrite/duplicate
@@ -91,7 +86,7 @@ def test_catch_up_always_admits_one_record_beyond_the_batch_budget(
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
     # A batch budget smaller than the next single record still advances the
     # checkpoint by admitting that one record; it never refuses progress.
-    outcome = index.catch_up_committed_append(hint, max_bytes=128, bootstrap_new=True)
+    outcome = index.catch_up_committed_append(hint, max_bytes=128, start=FirstBuild())
     assert outcome.caught_up
     assert index._verified_checkpoint(root_id).last_seq == message.seq
     assert [row.source_seq for row in _page(index, root_id, lookup, message.seq).entries] == [1]
@@ -109,7 +104,7 @@ def test_catch_up_admits_a_record_larger_than_the_default_batch_budget(
     )
     assert comms.bus.log.path.stat().st_size > 256 * 1024
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
-    outcome = index.catch_up_committed_append(hint, bootstrap_new=True)
+    outcome = index.catch_up_committed_append(hint, start=FirstBuild())
     assert outcome.caught_up
     assert [row.source_seq for row in _page(index, root_id, lookup, message.seq).entries] == [
         message.seq
@@ -120,7 +115,7 @@ def test_crash_after_wal_before_ack_is_idempotent_and_future_hint_refuses(tmp_pa
     comms, index, root_id, lookup = _fresh(tmp_path)
     first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
-    assert index.catch_up_committed_append(hint, bootstrap_new=True).caught_up
+    assert index.catch_up_committed_append(hint, start=FirstBuild()).caught_up
     # A bus commit+index WAL commit may survive while the caller loses the ACK.
     reopened = WakeCandidateIndex(comms.bus.log)
     assert reopened.catch_up_committed_append(hint) == CandidateCatchUp(hint.through_bytes, True, False)
@@ -137,7 +132,7 @@ def test_changed_bus_or_incomplete_tail_never_promotes_a_hint(tmp_path: Path, da
     first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     assert index.catch_up_committed_append(
         index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size),
-        bootstrap_new=True,
+        start=FirstBuild(),
     ).caught_up
     second = comms.messaging.send_initial_cohort("sender", "member000", "second")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
@@ -162,7 +157,7 @@ def test_foreign_root_is_rejected(tmp_path: Path) -> None:
     comms, index, root_id, lookup = _fresh(tmp_path / "one")
     first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
-    assert index.catch_up_committed_append(hint, bootstrap_new=True).caught_up
+    assert index.catch_up_committed_append(hint, start=FirstBuild()).caught_up
     other, other_index, other_id, _ = _fresh(tmp_path / "other")
     other.messaging.send_initial_cohort("sender", "member000", "elsewhere")
     with pytest.raises(ProjectionRebuildRequiredError, match="another root"):
@@ -181,7 +176,7 @@ def test_reader_snapshot_does_not_block_deferred_wal_catch_up(tmp_path: Path) ->
     first = comms.messaging.send_initial_cohort("sender", "member000", "first")
     assert index.catch_up_committed_append(
         index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size),
-        bootstrap_new=True,
+        start=FirstBuild(),
     ).caught_up
     second = comms.messaging.send_initial_cohort("sender", "member000", "second")
     with sqlite3.connect(index.path, timeout=0.05) as reader:
@@ -211,7 +206,7 @@ def test_bounded_101_initials_and_150_frozen_recipients(tmp_path: Path) -> None:
         assert rounds <= 32  # finite event-driven continuation, no polling/sleep
         start = time.perf_counter()
         state = index.catch_up_committed_append(
-            hint, bootstrap_new=rounds == 1, max_rows=256, max_bytes=8 * 1024 * 1024
+            hint, start=FirstBuild(), max_rows=256, max_bytes=8 * 1024 * 1024
         )
         builds.append(time.perf_counter() - start)
         if state.caught_up:
@@ -249,13 +244,13 @@ def test_damaged_schema_requires_external_reset_without_repair(tmp_path):
     comms, index, root_id, lookup = _fresh(tmp_path)
     message = comms.messaging.send_initial_cohort("sender", "member000", "keep checkpoint")
     hint = index.notify_committed_append(root_id=root_id, through_bytes=index.log.path.stat().st_size)
-    assert index.catch_up_committed_append(hint, bootstrap_new=True).caught_up
+    assert index.catch_up_committed_append(hint, start=FirstBuild()).caught_up
     with sqlite3.connect(index.path) as db:
         db.execute("DROP TABLE candidate_response_key")
         saved = db.execute("SELECT * FROM candidate_checkpoint").fetchall()
-    for rebuild in (False, True):
+    for start in (ResumeIndex(), RebuildIndex()):
         with pytest.raises(ProjectionRebuildRequiredError, match="schema changed"):
-            index.maintain(rebuild=rebuild)
+            index.maintain(start=start)
     with sqlite3.connect(index.path) as db:
         assert db.execute("SELECT * FROM candidate_checkpoint").fetchall() == saved
         assert db.execute("SELECT count(*) FROM candidate").fetchone()[0] == 1

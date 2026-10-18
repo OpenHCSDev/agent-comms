@@ -15,12 +15,12 @@ Unknown references raise — the system is fail-closed.
 
 ## Components
 
-- **Core** (`agent_comms.comms` and its state-owning components) — zero
-  dependencies. Threads, messages, registry, JSONL bus, shared ledger.
+- **Core** (`agent_comms.comms` and its state-owning components) — threads,
+  messages, registry, JSONL bus, shared ledger.
 - **CLI** (`agent-comms`) — JSON over stdout; the adapter surface for the pi
   extension and other process-based clients.
 - **ACP server** (`agent-comms-acp`) — Agent Client Protocol agent over
-  stdio, so Toad, Zed, and VS Code connect natively (`agent-comms[acp]`).
+  stdio, included in the base package so Toad, Zed, and VS Code connect natively.
 - **Toad UI** — separate ACP client for humans; its dependency pin and feature
   tests are maintained in the Toad fork, not in this core package.
 - **Pi extension** (`extensions/pi-agent-comms/`) — thin TypeScript shim that
@@ -35,11 +35,8 @@ Install the core CLI and library from PyPI:
 pip install agent-comms
 ```
 
-Install the optional ACP server dependency for graphical clients such as Toad:
-
-```bash
-pip install "agent-comms[acp]"
-```
+The base package includes the ACP dependency used by Core's runtime and errors;
+no extra is needed for `agent-comms install` or graphical clients such as Toad.
 
 For a reproducible local installation with the merged Toad and Textual forks,
 use the [pinned stack](stack/README.md). The stack fixes the core and both
@@ -77,6 +74,11 @@ comms.registry.require("nonexistent")
 ```
 
 ## Development
+
+Install editable before importing from a fresh checkout. The Hatch build hook
+writes the checkout's Core commit into package data; runtime imports never run
+Git. Source distributions retain that stamp, and Git archives use their export
+stamp. Rebuild after changing the checked-out commit to refresh the build identity.
 
 ```bash
 pip install -e ".[dev]"

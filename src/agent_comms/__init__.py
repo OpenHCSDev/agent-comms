@@ -11,7 +11,6 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .historical_views import (
-    HistoricalDisplay,
     HistoricalMessage,
     HistoricalThread,
     HistoryCursor,
@@ -19,7 +18,7 @@ from .historical_views import (
 )
 from .importing import ImportFormat, ImportLimits, ImportReceipt, ImportSnapshot
 from .mentions import MentionQuery
-from .read_basis import Conversation, DisplayedConversation
+from .read_basis import Conversation, DisplayedConversation, HistoricalDisplay
 from .read_ledger import ReadLedger
 from .registration import Registration
 from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog

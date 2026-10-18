@@ -31,7 +31,7 @@ from .private_bus_checkpoint import (
     PrefixWitness,
     verify_private_bus_checkpoint_unlocked,
 )
-from .wake import NoWakeDecision, WakeDecision
+from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope
@@ -148,16 +148,17 @@ class SourceCoverage:
                 if acknowledgement is None:
                     blocked = seq
                     break
-                if type(decision) is NoWakeDecision:
+                claims = decision.claim_decisions()
+                if not claims:
                     no_wake.append(seq)
-                elif type(decision) is WakeDecision:
-                    evidence = self._selected_inputs(seq, recipient, decision, acknowledgement, source_reads)
+                for selected in claims:
+                    evidence = self._selected_inputs(seq, recipient, selected, acknowledgement, source_reads)
                     if not evidence:
                         blocked = seq
                         break
                     inputs.extend(evidence)
-                else:
-                    raise IdentityConflict("unsupported frozen wake decision")
+                if blocked is not None:
+                    break
                 covered = seq
             if blocked is None:
                 covered = max(covered, horizon)
@@ -198,7 +199,7 @@ class SourceCoverage:
             return _claim_record(db, initial) if sealed and sealed.sealed else None
 
     def _selected_inputs(
-        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, acknowledgement: AcceptedCohort,
+        self, seq: int, recipient: FrozenRecipient, decision: RecipientDecision, acknowledgement: AcceptedCohort,
         source_reads: NativeEvidenceScope,
     ) -> tuple[HistoricalNativeInput, ...]:
         assignments = [
@@ -207,12 +208,13 @@ class SourceCoverage:
             if a.recipient_lookup == self.recipient_lookup
             and a.recipient == recipient.canonical_thread
         ]
-        if len(assignments) != 1 or assignments[0].lifecycle.mode != decision.wake_mode:
+        policy = decision.wake_policy()
+        if len(assignments) != 1 or assignments[0].lifecycle.mode != policy:
             raise IdentityConflict("selected claim differs from frozen bus recipient")
-        if not decision.wake_mode.active:
+        if not policy.active:
             return ()  # PASSIVE is not native injection.
         evidence = self.native_inputs(seq, source_reads=source_reads)
-        if decision.wake_mode.proves_source(evidence) and all(
+        if policy.proves_source(evidence) and all(
             p.assignment_id == assignments[0].assignment_id for p in evidence
         ):
             return evidence

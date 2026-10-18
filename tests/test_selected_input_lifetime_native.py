@@ -22,7 +22,9 @@ from agent_comms.coordination_tables.attempts import ReplayFact
 from agent_comms.coordinator import Coordination
 from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
 from agent_comms.native_runtime_input import NativeRuntimeInput
-from agent_comms.wake_candidate_index import WakeCandidateIndex
+from agent_comms.wake_candidate_index import (
+    WakeCandidateIndex, RebuildIndex,
+)
 from agent_comms.wake_policy import PassiveWake
 from compaction_loopback import LoopbackProvider
 from test_coordinated_runtime import _root
@@ -57,7 +59,7 @@ class SelectedNativeJourney:
         self.replies.append(LoopbackProvider(status=200, text=text))
 
     def execution(self):
-        WakeCandidateIndex(self.comms.bus.log).maintain(rebuild=True)
+        WakeCandidateIndex(self.comms.bus.log).maintain(start=RebuildIndex())
         return SelectedExecution(
             root=self.root,
             wire_root_id=self.root_id,

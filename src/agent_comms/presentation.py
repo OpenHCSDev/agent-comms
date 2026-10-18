@@ -19,9 +19,9 @@ from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import CommandTarget
-from .channels import Channel
+from .channels import Channel, ChannelMemberIndex, Channels
 from .display_order import ChannelSort, NameChannelSort
-from .goal_presentation import GoalExecution
+from .goal_presentation import ThreadGoalExecution, IdleGoalExecution
 from .goal_waits import GoalWaits
 from .external_transcript import ExternalTranscript
 from .notification_assignment import NotificationAssignment
@@ -34,7 +34,7 @@ from .messages import Message
 from .private_path import FileRevision
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
-from .runtime_info import AgentRuntimeInfo
+from .runtime_info import RuntimeInfo
 from .store_files import _store_lock
 from .wire_log import OpenedWireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
@@ -319,6 +319,7 @@ class DisplaySelection:
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
         reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
     ) -> DisplaySelection:
+        viewer = viewer.resolve(snapshot)
         return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
 
     @classmethod
@@ -340,7 +341,7 @@ class DisplaySelection:
             yield selected
 
     @property
-    def channels(self) -> Mapping[str, Channel]:
+    def channels(self) -> Channels:
         return self.catalog.views(self.registry.threads)
 
     @property
@@ -368,7 +369,7 @@ class ChannelReadMark(ABC):
     def apply(self, presentation: BusPresentation, target: str, viewer: str) -> None:
         with _store_lock(presentation._wire_lock_path, shared=True):
             with self.reading(presentation, target, viewer) as displayed:
-                presentation.bus.reads.mark_displayed(viewer, displayed)
+                presentation.bus.reads.mark_displayed(displayed.viewer, displayed)
 
     @abstractmethod
     def reading(self, presentation: BusPresentation, target: str, viewer: str): ...
@@ -381,13 +382,13 @@ class ReadAll(ChannelReadMark):
         with presentation.bus.log._opened_wire_snapshot() as source:
             with DisplaySelection.reading(
                 presentation.registry, presentation.catalog, presentation.bus.reads,
-                NamedViewer(viewer, presentation.registry.snapshot()),
+                NamedViewer(viewer),
             ) as basis:
                 scope = basis.scope(target)
             # Page preparation takes the bus lock, so release registry first.
             page = MessagePageRequest.every(scope).read_opened(source)
             yield presentation.bus.reads.capture(
-                viewer, page.messages, basis.registry, presentation.bus.log.path,
+                basis.require_viewer(), page.messages, basis.registry, presentation.bus.log.path,
             )
 
 
@@ -400,13 +401,13 @@ class ReadThrough(ChannelReadMark):
     def reading(self, presentation, target, viewer):
         with DisplaySelection.reading(
             presentation.registry, presentation.catalog, presentation.bus.reads,
-            NamedViewer(viewer, presentation.registry.snapshot()),
+            NamedViewer(viewer),
         ) as basis:
             displayed = self.expected_scope.require_displayed()
             if basis.scope(target) != self.expected_scope:
                 raise ValueError("Channel display changed; refresh the displayed page.")
             displayed.validate(
-                viewer, basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
+                basis.require_viewer(), basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
             )
             yield displayed.through(self.through)
 
@@ -443,7 +444,7 @@ class BusPresentation:
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
         with DisplaySelection.reading(
-            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer, self.registry.snapshot())
+            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer)
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
@@ -479,7 +480,7 @@ class BusPresentation:
             page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes
             ).read_opened(source)
-            return replace(page, display_scope=viewer.displayed_scope(scope, page, basis, self))
+            return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self))
 
     def mark_channel_read(
         self,
@@ -522,7 +523,7 @@ class ChannelView:
     def roster(
         cls,
         snapshot: RegistrySnapshot,
-        channels: Mapping[str, Channel],
+        channels: Iterable[Channel],
         pins: Mapping[str, frozenset[str]],
         order: type[ChannelSort],
         activity: Mapping[str, ObservedActivity],
@@ -532,16 +533,14 @@ class ChannelView:
         show_stopped: bool,
         show_archived: bool,
     ) -> tuple[ChannelView, ...]:
+        index = ChannelMemberIndex(snapshot.threads.values())
         people = {thread.name: thread for thread in snapshot.visible_threads(
             show_stopped=show_stopped, show_archived=show_archived,
         )}
         views: list[ChannelView] = []
-        for channel in channels.values():
-            if channel.archived and not show_archived:
-                continue
+        for channel in channels:
             pinned_members = pins.get(channel.name, frozenset())
-            registered = tuple(name for name, thread in snapshot.threads.items()
-                               if thread.role.executable and channel.matches(thread.tags))
+            registered = tuple(thread.name for thread in channel.members(index))
             members = tuple(
                 sorted(
                     (name for name in registered if name in people),
@@ -591,9 +590,9 @@ class ThreadView:
     thread: Thread
     status: ThreadStatus
     activity: ObservedActivity
-    runtime: AgentRuntimeInfo | None
+    runtime: RuntimeInfo
     last_seen: float
-    goal_execution: GoalExecution | None = None
+    goal_execution: ThreadGoalExecution = IdleGoalExecution()
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
     @classmethod
@@ -607,10 +606,11 @@ class ThreadView:
         ))
         if not threads:
             return ()
-        runtime, waits = agents.runtime_info.read(), goal_waits.read()
+        runtime = agents.runtime_info.for_threads(thread.name for thread in threads)
+        waits = goal_waits.read()
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
-            thread, snapshot.statuses[thread.name], activities[thread.name], runtime.get(thread.name),
+            thread, snapshot.statuses[thread.name], activities[thread.name], runtime[thread.name],
             snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot, agents),
             snapshot.owner_binding(thread.name),
         ) for thread in threads)
@@ -633,9 +633,7 @@ class ThreadView:
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
         if self.thread.executing:
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
-        if self.goal_execution is not None and self.goal_execution.state.view.waiting:
-            return self.goal_execution.presentation(ordinary.title)
-        return ordinary
+        return self.goal_execution.waiting_presentation(ordinary)
 
     def to_wire(self) -> dict[str, object]:
         return {
@@ -647,11 +645,8 @@ class ThreadView:
             "last_activity": self.activity.timestamp,
             "activity": self.activity.state.value,
             "activity_detail": self.activity.detail,
-            "goal_execution": self.goal_execution.to_wire() if self.goal_execution else None,
-            "session_name": self.runtime.session_name if self.runtime else None,
-            "context_used": self.runtime.context_used if self.runtime else None,
-            "context_size": self.runtime.context_size if self.runtime else None,
-            "context_percent": self.runtime.context_percent if self.runtime else None,
+            "goal_execution": self.goal_execution.to_wire(),
+            **self.runtime.wire_fields(),
         }
 
 
@@ -673,7 +668,7 @@ class CoordinationSnapshot:
     @classmethod
     def capture(
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
-        agents: AgentActivity, declarations: Mapping[str, Channel],
+        agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
@@ -686,7 +681,7 @@ class CoordinationSnapshot:
         activities = {name: view.activity for name, view in threads.items()}
         return cls(
             channels=OrderedDict((view.channel.name, view) for view in ChannelView.roster(
-                registry, declarations, catalog.pinned_members(), catalog.list_order,
+                registry, declarations.visible(show_archived), catalog.pinned_members(), catalog.list_order,
                 activities, sent, messages,
                 show_stopped=show_stopped, show_archived=show_archived,
             )),

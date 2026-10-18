@@ -12,7 +12,8 @@ import json
 import os
 import sqlite3
 import time
-from dataclasses import dataclass, field
+from abc import ABC, abstractmethod
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -26,7 +27,6 @@ from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
-from .wake import NoWakeDecision, WakeDecision
 from .wake_policy import WakePolicy
 from .wire_log import OpenedWireSnapshot, WireLog
 from .wire_metadata import WireRootIdText
@@ -41,12 +41,35 @@ class ProjectionRebuildRequiredError(ProjectionUnavailableError):
     """A changed source or checkpoint needs explicit bounded maintenance."""
 
 
+class CheckpointState(ABC):
+    @abstractmethod
+    def require_source(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint: ...
+
+    @abstractmethod
+    def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint: ...
+
+    def first_build(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
+        return self.require_source(stream, info, root_id)
+
+
+@dataclass(frozen=True)
+class NoCheckpoint(CheckpointState):
+    def require_source(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
+        raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
+
+    def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
+        raise ProjectionUnavailableError("candidate projection is stale or unrelated")
+
+    def first_build(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
+        return CandidateCheckpoint.initial(root_id, info)
+
+
 class CandidateTable:
     """Disposable projections: source identity, recipient hints, and duplicate response keys."""
 
 
-@dataclass(frozen=True)
-class CandidateCheckpoint(CandidateTable, TypedTable):
+@dataclass(frozen=True, kw_only=True)
+class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True)})
     version: Literal[3]
     root_id: str
@@ -58,9 +81,14 @@ class CandidateCheckpoint(CandidateTable, TypedTable):
 
 
     @classmethod
-    def current(cls, db: sqlite3.Connection) -> CandidateCheckpoint | None:
+    def initial(cls, root_id: str, info: os.stat_result) -> CandidateCheckpoint:
+        return cls(singleton=1, version=3, root_id=root_id, device=info.st_dev,
+                   inode=info.st_ino, byte_offset=0, tail_digest="", last_seq=0)
+
+    @classmethod
+    def current(cls, db: sqlite3.Connection) -> CheckpointState:
         try:
-            return cls.one(db, singleton=1)
+            return next(iter(cls.select(db, singleton=1)), NoCheckpoint())
         except (ValueError, TypeError) as error:
             raise ProjectionRebuildRequiredError("candidate index schema is unavailable") from error
 
@@ -68,13 +96,19 @@ class CandidateCheckpoint(CandidateTable, TypedTable):
     def source_identity(self) -> PrefixSource:
         return PrefixSource(self.root_id, self.device, self.inode)
 
-    def require_source(self, stream, info: os.stat_result, root_id: str) -> None:
+    def require_source(self, stream, info: os.stat_result, root_id: str) -> CandidateCheckpoint:
         if self.source_identity != PrefixSource(root_id, info.st_dev, info.st_ino):
             raise ProjectionRebuildRequiredError("candidate bus source changed")
         if self.byte_offset > info.st_size:
             raise ProjectionRebuildRequiredError("candidate bus prefix was truncated")
         if AppendCheckpoint.fingerprint(stream, self.byte_offset) != self.tail_digest:
             raise ProjectionRebuildRequiredError("candidate bus prefix changed")
+        return self
+
+    def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
+        if self.root_id != request.root_id or self.last_seq < request.required_through_seq:
+            raise ProjectionUnavailableError("candidate projection is stale or unrelated")
+        return self
 
 
 @dataclass(frozen=True)
@@ -148,6 +182,46 @@ class _ReplayBatch:
     response_keys: tuple[CandidateResponseKey, ...]
 
 
+class IndexStart(ABC):
+    @abstractmethod
+    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+              root_id: str) -> CandidateCheckpoint: ...
+
+    def prepare_rows(self, db: sqlite3.Connection) -> None:
+        """Resuming and first builds preserve already committed rows."""
+
+    def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
+        """A first build or explicit rebuild must enter serialized maintenance."""
+        return 0
+
+
+class ResumeIndex(IndexStart):
+    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+              root_id: str) -> CandidateCheckpoint:
+        return checkpoint.require_source(stream, stat, root_id)
+
+    def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
+        if not index.path.exists():
+            raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
+        return index._verified_checkpoint(hint.root_id).byte_offset
+
+
+class RebuildIndex(IndexStart):
+    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+              root_id: str) -> CandidateCheckpoint:
+        return CandidateCheckpoint.initial(root_id, stat)
+
+    def prepare_rows(self, db: sqlite3.Connection) -> None:
+        db.execute(f'DELETE FROM "{Candidate.declared_name}"')
+        db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
+
+
+class FirstBuild(IndexStart):
+    def start(self, checkpoint: CheckpointState, stream, stat: os.stat_result,
+              root_id: str) -> CandidateCheckpoint:
+        return checkpoint.first_build(stream, stat, root_id)
+
+
 class WakeCandidateIndex(TypedStore):
     """Read-only candidate pages plus an explicit, bounded maintenance API.
 
@@ -189,24 +263,6 @@ class WakeCandidateIndex(TypedStore):
             raise ValueError("max_bytes must be a bounded positive byte count")
 
     @staticmethod
-    def _checkpoint_start(
-        checkpoint: CandidateCheckpoint | None,
-        stream: Any,
-        stat: os.stat_result,
-        root_id: str,
-        *,
-        rebuild: bool,
-        bootstrap_new: bool = False,
-    ) -> CandidateCheckpoint:
-        """Derive replay coordinates from the one originally captured stored row."""
-        if checkpoint is None and not (rebuild or bootstrap_new):
-            raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
-        if rebuild or checkpoint is None:
-            return CandidateCheckpoint(1, 3, root_id, stat.st_dev, stat.st_ino, 0, "", 0)
-        checkpoint.require_source(stream, stat, root_id)
-        return checkpoint
-
-    @staticmethod
     def _parse_row(record: dict[str, Any], root_id: str, last_seq: int) -> _ParsedRow:
         """Interpret one raw bus object without mistaking its sideband for authority."""
         from .wire_record import WireRecord
@@ -219,8 +275,6 @@ class WakeCandidateIndex(TypedStore):
             for recipient, decision in zip(
                 initial.audience.recipients, initial.decisions, strict=True
             ):
-                if type(decision) not in {WakeDecision, NoWakeDecision}:
-                    raise ProjectionUnavailableError("unknown candidate wake decision")
                 rows.append(
                     Candidate(
                         message.seq,
@@ -228,9 +282,7 @@ class WakeCandidateIndex(TypedStore):
                         recipient.recipient_lookup,
                         message.sender,
                         message.target,
-                        type(decision.wake_mode)
-                        if type(decision) is WakeDecision
-                        else None,
+                        decision.candidate_wake_mode(),
                     )
                 )
         return _ParsedRow(sequence, tuple(rows), verified.acknowledgement)
@@ -298,40 +350,28 @@ class WakeCandidateIndex(TypedStore):
     def _commit_batch(
         db: sqlite3.Connection,
         batch: _ReplayBatch,
-        stat: os.stat_result,
-        root_id: str,
+        checkpoint: CandidateCheckpoint,
         tail: str,
         *,
-        rebuild: bool,
+        start: IndexStart,
     ) -> None:
         """Replace derived rows and checkpoint inside the caller's transaction."""
-        if rebuild:
-            db.execute(f'DELETE FROM "{Candidate.declared_name}"')
-            db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
+        start.prepare_rows(db)
         for row in batch.recipients:
             row.insert(db)
         for row in batch.response_keys:
             if CandidateResponseKey.one(db, publication_key=row.publication_key) is not None:
                 raise ProjectionUnavailableError("duplicate private response publication key")
             row.insert(db)
-        CandidateCheckpoint(
-            1,
-            3,
-            root_id,
-            stat.st_dev,
-            stat.st_ino,
-            batch.next_offset,
-            tail,
-            batch.last_seq,
-        ).upsert(db)
+        replace(checkpoint, byte_offset=batch.next_offset,
+                tail_digest=tail, last_seq=batch.last_seq).upsert(db)
 
     def maintain(
-        self, *, rebuild: bool = False, bootstrap_new: bool = False,
+        self, *, start: IndexStart = ResumeIndex(),
         max_rows: int = batch_rows, max_bytes: int = batch_bytes,
     ) -> bool:
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
-        bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         try:
             with self.log._opened_wire_snapshot(need_sequence=False) as source:
                 stream = source.stream
@@ -343,10 +383,7 @@ class WakeCandidateIndex(TypedStore):
                     # TypedStore installs schema atomically. Capture the stored
                     # row, then close the SQL connection before reading or decoding.
                     recorded = CandidateCheckpoint.current(db)
-                checkpoint = self._checkpoint_start(
-                    recorded, stream, stat, root_id,
-                    rebuild=rebuild, bootstrap_new=bootstrap_new,
-                )
+                checkpoint = start.start(recorded, stream, stat, root_id)
                 batch = self._replay_prefix(
                     source, checkpoint.byte_offset, checkpoint.last_seq,
                     max_rows=max_rows, max_bytes=max_bytes,
@@ -355,13 +392,12 @@ class WakeCandidateIndex(TypedStore):
                     current = CandidateCheckpoint.current(db)
                     if current == recorded:
                         tail = self._source_end(stream, batch.next_offset)
-                        self._commit_batch(db, batch, stat, root_id, tail, rebuild=rebuild)
+                        self._commit_batch(db, batch, checkpoint, tail, start=start)
                         return batch.next_offset >= source.boundary
                 # Another writer's committed row owns progress. Close the SQL
                 # connection before validating its source; never replay a batch.
-                advanced = self._checkpoint_start(
+                advanced = ResumeIndex().start(
                     current, stream, os.fstat(stream.fileno()), root_id,
-                    rebuild=False,
                 )
                 return advanced.byte_offset >= source.boundary
         except (
@@ -402,9 +438,8 @@ class WakeCandidateIndex(TypedStore):
             with self.snapshot() as db:
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
-                    checkpoint = self._checkpoint_start(
-                        CandidateCheckpoint.current(db),
-                        stream, stat, root_id, rebuild=False,
+                    checkpoint = ResumeIndex().start(
+                        CandidateCheckpoint.current(db), stream, stat, root_id,
                     )
                 return checkpoint
         except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
@@ -416,7 +451,7 @@ class WakeCandidateIndex(TypedStore):
         *,
         max_rows: int = batch_rows,
         max_bytes: int = batch_bytes,
-        bootstrap_new: bool = False,
+        start: IndexStart = ResumeIndex(),
     ) -> CandidateCatchUp:
         """Replay at most ONE bounded batch after a durable append notification.
 
@@ -432,30 +467,17 @@ class WakeCandidateIndex(TypedStore):
         if type(hint) is not CommittedAppendHint:
             raise ValueError("candidate catch-up requires the original append hint")
         hint = hint.validated()
-        bootstrap_new = FieldCodec.decode(bool, bootstrap_new)
         self._validate_limits(max_rows, max_bytes)
         if self.log._private_marker_unlocked().root_id != hint.root_id:
             raise ProjectionRebuildRequiredError("candidate append hint belongs to another root")
-        prior_bytes = 0
-        if bootstrap_new:
-            # Existence is not initialization: another process may have created
-            # the WAL but not committed its first checkpoint. BEGIN IMMEDIATE in
-            # maintain serializes that decision against the stored row.
-            more_source_bytes = not self.maintain(
-                bootstrap_new=True, max_rows=max_rows, max_bytes=max_bytes
-            )
-        else:
-            if not self.path.exists():
-                raise ProjectionRebuildRequiredError(
-                    "candidate index needs explicit initial build"
-                )
-            prior = self._verified_checkpoint(hint.root_id)
-            prior_bytes = prior.byte_offset
-            if prior.byte_offset >= hint.through_bytes:
-                return CandidateCatchUp(prior.byte_offset, True, False)
-            more_source_bytes = not self.maintain(
-                max_rows=max_rows, max_bytes=max_bytes
-            )
+        prior_bytes = start.prior_bytes(self, hint)
+        if prior_bytes >= hint.through_bytes:
+            return CandidateCatchUp(prior_bytes, True, False)
+        # The saved row, not file existence, decides initialization inside
+        # maintain's serialized transaction; concurrent first builds can resume.
+        more_source_bytes = not self.maintain(
+            start=start, max_rows=max_rows, max_bytes=max_bytes
+        )
         checkpoint = self._verified_checkpoint(hint.root_id)
         if checkpoint.byte_offset <= prior_bytes and more_source_bytes:
             # The checkpoint row owns the byte position: a batch that consumed
@@ -493,13 +515,7 @@ class WakeCandidateIndex(TypedStore):
                      limit=limit, delivery_only=delivery_only)
         try:
             with self.snapshot() as db:
-                checkpoint = CandidateCheckpoint.current(db)
-                if (
-                    checkpoint is None
-                    or checkpoint.root_id != request.root_id
-                    or checkpoint.last_seq < request.required_through_seq
-                ):
-                    raise ProjectionUnavailableError("candidate projection is stale or unrelated")
+                checkpoint = CandidateCheckpoint.current(db).require_fresh(request)
                 with self.log.path.open("rb") as stream:
                     stat = os.fstat(stream.fileno())
                     checkpoint.require_source(stream, stat, request.root_id)

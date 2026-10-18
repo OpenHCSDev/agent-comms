@@ -284,7 +284,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
         ))
         return {
             "goal": goal.to_wire() if goal is not None else None,
-            "goalExecution": execution.to_wire() if execution is not None else None,
+            "goalExecution": execution.to_wire(),
             "_meta": encode_updates(TurnChangedUpdate(await Coordination.run_worker(partial(
                 ctx.server.agent.turns.turn_state, ctx.session_id,
             )))),

@@ -1,1 +1,1 @@
-src/agent_comms/owner_protocol.py export-subst
+hatch_build.py export-subst

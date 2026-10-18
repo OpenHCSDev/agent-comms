@@ -14,7 +14,7 @@ from agent_comms.assignment_states import (
 )
 from agent_comms.comms import Comms
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
-from agent_comms.historical_views import HistoricalDisplay
+from agent_comms.read_basis import HistoricalDisplay
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import ThreadRole
 from agent_comms.threads import Thread

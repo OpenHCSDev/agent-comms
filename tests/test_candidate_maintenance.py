@@ -16,7 +16,9 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
-from agent_comms.wake_candidate_index import WakeCandidateIndex
+from agent_comms.wake_candidate_index import (
+    WakeCandidateIndex, FirstBuild,
+)
 from agent_comms.wake_policy import FullWake
 
 _SCHEDULE = maintenance.schedule_candidate_catchup
@@ -145,7 +147,7 @@ def test_one_background_drain_catches_up_a_backlog_of_oversized_records(
             first_bytes = len(stream.readline())
         assert index.catch_up_committed_append(
             index.notify_committed_append(root_id=root_id, through_bytes=first_bytes),
-            bootstrap_new=True,
+            start=FirstBuild(),
         ).checkpoint_bytes == first_bytes
         through_bytes = index.log.path.stat().st_size
         hint = index.notify_committed_append(root_id=root_id, through_bytes=through_bytes)
@@ -197,5 +199,5 @@ def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tm
                       recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
                       after_seq=0, required_through_seq=messages[-1].seq, limit=32)
     assert len(page.entries) == 32 and page.has_more
-    with comms.bus.snapshot(viewer=NamedViewer("beta", comms.registry.snapshot())) as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer("beta")) as (basis, source):
         assert comms.bus.pending_counts_opened(source, basis) == {"sender": len(messages)}
