@@ -105,7 +105,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     execution = OwnedTurn(owner.turns, session.session_id, name, "work", autonomous_goal=True)
     store = comms.goals.open_goal_store()
     generation_before = store.snapshot(goal.id)
-    pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))
+    pending_before = tuple(owner.inputs.state(session.session_id).pending_turns)
 
     def fail(*args, **kwargs):
         raise RuntimeError("injected acquired resource failure")
@@ -136,10 +136,10 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
             await execution.run()
         assert store.snapshot(goal.id).lifecycle == expected_state
         assert not comms.registry.require(name).active_turn.executing
-        assert session.session_id not in owner.inputs.backend_inboxes
-        assert session.session_id not in owner.inputs.first_sources
+        assert owner.inputs.state(session.session_id).inbox is None
+        assert owner.inputs.state(session.session_id).first_source is None
         assert not owner.inputs.input_keys(session.session_id)
-        assert tuple(owner.inputs.pending_turns.get(session.session_id, ())) == pending_before
+        assert tuple(owner.inputs.state(session.session_id).pending_turns) == pending_before
         if failure == "receipt_capture":
             originals = tuple(stored_inputs(owner.inputs.dispositions.root).rows.values())
             assert len(originals) == 1
@@ -195,8 +195,8 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
         original, = stored_inputs(owner.inputs.dispositions.root).rows.values()
         assert isinstance(original, NotSentInput)
         assert comms.registry.require(name).turn_lease is None
-        assert session.session_id not in owner.inputs.first_sources
-        assert session.session_id not in owner.inputs.backend_inboxes
+        assert owner.inputs.state(session.session_id).first_source is None
+        assert owner.inputs.state(session.session_id).inbox is None
         assert not owner.turns.persistent_backends
     finally:
         release.set()

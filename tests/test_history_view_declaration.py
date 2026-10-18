@@ -2,7 +2,7 @@
 
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
-from agent_comms.message_page import MessagePageRequest
+from agent_comms.message_page import MessagePageRequest, PageBounds, PageTraversal
 from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.threads import Thread
 
@@ -11,9 +11,9 @@ class ReviewHistory(HistoryView):
     def capture(self, snapshot):
         return ChannelDisplayScope("#review", frozenset({"#review"}))
 
-    def live_page(self, presentation, **paging):
-        return MessagePageRequest.capture(
-            self.capture(presentation.registry.snapshot()), **paging
+    def live_page(self, presentation, bounds):
+        return MessagePageRequest(
+            self.capture(presentation.registry.snapshot()), bounds
         ).read(presentation.bus.log)
 
 
@@ -28,17 +28,19 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
     original = prior.bus.log.path.read_bytes()
     current.views.attach_history(prior.root)
     view = ReviewHistory()
-    page = view.page(current.views.presentation, limit=2)
+    page = view.page(current.views.presentation, PageBounds(limit=2))
     assert [m.body for m in page.messages] == ["current 1", "current 2"]
     backwards = list(page.messages)
     while page.has_older:
-        page = view.page(current.views.presentation, before=page.oldest_cursor, limit=2)
+        page = view.page(
+            current.views.presentation, PageBounds(PageTraversal.capture(before=page.oldest_cursor), 2)
+        )
         backwards[0:0] = page.messages
     assert len(backwards) == 6
     forward = []
     cursor = backwards[0].view_cursor
     while True:
-        page = view.page(current.views.presentation, after=cursor, limit=2)
+        page = view.page(current.views.presentation, PageBounds(PageTraversal.capture(after=cursor), 2))
         forward.extend(page.messages)
         if not page.has_newer:
             break

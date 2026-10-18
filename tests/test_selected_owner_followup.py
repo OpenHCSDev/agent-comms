@@ -26,7 +26,7 @@ tmp_path = private_root_fixture
 
 @asynccontextmanager
 async def selected_reply(agent, *, error=None):
-    wake = agent.inputs.wake_tasks["beta"]
+    wake = agent.inputs.state("beta").wake_task
     yield wake
     with pytest.raises(error) if error is not None else nullcontext():
         await wake
@@ -67,7 +67,7 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await recorded_request(control, agent)
-        wake = agent.inputs.wake_tasks["beta"]
+        wake = agent.inputs.state("beta").wake_task
         assert comms.registry.require("beta").active_turn.executing
         response = await asyncio.wait_for(
             agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
@@ -100,8 +100,8 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         row = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{acknowledgement.input_id}"]
         assert isinstance(row, StartedInput)
         assert not row.unresolved and row.native_id == sent[1]["inputId"]
-        assert not agent.inputs.queued_inputs.get("beta")
-        assert "beta" not in agent.inputs.backend_inboxes
+        assert not agent.inputs.state("beta").queued
+        assert agent.inputs.state("beta").inbox is None
         assert "beta" not in agent.turns.turn_tasks
         assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == before_goal
@@ -163,10 +163,10 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
             if change == "clear":
                 await agent.inputs.clear_queued_inputs("beta")
             elif change == "missing_key":
-                agent.inputs.following_sources["beta"].pop(input_id)
+                agent.inputs.state("beta").following.pop(input_id)
             elif change == "foreign_key":
-                agent.inputs.following_sources["beta"][input_id] = replace(
-                    agent.inputs.following_sources["beta"][input_id], keys=(old_key,)
+                agent.inputs.state("beta").following[input_id] = replace(
+                    agent.inputs.state("beta").following[input_id], keys=(old_key,)
                 )
             else:
                 wake.cancel()
@@ -175,7 +175,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
         rows = stored_inputs(agent.inputs.dispositions.root).rows
         assert rows[old_key] == old_row
         assert isinstance(rows[f"acp:{input_id}"], expected_state)
-        assert "beta" not in agent.inputs.backend_inboxes
+        assert agent.inputs.state("beta").inbox is None
         assert "beta" not in agent.turns.turn_tasks
     finally:
         release.set()
@@ -305,7 +305,7 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
         assert not row.unresolved and row.native_id
         assert len(requests) == 2
         assert "Exactly one fresh owner instruction" in json.dumps(requests[1])
-        assert not agent.inputs.backend_inboxes and not agent.turns.turn_tasks
+        assert not any(state.inbox for state in agent.inputs.drained.values()) and not agent.turns.turn_tasks
         assert not comms.registry.require("beta").active_turn.executing
         assert comms.registry.require("beta").goal == parked_goal
         assert comms.goals.goal_wait("beta") == parked_wait
@@ -356,7 +356,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         request = object()
         assert await kwargs["ui_request"](request) is request
         assert kwargs["images"][0].data == "eA=="
-        original_key = agent.inputs.first_sources["beta"].notice_keys[0]
+        original_key = agent.inputs.state("beta").first_source.notice_keys[0]
         first_id = original_key.removeprefix("acp:")
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert isinstance(allowed, GrantedSend)

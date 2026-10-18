@@ -76,7 +76,7 @@ async def test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling(g
     paused = await proxy.request("goal_snapshot")
     assert paused["goal"]["revision"] > result["goal"]["revision"]
     assert paused["goalExecution"]["state"] == "paused"
-    assert scheduled == [] and not owner.inputs.pending_turns and not owner.inputs.wake_tasks
+    assert scheduled == [] and not any(state.pending_turns for state in owner.inputs.drained.values()) and not any(state.wake_task for state in owner.inputs.drained.values())
 
 
 async def test_goal_actions_check_revision_and_preserve_owner_pause(goal_owner):

@@ -188,8 +188,8 @@ async def test_native(retained_native_acp_owner):
     turn = asyncio.create_task(agent.inputs.drain_inbox(sid))
     try:
         await turn
-        assert sid in agent.inputs.wake_tasks
-        wake = agent.inputs.wake_tasks[sid]
+        assert agent.inputs.state(sid).wake_task is not None
+        wake = agent.inputs.state(sid).wake_task
         async with asyncio.timeout(15):
             while native.provider.posts < 2:
                 if wake.done():
@@ -203,7 +203,7 @@ async def test_native(retained_native_acp_owner):
             item for item in decode_updates(response.field_meta)
             if isinstance(item, InputDeliveryChangedUpdate)
         )
-        assert accepted.input_id in agent.inputs.queued_inputs[sid]
+        assert accepted.input_id in agent.inputs.state(sid).queued
         queued = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
         assert queued.unresolved and queued.has_native_binding
         gate.set()
@@ -216,7 +216,7 @@ async def test_native(retained_native_acp_owner):
         assert not comms.registry.require(sid).active_turn.executing
         handled = stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{accepted.input_id}")
         assert not handled.unresolved and handled.has_native_binding
-        assert not agent.inputs.queued_inputs.get(sid)
+        assert not agent.inputs.state(sid).queued
         assert stored_inputs(agent.inputs.dispositions.root).lookup(old_key) == old
         assert native.provider.posts == 3
         assert not any("HISTORICAL_UNKNOWN_MUST_NOT_REPLAY" in json.dumps(r) for r in native.provider.requests)

@@ -436,11 +436,11 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         # another owner, whose separate tests exercise the provider path.
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         before = len(drains)
-        agent.inputs.pending_turns["beta"] = [ScheduledTurn("queued locally")]
+        agent.inputs.state("beta").pending_turns = [ScheduledTurn("queued locally")]
         await tick()
         assert len(drains) == before + 1
     finally:
-        agent.inputs.pending_turns.pop("beta", None)
+        agent.inputs.state("beta").pending_turns = []
         observer.cancel()
         await asyncio.gather(observer, return_exceptions=True)
 
@@ -519,7 +519,7 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     assert len(calls) == 5
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 6
-    before = agent.inputs._idle_private_revisions["beta"]
+    before = agent.inputs.state("beta").idle_revision
     second = publish_initial(comms, "sender", "beta", "new pending input")
     assert first.seq < second.seq
     with Coordination(comms.root / "coordination.sqlite3") as store:

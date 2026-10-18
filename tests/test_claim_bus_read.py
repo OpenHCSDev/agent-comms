@@ -33,6 +33,7 @@ from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_tables.executions import ExecutionOrigin
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from agent_comms.message_page import ConversationMessagePageRequest
 from agent_comms.messages import ClaimNoticeKind
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.read_basis import DMDisplayScope
@@ -173,7 +174,7 @@ def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.Monkey
         assert all(message.type is ClaimNoticeKind for message in claims)
         snapshot = comms.registry.snapshot()
         dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
-        assert comms.bus.conversation_page(dm_scope).messages == ()
+        assert ConversationMessagePageRequest(dm_scope).read(comms.bus.log).messages == ()
         raw_channel = comms.views.channel_history_page("#team").messages
         assert [message.body for message in raw_channel] == ["@Alice investigate"]
         channel = comms.views.channel_display_page("#team").messages

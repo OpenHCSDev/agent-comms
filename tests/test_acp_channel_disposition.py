@@ -98,7 +98,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
                 store.session._connection, beta_lookup
             )
         assert stored_inputs(owner.inputs.dispositions.root).rows == {}
-        assert owner.inputs.pending_turns == {}
+        assert not any(state.pending_turns for state in owner.inputs.drained.values())
         before = len(alpha_calls), len(beta_calls)
         assert await owner.inputs.drain_inbox("alpha") == 0
         assert (len(alpha_calls), len(beta_calls)) == before
@@ -126,7 +126,7 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
         messages = comms.bus.inbox("alpha")
         comms.messaging.acknowledge("alpha", tuple(message.reference for message in messages))
         assert await owner.inputs.drain_inbox("alpha") == 0
-        assert len(calls) == 1 and not owner.inputs.pending_turns
+        assert len(calls) == 1 and not any(state.pending_turns for state in owner.inputs.drained.values())
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             rows = NativeRuntimeInput.read(
                 store.session._connection.execute(f"SELECT * FROM {NativeRuntimeInput.declared_name}")
@@ -165,7 +165,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
     monkeypatch.setattr(TrackedTurnSession, "execute", suspended)
     async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, _root):
         assert await owner.inputs.drain_inbox("beta") == 1
-        turn = owner.inputs.wake_tasks["beta"]
+        turn = owner.inputs.state("beta").wake_task
         try:
             await asyncio.wait_for(entered.wait(), 5)
             if revocation == "goal":
@@ -194,7 +194,7 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
                 )
                 assert len(rows) == 1 and rows[0].session_id is None
             assert comms.bus.log.messages_for_references((message.reference,)) == (message,)
-            assert not owner.inputs.pending_turns
+            assert not any(state.pending_turns for state in owner.inputs.drained.values())
         finally:
             release.set()
             turn.cancel()
@@ -215,7 +215,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
     monkeypatch.setattr(TrackedTurnSession, "execute", suspended)
     async with canonical_delivery_owner(tmp_path, direct=True) as (comms, owner, message, root_id):
         assert await owner.inputs.drain_inbox("beta") == 1
-        turn = owner.inputs.wake_tasks["beta"]
+        turn = owner.inputs.state("beta").wake_task
         try:
             await asyncio.wait_for(entered.wait(), 5)
             key = message.seq, message.message_id

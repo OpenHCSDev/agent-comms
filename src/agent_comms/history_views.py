@@ -21,7 +21,7 @@ from .thread_execution import ConversationPreparation
 from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
-    from .historical_views import HistoricalThread, HistoryCursor, HistorySource
+    from .historical_views import HistoricalThread, HistorySource
     from .read_basis import HistoricalDisplay
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -44,7 +44,7 @@ from .exporting import (
 from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
-from .message_page import MessagePage
+from .message_page import NEWEST_PAGE, MessagePage, OlderTraversal, PageBounds
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
@@ -103,7 +103,7 @@ class ThreadViewRead(ConversationPreparation):
         page = DMDisplayBasis.fetch_page(
             self.views.bus, self.views.registry, self.views.root, self.viewer.name,
             self.thread.name, worktree=self.viewer.worktree,
-            before=self.through.wire.sequence + 1,
+            bounds=PageBounds(OlderTraversal(self.through.wire.sequence + 1)),
         )
         if page.messages:
             self.views.mark_dm_view_read(
@@ -188,25 +188,9 @@ class HistoryViews:
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
 
-    def dm_history_page(
-        self,
-        a: str,
-        b: str,
-        *,
-        before: int | HistoryCursor | None = None,
-        after: int | HistoryCursor | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
-    ) -> MessagePage:
+    def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded DM history for any client adapter."""
-
-        return DMHistory(a, b).page(
-            self.presentation,
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-        )
+        return DMHistory(a, b).page(self.presentation, bounds)
 
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Attach preserved history without allowing any historical execution."""
@@ -224,23 +208,10 @@ class HistoryViews:
         return self.bus.history.threads(name)
 
     def dm_display_page(
-        self,
-        peer: str,
-        *,
-        worktree: str,
-        before: int | HistoryCursor | None = None,
-        after: int | HistoryCursor | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
+        self, peer: str, *, worktree: str, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         viewer = self.messaging.user_identity(worktree).name
-        return DMDisplayHistory(viewer, peer, worktree).page(
-            self.presentation,
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-        )
+        return DMDisplayHistory(viewer, peer, worktree).page(self.presentation, bounds)
 
     def display_viewer(self, worktree: str) -> NamedViewer:
         """Select the human reader; page capture resolves it in its own snapshot."""
@@ -251,42 +222,19 @@ class HistoryViews:
         target: str,
         *,
         viewer: DisplayViewer = AnonymousViewer(),
-        before: int | HistoryCursor | None = None,
-        after: int | HistoryCursor | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
+        bounds: PageBounds = NEWEST_PAGE,
     ) -> MessagePage:
         channel = self.channels.catalog.read().require_channel(target, self.registry.snapshot().threads)
-        return ChannelDisplayHistory(channel, viewer).page(
-            self.presentation,
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-        )
+        return ChannelDisplayHistory(channel, viewer).page(self.presentation, bounds)
 
     def mark_historical_view_read(self, displayed: HistoricalDisplay) -> None:
         displayed.acknowledge(self.bus.history, self.registry)
 
-    def channel_history_page(
-        self,
-        target: str,
-        *,
-        before: int | HistoryCursor | None = None,
-        after: int | HistoryCursor | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
-    ) -> MessagePage:
+    def channel_history_page(self, target: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         """Bounded channel history for any client adapter."""
         selected = CommandTarget.named(target).require_channel()
         channel = self.channels.catalog.read().resolve(selected.name)
-        return ChannelHistory(channel.name, channel.history_targets).page(
-            self.presentation,
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
-        )
+        return ChannelHistory(channel.name, channel.history_targets).page(self.presentation, bounds)
 
     def last_sent_timestamps(
         self, sent: Mapping[str, float], *, registry: RegistrySnapshot,
@@ -298,20 +246,9 @@ class HistoryViews:
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
 
-    def full_history_page(
-        self,
-        *,
-        before: int | HistoryCursor | None = None,
-        after: int | HistoryCursor | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
-    ) -> MessagePage:
+    def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         return ChannelHistory(BuiltinChannel.ANY.value, BuiltinChannel.ANY.history_targets).page(
-            self.presentation,
-            before=before,
-            after=after,
-            limit=limit,
-            max_bytes=max_bytes,
+            self.presentation, bounds
         )
 
     def export_wire(

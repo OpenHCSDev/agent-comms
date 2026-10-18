@@ -51,7 +51,7 @@ async def test_live_drain_schema_failure_visible_until_real_recovery(tmp_path, b
             db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
     try:
         agent.inputs.ensure_live_drain("beta")
-        await until(lambda: "beta" in agent.inputs._observation_watchers)
+        await until(lambda: agent.inputs.state("beta").observation_watcher is not None)
         agent.inputs.wake_observer("beta")
         await until(
             lambda: owner_view(comms).activity.readiness.source_diagnostic() is not None
@@ -242,7 +242,7 @@ async def test_unexpected_drain_failure_is_visible_and_propagates(tmp_path, monk
     monkeypatch.setattr(agent.inputs, "drain_inbox", broken)
     try:
         agent.inputs.ensure_live_drain("beta")
-        task = agent.inputs.drain_tasks["beta"]
+        task = agent.inputs.state("beta").drain_task
         with pytest.raises(ValueError, match="unexpected drain implementation failure"):
             await task
         assert isinstance(

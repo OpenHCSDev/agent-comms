@@ -24,7 +24,7 @@ def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypa
         replacement.append(successor.turn_lease)
         raise OSError("activity publication failed")
 
-    monkeypatch.setattr(comms.agents.activity, "emit", fail_after_replacement)
+    monkeypatch.setattr(comms.agents, "_emit_activity", fail_after_replacement)
     with pytest.raises(OSError, match="activity publication failed"):
         comms.agents.begin_turn("owner", "same-id")
     assert comms.registry.require("owner").turn_lease == replacement[0]

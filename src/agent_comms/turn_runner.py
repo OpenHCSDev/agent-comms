@@ -367,7 +367,7 @@ class TurnRunner:
 
     async def active_backend_inbox(self, session_id: str) -> TurnInbox | None:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
-        return self.inputs.backend_inboxes.get(session_id) if state.active.phase.accepts_followup else None
+        return self.inputs.state(session_id).inbox if state.active.phase.accepts_followup else None
 
     async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
         async with self.idle_backend(session_id, thread) as persistent:

@@ -73,7 +73,7 @@ class GoalScheduler:
             check.require_valid()
         except ReservationViolationError:
             return
-        self.inputs.pending_turns.setdefault(session_id, []).append(scheduled)
+        self.inputs.state(session_id).pending_turns.append(scheduled)
         WakeScheduleCheck(session_id=session_id, inputs=self.inputs).schedule()
 
     def prepare_goal(self, session_id: str) -> ScheduledTurn | None:

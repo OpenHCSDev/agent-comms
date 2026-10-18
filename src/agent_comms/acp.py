@@ -448,6 +448,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             # close it after its session/input producers have drained.
             retirement.callback(self.cursors.close)
             retirement.push_async_callback(self.sessions.release_owned)
+            retirement.callback(self.inputs.end_sessions)
             retirement.push_async_callback(self.turns.close)
             retirement.push_async_callback(self.sessions.close_proxies)
             retirement.push_async_callback(self.inputs.close)

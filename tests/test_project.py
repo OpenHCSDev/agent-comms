@@ -189,7 +189,7 @@ async def test_cancel_during_project_change_does_not_restart_work(tmp_path, monk
         await agent.cancel(session)
         assert (await prompt).stop_reason == "cancelled"
         assert comms.registry.require(session).worktree == str(new)
-        assert not agent.inputs.pending_turns.get(session)
+        assert not agent.inputs.state(session).pending_turns
     finally:
         await agent.shutdown()
 

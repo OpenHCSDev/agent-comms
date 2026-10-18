@@ -30,7 +30,9 @@ from .goal_waits import GoalWaits
 from .external_transcript import ExternalTranscript
 from .notification_assignment import NotificationAssignment
 from .mentions import MentionCandidate
-from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
+from .message_page import (
+    NEWEST_PAGE, ConversationMessagePageRequest, MessagePage, MessagePageRequest, PageBounds,
+)
 from .message_reference import MessageReference
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
@@ -496,10 +498,7 @@ class BusPresentation:
         target: str,
         *,
         viewer: DisplayViewer = AnonymousViewer(),
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
+        bounds: PageBounds = NEWEST_PAGE,
     ) -> MessagePage:
         """Local display projection; underlying channel history remains target-owned."""
         target = CommandTarget.named(target).require_channel()
@@ -512,9 +511,7 @@ class BusPresentation:
                     scope = basis.scope(target.name)
             # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
-            page = ConversationMessagePageRequest.capture(
-                scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-            ).read_opened(source)
+            page = ConversationMessagePageRequest(scope, bounds).read_opened(source)
             return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self))
 
     def mark_channel_read(
