@@ -905,8 +905,10 @@ class SendBackVerdict(OrderVerdict):
     reason: StrikeReason
 
     def judged(self, current: Todo) -> Todo:
-        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text, self.at)
-        return strike.apply(current)
+        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
+                            self.at)
+        struck: Todo = strike.apply(current)
+        return struck
 
     def record(self, goals: Goals, problem: str) -> Todo:
         return goals.send_back(problem, self)

@@ -50,7 +50,7 @@ class Goals:
         self.goal_store: GoalAttemptStore | None = None
 
     @cached_property
-    def todos(self) -> TodoStore:
+    def todos(self):
         return TodoStore(self.root)
 
     def change_problem(self, problem, operation, commander):
@@ -61,14 +61,16 @@ class Goals:
 
     def apply_problem(self, problem: str, operation: TodoOperation) -> Todo:
         with _store_lock(self._wire_lock_path):
-            return self.todos.apply(problem, operation)
+            applied: Todo = self.todos.apply(problem, operation)
+            return applied
 
     def send_back(self, problem: str, verdict: SendBackVerdict) -> Todo:
         """The verdict and strike land on the Todo in the write that revises the holder's Goal."""
         holder = verdict.previous
         self.update_goal(holder.owner, SentBackOrderGoalAction(
             expect=GoalPrecondition(goal_id=holder.generation), problem=problem, operation=verdict))
-        return self.todos.get(problem)
+        sent_back: Todo = self.todos.get(problem)
+        return sent_back
 
     def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
         actor = self.registry.require(commander).incarnation
