@@ -581,7 +581,6 @@ class DMDisplayBasis:
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
-            revision = registry.store.revision_unlocked()
             document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
         from .wire_log import CurrentSnapshotOpening
         with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
@@ -605,8 +604,6 @@ class DMDisplayBasis:
                 fetched_through=page.newest_seq or 0,
             )
             with registry.store.locked(mode=SharedLock()):
-                if registry.store.revision_unlocked() != revision:
-                    raise HistoricalSourceChanged("Registry changed; refresh the DM page")
                 basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path))
             return replace(page, display_basis=basis)
 
