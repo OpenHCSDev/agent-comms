@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from .child_process import ProcessState
 
 
-class TurnDeclaration(SubclassUnion):
+class TurnDeclaration(SubclassUnion, affix=""):
     """A recorded active turn or the idle state."""
 
     phase: TurnPhase
@@ -263,7 +263,7 @@ class TurnLeaseFence(TurnFence):
     record: StoredTurnRecord = field(kw_only=True)
 
 
-class TurnRecord(SubclassUnion):
+class TurnRecord(SubclassUnion, affix=""):
     """A stored turn reference or the declared absence of one; never a phase cache."""
 
     @abstractmethod
@@ -319,7 +319,7 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference):
+class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_name=None):
     """Turn file bound to the registry that decoded its wire reference."""
 
     identity: TurnIdentity = field(metadata={"wire_transient": True})

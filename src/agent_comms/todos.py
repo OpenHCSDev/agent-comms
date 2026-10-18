@@ -27,7 +27,7 @@ from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, JsonStorage, TypedStore, TypedTable
+from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
@@ -881,6 +881,10 @@ class TodoState(DeclaredFamily, affix="TodoState"):
     open: ClassVar[bool] = True  # on the board until closed with installed evidence
 
     @classmethod
+    def open_names(cls) -> tuple[str, ...]:
+        return tuple(member.declared_name for member in cls.members_with(cls) if member.open)
+
+    @classmethod
     def prepare_change(cls, goals, current):
         pass
 
@@ -1086,6 +1090,18 @@ class CorrectCheckTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class WordingCorrection(TodoOperation):
+    """Core's answer to a published unit message whose words hide what happened; no strike."""
+    message_id: str
+    words: tuple[str, ...]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        corrections = (*current.corrections, self)
+        return replace(current, corrections=corrections, revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class ServeTodo(TodoOperation):
     """The commander names the plan phase an open order serves; it keeps its id and holder."""
     actor: ThreadIncarnation
@@ -1197,6 +1213,8 @@ class ChangeTodoState(TodoOperation):
 
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
+
     id: str = field(metadata={"sql": Column(primary_key=True)})
     repo: str
     text: str
@@ -1213,6 +1231,7 @@ class Todo(TypedTable):
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
     verdicts: tuple[OrderVerdict, ...] = ()
+    corrections: tuple[WordingCorrection, ...] = ()
 
     @property
     def pending(self):
@@ -1401,18 +1420,36 @@ class TodoStore(TypedStore):
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
-        return any(todo.pending for todo in self._select(
+        return any(todo.pending for todo in self._open(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
             (owner.name, owner.wire_birth)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """The orders serving one request: a Goal on the commander's thread."""
-        return self._select(
+        return self._open(
             "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?", (commander.name, commander.created_at))
+        return self._open("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+
+    def held_for_commander(
+        self, commander: ThreadIncarnation, unit: str | None = None,
+    ) -> tuple[Todo, ...]:
+        where = "creator=? AND creator_created=? AND assignment IS NOT NULL"
+        parameters: tuple = (commander.name, commander.wire_birth)
+        if unit is not None:
+            where += " AND json_extract(assignment,'$.owner')=?"
+            parameters += (unit,)
+        return self._open(where, parameters)
+
+    def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
+
+    def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        states = TodoState.open_names()
+        selected = ','.join('?' for state in states)
+        return self._select(f"state IN ({selected}) AND ({where})", (*states, *parameters))
 
     def create(
         self,
@@ -1462,6 +1499,19 @@ class TodoStore(TypedStore):
                 return current
             result.upsert(db)
             return self._current(db, todo_id)
+
+    def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
+        """Correct every open order the unit holds when its published text uses jargon."""
+        if not (words := tuple(PlainText.found(text))) or not self.path.exists():
+            return ()
+        with self.writing() as db:
+            held = (todo for todo in self._rows(db, "json_extract(assignment,'$.owner')=?", (unit,))
+                    if todo.state.open)
+            corrected = tuple(WordingCorrection(todo.revision, message_id, words).apply(todo)
+                              for todo in held)
+            for todo in corrected:
+                todo.upsert(db)
+            return corrected
 
     def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
         """Release every open problem the unit holds from this commander in one write; each
