@@ -52,6 +52,7 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+from .ordinary_turn_rules import OrdinaryGoalGrantCheck
 
 
 if TYPE_CHECKING:
@@ -358,7 +359,7 @@ class GoalTurnPermit(ABC):
     """The turn's launch authority, including a turn that has no goal claim."""
 
     @abstractmethod
-    def perform(self, work: Callable[[LaunchPermit], object]) -> None: ...
+    def check_grant(self, store: GoalAttemptStore) -> None: ...
 
     @abstractmethod
     def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool: ...
@@ -388,7 +389,7 @@ class GoalTurnPermit(ABC):
 
 
 class NoLaunchPermit(GoalTurnPermit):
-    def perform(self, work: Callable[[LaunchPermit], object]) -> None:
+    def check_grant(self, store: GoalAttemptStore) -> None:
         pass
 
     def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
@@ -425,18 +426,18 @@ class NoLaunchPermit(GoalTurnPermit):
 class LaunchPermit(GoalTurnPermit):
     reservation: Reservation
 
-    def perform(self, work: Callable[[LaunchPermit], object]) -> None:
-        work(self)
+    def check_grant(self, store: GoalAttemptStore) -> None:
+        OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()
 
     def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
         claims.callback(self.retire_unverified, store)
         return True
 
     def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None:
-        account.settle_original(self, terminal)
+        account.settle_launched(self, terminal)
 
     def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
-        account._block_active_goal(diagnostic)
+        account.block_active_goal(diagnostic)
 
     def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
                     goal: GoalDeclaration, turn: TurnId) -> None:

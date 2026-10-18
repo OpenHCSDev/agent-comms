@@ -45,7 +45,7 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
 
     def run(self) -> None:
         goal = COMMS.goals.update_goal(ME, SetGoalAction(text=self.text, order=RequestGoalOrder()))
-        print(goal.require().id)
+        print(goal.project(lambda current: current.id, lambda: "No request recorded."))
 
 
 @dataclass(frozen=True, kw_only=True)

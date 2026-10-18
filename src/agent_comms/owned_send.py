@@ -14,7 +14,6 @@ from .ordinary_turn_rules import (
     MissingAcceptedInputCheck,
     MissingTurnOwnerCheck,
     OrdinaryContextCheck,
-    OrdinaryGoalGrantCheck,
     OrdinaryOwnerCheck,
     UnboundOrdinaryInputRule,
     UnconsumedDependencyRule,
@@ -109,9 +108,7 @@ class OwnedSend:
             source=source, owner=current, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
         if not source.bypasses_goal_permit:
-            self.goal_permit.perform(lambda permit: OrdinaryGoalGrantCheck(
-                permit=permit, store=self.goal_store,
-            ).require_valid())
+            self.goal_permit.check_grant(self.goal_store)
 
     def _refusal(self, rule: ReservationRule, defer: bool) -> SendOutcome:
         _LOG.info(

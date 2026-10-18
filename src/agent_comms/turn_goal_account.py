@@ -170,7 +170,7 @@ class TurnGoalAccount:
         self.unattributed_usage.clear()
         self.pending_origins[self.thread_name] = permit.reservation.goal_id
 
-    def _block_active_goal(self, diagnostic: str) -> None:
+    def block_active_goal(self, diagnostic: str) -> None:
         current = self.comms.registry.require(self.thread_name).continuation_goal(self.owner)
         current.block_after_failed_turn(
             self.comms.goals, self.thread_name, self.owner.worktree, diagnostic,
@@ -185,9 +185,9 @@ class TurnGoalAccount:
                 "or tool activity; inspect the session before resuming."
             )
 
-    def settle_original(self, permit: LaunchPermit, terminal: events.Done | None) -> None:
+    def settle_launched(self, permit: LaunchPermit, terminal: events.Done | None) -> None:
         if terminal is None:
-            self._block_active_goal("Backend turn ended without a result; inspect local diagnostics.")
+            self.block_active_goal("Backend turn ended without a result; inspect local diagnostics.")
         store = self.comms.goals.open_goal_store()
         captured = self.owner.goal.require_id(permit.reservation.goal_id)
         current = captured.continued_by(self.comms.registry.require(self.thread_name).goal)
