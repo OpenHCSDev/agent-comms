@@ -19,11 +19,10 @@ async def canonical_delivery_owner(root, *, direct=False):
     from test_coordinated_runtime import _root
 
     _path, root_id, comms, initial, people = _root(root, direct=direct)
+    comms.owners.pin_private_nk_launch(comms.root, root_id, root)
     owner = CommsAgent(
         comms,
         runtime_enabled=True,
-        private_nk_native_package=root,
-        private_nk_wire_root_id=root_id,
     )
     for person in people[1:]:
         owner.sessions.bindings[person.name] = person.name
@@ -45,9 +44,10 @@ def canonical_agent(comms, **options):
         else comms.messaging.initialize_private_initial_protocol()
     )
     package = pinned_native_package()
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     return CommsAgent(
-        comms, private_nk_native_package=package,
-        private_nk_wire_root_id=root_id, **options,
+        comms,
+        **options,
     )
 
 

@@ -57,12 +57,11 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     comms.registry.declare(
         comms.registry.new_thread('retained-parent', frozenset(), str(fixture.project), session_file=str(source), model='response-local/fixture', thinking_level='off')
     )
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(
         comms,
         agent_bin=launcher,
         runtime_enabled=True,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
     )
     failures = []
     answered = asyncio.Event()

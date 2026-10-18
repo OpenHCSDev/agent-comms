@@ -7,9 +7,9 @@ change its `--no-tools --no-extensions` launch, or intercept shell/edit/child
 writes. Ordinary sessions, public roots, and unrelated private workers cannot
 opt in with ACP metadata alone. This is not a filesystem security boundary.
 
-On an attached private N/K owner ACP session configured with an exact matching
-`AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID` and
-`AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE`, an operator may issue an **empty**
+On an attached private N/K owner ACP session (its launch pinned by the root's
+owner lifecycle: root ID from the marker, reviewed native package from the
+installation's pin or a parent's handoff), an operator may issue an **empty**
 `session/prompt` with precisely this `field_meta` (camelCase on ACP wire):
 
 ```json

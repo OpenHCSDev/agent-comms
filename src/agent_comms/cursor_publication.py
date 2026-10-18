@@ -74,15 +74,22 @@ class CursorDelivery:
 class CursorPublication:
     """Connection-owned observer; durable proof and execution stay elsewhere."""
 
-    def __init__(self, comms: Comms, runtime: RuntimeServer, root_id: str | None):
-        self.comms, self.runtime, self.root_id = comms, runtime, root_id
+    def __init__(self, comms: Comms, runtime: RuntimeServer):
+        self.comms, self.runtime = comms, runtime
         self.deliveries: dict[str, CursorDelivery] = {}
+
+    @property
+    def root_id(self) -> str | None:
+        """The root ID this root's owner lifecycle pinned, if the root is private."""
+        launch = self.comms.owners.launch_authority
+        return None if launch is None else launch.wire_root_id
 
     def delivery(self, session_id: str) -> CursorDelivery:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
-        if self.root_id is None:
+        root_id = self.root_id
+        if root_id is None:
             return NoCursorScope()
         try:
             owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
@@ -92,7 +99,7 @@ class CursorPublication:
             return NoCursorScope()
         return LiveCursorScope(
             session_id,
-            self.root_id,
+            root_id,
             ClaimedIdentity(owner.incarnation, generation),
             owner.pid,
         )

@@ -45,14 +45,15 @@ checkpoint and enables it for fresh managed roots. The current live bus has
 completed this migration; see checkpoint-live acceptance
 and the [installation procedure](private-checkpoint-install.md).
 
-`prepare-pi-native` verifies the installed Pi 0.85.1 bytes, builds a pinned
+`prepare-pi-native` installs the Pi release named in `pi-native.sha256` from
+its published package and its own `npm-shrinkwrap.json`, then builds a pinned
 local copy with native input IDs and writer-fenced session storage. Preparation and launch verify a complete-package content commitment,
 including dependencies and resolution metadata (see
 [`native-package-provenance.md`](native-package-provenance.md)). Each
 manifest gets its own copy, so preparing an update leaves running workers on
 their previous package until they restart. The copy
 retains the stock Bedrock transport; the script does not change the installed
-Pi or make a provider call. Set `PI_STOCK_DIR` if Pi is installed elsewhere.
+Pi or make a provider call. An installed Pi is neither read nor needed.
 Ambient `NODE_OPTIONS`/`NODE_PATH` are removed; the managed-project bootstrap is
 copied into and loaded from the verified package. Native v3 files with complete,
 valid ancestry are required; legacy or damaged files are refused without repair.
