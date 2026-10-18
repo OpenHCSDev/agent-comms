@@ -869,7 +869,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None]
 
     @pytest.mark.parametrize(
         "compaction",
@@ -2223,8 +2223,14 @@ send({{"type":"message_end", "message":{{
     "role":"assistant", "content":[], "stopReason":"stop",
 }}}})
 send({{"type":"agent_settled"}})
-answer_state(state_data)
-answer_stats({{"contextUsage":{{"tokens":33}}}})
+stats_data = {{"contextUsage":{{"tokens":33}}}}
+if case == "accepted_then_started":
+    answer_state(state_data)
+    answer_stats(stats_data)
+else:
+    # An unstarted input prevents settlement queries. A stray usage reply is
+    # still not evidence of its start; close the scripted child afterward.
+    send(request_response(steer, stats_data) | {{"command":"get_session_stats"}})
 ''',
         )
         queue = TurnInbox()
@@ -3175,8 +3181,10 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
             f"#!{sys.executable}\n"
             + f"""
 import json, sys, time
-sys.stdin.readline()
-prompt = json.loads(sys.stdin.readline())
+sys.path.insert(0, {str(Path(__file__).parent)!r})
+from pi_stub_protocol import answer_state, next_prompt
+answer_state({{"nativeInputProofCapability": {CAPABILITY!r}}})
+prompt = next_prompt()
 with open({str(calls)!r}, "a") as handle:
     handle.write("one\\n")
     handle.flush()
