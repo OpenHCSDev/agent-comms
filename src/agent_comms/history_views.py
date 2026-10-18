@@ -453,7 +453,9 @@ class HistoryViews:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(target)
             checkpoint = self.transcripts.transcript_checkpoint(thread.name)
-            ThreadViewRead(self, thread, self.registry.require(viewer), checkpoint).native()
+            thread.execution.prepare_conversation(ThreadViewRead(
+                self, thread, self.registry.require(viewer), checkpoint,
+            ))
             messages = self.bus.inbox(viewer, thread.name)
             self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
