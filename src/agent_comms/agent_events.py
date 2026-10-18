@@ -161,7 +161,8 @@ class ToolStart(ToolEvent):
     @classmethod
     def from_call(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
-        return cls(call_id, name, ToolDeclaration.caption(name, arguments), arguments, declaration.acp_kind)
+        title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments))
+        return cls(call_id, name, title, arguments, declaration.acp_kind)
 
 
 @dataclass(frozen=True)

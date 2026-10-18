@@ -36,6 +36,7 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     from agent_comms.activity import ActivityState
     from agent_comms.cli_bridges.codex_protocol import ItemStream, RpcNotification
     from agent_comms.cli_bridges.shared import ActiveItem, FinishedItem, TurnEnded, TurnStarted
+    from agent_comms.native_tools import BashTool
     from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
 
     stream = ItemStream("th")
@@ -57,7 +58,7 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
                                        "aggregatedOutput": "a\n"})
     assert finished == FinishedItem("t1", "c1", (
         ToolStartTranscript(tool_call_id="c1", tool_name="bash",
-                            raw_input={"command": "ls -la"}, timestamp=1.0),
+                            raw_input={"command": "ls -la"}, tool=BashTool(command="ls -la"), timestamp=1.0),
         ToolEndTranscript(tool_call_id="c1", tool_name="bash", text="a\n", ok=True,
                           timestamp=1.0)))
     thinking = {"type": "reasoning", "id": "r1", "summary": []}

@@ -120,7 +120,7 @@ class NativeThreadExecution(ThreadExecution):
     def restart_candidates(cls, thread: Thread, status):
         if thread.process_identity.runs_here():
             return ()
-        return (thread,) if thread.role.executable and status.active and thread.process_alive else ()
+        return thread.role.executor(thread) if status.active and thread.process_alive else ()
 
     @classmethod
     def prepare_conversation(cls, preparation: ConversationPreparation):

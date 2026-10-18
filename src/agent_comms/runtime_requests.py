@@ -13,21 +13,30 @@ from abc import abstractmethod
 from functools import partial
 from .coordinator import Coordination
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
+
+from acp.schema import PromptResponse, SetSessionConfigOptionResponse
+from pydantic import BaseModel, JsonValue
 
 from .command import Command
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireValue
 from .private_bus_checkpoint import ContextManifestReference
 from .goal_actions import GoalAction
+from .goal_history import RecordedGoalRevision
+from .goals import Goal
 from .owner_protocol import OwnerAnnouncement
 from .thread_presentation import LiveThreadOwnerBinding
 from .turn_context import ContextManifest, ContextSourceText, PreviewProvenance, Provenance, RecordedContextTurn, SegmentManifest, TurnContext
 from .thread_identity import ThreadIncarnation
+from .tool_result import DeclaredReply
 from .working_memory_labels import ClassifierVersion, ModelLabel
 from .working_memory_questions import SpanAnswer
 
 if TYPE_CHECKING:
+    from .acp_extension import GoalSnapshotReply
+    from .agent_backend import CompactionOutcome
+    from .input_disposition import DeliveryOverview
     from .runtime import RuntimeServer, SocketClient
 
 
@@ -88,10 +97,68 @@ class RuntimeRequest(DeclaredFamily, Command, affix="RuntimeRequest"):
 
 class ResultRuntimeRequest(RuntimeRequest):
     async def apply(self, ctx: RuntimeRequestContext) -> None:
-        await ctx.send({"result": await self.result(ctx)})
+        reply = await self.result(ctx)
+        await ctx.send({"result": FieldCodec.encode(reply)})
 
     @abstractmethod
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]: ...
+    async def result(self, ctx: RuntimeRequestContext) -> DeclaredReply: ...
+
+
+@dataclass(frozen=True)
+class ProjectReply(DeclaredReply):
+    worktree: str
+
+
+@dataclass(frozen=True)
+class CancelReply(DeclaredReply):
+    pass
+
+
+@dataclass(frozen=True)
+class GoalReply(DeclaredReply):
+    goal: Goal
+
+
+@dataclass(frozen=True)
+class GoalHistoryReply(DeclaredReply):
+    history: tuple[RecordedGoalRevision, ...]
+
+
+@dataclass(frozen=True)
+class AcpResponseReply(DeclaredReply, WireValue):
+    """An ACP schema response, sent exactly as the schema writes it."""
+
+    response_type: ClassVar[type[BaseModel]]
+    response: BaseModel
+
+    def to_wire(self) -> dict[str, JsonValue]:
+        return self.response.model_dump(by_alias=True, exclude_none=True)
+
+    @classmethod
+    def from_wire(cls, data: dict[str, JsonValue]) -> Self:
+        return cls(cls.response_type.model_validate(data))
+
+
+class PromptReply(AcpResponseReply):
+    response_type = PromptResponse
+
+
+class ConfigOptionReply(AcpResponseReply):
+    response_type = SetSessionConfigOptionResponse
+
+
+@dataclass(frozen=True)
+class AnnotationsReply(DeclaredReply, WireValue):
+    """A segment's stored annotations, sent as their list."""
+
+    labels: tuple[ModelLabel, ...]
+
+    def to_wire(self) -> tuple[ModelLabel, ...]:
+        return self.labels
+
+    @classmethod
+    def from_wire(cls, data: list[JsonValue]) -> Self:
+        return cls(FieldCodec.decode(tuple[ModelLabel, ...], data))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -132,7 +199,7 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
             ctx.server.agent._comms.registry.entry, ctx.name,
         ))).entry
         current = self.require_original(entry)
-        return {"worktree": current.worktree}
+        return ProjectReply(current.worktree)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -188,7 +255,7 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
             thread, controller_token, {"controllerToken": controller_token, **parameters}
         )
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> PromptReply:
         controller = next(
             (
                 subscriber
@@ -204,14 +271,14 @@ class PromptRuntimeRequest(ResultRuntimeRequest):
             )
         finally:
             ctx.server.controller.reset(token)
-        return result.model_dump(by_alias=True, exclude_none=True)
+        return PromptReply(result)
 
 
 @dataclass(frozen=True, kw_only=True)
 class CancelRuntimeRequest(ResultRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> CancelReply:
         await ctx.server.agent.cancel(ctx.session_id)
-        return {}
+        return CancelReply()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -219,30 +286,28 @@ class SetConfigOptionRuntimeRequest(ResultRuntimeRequest):
     config_id: str
     value: str | bool
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> ConfigOptionReply:
         result = await ctx.server.agent.set_config_option(
             self.config_id, ctx.session_id, self.value
         )
-        return result.model_dump(by_alias=True, exclude_none=True)
+        return ConfigOptionReply(result)
 
 
 @dataclass(frozen=True, kw_only=True)
 class CompactRuntimeRequest(ResultRuntimeRequest):
     instructions: str | None = None
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> CompactionOutcome:
         from .manual_compaction_bridge import compact_context
 
-        return FieldCodec.encode(
-            await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
-        )
+        return await compact_context(ctx.server.agent.turns, ctx.session_id, self.instructions)
 
 
 @dataclass(frozen=True, kw_only=True)
 class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
     include_history: bool = False
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
         return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
             ctx.name,
             include_history=self.include_history,
@@ -252,7 +317,7 @@ class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
 
 @dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> DeliveryOverview:
         result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
             ctx.name, awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
         ))
@@ -264,30 +329,27 @@ class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
 class GoalHistoryRuntimeRequest(ResultRuntimeRequest):
     goal_id: str | None = None
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> GoalHistoryReply:
         history = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.goal_history, ctx.name, goal_id=self.goal_id,
         ))
-        return {"history": [row.to_wire() for row in history]}
+        return GoalHistoryReply(tuple(row.recorded() for row in history))
 
 
 class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
     @abstractmethod
     async def change(self, ctx: RuntimeRequestContext) -> None: ...
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        from .acp_extension import TurnChangedUpdate, encode_updates
+    async def result(self, ctx: RuntimeRequestContext) -> GoalSnapshotReply:
+        from .acp_extension import GoalSnapshotReply, TurnChangedUpdate, UpdateMetadata
         await self.change(ctx)
         goal, execution = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
         ))
-        return {
-            "goal": goal.to_wire() if goal is not None else None,
-            "goalExecution": execution.to_wire(),
-            "_meta": encode_updates(TurnChangedUpdate(await Coordination.run_worker(partial(
+        return GoalSnapshotReply(goal, execution, UpdateMetadata.of(TurnChangedUpdate(
+            await Coordination.run_worker(partial(
                 ctx.server.agent.turns.turn_state, ctx.session_id,
-            )))),
-        }
+            )))))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -333,18 +395,18 @@ class UpdateGoalRuntimeRequest(GoalRevisionRuntimeRequest, GoalSnapshotResultRun
 
 @dataclass(frozen=True, kw_only=True)
 class RetryGoalRuntimeRequest(GoalRevisionRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> GoalReply:
         goal = await ctx.server.agent.turns.goals.retry_goal(
             ctx.session_id, self.goal_id, self.expected_revision
         )
-        return {"goal": goal.to_wire()}
+        return GoalReply(goal)
 
 
 @dataclass(frozen=True, kw_only=True)
 class SetGoalRuntimeRequest(GoalTextRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> GoalReply:
         goal = await ctx.server.agent.turns.goals.set_goal(ctx.session_id, self.text)
-        return {"goal": goal.to_wire()}
+        return GoalReply(goal)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -356,7 +418,7 @@ class ContextRuntimeRequest(ResultRuntimeRequest):
         return context.require_session_file(owner.runtime.path)
 
     async def result(self, ctx):
-        return FieldCodec.encode(await self.inspect(ctx))
+        return await self.inspect(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -371,7 +433,7 @@ class ContextSourceRuntimeRequest(ContextRuntimeRequest):
             context.public_source_text, ctx.server.agent._comms,
             self.observation, self.segment, self.source,
         ))
-        return FieldCodec.encode(text)
+        return text
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -385,7 +447,7 @@ class ContextCoreRuntimeRequest(ResultRuntimeRequest):
         return await Coordination.run_worker(partial(self.read_context, ctx))
 
     async def result(self, ctx):
-        return FieldCodec.encode(await self.inspect(ctx))
+        return await self.inspect(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -401,7 +463,7 @@ class ContextCoreSourceRuntimeRequest(ContextCoreRuntimeRequest):
                                         self.segment, self.manifest, self.source)
 
     async def result(self, ctx):
-        return FieldCodec.encode(await Coordination.run_worker(partial(self.read_source, ctx)))
+        return await Coordination.run_worker(partial(self.read_source, ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -429,7 +491,7 @@ class ContextReferenceRuntimeRequest(RecordedContextRuntimeRequest):
         text = await Coordination.run_worker(partial(
             manifest.public_source_text, ctx.server.agent._comms, self.segment, self.source,
         ))
-        return FieldCodec.encode(text)
+        return text
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -449,7 +511,7 @@ class ContextRecordedSegmentRuntimeRequest(RecordedContextRuntimeRequest):
             return await agent.turns.inspect_context_segment(ctx.session_id, owner, original)
 
         text = await segment.public_text(read_reference)
-        return FieldCodec.encode(ContextSourceText(segment.public_description(), text))
+        return ContextSourceText(segment.public_description(), text)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -463,7 +525,7 @@ class ContextAnnotationsRuntimeRequest(ContextRecordedSegmentRuntimeRequest):
         labels = await Coordination.run_worker(partial(WorkingMemoryAnnotations.for_segment,
             ctx.server.agent._comms.root / "coordination.sqlite3",
             segment, self.classifier))
-        return FieldCodec.encode(labels)
+        return AnnotationsReply(labels)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -480,5 +542,4 @@ class ContextAnnotationCorrectionRuntimeRequest(ContextRecordedSegmentRuntimeReq
             raise ValueError("Correction belongs to another original context source")
         request = CorrectAnnotationCliCommand(
             label=self.label, answer=self.answer, worktree=self.worktree)
-        corrected = await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms))
-        return FieldCodec.encode(corrected)
+        return await Coordination.run_worker(partial(request.apply, ctx.server.agent._comms))

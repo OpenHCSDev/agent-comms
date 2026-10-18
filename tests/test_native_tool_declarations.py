@@ -1,5 +1,6 @@
 """One tool declaration controls presentation without granting coding authority."""
 
+from dataclasses import dataclass
 from pathlib import Path
 import asyncio
 import json
@@ -18,10 +19,14 @@ from delivery_owner_fixture import canonical_agent
 
 
 async def test_new_tool_declaration_drives_presentation_without_coding_permission(acp_tools):
+    @dataclass(frozen=True, kw_only=True)
     class InspectFixtureTool(ToolDeclaration):
         acp_kind = "search"
         label = "Inspect"
-        preview_fields = ('query',)
+        query: str
+
+        def reads(self):
+            return self.query
 
     event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
@@ -45,7 +50,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
         event = events.ToolStart.from_call("case", tool.declared_name, call.tool.arguments)
         assert event.kind == tool.acp_kind and event.args == tool.arguments
-        assert call.tool == tool and tool.arguments[tool.preview_fields[0]] in event.title
+        assert call.tool == tool and tool.reads() in event.title
     unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
@@ -60,7 +65,8 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
 
     arguments = {"pattern": "shared preview"}
     event = events.ToolStart.from_call("pattern-case", name, arguments)
-    recorded = ToolStartTranscript(tool_call_id="pattern-case", tool_name=name, raw_input=arguments)
+    recorded = ToolStartTranscript(tool_call_id="pattern-case", tool_name=name, raw_input=arguments,
+                                   tool=ToolDeclaration.record(name, arguments))
     assert (event.title, event.kind) == (f"{label} shared preview", "search")
     assert (recorded.title, recorded.kind) == (event.title, event.kind)
     owner, received = acp_tools
@@ -103,18 +109,20 @@ def test_foreign_protocol_owners_decode_canonical_preview_arguments():
     from agent_comms.cli_bridges.opencode_parts import ToolPart
     from agent_comms.cli_bridges.shared import ToolCall
     from agent_comms.field_codec import FieldCodec
+    from agent_comms.native_tools import FilePatchTool
     from agent_comms.transcript_events import TranscriptEvent
 
     start, end = FileChange(path="codex.txt", diff="@@ -1 +1 @@\\n-old\\n+new\\n",
                             kind=UpdatedFile()).events("codex", True)
     assert start.title == "Edit codex.txt" and start.raw_input == {"path": "codex.txt"}
+    assert start.tool == FilePatchTool(path="codex.txt")
     assert end.title == "Edit" and end.diff is not None
     assert FieldCodec.decode(TranscriptEvent, FieldCodec.encode(start)) == start
     part = ToolPart.model_validate({"type": "tool", "id": "part", "sessionID": "session",
         "messageID": "message", "callID": "open-code", "tool": "read",
         "state": {"status": "pending", "input": {"filePath": "open-code.txt"}}})
     call = part.state.call(part)
-    assert call.title == "Read open-code.txt"
+    assert call.title == "Read open-code.txt" and call.tool == ReadTool(path="open-code.txt")
     recorded, _ = call.finished("saved", True)
     assert recorded.title == call.title and recorded.raw_input == {"path": "open-code.txt"}
     opaque = {"external": ["not", "Pi"]}

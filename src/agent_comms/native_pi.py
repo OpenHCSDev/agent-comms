@@ -24,7 +24,7 @@ from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
 from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .field_codec import FieldCodec
 from .jsonl_stream import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
@@ -157,10 +157,9 @@ class NativeContextRecord:
         This is an emitted acknowledgement, not proof of durable inclusion. A journal
         read must independently corroborate the same complete located record.
         """
-        record = FieldCodec.decode(cls, {
-            item.metadata.get("wire_name", item.name): getattr(context_event, item.name)
-            for item in fields(cls)
-        })
+        emitted = FieldCodec.encode(context_event)
+        record = FieldCodec.decode(cls, {key: emitted[key]
+                                         for _, key in FieldCodec.record_fields(cls)})
         if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
             raise NativePiUnavailable("Native Pi context names another original input")
         if record.input_commit != NativeInputCommit.from_event(input_event):
@@ -230,7 +229,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return {
             "objects": cls.schema_objects(),
             "columns": [
-                {"name": item.name, "wire": item.metadata.get("wire_name", item.name)}
+                {"name": item.name, "wire": FieldCodec.wire_key(item)}
                 for item in fields(cls)
             ],
             "insert": cls.insertion_statement(),
@@ -412,7 +411,7 @@ class NativePiRpcLaunch:
         for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             env.pop(name, None)
         env["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        env["PI_WORKTREE"] = str(cwd)
+        env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
         env.update(configuration.encode_native())
         argv = (

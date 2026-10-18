@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
-from .bus_route_counts import CompletingRouteCounts, OpenedRouteCounts
+from .bus_route_counts import OpenedRouteCounts
 from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
@@ -107,17 +107,13 @@ class MessageBus[Writes: Publisher]:
     def inbox(
         self, name: str, target: str | None = None, *,
         after: MessageReference | None = None,
-        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> Sequence[Message]:
         """Read unread deliveries against a newly captured registry."""
-        return self.inbox_at(
-            name, self._registry.snapshot(), target, after=after, projection=projection,
-        )
+        return self.inbox_at(name, self._registry.snapshot(), target, after=after)
 
     def inbox_at(
         self, name: str, snapshot: RegistrySnapshot, target: str | None = None, *,
         after: MessageReference | None = None,
-        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> Sequence[Message]:
         """Read unread deliveries using the caller's captured registry.
 
@@ -130,7 +126,7 @@ class MessageBus[Writes: Publisher]:
         seen = self.reads.cursor(delivery.actor, snapshot)
         with self.log.opened_wire_snapshot() as source:
             source.messages_for_references((after,) if after is not None else ())
-            with projection(
+            with self.projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
                 unread = index.unseen_deliveries(delivery.actor, seen, after=after.seq if after else 0)
@@ -157,7 +153,7 @@ class MessageBus[Writes: Publisher]:
             async for _ in changes:
                 snapshot = self._registry.snapshot()
                 messages = await asyncio.to_thread(
-                    self.inbox_at, name, snapshot, after=after, projection=CompletingRouteCounts)
+                    self.inbox_at, name, snapshot, after=after)
                 if not reader.current(self._registry.snapshot()):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
                 for message in messages:
@@ -203,7 +199,7 @@ class MessageBus[Writes: Publisher]:
         """Borrow the caller's original source, namespace and sparse reads."""
         actor = selection.require_viewer()
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
-        with OpenedRouteCounts(
+        with self.projection(
             self.log.path, source, selection.registry, {actor: delivery}
         ) as index:
             return index.unseen_counts({actor: selection.seen})[actor]

@@ -22,12 +22,14 @@ from .context_reading import ContextReading
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec, WireValue
-from .goal_presentation import GoalSnapshot
+from .goal_presentation import GoalSnapshot, ThreadGoalExecution
+from .goals import Goal
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement
 from .routing import MessageRoute
 from .thread_identity import ClaimedIdentity, ThreadIncarnation
+from .tool_result import DeclaredReply
 from .turn_lease import TurnState
 from .wire_metadata import WireRootIdText
 from .transcripts import TranscriptCursor, TranscriptPage, TranscriptReadIdentity
@@ -104,6 +106,26 @@ class InputFailedUpdate(AgentCommsUpdate):
 @dataclass(frozen=True)
 class UpdateBatch:
     updates: tuple[AgentCommsUpdate, ...]
+
+
+@dataclass(frozen=True)
+class UpdateMetadata:
+    """An ACP ``_meta`` object carrying one batch of Comms updates."""
+
+    batch: UpdateBatch = field(metadata={"wire_name": "agentComms"})
+
+    @classmethod
+    def of(cls, *updates: AgentCommsUpdate) -> UpdateMetadata:
+        return cls(UpdateBatch(updates))
+
+
+@dataclass(frozen=True)
+class GoalSnapshotReply(DeclaredReply):
+    """A goal request's reply: the owner's goal snapshot and its turn state."""
+
+    goal: Goal | None
+    execution: ThreadGoalExecution = field(metadata={"wire_name": "goalExecution"})
+    meta: UpdateMetadata = field(metadata={"wire_name": "_meta"})
 
 
 def encode_updates(*updates: AgentCommsUpdate) -> dict:

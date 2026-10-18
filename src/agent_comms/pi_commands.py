@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import abstractmethod
-from collections.abc import AsyncIterator, Sequence
+from collections.abc import Iterable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -120,11 +120,10 @@ class PiCommand(DeclaredFamily):
             return UnknownCommand
 
     @classmethod
-    async def on_response(
+    def on_response(
         cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
-        if False:
-            yield
+    ) -> Iterable[events.AgentEvent]:
+        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -176,9 +175,9 @@ class Prompt(PiCommand):
         return data
 
     @classmethod
-    async def on_response(
+    def on_response(
         cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
+    ) -> Iterable[events.AgentEvent]:
         if response.id == session.prompt_id:
             session.watchdog.progress()
             if response.success:
@@ -210,9 +209,9 @@ class GetState(SessionSnapshot, NativeQuery):
     response_payload = StateData
 
     @classmethod
-    async def on_response(
+    def on_response(
         cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
+    ) -> Iterable[events.AgentEvent]:
         if response.success:
             state = response.data.require_payload()
             session.native.attestation = session.native.attestation.observe(state)
@@ -228,9 +227,9 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
     response_payload = SessionStatsData
 
     @classmethod
-    async def on_response(
+    def on_response(
         cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
+    ) -> Iterable[events.AgentEvent]:
         if response.success:
             context = response.data.require_payload().context_usage
             if context is not None:
@@ -309,9 +308,9 @@ class Abort(PiCommand):
 @dataclass(frozen=True, kw_only=True)
 class InterruptSteering(PiCommand):
     @classmethod
-    async def on_response(
+    def on_response(
         cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
+    ) -> Iterable[events.AgentEvent]:
         if response.success is False:
             yield events.Error(text=str(response.error or "Send now was refused"))
 
@@ -351,9 +350,9 @@ class SettingCommand(CatalogQuery):
             return state.data.require_payload()
 
     @classmethod
-    async def on_response(
+    def on_response(
         cls, response: Response, session: TurnSession
-    ) -> AsyncIterator[events.AgentEvent]:
+    ) -> Iterable[events.AgentEvent]:
         yield cls.result_type(
             id=response.id,
             ok=bool(response.success),

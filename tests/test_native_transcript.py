@@ -2,6 +2,7 @@
 
 import json
 from dataclasses import fields
+from unittest.mock import Mock
 
 import pytest
 
@@ -9,7 +10,8 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_entries import MessageEntry, NativeEntry, TranscriptProjection, UnknownEntry
-from agent_comms.native_transcript import NativeTranscript
+from agent_comms.coordination_errors import TranscriptChanged
+from agent_comms.native_transcript import MissingSessionCut, NativeTranscript, PresentSessionCut
 from agent_comms.pi_payloads import UserMessage
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import (
@@ -21,6 +23,27 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+
+
+def test_missing_session_has_nothing_to_mark_read(tmp_path):
+    cut = NativeTranscript(tmp_path / "missing.jsonl").cut()
+    reads = Mock()
+    assert isinstance(cut, MissingSessionCut) and cut.offset == 0
+    cut.mark_read(reads, "viewer", "missing.jsonl", 0)
+    reads.mark_transcript.assert_not_called()
+
+
+def test_present_session_rejects_a_read_past_its_cut(tmp_path):
+    source = tmp_path / "session.jsonl"
+    source.write_bytes(b"x\n")
+    cut = NativeTranscript(source).cut()
+    reads = Mock()
+    assert isinstance(cut, PresentSessionCut)
+    cut.mark_read(reads, "viewer", str(source), 2)
+    reads.mark_transcript.assert_called_once_with(
+        "viewer", str(source), source.stat().st_ino, 2, 2)
+    with pytest.raises(TranscriptChanged):
+        cut.mark_read(reads, "viewer", str(source), 3)
 
 
 def encoded(value):

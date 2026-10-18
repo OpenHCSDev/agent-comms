@@ -12,7 +12,7 @@ from .coordinator import Coordination
 from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import PrivateFileRole
-from .launch_runtime import RestartEnvironment
+from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingLevel
 
 if TYPE_CHECKING:
@@ -49,13 +49,9 @@ class SelectedSession:
         return thinking_level.launch_arguments()
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
-        environment = dict(os.environ)
-        for name in (
-            "PI_PARENT_ID", "PI_AGENT_TAGS", RestartEnvironment.owner_key,
-            "AGENT_COMMS_TAGS", "AGENT_COMMS_SELECTED_TOOL_SOCKET",
-            "AGENT_COMMS_SELECTED_TOOL_TOKEN",
-        ):
-            environment.pop(name, None)
+        environment = ThreadLaunch.strip(dict(os.environ))
+        environment.pop("AGENT_COMMS_SELECTED_TOOL_SOCKET", None)
+        environment.pop("AGENT_COMMS_SELECTED_TOOL_TOKEN", None)
         environment.update(original or {})
         configuration = RestartEnvironment.inherit(environment).for_agent(agent_dir)
         environment["PI_OFFLINE"] = "1"
