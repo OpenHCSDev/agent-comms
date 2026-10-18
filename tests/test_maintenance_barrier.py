@@ -43,10 +43,10 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     monkeypatch.setattr(private_nk_entrypoint, '_trusted_package', lambda _: None)
     monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
     control = comms.owners.maintenance
-    hold = control.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
-    # Message publication remains live: only new turns are held. Use the actual
-    # scratch bus, not a constructed message pretending to be a post.
+    # A post pending when the drain begins; the drain refuses new publication.
+    # Use the actual scratch bus, not a constructed message pretending to be a post.
     post = comms.messaging.send_message('sender', '#team', 'mid-drain channel post')
+    hold = control.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     queued = ScheduledTurn.incoming(post)
     starts = []
 
@@ -111,8 +111,8 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
     monkeypatch.setattr(private_nk_entrypoint, '_trusted_package', lambda _: None)
     monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
     gate = comms.owners.maintenance
-    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     post = comms.messaging.send_message('sender', '#team', 'while draining')
+    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))
     assert await agent.inputs.drain_inbox('beta') == 0
     assert await agent.inputs.drain_inbox('beta') == 0
     beta = comms.registry.require('beta')
@@ -503,3 +503,29 @@ def test_phase_change_waits_for_final_native_write_lock(tmp_path: Path) -> None:
     assert changed.is_set()
     with _store_lock(root / "wire"), pytest.raises(RelationViolationError, match="Maintenance"):
         gate.assert_open_unlocked()
+
+
+def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, capsys) -> None:
+    """A sender or tool-use hook is not paused by the drain; Core refuses its write instead."""
+    from agent_comms.cli import main
+
+    def cli(*argv: str) -> tuple[int, str]:
+        code = main(['--root', str(tmp_path), *argv])
+        return code, capsys.readouterr().out
+
+    for name in ('a', 'b'):
+        assert cli('register', '--name', name, '--worktree', '/wt')[0] == 0
+    def written() -> tuple[bytes, ...]:
+        return tuple(path.read_bytes() if path.exists() else b''
+                     for path in (tmp_path / 'bus.jsonl', tmp_path / 'activity.jsonl'))
+
+    before = written()
+    gate = MaintenanceBarrier(tmp_path / 'registry.json')
+    hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'upgrade-bus'))
+    for argv in (('send', '--from', 'a', '--to', 'b', '--body', 'hi'),
+                 ('activity', '--name', 'a', '--state', 'working')):
+        code, out = cli(*argv)
+        assert code != 0 and 'under maintenance' in out
+    assert written() == before
+    gate.clear(hold)
+    assert cli('send', '--from', 'a', '--to', 'b', '--body', 'hi')[0] == 0

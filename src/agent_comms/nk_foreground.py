@@ -30,7 +30,8 @@ from .comms import Comms
 from .coordinated_runtime import SelectedExecution
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
-from .native_pi import _private_session_dir, _trusted_package
+from .native_pi import _private_session_dir
+from .native_package import VerifiedNativePackage
 from .selected_result import CoordinatedTurn
 from .store_files import _store_lock
 from .threads import Thread
@@ -46,7 +47,7 @@ class ForegroundOwner:
     root: Path
     wire_root_id: str
     name: str
-    native_package: Path
+    native_package: VerifiedNativePackage
     _started: bool = field(default=False, init=False, repr=False)
 
     async def run_go(self, line: str) -> CoordinatedTurn | None:
@@ -73,7 +74,7 @@ def reserve_foreground_owner(
     name: str,
     task: str,
     tags: frozenset[str],
-    native_package: Path,
+    native_package: VerifiedNativePackage,
     opt_in: bool = True,
 ) -> ForegroundOwner:
     """Atomically reserve a fresh recipient in THIS process before publication.
@@ -92,8 +93,6 @@ def reserve_foreground_owner(
     _private_session_dir(root)
     if type(wire_root_id) is not str or not wire_root_id:
         raise MalformedRecord("A private wire-root ID is required")
-    package = Path(native_package).absolute()
-    _trusted_package(package)  # Reject before touching the recipient registry.
     worktree = root / "work"
     _private_session_dir(worktree)
     comms = Comms(root)
@@ -116,7 +115,7 @@ def reserve_foreground_owner(
         comms.registry.register(owner)
         with comms.channels.catalog.editing() as document:
             document.remember_tags(owner.tags, owner.created_at)
-    return ForegroundOwner(root, wire_root_id, owner.name, package)
+    return ForegroundOwner(root, wire_root_id, owner.name, native_package)
 
 
 def _emit(payload: dict[str, object]) -> None:
@@ -171,7 +170,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             name=args.name,
             task=args.task,
             tags=frozenset(tag.strip() for tag in args.tags.split(",") if tag.strip()),
-            native_package=args.native_package,
+            native_package=VerifiedNativePackage.acquire(args.native_package),
             opt_in=args.private_opt_in and args.native_model_opt_in,
         )
         _emit({"status": "ready", "name": owner.name, "pid": os.getpid()})

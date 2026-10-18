@@ -46,6 +46,7 @@ from .field_codec import Id128Text, MalformedRecord
 from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
+from .native_package import VerifiedNativePackage
 from .native_pi import NativePiRpcLaunch, NativePiUnavailable
 from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
@@ -111,6 +112,7 @@ async def stream_agent_events(
     native_start: Callable[[str | None, str, str], bool] | None = None,
     *,
     persistent_session: PersistentPiSession,
+    package: VerifiedNativePackage,
     root: Path,
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
@@ -132,6 +134,7 @@ async def stream_agent_events(
                     persistent_session.child_state.managed_launch,
                     agent_bin,
                     tuple(agent_args),
+                    package=package,
                     root=root,
                     worktree=Path(cwd),
                     environment=env_extra,

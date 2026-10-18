@@ -18,7 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from abc import abstractmethod
-from typing import ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .field_codec import FieldCodec, GitCommitText, MalformedRecord, WireValue
 from .command import Command
@@ -28,14 +28,22 @@ from .threads import Thread
 from .typed_table import Column, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
-from .goals import OrderCheck, ProblemGoalOrder
+from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .child_process import BoundedRun, ExitedOutcome
 from .storage_rules import StorageRule
+from .plan_phases import OrderPhase, UnplannedPhase
+
+if TYPE_CHECKING:
+    from .goal_management import Goals
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+
+    @property
+    def work(self) -> str:
+        return "delivered work"
 
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
@@ -43,10 +51,13 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, check):
-        await self.require_source(check)
-        result = await BoundedRun.run(("bash", "-c", check.command), cwd=check.directory, timeout=120)
-        check.result.require(result)
+    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
+        """The order's check and every count its deletion declares run on the delivered source."""
+        for each in (check, *deletes.checks):
+            await self.require_source(each)
+            command = ("bash", "-c", each.command)
+            result = await BoundedRun.run(command, cwd=each.directory, timeout=120)
+            each.result.require(result)
         return replace(self, at=await self.delivery_time(check))
 
     @abstractmethod
@@ -70,6 +81,10 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     @property
     def delivered(self) -> str:
         return self.commit
+
+    @property
+    def work(self) -> str:
+        return f"delivered commit {self.delivered}"
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -98,6 +113,10 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if base.strip() != head[2]:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
+        parents = await self.run(check, "git", "rev-list", "--parents", "-n", "1", self.delivered)
+        if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
+            raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
+                             "first pushed commit that answers the order.")
         pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
                                 "--list", "origin/*")
         if not pushed.strip():
@@ -430,10 +449,19 @@ class PlainText(OrderWords):
 
 
 class StrikeReason(PlainText):
-    """What a unit did, plainly, in enough words to stand on the public record."""
+    """What a unit did, plainly, in enough words to stand on the public record. A unit's
+    wording is answered by a correction, never a strike: a reason whose every quoted span
+    is jargon is about wording alone."""
 
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
+
+    @classmethod
+    def refused(cls, text: str) -> str | None:
+        cited = [span.group(0).strip('`"“” ') for span in cls.CITED.finditer(text)]
+        if cited and all(PlainText.found(span) for span in cited):
+            return f"{cited} is the unit's wording; send it a correction, not a strike."
+        return super().refused(text)
 
 
 class OrderText(OrderWords):
@@ -516,6 +544,50 @@ class ApplicationOrderRun(OrderRun):
         return (f"{self.label} {self.text}",)
 
 
+class OrderDeletion(DeclaredFamily, affix="Deletion"):
+    """The decision family an order deletes, read once from its Deletes: line."""
+
+    label: ClassVar[str] = "Deletes:"
+    LINE: ClassVar[re.Pattern] = re.compile(r"(.+?)\s+at\s+(\S+):(\d+)\s*::\s*(\S+)\s*::\s*(.+)")
+    checks: ClassVar[tuple[OrderCheck, ...]] = ()
+
+    @staticmethod
+    def parse(line: str | None) -> OrderDeletion:
+        if line is None:
+            return NoOrderDeletion()
+        if not (found := OrderDeletion.LINE.fullmatch(line.strip())):
+            raise ValueError(f"Write {OrderDeletion.label} <decision family> at PATH:LINE :: "
+                             "<repo> :: <family-wide scanner count>.")
+        return FamilyDeletion(found[1], FileLine(found[2], int(found[3])),
+                              OrderCheck(found[4], found[5], CountCheckResult(0)))
+
+    def instructions(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class NoOrderDeletion(OrderDeletion):
+    pass
+
+
+@dataclass(frozen=True)
+class FamilyDeletion(OrderDeletion):
+    """Completion counts the whole family on the delivered commit, so a site renamed or wrapped
+    instead of deleted still counts, and only zero passes."""
+
+    family: str
+    site: FileLine
+    count: OrderCheck
+
+    @property
+    def checks(self) -> tuple[OrderCheck, ...]:
+        return (self.count,)
+
+    def instructions(self) -> tuple[str, ...]:
+        return (f"{self.label} {self.family} at {self.site.to_wire()} :: {self.count.directory} :: "
+                f"{self.count.command}",)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """One checked order lives on its Todo, independently of the unit's Goal."""
@@ -532,6 +604,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    deletes: OrderDeletion = field(
+        default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
+    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -546,6 +621,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
 
+    def require_transfer(self, todo: Todo) -> None:
+        raise ValueError("Only an undelivered order can change owner.")
+
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
@@ -553,6 +631,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
             f"Owner: {self.owner.to_wire()}",
             f"Check: {self.check.directory} :: {self.check.command}",
+            *self.deletes.instructions(),
             *self.run.instructions(),
             f"Deadline: {FieldCodec.encode(todo.deadline)}",
             *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
@@ -586,6 +665,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
 
+    def require_transfer(self, todo: Todo) -> None:
+        pass
+
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
@@ -595,6 +677,10 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
+
+    def require_transfer(self, todo: Todo) -> None:
+        owner = (todo.assignment or todo.released[-1].previous).owner
+        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -817,6 +903,10 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def prepare(self, goals, current):
         return self
 
+    def record(self, goals: Goals, problem: str) -> Todo:
+        """Write this operation; one that also revises the holder's Goal routes through it."""
+        return goals.apply_problem(problem, self)
+
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
@@ -857,6 +947,54 @@ class StrikeTodo(TodoOperation):
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class OrderVerdict(TodoOperation, declared_name=None):
+    """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+    actor: ThreadIncarnation
+    previous: Assignment
+    tool_call_id: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
+
+    @abstractmethod
+    def judged(self, current: Todo) -> Todo: ...
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        _text(self.tool_call_id, "Judged tool call ID", 200)
+        judged = self.judged(current)
+        return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class AcceptedVerdict(OrderVerdict):
+    """The tool call carries out the order clause it quotes."""
+    quote: str
+
+    def judged(self, current: Todo) -> Todo:
+        quoted = " ".join(self.quote.split())
+        order = " ".join(current.order.instructions(current).split())
+        if len(quoted.split()) < 4 or quoted not in order:
+            raise ValueError("Quote 4+ words of the order this tool call carries out.")
+        return current
+
+
+@dataclass(frozen=True)
+class SendBackVerdict(OrderVerdict):
+    """The tool call goes back; the same write strikes the holder and revises the order Goal."""
+    reason: StrikeReason
+
+    def judged(self, current: Todo) -> Todo:
+        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
+                            self.at)
+        struck: Todo = strike.apply(current)
+        return struck
+
+    def record(self, goals: Goals, problem: str) -> Todo:
+        return goals.send_back(problem, self)
 
 
 @dataclass(frozen=True)
@@ -912,6 +1050,19 @@ class CorrectCheckTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class ServeTodo(TodoOperation):
+    """The commander names the plan phase an open order serves; it keeps its id and holder."""
+    actor: ThreadIncarnation
+    serves: type[OrderPhase]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        return replace(current, order=replace(current.order, serves=self.serves),
+                       revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class RecordFirstCallTodo(TodoOperation):
     actor: ThreadIncarnation
     event: type[FirstCallEvent]
@@ -944,7 +1095,8 @@ class DeliverTodo(TodoOperation):
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(self, delivery=asyncio.run(self.delivery.verified(current.order.check)))
+        verified = self.delivery.verified(current.order.check, current.order.deletes)
+        return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
@@ -1024,6 +1176,7 @@ class Todo(TypedTable):
     hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
+    verdicts: tuple[OrderVerdict, ...] = ()
 
     @property
     def pending(self):
@@ -1047,6 +1200,13 @@ class Todo(TypedTable):
         taken_back = tuple(void.strike for void in self.voided)
         return tuple(recorded for recorded in self.strikes
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
+
+    def struck_on_order(self, unit: str) -> bool:
+        """A live strike on ``unit`` recorded since the current order was sent; a send-back that
+        replaces this order is that same miss, so it counts no second strike."""
+        sent = self.order.at.recorded_at("An order")
+        return any(recorded.at.recorded_at("A strike") >= sent
+                   for recorded in self.live_strikes(unit))
 
     def struck_out(self, unit: str) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
@@ -1077,6 +1237,7 @@ class Todo(TypedTable):
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+        self.order.require_transfer(self)
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)

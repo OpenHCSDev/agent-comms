@@ -14,7 +14,9 @@ import pytest
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.comms import Comms
 from agent_comms.read_basis import Conversation, ReadCursor
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.private_path import FileIdentity
+from agent_comms.read_ledger import ReadDocument, ReadLedger
+from agent_comms.recorded_bus import RecordedBus
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
@@ -289,23 +291,20 @@ def run_step(name: str, root: Path, *flags: str) -> dict:
     return json.loads(output)
 
 
-def earlier_read_ledger(root: Path) -> None:
-    channel = {"target": "#comms", "participants": []}
-    direct = {"target": "", "participants": [["alice", 2.5], ["user", 1.5]]}
-    (root / "read_ledger.json").write_text(json.dumps({
-        "messages": {
-            json.dumps(["user", 1.5, channel], separators=(",", ":")): [1, 2, 4],
-            json.dumps(["user", 1.5, direct], separators=(",", ":")): [3],
-        },
-        "bus_identity": [66308, 6861023],
-        "transcripts": {json.dumps(["user", "/sessions/a.jsonl", 6860966]): 4881511},
-        "notice": None,
-    }))
+def retained_read_ledger(root: Path) -> None:
+    """The earlier bus already ran the retired read-key step."""
+    user = RecordedThreadIncarnation("user", 1.5)
+    direct = Conversation("", (RecordedThreadIncarnation("alice", 2.5), user))
+    ReadLedger.at(root).replace(ReadDocument(
+        messages={user: {Conversation("#comms"): ReadCursor(2, (4,)), direct: ReadCursor(0, (3,))}},
+        bus_identity=RecordedBus(FileIdentity(66308, 6861023)),
+        transcripts={("user", "/sessions/a.jsonl", 6860966): 4881511},
+    ))
 
 
 def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_path, monkeypatch):
     """Earlier formats: storage roots with a checkout list, a JSON-text-keyed read
-    ledger and a route naming its native package. Each declared step dry-runs,
+    ledger already carried by its retired step, and a route naming its native package. Each declared step dry-runs,
     applies, then finds nothing left; no file it does not name changes."""
     tmp_path.chmod(0o700)
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -319,7 +318,7 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     store = RegistryStore(root / "registry.json")
     with store.locked():
         store._write_unlocked(json.dumps(registry, indent=2))
-    earlier_read_ledger(root)
+    retained_read_ledger(root)
     route = tmp_path / ".local/state/agent-comms/active-route.json"
     route.parent.mkdir(parents=True, mode=0o700)
     route.write_text(json.dumps({"version": 1, "root": str(root), "wire_root_id": root_id,
@@ -382,3 +381,58 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     assert run_step("carry_turn_records", root)["changed"] == 0
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert not thread.executing
+
+
+LIVE_DRIVER = """
+import signal, sys
+from pathlib import Path
+from upgrade_bus import Stack, live, stopped
+
+
+class Owners(Stack):
+    def cli(self, root, *arguments):
+        print(' '.join(arguments), flush=True)
+        return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
+
+
+for each in (signal.SIGTERM, signal.SIGINT):
+    signal.signal(each, stopped)
+root = Path(sys.argv[1])
+live(root, root, "", "", (), Owners(root), Owners(root), None)
+"""
+
+
+def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
+    """A reader holds the route; SIGTERM while the upgrade waits for it runs the abort: the bus
+    reads READY and the stopped thread is started again."""
+    import fcntl
+    import signal
+
+    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
+
+    root = tmp_path / "bus"
+    Comms(root)
+    routes = tmp_path / "home/.local/state/agent-comms"
+    routes.mkdir(parents=True)
+    reader = os.open(routes, os.O_RDONLY | os.O_DIRECTORY)
+    fcntl.flock(reader, fcntl.LOCK_SH)
+    try:
+        tool = subprocess.Popen(
+            [sys.executable, "-c", LIVE_DRIVER, str(root)], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+            env={**os.environ, "HOME": str(tmp_path / "home"),
+                 "PYTHONPATH": os.pathsep.join(str(REPO / part) for part in ("src", "tools"))})
+        waited = ""
+        while "Waiting for default-route readers" not in waited:
+            line = tool.stderr.readline()
+            assert line, waited + tool.stdout.read()
+            waited += line
+        assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
+        tool.send_signal(signal.SIGTERM)
+        out, err = tool.communicate(timeout=60)
+    finally:
+        os.close(reader)
+    assert tool.returncode != 0
+    assert "stopped by SIGTERM" in err and "aborted before the backup" in err
+    assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
+    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase

@@ -2,8 +2,8 @@
 import json, time
 
 from .config import CommanderConfig
-from ..todos import PlainText
-from .order import post
+from ..tools import CommsCorrectWordingTool
+from .order import call
 
 CONFIG = CommanderConfig.installed()
 
@@ -12,10 +12,11 @@ def judge(d):
     text, sender = d.get("text") or "", d.get("from")
     if not text or d.get("notice") or d.get("sender_role") != "agent" or sender == CONFIG.commander:
         return
-    if words := PlainText.found(text):
-        print(f"JARGON {sender} [{d.get('id')}]: {', '.join(words)}", flush=True)
-        post([sender], f"Correction, no strike: message {d.get('id')} used {', '.join(words)}. "
-             "Say what you did and what broke in plain words from now on.")
+    try:  # Core decides whether the wording needs a correction and records it on the unit's orders
+        call(CommsCorrectWordingTool(unit=sender, message_id=d.get("id"), text=text))
+        print(f"CORRECTED {sender} [{d.get('id')}]", flush=True)
+    except ValueError:
+        pass
     print(f"MSG {sender} -> {d.get('to')} [{d.get('id')}]: {' '.join(text.split())[:1200]}", flush=True)
 
 

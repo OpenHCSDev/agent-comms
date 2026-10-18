@@ -102,7 +102,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         use_unstable_protocol: bool = False,
         auto_wake: bool = True,
         private_selected_tool_intent: SelectedToolIntent | None = None,
-        private_nk_verified_cli: Path | None = None,
     ):
         self._comms = comms
         if private_selected_tool_intent is not None:
@@ -112,14 +111,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 raise TypeError("private selected tool needs a nominal owner intent")
             self._comms.owners.require_private_launch()
         self._private_selected_tool_intent = private_selected_tool_intent
-        # A worker's startup check already verified its package; reuse it.
-        self._verified_native_launcher = None
-        if private_nk_verified_cli is not None:
-            from .native_pi import NativePiRpcLaunch
-
-            self._verified_native_launcher = NativePiRpcLaunch.verified_launcher(
-                self._comms.owners.require_private_launch().native_package, private_nk_verified_cli
-            )
         self.use_unstable_protocol = use_unstable_protocol
         # Enabled for verified native owners by default. Explicit construction
         # may disable it; model/tool content cannot change this owner policy.
@@ -338,20 +329,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 )
             return source.marker.root_id
 
-    def _verify_native_package_once(self):
-        """Verify this worker's pinned native package once, for the worker's life.
-
-        Builds publish new package directories and never edit one in use, so
-        each message reuses this check instead of hashing the package again.
-        """
-        from .native_pi import NativePiRpcLaunch
-
-        if self._verified_native_launcher is None:
-            self._verified_native_launcher = NativePiRpcLaunch.acquire_tracked(
-                self._comms.owners.require_private_launch().native_package
-            )
-        return self._verified_native_launcher
-
     async def _drain_private_nk(self, session_id: str, wire_root_id: str) -> int:
         """Run a selected private wake for this ACP session.
 
@@ -395,7 +372,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             write_authority=AcpSelectedWriteAuthority(
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
-            verified_launcher=self._verify_native_package_once,
             **(
                 {"selected_tool_intent": self._private_selected_tool_intent}
                 if self._private_selected_tool_intent is not None

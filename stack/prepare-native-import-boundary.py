@@ -167,8 +167,9 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         # directory. The existing owner checks its current native tree pin.
         dependency_package = dependency_package.resolve(strict=True)
         subprocess.run(
-            [sys.executable, str(stack.parent / "src/agent_comms/native_package.py"),
-             str(dependency_package)], check=True,
+            [sys.executable, "-m", "agent_comms.native_package", str(dependency_package)],
+            env={**environment, "PYTHONPATH": str(stack.parent / "src") + os.pathsep + environment.get("PYTHONPATH", "")},
+            check=True,
         )
         staging = dependency_package / "agent-comms-extensions/pi-mcp-client"
         for name in ("package.json", "package-lock.json", "index.mjs", "README.md"):

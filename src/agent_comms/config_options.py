@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from abc import abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -27,8 +27,9 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
-from .native_pi import NativePiUnavailable
-from .launch_runtime import RestartEnvironment
+from .native_pi import NativePiUnavailable, NativePiRpcLaunch
+from .native_package import VerifiedNativePackage
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -52,6 +53,17 @@ class CatalogSelection(Protocol):
     def thinking_level(self) -> type[ThinkingChoice]: ...
 
 
+@dataclass(frozen=True, slots=True)
+class CatalogChoice:
+    """A catalog value; only the ACP view needs a string for an unset value."""
+    name: str
+    value: str | None
+
+    @property
+    def acp_value(self) -> str:
+        return self.value if self.value is not None else ""
+
+
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
     title: ClassVar[str]
     description: ClassVar[str]
@@ -61,7 +73,7 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
     def current_value(self, thread: CatalogSelection) -> str | None: ...
 
     @abstractmethod
-    async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]: ...
+    async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]: ...
 
     @abstractmethod
     async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect: ...
@@ -75,10 +87,12 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
 
-    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment):
+    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment,
+                 package: VerifiedNativePackage):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
-        self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
+        self.package = package
+        self.catalogs: dict[str | None, list[CatalogChoice]] = {}
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
 
@@ -89,7 +103,7 @@ class CatalogConfigOption(ConfigOption):
     def cache_key(self, thread: CatalogSelection) -> str | None:
         return thread.model
 
-    async def choices(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
+    async def choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
         async with self.lock:
             if not self.current_auth:
                 self.catalogs.clear()
@@ -102,27 +116,28 @@ class CatalogConfigOption(ConfigOption):
                 self.catalogs[key] = await self.discover(thread)
             return self.catalogs[key]
 
-    async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
+    async def display_choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
         choices = await self.choices(thread)
+        if self.current_value(thread) is None:
+            return [CatalogChoice(name="Not configured", value=None), *choices]
+        return choices
+
+    async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
+        choices = await self.display_choices(thread)
         configured = self.current_value(thread)
-        selected = configured if configured is not None else ""
-        if configured is None:
-            choices = [SessionConfigSelectOption(
-                value=selected, name="Not configured"
-            ), *choices]
-        else:
-            try:
-                self.require_value(selected, choices)
-            except InvalidConfigChoice as error:
-                raise NativePiUnavailable(str(error)) from error
+        try:
+            self.require_value(configured, choices)
+        except InvalidConfigChoice as error:
+            raise NativePiUnavailable(str(error)) from error
         return SessionConfigOptionSelect(
             id=FieldCodec.encode(type(self)),
             name=self.title,
             description=self.description,
             category=self.category,
             type="select",
-            current_value=selected,
-            options=choices,
+            current_value=next(choice.acp_value for choice in choices if choice.value == configured),
+            options=[SessionConfigSelectOption(name=choice.name, value=choice.acp_value)
+                     for choice in choices],
         )
 
     @abstractmethod
@@ -139,9 +154,9 @@ class CatalogConfigOption(ConfigOption):
             raise RequestError.invalid_params({"reason": str(error)}) from error
         await self.apply(owner, thread, value)
 
-    def require_value(self, value: str, choices: list[SessionConfigSelectOption]) -> None:
+    def require_value(self, value: str | None, choices: list[CatalogChoice]) -> None:
         if value not in {choice.value for choice in choices}:
-            valid = ", ".join(choice.value for choice in choices)
+            valid = ", ".join(choice.acp_value for choice in choices)
             raise InvalidConfigChoice(
                 f"{self.title} {value!r} is unavailable; choose one of: {valid}"
             )
@@ -161,7 +176,7 @@ class ModelConfigOption(CatalogConfigOption):
     def cache_key(self, thread: CatalogSelection) -> None:
         return None
 
-    async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
+    async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         values = [
             value.strip()
             for value in os.environ.get("AGENT_COMMS_AGENT_MODELS", "").split(",")
@@ -171,11 +186,11 @@ class ModelConfigOption(CatalogConfigOption):
             from .pi_commands import GetAvailableModels
 
             data = await GetAvailableModels().discover(
-                self.agent_bin, self.agent_args.argv, self.configuration.root
+                self.agent_bin, self.agent_args.argv, self.configuration.root, package=self.package
             )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
-            SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
+            CatalogChoice(value=value, name=value) for value in dict.fromkeys(values)
         ]
 
     async def apply(
@@ -197,14 +212,15 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     def current_value(self, thread: CatalogSelection) -> str | None:
         return thread.thinking_level.wire_value()
 
-    async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
+    async def discover(self, thread: CatalogSelection) -> list[CatalogChoice]:
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root,
+            package=self.package,
         )
         levels = [member.declared_name for member in data.levels]
-        return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
+        return [CatalogChoice(value=level, name=level.title()) for level in levels]
 
     async def apply(
         self, owner: SessionConfigOptions, thread: Thread, value: str
@@ -224,20 +240,26 @@ class ConfigOptions:
         agent_bin: str,
         agent_args: NativeArguments,
         configuration: RestartEnvironment,
+        package: VerifiedNativePackage,
     ):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
+        self.package = package
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
     @classmethod
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
-        return cls(NativeArguments.configured_binary(), NativeArguments.configured(),
-                   RestartEnvironment.inherit(os.environ))
+        command = NativeArguments.configured_binary()
+        configuration = RestartEnvironment.inherit(os.environ)
+        package = NativePiRpcLaunch.package_for_command(
+            command, LaunchRuntime.running(), configuration.root,
+        )
+        return cls(command, NativeArguments.configured(), configuration, package)
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
-            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
+            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration, self.package)
         return self.catalogs[member]
 
     async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect]:
@@ -272,6 +294,7 @@ class SessionConfigOptions(ConfigOptions):
             agent_bin,
             agent_args,
             replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
+            comms.owners.require_private_launch().native_package,
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
@@ -341,7 +364,7 @@ class SessionConfigOptions(ConfigOptions):
             thread.thinking_level
         )
         state = await command.configure(
-            self.agent_bin, arguments.argv, worktree=Path(thread.worktree), root=self.comms.root,
+            self.agent_bin, arguments.argv, package=self.package, worktree=Path(thread.worktree), root=self.comms.root,
         )
         model = state.model.display_name
         level = state.thinking_level.wire_value()
