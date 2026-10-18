@@ -217,6 +217,28 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     assert script.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
 
 
+def test_a_main_merge_is_never_the_delivered_commit(commander):
+    """P44 recorded the commander's main merge as the delivery, 72 minutes after the unit's own push."""
+    comms, caller = commander
+    def git(*args):
+        return subprocess.check_output(('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t',
+                                        *args), stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'base')
+    git('checkout', '-q', '-b', 'work')
+    git('commit', '-q', '--allow-empty', '-m', 'the answer')
+    git('checkout', '-q', 'main')
+    git('merge', '-q', '--no-ff', '-m', 'merged', 'work')
+    merge = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', merge)
+    create(commander, 'P1')
+    with pytest.raises(ValueError, match='is a merge'):
+        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=merge)).apply(comms, caller)
+    answer = git('rev-parse', 'work')
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=answer)).apply(comms, caller)
+    assert not comms.goals.todos.get('P1').pending
+
+
 def test_a_done_record_from_before_the_split_reads_its_one_commit_as_both():
     old = {'kind': 'commit', 'commit': 'd012d23b4', 'at': FieldCodec.encode(RecordedEventTime(1000))}
     recorded = FieldCodec.decode(OrderDelivery, old)
@@ -272,6 +294,66 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
                 'sent.jsonl', 'hunts.jsonl'} & {
         path.name for path in (repo.parent / 'state').iterdir()}
+
+
+def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
+    """An order body the commander script accepts, with its check and one numbered edit."""
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: {check or 'cat count.txt -> 1'}\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
+                    f"The counter is wrong and that is stupid.\n1. {edit}\n{extra}"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    return str(body)
+
+
+def problem(script, body):
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, 'request')
+
+
+def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
+    """A miss struck with `order strike` and then sent back is one strike; the next send-back strikes again."""
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    (repo / 'count.txt').write_text('0\n')
+    body = order_body(repo)
+    problem(script, body)
+    script.strike('worker', 'P1 left count.txt at zero and reported it fixed')
+    script.send('worker', '23:59', body, 'request')
+    assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
+    script.send('worker', '23:59', body, 'request')
+    assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
+
+
+def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_module(
+        commander, commander_script, monkeypatch, tmp_path):
+    """P12 deleted acp_ingress.py while Toad imported it; the check must read Toad's imports too."""
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    toad = tmp_path / 'toad'
+    (toad / 'src').mkdir(parents=True)
+    (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
+    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={'repos': (
+        script.Repo(checkout=toad, github='OpenHCSDev/toad'),)}))
+    (repo / 'acp_ingress.py').write_text('class Ingress: ...\n')
+    edit = 'Delete src/agent_comms/acp_ingress.py.'
+    with pytest.raises(SystemExit, match=rf"\['{toad}'\] import"):
+        problem(script, order_body(repo, 'grep -rl Ingress . | wc -l -> 0', edit))
+    problem(script, order_body(repo, f'grep -rl Ingress . {toad} | wc -l -> 0', edit))
+    assert comms.goals.todos.get('P1').order.check.command == f'grep -rl Ingress . {toad} | wc -l'
+
+
+def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_script, monkeypatch):
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    (repo / 'count.txt').write_text('0\n')
+    edit = 'Count the measure in tools/debt_ratchet.py.'
+    with pytest.raises(SystemExit, match='--root tools and with --root src'):
+        problem(script, order_body(repo, edit=edit))
+    problem(script, order_body(repo, edit=edit, extra='Ratchet with --root tools and with --root src, each as its own command.\n'))
+    assert comms.goals.todos.get('P1').order.edits == (edit,)
 
 
 def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(commander, commander_script):

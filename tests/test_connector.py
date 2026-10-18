@@ -11,6 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from agent_comms.comms import Comms
 from agent_comms.connector import (
+    CALLER,
     CALLBACK,
     AuthorizationQuery,
     Connector,
@@ -18,7 +19,6 @@ from agent_comms.connector import (
     ApproveVerb,
     RevokeVerb,
 )
-from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
@@ -31,9 +31,8 @@ def store(tmp_path: Path) -> ConnectorStore:
 
 @pytest.fixture
 async def client(store: ConnectorStore, root: Path, comms: Comms):
-    comms.registry.declare(
-        comms.registry.new_thread("worker", frozenset(), str(root), created_at=1.0)
-    )
+    for created_at, name in enumerate(("worker", "claude-ai"), start=1):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(root), created_at=created_at))
     connector = Connector(store, "http://127.0.0.1:18766", root)
     async with TestClient(TestServer(connector.application())) as client:
         yield client
@@ -98,11 +97,17 @@ async def test_connector_lists_every_tool(client, store, comms):
     assert [tool["name"] for tool in listed] == [tool.declared_name for tool in family]
     assert [tool["annotations"]["readOnlyHint"] for tool in listed] == [
         issubclass(tool, ReadTool) for tool in family]
-    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), "/tmp", created_at=2.0))
-    send = {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}}
-    sent = await (await client.post("/mcp", headers=headers, json={
-        "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": send})).json()
-    assert sent["result"]["isError"] is False
+
+
+async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
+    headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
+    calls = ({"name": "comms_set_goal", "arguments": {"text": "Ship the connector"}},
+             {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}})
+    for call in calls:
+        reply = await (await client.post("/mcp", headers=headers, json={
+            "jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": call})).json()
+        assert reply["result"]["isError"] is False, reply
+    assert comms.registry.require("claude-ai").goal.text == "Ship the connector"
     assert [(message.sender, message.body) for message in comms.bus.inbox("worker")] == [
         ("claude-ai", "Owner said go")]
 
@@ -121,9 +126,9 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
             },
         )
     ).json()
-    in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=NoThreadCaller())
+    in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=CALLER)
     assert called["result"]["structuredContent"] == in_process
-    assert [thread["name"] for thread in in_process["threads"]] == ["worker"]
+    assert [thread["name"] for thread in in_process["threads"]] == ["claude-ai", "worker"]
 
 
 async def test_a_revoked_token_is_refused(client, store):
