@@ -176,7 +176,7 @@ class Step:
         """The step a module declares, read without importing it; None if it holds no Carry."""
         for node in ast.parse(source).body:
             if isinstance(node, ast.ClassDef) and any(
-                isinstance(base, ast.Name) and base.id == "Carry" for base in node.bases
+                isinstance(base, ast.Name) and base.id in carry_parents() for base in node.bases
             ):
                 for statement in node.body:
                     if (isinstance(statement, ast.Assign)
@@ -185,6 +185,12 @@ class Step:
                         return cls(name, ast.literal_eval(statement.value), revision)
                 raise ValueError(f"{name} declares no step it runs after")
         return None
+
+
+def carry_parents() -> frozenset[str]:
+    """Carry and every parent this module gives a step to inherit."""
+    return frozenset(name for name, value in globals().items()
+                     if isinstance(value, type) and issubclass(value, Carry))
 
 
 def git(repo: Path, *args: str) -> bytes:
@@ -239,22 +245,24 @@ class CarryChain:
 
     @staticmethod
     def spliced(known: dict[str, Step], revision: str) -> dict[str, Step]:
-        """A line of deleted steps that nothing follows forked off the chain before it was
-        deleted; it runs after the line that kept a step in the tree, so no kept step moves."""
-        followed = {step.after for step in known.values()}
-        heads = sorted((step for step in known.values() if step.name not in followed),
-                       key=lambda step: step.revision == revision, reverse=True)
-        tail = heads[0].name if heads and heads[0].revision == revision else None
-        for head in heads[1 if tail else 0:]:
+        """Deleted steps that forked off the chain run after the head of the other line,
+        whether or not a kept step later followed them, so no kept step moves."""
+        parents = [step.after for step in known.values()]
+        lines = []
+        for head in (step for step in known.values() if step.name not in parents):
             line = [head]
             # Walk back to the fork: the first step whose parent another step also follows.
-            parents = [step.after for step in known.values()]
             while line[-1].after in known and parents.count(line[-1].after) == 1:
                 line.append(known[line[-1].after])
-            if tail is None or any(step.revision == revision for step in line):
-                continue
-            known = {**known, line[-1].name: replace(line[-1], after=tail)}
-            tail = head.name
+            lines.append(line)
+        kept = [line for line in lines if line[-1].revision == revision]
+        if len(kept) != 1:
+            return known
+        tail = kept[0][0].name
+        for line in lines:
+            if line is not kept[0]:
+                known = {**known, line[-1].name: replace(line[-1], after=tail)}
+                tail = line[0].name
         return known
 
     @staticmethod
