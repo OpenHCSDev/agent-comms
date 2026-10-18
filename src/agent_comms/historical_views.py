@@ -469,11 +469,11 @@ class HistoryArchive(RootFile):
                     provenance,
                 )
                 declarations = source.provenance.threads
-                from .wire_log import OpenedWireSnapshot
+                from .wire_log import WireSnapshot
 
                 previous = 0
                 for record, size in _iter_jsonl_records(stage / "bus.jsonl"):
-                    for message, _ in OpenedWireSnapshot.public_page_records(record, size, marker):
+                    for message, _ in WireSnapshot.public_page_records(record, size, marker):
                         if message.seq <= previous:
                             raise ValueError("Historical source has nonascending sequences")
                         previous = message.seq

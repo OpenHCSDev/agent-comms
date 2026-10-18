@@ -13,7 +13,7 @@ from .errors import RelationViolationError
 if TYPE_CHECKING:
     from .channels import Channel
     from .messages import Message
-    from .wire_log import OpenedWireSnapshot
+    from .wire_log import OpenedWireSnapshot, WireSnapshot
 
 ActivityFields = tuple[str, str, float, bool, bool]
 
@@ -44,12 +44,15 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
     def __init__(self, bus_path: Path):
         super().__init__(bus_path, bus_path.with_name("bus_activity_latest.json"))
 
-    def snapshot(self, opened: OpenedWireSnapshot,
+    def snapshot(self, opened: WireSnapshot,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
+        return opened.read(lambda source: self._snapshot(source, parse),
+                           absent=lambda: ActivityClocks({}, {}))
+
+    def _snapshot(self, opened: OpenedWireSnapshot,
+                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
         boundary = opened.complete_boundary
         source, stream = opened.revision, opened.stream
-        if source is None:
-            return ActivityClocks({}, {})
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is None:
             channels, sent, offset = {}, {}, 0
