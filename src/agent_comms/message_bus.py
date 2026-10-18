@@ -100,7 +100,7 @@ class MessageBus:
                 message.target,
                 message.timestamp,
                 not message.sender_role.executable,
-                message.membership is None and not message.notice,
+                message.role.counts_as_conversation(),
             )
 
     @contextmanager

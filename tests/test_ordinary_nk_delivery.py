@@ -2,6 +2,7 @@
 publication protocol."""
 
 from __future__ import annotations
+from agent_comms.messages import NoticeRole
 from agent_comms.tool_caller import NoThreadCaller
 
 import json
@@ -34,7 +35,7 @@ def test_fresh_send_uses_canonical_publication_and_human_delivery_has_no_wake(tm
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     reply = comms.messaging.send_message("sender", viewer, "human notification")
     human = comms.bus.log.read_delivery_cohort(metadata.root_id, reply.seq)
-    assert human.message.notice
+    assert isinstance(human.message.role, NoticeRole)
     assert human.audience.recipients == ()
     assert human.decisions == ()
     assert comms.views.dm_display_page("sender", worktree=str(tmp_path)).messages[-1] == reply

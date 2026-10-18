@@ -31,7 +31,7 @@ from .goal_actions import (
 from .goal_states import ActiveGoal
 from .todos import DeliverTodo, InstallTodo, OrderDelivery, TodoOperation
 from .change_report import ChangeReport
-from .messages import InfoKind, MessageKind
+from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller
 from .task_sources import (
@@ -817,7 +817,7 @@ class CommsAuthoredTaskTool(ThreadToolRequest):
         declaration = self.declaration(owner)
         message = comms.messaging.send_message(
             owner.name, self.target, self.original_body(declaration),
-            notice=True, task=declaration)
+            role=NoticeRole(), task=declaration)
         return {"reference": FieldCodec.encode(message.reference),
                 "task": FieldCodec.encode(message.task)}
 

@@ -293,7 +293,7 @@ class RecentRelationshipGroup(RelationshipGroup):
     def supply(cls, context: RelationshipContext) -> tuple[RelationshipEntry, ...]:
         entries = {}
         for message in reversed(context.messages):
-            if message.notice or message.membership is not None:
+            if not message.role.counts_as_conversation():
                 continue
             for target in cls.targets(context, message):
                 entries.setdefault(target, context.entry(
@@ -788,7 +788,7 @@ class ThreadRelationships:
         messages, _ = self._recent_messages()
         correspondents: dict[str, float] = {}
         for message in messages:
-            peer = message.response_policy.context_peer(
+            peer = message.role.response_policy(message).context_peer(
                 thread.name, registry.canonical_name(message.sender),
                 registry.canonical_name(message.target))
             if peer is not None:

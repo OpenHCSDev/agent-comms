@@ -295,22 +295,17 @@ class HistoricalMessage(Message):
             )
 
         return cls(
-            **{f.name: getattr(message, f.name) for f in fields(Message)},
+            **{**{f.name: getattr(message, f.name) for f in fields(Message)},
+               "role": message.role.as_historical()},
             source=source,
             source_order=order,
             sender_created_at=creation(message.sender),
             target_created_at=creation(message.target),
         )
 
-    def notification_references(self) -> tuple[MessageReference, ...]:
-        """An archived row has no current recipient handling authority."""
-        return ()
-
     @property
     def history_source(self) -> HistorySource:
         return self.source
-
-    response_policy = InformationalPolicy.instance()
 
     @property
     def view_cursor(self) -> HistoryCursor:

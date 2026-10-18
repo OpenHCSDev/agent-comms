@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
-from .messages import InfoKind, Message, MessageKind
+from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
 from .change_report import ChangeReport
 from .store_files import _store_lock
 from .thread_identity import ThreadRole
@@ -40,14 +40,14 @@ class Messaging:
         body: str,
         type: Type[MessageKind] = InfoKind,
         *,
-        notice: bool = False,
+        role: MessageRole = ConversationRole(),
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
         report: ChangeReport | None = None,
     ) -> str:
         """Declare a message and route it through the bus."""
         return self.send_message(
-            sender, target, body, type, notice=notice, claims=claims, releases=releases,
+            sender, target, body, type, role=role, claims=claims, releases=releases,
             report=report,
         ).message_id
 
@@ -58,7 +58,7 @@ class Messaging:
         body: str,
         type: Type[MessageKind] = InfoKind,
         *,
-        notice: bool = False,
+        role: MessageRole = ConversationRole(),
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path] = (),
         task: TaskAttachment = NoTaskAttachment(),
@@ -79,7 +79,7 @@ class Messaging:
                 target=target,
                 body=body,
                 type=type,
-                notice=notice,
+                role=role,
                 task=task,
                 report=report,
                 answers=self._answered_by(owner, target),
@@ -119,7 +119,7 @@ class Messaging:
         body: str,
         type: Type[MessageKind] = InfoKind,
         *,
-        notice: bool = False,
+        role: MessageRole = ConversationRole(),
     ) -> Message:
         """Test-gated full-N send. No automatic SQL acceptance or live wake."""
         type.require_sendable()
@@ -127,7 +127,7 @@ class Messaging:
             if sender not in self.registry or not self.registry.require(sender).role.executable:
                 raise RelationViolationError("Initial sender must be a registered executable.")
             committed = self.bus.publisher.publish_initial_cohort(
-                Message(sender=sender, target=target, body=body, type=type, notice=notice)
+                Message(sender=sender, target=target, body=body, type=type, role=role)
             )
         return committed
 
@@ -198,13 +198,13 @@ class Messaging:
                                change=change, **declaration_options)
             return self._publish_user_under_wire_lock(
                 user, owner.name, "Pinned constraint from its original source",
-                task, notice=True)
+                task, role=NoticeRole())
 
-    def _publish_user_under_wire_lock(self, user, target, body, task, *, notice=False):
+    def _publish_user_under_wire_lock(self, user, target, body, task, *, role=ConversationRole()):
         from .bus_publication import HumanOrigin
 
         return self.bus.publisher.publish_ordinary(
-            Message(user.name, target, body, InfoKind, task=task, notice=notice),
+            Message(user.name, target, body, InfoKind, task=task, role=role),
             _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
 

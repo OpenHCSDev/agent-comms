@@ -6,6 +6,7 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 
 from __future__ import annotations
 
+from agent_comms.messages import NoticeRole
 import asyncio
 import hashlib
 import json
@@ -858,7 +859,7 @@ async def test_crash_after_triage_reservation_never_reissues_model(
     )
     assert len(calls) == 1
     history = list(comms.views.channel_history_page("#team").messages)
-    assert len(history) == 2 and history[-1].notice
+    assert len(history) == 2 and isinstance(history[-1].role, NoticeRole)
     assert "input is uncertain" in history[-1].body
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
@@ -895,7 +896,7 @@ async def test_forged_dto_without_private_evidence_cannot_mark_context(
             opt_in=True,
         ).run()
     rows = list(comms.views.channel_history_page("#team").messages)
-    assert len(rows) == 2 and rows[-1].notice
+    assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
     assert "input is uncertain" in rows[-1].body
 
 
@@ -1503,7 +1504,7 @@ async def test_full_input_crash_leaves_no_publish_and_no_automatic_restart(
     )
     assert len(calls) == 1
     rows = list(comms.bus.dm_history_page("sender", "beta").messages)
-    assert len(rows) == 2 and rows[-1].notice
+    assert len(rows) == 2 and isinstance(rows[-1].role, NoticeRole)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         row = store.session._connection.execute(
             "SELECT stage,session_id FROM native_runtime_input"
@@ -1656,7 +1657,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
     notice = list(comms.views.full_history_page().messages)[-1]
     from agent_comms.messages import AlertKind
 
-    assert notice.notice and notice.type is AlertKind
+    assert isinstance(notice.role, NoticeRole) and notice.type is AlertKind
     assert notice.target == ("sender" if direct else "#team")
     assert "The usage limit has been reached" in notice.body
     assert "No automatic retry" in notice.body
@@ -1861,7 +1862,7 @@ async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_pat
             native_package=tmp_path,
         ).run()
     notice = list(comms.views.full_history_page().messages)[-1]
-    assert notice.notice and "input is uncertain" in notice.body
+    assert isinstance(notice.role, NoticeRole) and "input is uncertain" in notice.body
     assert "No automatic retry" in notice.body
     assert response.error not in notice.body
     (diagnostic,) = (root / "diagnostics").glob("*.json")
