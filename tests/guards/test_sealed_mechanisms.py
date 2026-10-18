@@ -21,8 +21,7 @@ pytestmark = pytest.mark.refactor_guard
 
 def test_all_mechanisms_reject_external_adapters_and_keep_owned_implementations():
     for mechanism in (FieldCodec, PendingRequests, ReadLedger, PiRpcChannel, ChildProcess):
-        module = ModuleType("external_adapter")
-        namespace = {"__module__": module.__name__}
+        namespace: dict[str, object] = {"__module__": "external_adapter"}
         if issubclass(mechanism, LockedStore):
             namespace["lock_rank"] = mechanism.lock_rank
         with pytest.raises(TypeError, match=f"sealed mechanism {mechanism.__name__}"):
