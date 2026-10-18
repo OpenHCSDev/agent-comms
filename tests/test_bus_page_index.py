@@ -14,7 +14,7 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
-from agent_comms.read_basis import DMDisplayScope
+from agent_comms.read_basis import DMDisplayScope, ReadCursor
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess, WritableAccess
@@ -47,11 +47,24 @@ def retained_source(root, count, *, access=ArchivedAccess()):
     return comms.bus
 
 
+@pytest.mark.parametrize("seen,before,unread", [
+    (ReadCursor(3), 7, True),
+    (ReadCursor(6), 7, False),
+    (ReadCursor(3, (6,)), 7, False),
+    (ReadCursor(3), 6, False),
+    (ReadCursor(9), 10, False),
+])
+def test_older_unread_excludes_read_prefix_and_exceptions(tmp_path, seen, before, unread):
+    bus = retained_source(tmp_path / 'archive', 9)
+    scope = DMDisplayScope(frozenset({'b'}), frozenset({'a'}))
+    assert bus.conversation_older_unread(scope, before=before, seen=seen) is unread
+
+
 def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_path):
     empty = Comms(tmp_path / 'empty').bus
     assert empty.full_history_page().messages == ()
     scope = DMDisplayScope(frozenset({'a'}), frozenset({'b'}))
-    assert not empty.conversation_older_unread(scope, before=1, seen=frozenset())
+    assert not empty.conversation_older_unread(scope, before=1, seen=ReadCursor())
     assert not (empty.log.path.parent / 'bus_page_index.sqlite3').exists()
 
     bus = retained_source(tmp_path / 'owned', 9, access=WritableAccess())
