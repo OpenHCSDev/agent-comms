@@ -53,11 +53,11 @@ class JsonDocument(ABC, Generic[T]):
 
     def _decode(self, data: Any) -> T:
         """Decode the current declaration at the storage boundary."""
-        return FieldCodec.decode(self.record_type, data)
+        return FieldCodec.decode_document(self.record_type, data)
 
     def _encode(self, value: T) -> Any:
         """Owners with an established external shape may project that encoding."""
-        return FieldCodec.encode(value)
+        return FieldCodec.encode_document(value, self.record_type)
 
     def read(self) -> T:
         return self._read_unlocked()

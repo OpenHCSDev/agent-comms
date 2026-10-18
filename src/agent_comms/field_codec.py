@@ -397,13 +397,42 @@ class FieldCodec(Sealed):
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
     @classmethod
+    def encode_document(cls, value: object, declared: object) -> object:
+        """A document whose declaration names its leaf member stores that member untagged."""
+        member = _FamilyRecordDecoder.document_member(declared)
+        if member is None:
+            return cls.encode(value)
+        if get_origin(declared) is dict:
+            records = cast(dict[str, object], value)
+            return {key: cls.encode_fields(item) for key, item in records.items()}
+        return cls.encode_fields(value)
+
+    @classmethod
+    def decode_document(cls, declared: type[T], data: object) -> T:
+        member = _FamilyRecordDecoder.document_member(declared)
+        if member is None:
+            return cls.decode(declared, data)
+        decoder = _member_decoder(member)
+        if get_origin(declared) is not dict:
+            return cast(T, decoder.decode(data))
+        if not isinstance(data, dict):
+            raise ValueError("Expected a JSON object.")
+        return cast(T, {key: decoder.decode(item) for key, item in data.items()})
+
+    @classmethod
     def encode_record(cls, value: object) -> dict[str, Any]:
-        """Encode declared fields, including inside a custom wire representation."""
-        hints = cls._types(type(value))
-        result = (
+        """Encode a record: its family tag, then its declared fields."""
+        tag = (
             {value.family_discriminator: value.declared_name}
             if isinstance(value, DeclaredFamily) else {}
         )
+        return {**tag, **cls.encode_fields(value)}
+
+    @classmethod
+    def encode_fields(cls, value: object) -> dict[str, object]:
+        """Encode declared fields, including inside a custom wire representation."""
+        hints = cls._types(type(value))
+        result: dict[str, object] = {}
         plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
         for field, key in cls.record_fields(type(value)):
             current = getattr(value, field.name)
@@ -839,6 +868,20 @@ class _FamilyRecordDecoder(ValueDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
     family: type[DeclaredFamily]
+
+    @staticmethod
+    def document_member(declared: object) -> type[DeclaredFamily] | None:
+        """The leaf member a document declares directly or as its mapping's values."""
+        if get_origin(declared) is dict and get_args(declared)[0] is str:
+            declared = get_args(declared)[1]
+        if not (isinstance(declared, type) and issubclass(declared, DeclaredFamily)):
+            return None
+        members = declared._member_declarations()
+        if declared not in members or any(
+            other is not declared and issubclass(other, declared) for other in members
+        ):
+            return None
+        return declared
 
     def editor_choices(self):
         return tuple((member.label, {self.family.family_discriminator: member.declared_name})
