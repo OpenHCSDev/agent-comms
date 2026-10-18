@@ -31,7 +31,7 @@ from .channels import Channel
 from .channel_targets import CommandTarget, ResolvedChannel
 from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .command import Command
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .field_codec import FieldCodec, PathText, compile_decoder
@@ -442,7 +442,7 @@ class ThreadArchivedResult:
 @dataclass(frozen=True)
 class ThreadCreatedResult:
     created: str
-    pid: int | None
+    process_identity: ProcessState
 
 
 @dataclass(frozen=True)
@@ -1188,7 +1188,8 @@ class RegisterCliCommand(CliCommand):
     )
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
-    pid: int = option("--pid", default=0)
+    process: ProcessState = option("--pid", default_factory=NoProcess,
+        parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
     execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
@@ -1200,7 +1201,7 @@ class RegisterCliCommand(CliCommand):
             worktree=self.worktree,
             parent=self.parent,
             task=self.task,
-            process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
+            process_identity=self.process,
             execution=self.execution,
         )
         ctx.registry.declare(thread)
@@ -1248,16 +1249,19 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     help = "Attach a live Pi session to a registered thread"
     name: str = option("--name")
     session_file: str = option("--session-file")
-    pid: int | None = option("--pid", default=None)
+    process: ProcessState = option("--pid", default_factory=NoProcess,
+        parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
 
     def apply(self, ctx: Comms) -> Any:
+        current = ctx.registry.require(self.name)
         attached = ctx.threads.attach_session(
-            ctx.registry.require(self.name), self.session_file, pid=self.pid
+            current, self.session_file,
+            process=self.process.attachment_process(current.process_identity),
         )
         return {
             "attached": attached.name,
             "session_file": attached.session_file,
-            "pid": attached.pid,
+            **attached.process_identity.pid_fields(),
         }
 
 
@@ -1475,7 +1479,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
                                            for item in fields(self.spec_type)})
         child = ctx.threads.create(spec)
-        return ThreadCreatedResult(child.name, child.pid)
+        return ThreadCreatedResult(child.name, child.process_identity)
 
 
 @dataclass(frozen=True, kw_only=True)

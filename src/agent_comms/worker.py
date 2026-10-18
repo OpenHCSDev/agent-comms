@@ -103,7 +103,7 @@ def main() -> int:
     comms = wire()
     comms.owners.require_private_launch()  # Headless execution needs a private bus root.
     thread = comms.registry.require(name)
-    if thread.process_identity is not None and thread.process_identity.alive():
+    if thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")
     with suppress(KeyboardInterrupt):
         asyncio.run(run())

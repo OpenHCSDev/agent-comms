@@ -68,7 +68,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         def acquire():
             comms = agent._comms
             owned = agent.sessions.declare_thread(str(project))
-            return comms.threads.attach_session(owned, str(session))
+            return comms.threads.attach_session(owned, str(session), process=owned.process_identity)
 
         thread = await Coordination.run_worker(acquire)
         await agent.sessions.bind_owned(thread, thread.name)

@@ -138,7 +138,7 @@ class OwnerRestartHandoff:
         threads = tuple(owner.require_current(snapshot) for owner in self.owners)
         return tuple(OwnerRestartResult(
             thread.name, owner.launch.process.pid,
-            launch(thread, owner.launch).pid,
+            launch(thread, owner.launch).require_process().pid,
         ) for thread, owner in zip(threads, self.owners, strict=True))
 
 
