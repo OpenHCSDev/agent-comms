@@ -68,7 +68,8 @@ def enforce_storage(registry, thread, tool):
         return
     STRUCK[(thread, violation)] = time.time()
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
-    if task := next((t.id for t in order.open_todos(thread)), None):
+    if task := next((t.id for t in order.COMMS.goals.todos.held_for_commander(
+        order.COMMS.registry.require(order.ME).incarnation, thread)), None):
         order.strike(thread, f'{task} broke the storage rule at a tool call: {violation}; '
                              'storage waste is banned outright', 'tool_watch at tool call')
 

@@ -80,11 +80,6 @@ def todos():
     return COMMS.goals.todos.for_commander(COMMS.registry.require(ME).incarnation)
 
 
-def open_todos(unit=None):
-    """Problems not yet closed and held by a unit, optionally only those held by one unit."""
-    return [t for t in todos() if t.state.open and t.holder and unit in (None, t.holder)]
-
-
 def progress() -> dict[str, OrderProgress]:
     """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
     listed: TodoList = call(CommsTodoListTool())
@@ -245,7 +240,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
     owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
     check = (line := re.search(r'(?m)^Check:(.*)$', body)) and OrderCheck.parse(line[1])
-    listed = {t.id: t for t in todos() if t.state.open}
+    listed = {t.id: t for t in todos()}
     if not group:
         problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
     elif not new and (missing := [pid for pid in group if pid not in listed]):
@@ -402,7 +397,7 @@ def problem(text, unit, due, order_file, request):
         sys.exit('Refused: the order file needs a "Problem: NEW" line; a problem is never logged without its order')
     if len(text.split()) < 8:
         sys.exit('Refused: describe the problem (8+ words): what is wrong, what it costs')
-    pid = f'P{max([int(t.id[1:]) for t in todos() if t.id[1:].isdigit()] + [0]) + 1}'
+    pid = f'P{max([int(t.id[1:]) for t in COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation) if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
         send(unit, due, order_file, request, new=(pid, text))
@@ -433,7 +428,7 @@ def board():
              '| Problem | Owner file | Owner | Order | Due | Progress | Delivered '
              '| Owner last acted |',
              '|---|---|---|---|---|---|---|---|']
-    listed, read = (t for t in todos() if t.state.open), progress()
+    listed, read = todos(), progress()
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
         unit, last = t.holder, t.released[-1:]
         owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
@@ -442,7 +437,7 @@ def board():
                      f'{"no" if t.pending else "yes, install pending"} | '
                      f'{unit and last_activity(unit) or "-"} |')
     lines += ['', '## Withdrawn orders', '',
-              *(f'- {line}' for t in todos() for line in t.order.withdrawals(t))]
+              *(f'- {line}' for t in COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation) for line in t.order.withdrawals(t))]
     open(BOARD, 'w').write('\n'.join(lines) + '\n')
 
 
@@ -531,7 +526,7 @@ def first_calls():
     lines = open(ACTIVITY).read().splitlines()[-4000:]
     watched = {line[9:].split(' ', 1)[0] for line in lines}
     missing = []
-    for todo in open_todos():
+    for todo in COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation):
         unit, order = todo.assignment.owner, todo.order
         if not todo.pending or unit not in watched:
             continue  # tool_watch cannot see this unit's harness; its clock is the commit deadline
@@ -558,11 +553,11 @@ def hunt(where, why, sent=None):
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
     if sent:
-        todo = next((t for t in open_todos() if t.order.id == sent), None) or sys.exit(
+        todo = next((t for t in COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation) if t.order.id == sent), None) or sys.exit(
             f'Refused: {sent} is not an open tracked order; send it first. {HuntVerb.usage()}')
     else:
         named = set(re.findall(r'\bP\d+\b', why))
-        todo = next((t for t in open_todos() if t.id in named), None) or sys.exit(
+        todo = next((t for t in COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation) if t.id in named), None) or sys.exit(
             'Refused: a clean hunt is recorded on its open problem; name the P-number in --why. '
             + HuntVerb.usage())
     ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
@@ -573,7 +568,7 @@ def hunt(where, why, sent=None):
 
 
 def hunts():
-    return [h for t in todos() for h in t.hunts]
+    return [h for t in COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation) for h in t.hunts]
 
 
 def next_hunt():
@@ -639,7 +634,7 @@ def overdue():
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
-        held = open_todos()
+        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
         stale = [f'{t.id} {t.assignment.owner} (last {seen})' for t in held
                  if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
         if stale:

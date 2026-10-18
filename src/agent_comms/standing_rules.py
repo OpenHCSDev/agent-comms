@@ -66,7 +66,8 @@ class HuntDue(ReasonedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        hunts = (hunt for todo in cls.todos(comms, commander) for hunt in todo.hunts)
+        hunts = (hunt for todo in comms.goals.todos.history_for_commander(
+            comms.registry.require(commander).incarnation) for hunt in todo.hunts)
         hunted = (hunt.at.recorded_at("A hunt") for hunt in hunts)
         age = time.time() - max(hunted, default=0)
         return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
@@ -92,7 +93,7 @@ class PlanIdle(StandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        todos = cls.todos(comms, commander)
+        todos = comms.goals.todos.history_for_commander(comms.registry.require(commander).incarnation)
         return tuple(
             cls(phase)
             for phase in PlanPhase.members_with(PlanPhase)

@@ -1314,12 +1314,25 @@ class TodoStore(TypedStore):
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         """The orders serving one request: a Goal on the commander's thread."""
-        return self._select(
+        return self._open(
             "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=?", (commander.name, commander.created_at))
+
+    def held_for_commander(
+        self, commander: ThreadIncarnation, unit: str | None = None,
+    ) -> tuple[Todo, ...]:
+        where = "creator=? AND creator_created=? AND assignment IS NOT NULL"
+        parameters: tuple = (commander.name, commander.created_at)
+        if unit is not None:
+            where += " AND json_extract(assignment,'$.owner')=?"
+            parameters += (unit,)
+        return self._open(where, parameters)
+
+    def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._select("creator=? AND creator_created=?", (commander.name, commander.created_at))
 
     def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
         states = TodoState.open_names()

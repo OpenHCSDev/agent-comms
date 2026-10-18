@@ -24,7 +24,7 @@ class IdleUnits(ReasonedStandingRule):
     def reason(cls, comms: Comms, commander: str) -> str | None:
         with open(CONFIG.state / "activity.log", errors="replace") as log:
             seen = {line[9:].split(" ", 1)[0] for line in log.readlines()[-cls.recent :]}
-        held = {todo.holder for todo in cls.todos(comms, commander) if todo.state.open}
+        held = {todo.holder for todo in cls.todos(comms, commander)}
         idle = sorted(seen - held - CONFIG.parked - {commander, ""})
         return ", ".join(idle) or None
 

@@ -22,7 +22,8 @@ def broken_rules():
 def owed_orders() -> dict[str, list[Todo]]:
     """Each unit's open orders."""
     owed: dict[str, list[Todo]] = {}
-    for todo in order.open_todos():
+    for todo in order.COMMS.goals.todos.held_for_commander(
+        order.COMMS.registry.require(order.ME).incarnation):
         owed.setdefault(todo.assignment.owner, []).append(todo)
     return owed
 
