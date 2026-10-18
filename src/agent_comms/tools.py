@@ -56,7 +56,8 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
+from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
+                    PullRequests, Todo, TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -154,6 +155,7 @@ class TodoChanged(ToolResult):
 @dataclass(frozen=True)
 class TodoList(ToolResult):
     todos: tuple[Todo, ...]
+    progress: dict[str, OrderProgress] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -749,7 +751,10 @@ class CommsTodoListTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
-        return TodoList(tuple(comms.goals.todos.for_commander(actor)))
+        listed = tuple(comms.goals.todos.for_commander(actor))
+        pulls, storage = PullRequests(), comms.registry.storage_rule
+        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
+                                 for todo in listed if todo.state.open and todo.holder})
 
 
 @dataclass(frozen=True, kw_only=True)

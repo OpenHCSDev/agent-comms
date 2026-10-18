@@ -52,15 +52,21 @@ class StorageRule:
     def initial_roots(self, name):
         return StorageRoots(self.scratch_base / name)
 
+    def order_checkout(self, name: str, problem: str) -> Path:
+        """The checkout thread ``name`` holds for one ordered problem."""
+        return self.checkout_base.resolve() / f'{name}--{problem}'
+
     def owns_checkout(self, thread: Thread, path: Path) -> bool:
-        return (path.parent == self.checkout_base.resolve()
-                and re.fullmatch(re.escape(thread.name) + r'--P[1-9][0-9]*', path.name) is not None)
+        problem = path.name.removeprefix(f'{thread.name}--')
+        return (re.fullmatch(r'P[1-9][0-9]*', problem) is not None
+                and path == self.order_checkout(thread.name, problem))
 
     def checkouts_of(self, thread: Thread) -> tuple[Path, ...]:
         """Read each repository now; directories and names do not register ownership."""
         home = self.checkout_base / thread.name
         home = (home if home.exists() else Path(thread.worktree)).expanduser().resolve()
-        candidates = (home, *(path for path in self.checkout_base.glob(f'{thread.name}--P*')
+        ordered = self.order_checkout(thread.name, 'P*')
+        candidates = (home, *(path for path in ordered.parent.glob(ordered.name)
                               if path.is_dir() and self.owns_checkout(thread, path)))
         checkouts = {home}
         listed = set()
@@ -175,7 +181,8 @@ class CheckoutStorageEffect(AllocateStorageEffect):
     def check(self, rule, thread):
         rule.require_path(thread, self.path)
         if not rule.owns_checkout(thread, self.path):
-            rule.deny(f'checkout destination must be {rule.checkout_base}/{thread.name}--P<number>')
+            destination = rule.order_checkout(thread.name, "P<number>")
+            rule.deny(f'checkout destination must be {destination}')
         rule.require_allocation(thread, self.path)
 
 

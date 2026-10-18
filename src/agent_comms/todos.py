@@ -7,7 +7,9 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import calendar
 import re
+import subprocess
 import sqlite3
 import time
 import asyncio
@@ -28,6 +30,7 @@ from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
 from .goals import OrderCheck
 from .child_process import BoundedRun, ExitedOutcome
+from .storage_rules import StorageRule
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -109,6 +112,221 @@ class OperationDelivery(OrderDelivery):
 
     async def delivery_time(self, check):
         return EventTime.capture(time.time())
+
+
+@dataclass(frozen=True)
+class PullRequest:
+    number: int
+    title: str
+    head: str
+    merge: str | None = None
+    merged_at: float | None = None
+    updated_at: float = 0.0
+
+    @classmethod
+    def listed(cls, number: str, title: str, head: str, merge: str, merged: str,
+               updated: str) -> Self:
+        """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
+        return cls(int(number), title, head, merge or None,
+                   _github_time(merged) if merged else None, _github_time(updated))
+
+    def names(self, problem: str) -> bool:
+        return re.search(rf"\b{re.escape(problem)}\b", self.title) is not None
+
+
+def _github_time(text: str) -> float:
+    return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
+
+
+class PullRequests:
+    """A repository's pull requests, read from GitHub once and shared by every order on a board."""
+
+    def __init__(self) -> None:
+        self._read: dict[tuple[str, str], tuple[PullRequest, ...]] = {}
+
+    def listed(self, repo: str, state: str) -> tuple[PullRequest, ...]:
+        if (repo, state) not in self._read:
+            self._read[repo, state] = self.read(repo, state)
+        return self._read[repo, state]
+
+    def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
+        listed = subprocess.run(
+            ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
+             "--json", "number,title,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
+             '.[] | [.number, .title, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
+             " .updatedAt] | @tsv"),
+            capture_output=True, text=True, timeout=60)
+        if listed.returncode:
+            raise ValueError(listed.stderr.strip() or f"gh pr list -R {repo} failed.")
+        return tuple(PullRequest.listed(*line.split("\t")) for line in listed.stdout.splitlines())
+
+
+def _clock(at: float) -> str:
+    return time.strftime("%H:%M", time.localtime(at))
+
+
+@dataclass(frozen=True)
+class ProgressSource:
+    """What an order's progress is read from: its unit's checkout and the repository's PRs."""
+    todo: Todo
+    checkout: Path
+    pulls: PullRequests
+
+    @property
+    def since(self) -> float:
+        return self.todo.order.at.recorded_at("An order")
+
+    def requests(self, state: str) -> list[PullRequest]:
+        """PRs naming the problem touched since the order; an older one served an earlier order."""
+        return [pr for pr in self.pulls.listed(self.todo.repo, state)
+                if pr.names(self.todo.id) and pr.updated_at >= self.since]
+
+    def commit(self, *excluded: str) -> tuple[str, float] | None:
+        """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
+        log = subprocess.run(
+            ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.since)}",
+             "--format=%H %ct", "HEAD", "--not", *excluded),
+            capture_output=True, text=True, timeout=30)
+        if log.returncode or not log.stdout.strip():
+            return None
+        sha, at = log.stdout.split()
+        return sha, float(at)
+
+
+@dataclass(frozen=True)
+class OrderProgress(DeclaredFamily, affix="Progress"):
+    """Where an order's work stands, derived on each read from its unit's checkout and PRs.
+
+    Never stored: the checkout and GitHub are its owners."""
+    strikes: ClassVar[bool] = True
+
+    @classmethod
+    def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
+        """The first found member by its declared precedence; with none found, no commit yet."""
+        owner = todo.holder
+        assert owner, "Only a held order has progress."
+        source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
+        members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
+        try:
+            found = (progress for member in members if (progress := member.found(source)))
+            return next(found, NoCommitProgress())
+        except (ValueError, subprocess.TimeoutExpired) as unread:
+            return UnreadProgress(str(unread))
+
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
+
+    def stalled(self, ordered: float, now: float) -> bool:
+        """Work stalls 15 minutes after ``moved`` with no commit, push or PR change."""
+        return self.moved is not None and now - self.moved > 900
+
+    @property
+    def moved(self) -> float | None:
+        return None
+
+
+@dataclass(frozen=True)
+class FoundProgress(OrderProgress):
+    """A state read finds in the checkout or on GitHub; the lowest ``precedence`` found wins."""
+    precedence: ClassVar[int]
+
+    @classmethod
+    @abstractmethod
+    def found(cls, source: ProgressSource) -> Self | None: ...
+
+
+@dataclass(frozen=True)
+class NoCommitProgress(OrderProgress):
+    @property
+    def line(self) -> str:
+        return "no commit since the order"
+
+    def stalled(self, ordered: float, now: float) -> bool:
+        """No first commit within 10 minutes of the order."""
+        return now - ordered > 600
+
+
+@dataclass(frozen=True)
+class UnreadProgress(OrderProgress):
+    reason: str
+
+    @property
+    def line(self) -> str:
+        return f"progress unread: {self.reason}"
+
+
+@dataclass(frozen=True)
+class CommittedProgress(FoundProgress):
+    precedence: ClassVar[int] = 3
+    sha: str
+    at: float
+
+    @property
+    def moved(self) -> float | None:
+        return self.at
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        commit = source.commit("--remotes")
+        return None if commit is None else cls(commit[0][:9], commit[1])
+
+    @property
+    def line(self) -> str:
+        return f"committed {self.sha} at {_clock(self.at)}, not pushed"
+
+
+@dataclass(frozen=True)
+class PushedProgress(CommittedProgress):
+    """Pushed past the default branch, with no PR naming the order yet."""
+    precedence: ClassVar[int] = 4
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        commit = source.commit("origin/HEAD")
+        return None if commit is None else cls(commit[0][:9], commit[1])
+
+    @property
+    def line(self) -> str:
+        return f"pushed {self.sha} at {_clock(self.at)}, no PR"
+
+
+@dataclass(frozen=True)
+class OpenPrProgress(FoundProgress):
+    precedence: ClassVar[int] = 2
+    number: int
+    head: str
+    at: float
+
+    @property
+    def moved(self) -> float | None:
+        return self.at
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        return next((cls(pr.number, pr.head[:9], pr.updated_at)
+                     for pr in source.requests("open")), None)
+
+    @property
+    def line(self) -> str:
+        return f"PR #{self.number} open at {self.head}"
+
+
+@dataclass(frozen=True)
+class MergedProgress(FoundProgress):
+    """Merged work is done; its deadline no longer draws a strike."""
+    precedence: ClassVar[int] = 1
+    strikes: ClassVar[bool] = False
+    sha: str
+
+    @classmethod
+    def found(cls, source: ProgressSource) -> Self | None:
+        return next((cls(pr.merge[:9]) for pr in source.requests("merged")
+                     if pr.merge and (pr.merged_at or 0) >= source.since), None)
+
+    @property
+    def line(self) -> str:
+        return f"merged as {self.sha}, record done"
 
 
 @dataclass(frozen=True)
