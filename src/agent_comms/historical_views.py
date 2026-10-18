@@ -362,7 +362,7 @@ class HistoryArchive(RootFile):
         except FileNotFoundError:
             yield ()
             if self.path.exists():
-                raise HistoricalSourceChanged("Historical source catalogue changed; refresh history")
+                raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
             return
         with stream:
             revision = FileRevision.from_file(stream)
@@ -373,7 +373,7 @@ class HistoryArchive(RootFile):
 
     def _require_revision(self, revision: FileRevision) -> None:
         if FileRevision.capture(self.path) != revision:
-            raise HistoricalSourceChanged("Historical source catalogue changed; refresh history")
+            raise HistoricalSourceChanged("Historical catalogue changed; refresh history")
 
     def attach(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Snapshot a preserved source, then publish it for ordinary display.
