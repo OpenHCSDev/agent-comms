@@ -11,7 +11,7 @@ from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import TextRepresentation
+from .field_codec import SpelledText
 
 if TYPE_CHECKING:
     import sqlite3
@@ -23,18 +23,14 @@ if TYPE_CHECKING:
     from .wire_log import WireLog
 
 
-class WireRootIdText(TextRepresentation):
+class WireRootIdText(SpelledText):
     """The private bus declaration owns its external root identity spelling."""
+
+    spelling = re.compile("[0-9a-f]{32}")
 
     @classmethod
     def encode(cls, value: object) -> object:
         return cls.decode(value)
-
-    @classmethod
-    def from_text(cls, value: str) -> str:
-        if re.fullmatch(r"[0-9a-f]{32}", value) is None:
-            raise ValueError("Invalid private bus root identity")
-        return value
 
 
 class WireAccess(DeclaredFamily, affix="Access"):
