@@ -76,6 +76,9 @@ class IgnoredProgress(ContextualProgress):
     label = ReadDelivery.label
     priority = ReadDelivery.priority
 
+    def notification_label(self, notification):
+        return self.proof.notification_label(notification)
+
 
 class InterruptedProgress(ContextualProgress):
     label = "Interrupted before read"

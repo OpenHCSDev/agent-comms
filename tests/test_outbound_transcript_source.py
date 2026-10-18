@@ -8,6 +8,9 @@ from agent_comms.coordination_errors import StaleRevision
 from agent_comms.assignment_states import IgnoredAssignment
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_assignment import NotificationAssignment
+from agent_comms.notification_progress import (
+    ContextualProgress, IgnoredProgress, SentProgress, ShownToModelProgress, UnrecordedProgress,
+)
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
 from agent_comms.presentation import MessageNotification
@@ -26,7 +29,8 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
 
     root, _root_id, comms, initial, _people = _root(tmp_path)
     database = root / "coordination.sqlite3"
-    original = NotificationAssignment.read(root, (initial,)).resolve(root)
+    captured = NotificationAssignment.read(root, (initial,))
+    original = captured.resolve(root)
     wire_before = comms.bus.log.path.read_bytes()
     assert original
     with Coordination(str(database)) as writer:
@@ -39,7 +43,9 @@ def test_original_read_contention_is_unavailable_then_same_receipts_return(tmp_p
             with pytest.raises(CoordinationReadUnavailable):
                 with TranscriptRead.publication_source(root):
                     pytest.fail("Busy acquisition reached the native schema decoder")
-    assert NotificationAssignment.read(root, (initial,)).resolve(root) == original
+    reopened = NotificationAssignment.read(root, (initial,))
+    assert reopened == captured
+    assert reopened.resolve(root) == original
     with TranscriptRead.publication_source(root) as native_read:
         assert native_read is not None
     assert comms.bus.log.path.read_bytes() == wire_before
@@ -58,7 +64,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
     notice = next(item for item in comms.views.thread_presentation('sender').notifications
                   if item.recipient=='beta')
-    assert notice.label=='Sent'
+    assert type(notice.state) is SentProgress
     assert notice.state.detail == ''
     assert notice.message.reference==initial.message.reference
     assert not notice.state.working
@@ -69,7 +75,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
     current = next(item for item in comms.views.thread_presentation('sender').notifications
                    if item.recipient=='beta')
-    assert current.label=='Sent'
+    assert type(current.state) is SentProgress
 
 
 def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):  # noqa: F811
@@ -89,7 +95,8 @@ def test_frozen_unhandled_delivery_projects_recovery_without_claiming(tmp_path):
     wire_before = comms.bus.log.path.read_bytes()
     notices = comms.views.message_notifications_for_references((message.reference,))[message.seq,message.message_id]
     beta = next(notice for notice in notices if notice.recipient=='beta')
-    assert beta.label=='Sent' and beta.state.detail == ''
+    assert beta.state == ContextualProgress(UnrecordedProgress())
+    assert beta.state.detail == ''
     assert beta.recipient_identity.recipient_lookup==RecordedThreadIncarnation("fixture", comms.registry.require('beta').created_at).lookup
     with Coordination(str(root/'coordination.sqlite3')) as store:
         assert WakeAssignment.select(store.session._connection)==before
@@ -179,17 +186,22 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     assert sent.declared_name == "sent"
     assert sent.source == message.reference
     assert sent.routing.reply.targets == (message.target,)
-    # Renaming cannot reassign the old sender's source to today's spelling.
+    # The reader's name changes; the original messages and sent source do not.
+    from dataclasses import replace
     comms.registry.rename("beta", "renamed")
     reopened = wire(comms.root).transcripts.capture_page_read("renamed").read()
-    assert reopened.events == events
+    assert reopened.events == (replace(events[0], reader="renamed"), events[1])
     assert list(comms.bus.full_history_page().messages)[-1] == message
 
 
-def test_original_target_handling_revokes_open_sender_read_without_new_message(
-    tmp_path,
+async def test_original_target_handling_revokes_open_sender_read_without_new_message(
+    tmp_path, monkeypatch,
 ):  # noqa: F811
-    root, _root_id, comms, initial, _people = _root(tmp_path)
+    from agent_comms.coordinated_runtime import SelectedExecution
+    from agent_comms.native_runtime_input import NativeRuntimeInput
+    from test_coordinated_runtime import _fake_model
+
+    root, root_id, comms, initial, _people = _root(tmp_path)
     message = initial.message
     before = comms.transcripts.capture_page_read("sender")
     sender_page = before.read()
@@ -197,11 +209,18 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     lookup = RecordedThreadIncarnation("fixture", target.created_at).lookup
     receipts = comms.views.thread_presentation("sender").notifications
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
-    assert beta.message.reference == message.reference and beta.label == "Sent"
-    original = next(
-        row.assignment for row in NotificationAssignment.read(root, (initial,)).resolve(root)
-        if row.assignment.recipient_lookup == lookup
-    )
+    assert beta.message.reference == message.reference
+    assert type(beta.state) is SentProgress
+    outcomes = comms.views.message_notifications_for_references((message.reference,))[
+        message.seq, message.message_id
+    ]
+    with pytest.raises(RelationViolationError):
+        comms.views.message_notifications_for_references(
+            (MessageReference(message.seq + 1, message.message_id),)
+        )
+    assert comms.views.message_notifications_for_references(
+        (message.reference,) * (MessageNotification.window_limit + 1)
+    ) == {(message.seq, message.message_id): outcomes}
     # Both views are already open. Later messages move this original beyond the
     # bounded recent-notification window before its handling changes.
     for index in range(6):
@@ -220,12 +239,16 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     before = comms.transcripts.capture_page_read("sender")
     sender_page = before.read()
     wire_before = comms.bus.log.path.read_bytes()
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        published_revision = comms.views.revision()
-        store.assignments.transition_preengagement(
-            original.assignment_id, IgnoredAssignment, expected_revision=original.revision
-        )
-        assert comms.views.revision().stores_changed_since(published_revision)
+    published_revision = comms.views.revision()
+    runner, calls = _fake_model(decision="IGNORE")
+    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+    monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
+    outcome = await SelectedExecution(
+        root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path,
+    ).run()
+    assert outcome is not None and outcome.disposition is IgnoredAssignment
+    assert len(calls) == 1
+    assert comms.views.revision().stores_changed_since(published_revision)
     after = comms.transcripts.capture_page_read("sender")
     assert not before.current()
     assert before.content_current()
@@ -240,18 +263,21 @@ def test_original_target_handling_revokes_open_sender_read_without_new_message(
     assert sender.read_identity != open_sender.read_identity
     assert recipient.read_identity != open_recipient.read_identity
     assert sender.read_identity == after.identity
-    outcomes = comms.views.message_notifications_for_references((message.reference,))[message.seq, message.message_id]
-    with pytest.raises(RelationViolationError):
-        comms.views.message_notifications_for_references(
-            (MessageReference(message.seq + 1, message.message_id),)
-        )
-    assert comms.views.message_notifications_for_references(
-        (message.reference,) * (MessageNotification.window_limit + 1)
-    ) == {(message.seq, message.message_id): outcomes}
+    outcomes = comms.views.message_notifications_for_references((message.reference,))[
+        message.seq, message.message_id
+    ]
     target_outcome = next(
         item for item in outcomes if item.recipient_identity.recipient_lookup == lookup
     )
-    assert target_outcome.label.startswith("Read ")
+    with Coordination(str(root / "coordination.sqlite3")) as store:
+        native, = NativeRuntimeInput.select(
+            store.session._connection, where="input_id=?", parameters=(outcome.input_id,)
+        )
+        context = native.require_context_proof()
+    assert target_outcome.state == IgnoredProgress(
+        ShownToModelProgress(context.committed_at_ms)
+    )
+    assert target_outcome.state.read and target_outcome.state.delivered
     assert target_outcome.state.detail == ""
 
 
@@ -390,7 +416,10 @@ def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noq
 def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     comms.bus.log.path.unlink()
-    with pytest.raises(RelationViolationError, match="inode is missing"):
+    with pytest.raises(
+        RelationViolationError,
+        match=r"^Private bus checkpoint verification is unavailable; durability is UNKNOWN\.$",
+    ):
         comms.views.thread_presentation("beta")
 
 

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
     from .wake import NoWakeDecision, WakeDecision
 
 
+@dataclass(frozen=True)
 class AssignmentContextEvidence(DeclaredFamily, affix="ContextEvidence"):
     @classmethod
     def from_columns(cls, committed_at_ms: object) -> AssignmentContextEvidence:
@@ -54,6 +55,7 @@ class ShownContextEvidence(AssignmentContextEvidence):
         return ShownToModelProgress(self.committed_at_ms)
 
 
+@dataclass(frozen=True)
 class AssignmentResponse(DeclaredFamily, affix="Response"):
     def recorded(self, message) -> AssignmentResponse:
         return self

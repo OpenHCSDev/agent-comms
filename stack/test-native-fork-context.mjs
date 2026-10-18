@@ -1,18 +1,15 @@
 // Real restored/forked native context -> first local-provider reply. No paid calls.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {join,resolve} from 'node:path';
+import {mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 
 const mode=process.argv[2] ?? 'fork';
 const percent=Number(process.argv[3] ?? 24);
 assert.ok(['fork','restore'].includes(mode));
 const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Matched installed native bundle required');
-const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true});
-const root=mkdtempSync(join(artifacts,'fork-context-'));
-process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
-process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
 const requests=[];
 const server=createServer(async(request,response)=>{
     let body='';for await(const chunk of request)body+=chunk;
@@ -22,16 +19,19 @@ const server=createServer(async(request,response)=>{
         model:'fork-context',choices:[{index:0,delta:{content:'FIRST_CHILD_REPLY'},finish_reason:'stop'}],
         usage:{prompt_tokens:24500,completion_tokens:5,total_tokens:24505}})+'\n\ndata: [DONE]\n\n');
 });
-await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
-const fetch=globalThis.fetch;
-globalThis.fetch=(input,options)=>{
-    const url=new URL(typeof input==='string'||input instanceof URL?input:input.url);
-    assert.equal(url.origin,`http://127.0.0.1:${server.address().port}`,'Only local fixture permitted');
-    return fetch(input,options);
-};
-const pi=await import(join(pkg,'dist/index.js'));
+const root=mkdtempSync(join(tmpdir(),'native-fork-context-'));
 let parent,child,session,runtime;
 try {
+    process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
+    process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
+    await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+    const fetch=globalThis.fetch;
+    globalThis.fetch=(input,options)=>{
+        const url=new URL(typeof input==='string'||input instanceof URL?input:input.url);
+        assert.equal(url.origin,`http://127.0.0.1:${server.address().port}`,'Only local fixture permitted');
+        return fetch(input,options);
+    };
+    const pi=await import(join(pkg,'dist/index.js'));
     writeFileSync(join(root,'models.json'),JSON.stringify({providers:{'fork-local':{
         baseUrl:`http://127.0.0.1:${server.address().port}/v1`,api:'openai-completions',
         models:[{id:'fork-context',name:'Fork local',contextWindow:100000,maxTokens:2048}]}}}));

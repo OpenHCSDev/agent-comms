@@ -280,21 +280,6 @@ class FullPendingAssignment(PendingNotification, AssignmentState):
 
 class IgnoredAssignment(AssignmentState):
     notification_changed = True
-
-    def notification(
-        self,
-        recipient,
-        *,
-        observation,
-        activity,
-        updated_at_ms=0,
-        triage_inflight=False,
-    ):
-        notification = super().notification(
-            recipient, observation=observation, activity=activity
-        )
-        return activity.progress.read_notification(notification)
-
     notification_state = IgnoredProgress
 
     terminal = True

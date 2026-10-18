@@ -4,18 +4,14 @@
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';
 import {mkdirSync,mkdtempSync,rmSync} from 'node:fs';
-import {join,resolve} from 'node:path';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {randomBytes} from 'node:crypto';
 
 const mode=process.argv[2] ?? 'threshold';
 assert.ok(['threshold','overflow','manual','wip','cap','oversized'].includes(mode));
 const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
 assert.ok(pkg,'Prepared native package required');
-const artifacts=resolve('.artifacts');mkdirSync(artifacts,{recursive:true,mode:0o700});
-const root=mkdtempSync(join(artifacts,'pi-compaction-'));
-process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
-process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
-process.env.PI_TASK='TASK_BRIEF_FIXTURE';
 const requests=[];
 let overflowSent=false;
 let replyCount=0;
@@ -45,16 +41,20 @@ const server=createServer(async(request,response)=>{
     response.writeHead(200,{'content-type':'text/event-stream'});
     response.end(chunk('TRACKED_REPLY',replyUsage()));
 });
-await new Promise(done=>server.listen(0,'127.0.0.1',done));
-const fetch=globalThis.fetch;
-globalThis.fetch=(input,options)=>{
-    const url=new URL(typeof input==='string'||input instanceof URL?input:input.url);
-    assert.equal(url.origin,`http://127.0.0.1:${server.address().port}`,'Only local fixture permitted');
-    return fetch(input,options);
-};
-const pi=await import(join(pkg,'dist/index.js'));
+const root=mkdtempSync(join(tmpdir(),'native-pi-compaction-'));
 let manager,session;
 try {
+    process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
+    process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
+    process.env.PI_TASK='TASK_BRIEF_FIXTURE';
+    await new Promise(done=>server.listen(0,'127.0.0.1',done));
+    const fetch=globalThis.fetch;
+    globalThis.fetch=(input,options)=>{
+        const url=new URL(typeof input==='string'||input instanceof URL?input:input.url);
+        assert.equal(url.origin,`http://127.0.0.1:${server.address().port}`,'Only local fixture permitted');
+        return fetch(input,options);
+    };
+    const pi=await import(join(pkg,'dist/index.js'));
     const {writeFileSync}=await import('node:fs');
     writeFileSync(join(root,'models.json'),JSON.stringify({providers:{'compaction-local':{
         baseUrl:`http://127.0.0.1:${server.address().port}/v1`,api:'openai-completions',
