@@ -82,7 +82,8 @@ class PiPayload:
             raise MalformedRecord(f"Unexpected {member.__name__} fields")
         hints = FieldCodec._types(member)
         for f, key in declared:
-            if key in value:
+            # Native null means omitted where the declaration names its not-reported member.
+            if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
                 data[key] = member.normalize_field(hints[f.name], key, value[key], value)
         return data
 
@@ -215,11 +216,18 @@ class PiCost(PiPayload):
 class TokenTotal:
     """Whether Pi reported a positive token total, decided once where its usage is decoded."""
 
+    @staticmethod
+    def reported(total: int | None) -> TokenTotal:
+        return ReportedTokens(total) if total is not None and total > 0 else UnreportedTokens()
+
     def otherwise(self, other: TokenTotal) -> TokenTotal:
         return other
 
     def provisional(self, session):
         return ()
+
+    def confirm(self, account) -> None:
+        """Only a reported total confirms the context usage."""
 
     def settle(self, session):
         """A stop keeps only a confirmed total; an unconfirmed provisional one is withdrawn."""
@@ -239,6 +247,9 @@ class ReportedTokens(TokenTotal):
 
     def otherwise(self, other: TokenTotal) -> TokenTotal:
         return self
+
+    def confirm(self, account) -> None:
+        account.confirm(self.count)
 
     def provisional(self, session):
         session.usage.observe(self.count)
@@ -270,9 +281,8 @@ class PiUsage(PiPayload):
     cache_write_1h: int | None = wire_field("cacheWrite1h")
 
     @property
-    def tokens(self) -> TokenTotal:
-        total = self.total_tokens
-        return ReportedTokens(total) if total is not None and total > 0 else UnreportedTokens()
+    def token_total(self) -> TokenTotal:
+        return TokenTotal.reported(self.total_tokens)
 
     def charges(self, account) -> tuple:
         """A usage Pi reported is charged once to the turn's account."""
@@ -595,7 +605,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
     @property
     def measured_tokens(self) -> TokenTotal:
-        return self.usage.tokens
+        return self.usage.token_total
 
     def require_failed_terminal(self):
         raise ValueError("Native recovery requires an unambiguous failed terminal")
@@ -954,6 +964,10 @@ class PiContextUsage(PiPayload):
 
     tokens: int | None = None
     context_window: int | None = wire_field("contextWindow")
+
+    @property
+    def token_total(self) -> TokenTotal:
+        return TokenTotal.reported(self.tokens)
 
 
 @dataclass(frozen=True)
