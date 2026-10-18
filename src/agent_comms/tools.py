@@ -277,6 +277,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
 ):
     description: ClassVar[str]
+    bus_effect: ClassVar[str] = "Changes the bus; call it only when the owner says to."
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
@@ -338,9 +339,10 @@ class LiveOwnerTool:
 
 
 class ReadTool:
-    """A tool whose apply changes nothing on the bus; the claude.ai connector lists only these."""
+    """A tool whose apply changes nothing on the bus."""
 
     __slots__ = ()
+    bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
 
 
 @dataclass(frozen=True, kw_only=True)
