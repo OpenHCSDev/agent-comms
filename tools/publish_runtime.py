@@ -22,6 +22,7 @@ from agent_comms.active_route import read_active_route, active_route_path, acqui
 from agent_comms.comms import wire
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.owner_restart import OwnerRestartRequest
+from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
 
@@ -30,10 +31,6 @@ from agent_comms.restart_queue import enqueue
 class RuntimePublication:
     runtime: Path
     links: dict[Path, Path]
-
-    @property
-    def current(self) -> Path:
-        return LaunchRuntime.current_pointer()
 
     @classmethod
     def installed(cls) -> RuntimePublication:
@@ -77,19 +74,20 @@ class RuntimePublication:
             os.close(directory)
 
     def publish_links(self) -> None:
-        if not self.current.is_symlink():
-            if self.current.exists():
-                raise FileExistsError(self.current)
+        current = StoppedOwnerInstallation.current_pointer()
+        if not current.is_symlink():
+            if current.exists():
+                raise FileExistsError(current)
             previous = (Path.home() / '.local/bin/toad').resolve(strict=True).parent.parent
             # Initial conversion leaves every command on the same old runtime.
             # A process exit midway therefore leaves usable, coherent links.
             for link, target in self.links.items():
                 if link.resolve(strict=True) != previous / target.relative_to(self.runtime):
                     raise ValueError(f'Existing runtime links disagree: {link}')
-            replace_link(self.current, previous)
+            replace_link(current, previous)
         for link, target in self.links.items():
-            replace_link(link, self.current / target.relative_to(self.runtime))
-        replace_link(self.current, self.runtime)
+            replace_link(link, current / target.relative_to(self.runtime))
+        replace_link(current, self.runtime)
 
 
 def main() -> None:

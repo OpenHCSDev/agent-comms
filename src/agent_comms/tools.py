@@ -1120,7 +1120,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
         "turn. A changed owner or uncertain attempt is never retried automatically. "
-        "Restarts in the current installed runtime; does not deploy another runtime."
+        "Restarts in the calling process's runtime; does not deploy another runtime."
     )
     context = "thread"
     action_label = "Queue idle restart"
@@ -1129,7 +1129,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return RestartQueued(
-            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.current()))
+            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)
