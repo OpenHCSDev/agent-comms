@@ -16,7 +16,7 @@ from agent_comms.threads import Thread
 
 
 def test_resource_checker_uses_storage_allocation_floor():
-    checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent-resource-check'))
+    checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent_resource_check.py'))
     floor = StorageRule().floor_gib
     assert floor == 5.0
     assert checker['LIMITS']['/home'][1] == floor
