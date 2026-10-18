@@ -317,6 +317,9 @@ class ReadCursor:
                 grouped.setdefault(conversation, []).append(value)
         return cls({key: ConversationCursor.union(values) for key, values in grouped.items()})
 
+    def __contains__(self, sequence: int) -> bool:
+        return any(sequence in cursor for cursor in self.conversations.values())
+
     def for_conversation(self, conversation: Conversation) -> ConversationCursor:
         return self.conversations.get(conversation, ConversationCursor())
 
