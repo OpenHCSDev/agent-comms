@@ -44,10 +44,9 @@ class NativeInputCommit:
 
     @classmethod
     def from_event(cls, event):
-        return FieldCodec.decode(cls, {
-            item.metadata["wire_name"]: getattr(event, item.name)
-            for item in fields(cls)
-        })
+        emitted = FieldCodec.encode(event)
+        return FieldCodec.decode(cls, {key: emitted[key]
+                                       for _, key in FieldCodec.record_fields(cls)})
 
 
 class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):

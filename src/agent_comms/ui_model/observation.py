@@ -27,6 +27,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self, final
 
@@ -41,7 +42,7 @@ from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
     StaleRevision,
 )
-from agent_comms.errors import RelationViolationError, StoredHistoryUnreadable
+from agent_comms.errors import RelationViolationError
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility
 from agent_comms.ui_model.delivery import InputDelivery
@@ -200,6 +201,22 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
     # Currentness and contention defer the existing read; they do not show
     # broken saved data.
     DEFERRED_READS = (CoordinationReadUnavailable, StaleRevision)
+    # Every way Core refuses saved data is a ValueError: StoredHistoryUnreadable and the other
+    # relation violations, a codec's refusal of a malformed record, an archive's source checks,
+    # and UnreadableHistory itself.
+    UNREADABLE_READS = (ValueError,)
+
+    @classmethod
+    def outcome[T](cls, read: Callable[[], T]) -> StoredRead[T]:
+        """Run a stored read: its value, a read deferred to retry, or unreadable with its cause."""
+        try:
+            return ReadValue(read())
+        except RouteIndexRebuilding as error:
+            return ReadPreparing(error)
+        except cls.DEFERRED_READS as error:
+            return ReadDeferred(error)
+        except cls.UNREADABLE_READS as error:
+            return ReadUnreadable(error, cls.capture(error))
 
     def __eq__(self, other: object) -> bool:
         return isinstance(other, UnreadableHistory) and self.args == other.args
@@ -223,6 +240,69 @@ class UnreadableHistory(ValueError):  # noqa: N818 - nominal stored-read state
         return (f"Saved history unreadable: {reason}\n"
                 f"Reader runtime: {reader_runtime}. Restart this process on "
                 "the reviewed runtime; if it still fails, the saved records need repair.")
+
+
+class StoredRead[T](ABC):
+    """A stored read's outcome: its value, or one of the two ways it fails."""
+
+    @abstractmethod
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[], R],
+                  unreadable: Callable[[UnreadableHistory], R]) -> R: ...
+
+    @abstractmethod
+    def raised(self) -> T:
+        """The value, or the failure raised again for a caller that answers it itself."""
+
+    def continued(self) -> Self:
+        """This outcome, for a reader that runs the next unit of a bounded preparation."""
+        return self
+
+
+@dataclass(frozen=True)
+class ReadValue[T](StoredRead[T]):
+    value: T
+
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[], R],
+                  unreadable: Callable[[UnreadableHistory], R]) -> R:
+        return value(self.value)
+
+    def raised(self) -> T:
+        return self.value
+
+
+@dataclass(frozen=True)
+class ReadDeferred[T](StoredRead[T]):
+    """Currentness or contention: the existing read is retried, not shown as broken."""
+
+    error: CoordinationError
+
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[], R],
+                  unreadable: Callable[[UnreadableHistory], R]) -> R:
+        return deferred()
+
+    def raised(self) -> T:
+        raise self.error
+
+
+@dataclass(frozen=True)
+class ReadPreparing[T](ReadDeferred[T]):
+    """A bounded route index unit finished and runnable work remains."""
+
+    def continued(self) -> Self:
+        raise self.error
+
+
+@dataclass(frozen=True)
+class ReadUnreadable[T](StoredRead[T]):
+    error: ValueError
+    cause: UnreadableHistory
+
+    def answer[R](self, value: Callable[[T], R], deferred: Callable[[], R],
+                  unreadable: Callable[[UnreadableHistory], R]) -> R:
+        return unreadable(self.cause)
+
+    def raised(self) -> T:
+        raise self.cause from self.error
 
 
 @dataclass(frozen=True)
@@ -346,22 +426,22 @@ class TranscriptRequest[ResultT](ReadRequest):
     historical_source: str | None = None
 
     def read(self, comms: Comms) -> ResultT:
-        try:
-            transcripts = comms.transcripts
-            window = dict(before=self.before, after=self.after, through=self.through)
-            if self.read_identity is None:
-                read = transcripts.capture_page_read(
-                    self.thread, historical_source=self.historical_source, **window
-                )
-            else:
-                if (self.historical_source is not None
-                        and self.historical_source != self.read_identity.historical_source):
-                    raise StaleRevision("Published transcript belongs to another recorded source")
-                read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
-            # The read checks its witness before and after preparing the page.
-            return self.result(read)
-        except StoredHistoryUnreadable as error:
-            raise UnreadableHistory.capture(error) from error
+        return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
+
+    def page_read(self, comms: Comms) -> TranscriptRead:
+        transcripts = comms.transcripts
+        window = dict(before=self.before, after=self.after, through=self.through)
+        if self.read_identity is None:
+            read = transcripts.capture_page_read(
+                self.thread, historical_source=self.historical_source, **window
+            )
+        else:
+            if (self.historical_source is not None
+                    and self.historical_source != self.read_identity.historical_source):
+                raise StaleRevision("Published transcript belongs to another recorded source")
+            read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
+        # The read checks its witness before and after preparing the page.
+        return read
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...
@@ -445,7 +525,7 @@ class ReadNotifications(ReadRequest):
 
     references: tuple[MessageReference, ...]
 
-    def read(self, comms: Comms):
+    def read(self, comms: Comms) -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
         return comms.views.message_notifications_for_references(self.references)
 
     def changed_since(self, revision: WireRevision, previous: WireRevision) -> bool:
@@ -458,7 +538,7 @@ class ReadRecordedNotifications(ReadNotifications):
 
     source: str
 
-    def read(self, comms: Comms):
+    def read(self, comms: Comms) -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
         from agent_comms.historical_views import HistorySource
 
         with comms.bus.history.read_sources() as sources:
@@ -504,15 +584,12 @@ class ObserveSidebar(InterestRequest):
         self, revision: WireRevision, read: Callable[..., CoordinationSnapshot], subject: str
     ) -> SidebarResult:
 
-        try:
-            snapshot = read(subject, RosterVisibility(self.show_stopped, self.show_archived))
-            return SidebarObserved(revision, self, snapshot, SidebarModel.derive(snapshot))
-        except RouteIndexRebuilding:
-            raise  # A bounded preparation unit finished; runnable work remains.
-        except UnreadableHistory.DEFERRED_READS:
-            return SidebarDeferred(revision, self)
-        except StoredHistoryUnreadable as error:
-            return SidebarUnreadable(revision, self, UnreadableHistory.capture(error))
+        visibility = RosterVisibility(self.show_stopped, self.show_archived)
+        return UnreadableHistory.outcome(lambda: SidebarObserved(
+            revision, self, snapshot := read(subject, visibility), SidebarModel.derive(snapshot),
+        )).continued().answer(  # The sidebar runs the next bounded preparation unit itself.
+            lambda observed: observed, lambda: SidebarDeferred(revision, self),
+            lambda error: SidebarUnreadable(revision, self, error))
 
 
 class SidebarReadStage:
@@ -650,18 +727,21 @@ class NotificationReading(Observation[ObserveNotifications]):
         for request in self.request.reads:
             if not self.read_states.get(request, NoRevision()).notification_read_changed(request, revision):
                 continue
-            try:
-                request.require_root(comms)
-                outcomes = request.read(comms)
-            except UnreadableHistory.DEFERRED_READS:
-                yield ObservationPending()  # Keep the interest pending until its source can be read.
-                continue
-            except (StoredHistoryUnreadable, RelationViolationError, ValueError) as error:
-                result = NotificationsUnreadable(revision, request, UnreadableHistory.capture(error))
-            else:
-                result = NotificationsObserved(revision, request, outcomes)
+            yield self.notifications(request, comms, revision)
+
+    def notifications(self, request: ReadNotifications, comms: Comms,
+                      revision: WireRevision) -> ObservationStep:
+        def read() -> Mapping[tuple[int, str], tuple[MessageNotification, ...]]:
+            request.require_root(comms)
+            return request.read(comms)
+
+        def settled(result: Observed) -> Observed:
             self.read_states[request] = revision
-            yield result
+            return result
+        return UnreadableHistory.outcome(read).answer(
+            lambda outcomes: settled(NotificationsObserved(revision, request, outcomes)),
+            ObservationPending,  # Keep the interest pending until its source can be read.
+            lambda error: settled(NotificationsUnreadable(revision, request, error)))
 
 
 class ThreadReading(Observation[ObserveThreads]):
@@ -678,31 +758,29 @@ class ThreadReading(Observation[ObserveThreads]):
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[ObservationStep]:
         previous = self.observed
         results: dict[str, ThreadReadResult] = {}
-        activity = {}
+        activity: dict[str, ObservedActivity] = {}
         names = self.request.names
-        try:
+
+        def located() -> dict[str, Callable[[], ThreadPresentation | None]]:
+            nonlocal activity, names
             snapshot = comms.registry.snapshot()
             captured = comms.agents.all_activity(snapshot.visible_threads(
                 DEFAULT_ROSTER, names=names), snapshot=snapshot)
             activity = {name: captured[canonical] for name in names
                         if (canonical := snapshot.canonical_name(name)) in captured}
             names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
-            if names:
-                batch = comms.views.thread_presentations(names)
-        except UnreadableHistory.DEFERRED_READS:
-            results.update(dict.fromkeys(names, ThreadBusy()))
-        except StoredHistoryUnreadable as error:
-            results.update(dict.fromkeys(names, ThreadUnavailable(UnreadableHistory.capture(error))))
-        else:
-            for name in names:
-                try:
-                    presentation = batch.read(name)
-                    results[name] = ThreadMissing() if presentation is None else ThreadPresented(presentation)
-                except UnreadableHistory.DEFERRED_READS:
-                    results[name] = ThreadBusy()
-                except StoredHistoryUnreadable as error:
-                    results[name] = ThreadUnavailable(UnreadableHistory.capture(error))
-                yield ObservationPending()
+            if not names:
+                return {}
+            batch = comms.views.thread_presentations(names)
+            return {name: partial(batch.read, name) for name in names}
+
+        def failed(result: ThreadReadResult) -> Iterator[ObservationStep]:
+            results.update(dict.fromkeys(names, result))
+            return iter(())
+
+        yield from UnreadableHistory.outcome(located).answer(
+            lambda reads: self.presented(reads, results),
+            lambda: failed(ThreadBusy()), lambda error: failed(ThreadUnavailable(error)))
         results.update((name, value) for name, value in previous.results.items()
                        if name in self.request.names and name not in names)
         observed = ThreadsObserved(revision, results, frozenset(), activity)
@@ -712,6 +790,15 @@ class ThreadReading(Observation[ObserveThreads]):
         if changed:
             yield replace(observed, changed=changed,
                           results={name: value for name, value in results.items() if name in changed})
+
+    @staticmethod
+    def presented(reads: Mapping[str, Callable[[], ThreadPresentation | None]],
+                  results: dict[str, ThreadReadResult]) -> Iterator[ObservationStep]:
+        for name, read in reads.items():
+            results[name] = UnreadableHistory.outcome(read).answer(
+                lambda shown: ThreadMissing() if shown is None else ThreadPresented(shown),
+                ThreadBusy, ThreadUnavailable)
+            yield ObservationPending()
 
 
 class ViewReading(Observation[ObserveViews]):

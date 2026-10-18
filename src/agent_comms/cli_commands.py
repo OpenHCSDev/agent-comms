@@ -137,7 +137,7 @@ class TargetField:
 
     @property
     def name(self) -> str:
-        return self.declaration.metadata.get('wire_name', self.declaration.name)
+        return FieldCodec.wire_key(self.declaration)
 
     @property
     def multiline(self) -> bool:
@@ -747,7 +747,7 @@ class DeclaredOptions(Command):
             ):
                 options["default"] = options["default"].declared_name
             if any(flag.startswith("-") for flag in metadata["flags"]):
-                options["dest"] = metadata.get("wire_name", declared.name)
+                options["dest"] = FieldCodec.wire_key(declared)
             else:
                 options.pop("required", None)
             owner.add_argument(*metadata["flags"], **options)
@@ -757,7 +757,7 @@ class DeclaredOptions(Command):
         payload = {"kind": cls.declared_name}
         hints = get_type_hints(cls)
         for declared in fields(cls):
-            key = declared.metadata.get("wire_name", declared.name)
+            key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
             normalize = declared.metadata["normalize"]
             if normalize is not None:
@@ -882,7 +882,7 @@ class CliCommand(
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
         hints = get_type_hints(cls)
-        declared = {item.metadata.get('wire_name', item.name): item for item in fields(cls)}
+        declared = {key: item for item, key in FieldCodec.record_fields(cls)}
         result = {}
         for key, text in values.items():
             item = declared[key]
@@ -903,15 +903,16 @@ class CliCommand(
         return self
 
     def edited(self, arguments: dict[str, object]) -> Self:
-        captured = {declared.metadata.get('wire_name', declared.name): getattr(self, declared.name)
-                    for declared in fields(self) if declared.metadata['target_bound']}
-        if captured.keys() & arguments.keys():
+        bound = {key for declared, key in FieldCodec.record_fields(type(self))
+                 if declared.metadata['target_bound']}
+        if bound & arguments.keys():
             raise ValueError('Target-bound parameters cannot be overridden')
         editable = {item.name for item in self.editable_fields}
         if arguments.keys() - editable:
             raise ValueError('Parameters not offered by this target command cannot be overridden')
-        return type(self).from_payload({'kind': FieldCodec.encode(type(self)),
-                                       **FieldCodec.encode(captured), **arguments})
+        encoded = FieldCodec.encode(self)
+        return type(self).from_payload({**{key: encoded[key] for key in bound & encoded.keys()},
+                                       'kind': FieldCodec.encode(type(self)), **arguments})
 
     @classmethod
     def execute_target(cls, comms: Comms, target: CommandTarget | str | tuple[CommandTarget | str, ...], arguments: dict[str, object],
