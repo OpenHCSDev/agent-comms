@@ -205,9 +205,8 @@ class TurnProgress(events.AgentEventConsumer):
 
     @handles(events.InputStarted)
     async def input_started(self, event: events.InputStarted) -> None:
-        await self.inputs.input_started(
-            self.session_id,
-            event.id,
+        await event.captured(self.inputs, self.session_id).started(
+            self.inputs, self.session_id,
             LiveQueueScope(self.session_id, ClaimedIdentity(
                 self.turn_lease.identity.incarnation,
                 self.turn_lease.claimed_generation,

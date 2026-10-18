@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .agent_backend import WhenBusy
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .messages import Message
+from .started_input import StartedInput
 from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 
 if TYPE_CHECKING:
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, kw_only=True)
-class TurnInputSource(ABC):
+class TurnInputSource(StartedInput, ABC):
     accepted_id: str | None
     goal_permission: TurnGoalPermission
     bypasses_goal_permit: ClassVar[bool] = False
@@ -113,14 +114,6 @@ class OriginalTurnInput(TurnInputSource):
     @property
     def keys(self) -> tuple[str, ...]:
         return self.batch.keys
-
-    @property
-    def notice_keys(self) -> tuple[str, ...]:
-        return ()
-
-    @property
-    def notice_text(self) -> str | None:
-        return None
 
     def valid_keys(self, text: str) -> bool:
         return super().valid_keys(text) or (self.batch.allows_multiple and text == self.prompt)
