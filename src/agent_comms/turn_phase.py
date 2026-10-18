@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from dataclasses import dataclass, field, replace
-from typing import ClassVar, TYPE_CHECKING
+from typing import ClassVar
 
 from .declared_family import DeclaredFamily
 from .activity import Activity, ActivityState
-
-if TYPE_CHECKING:
-    from . import pi_events as pi
+from . import pi_events as pi
 
 
 class StallExempt:
@@ -36,6 +33,15 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     The existing registry turn lease supplies identity independently of phase.
     """
     detail: str = ""
+    start_events: ClassVar[tuple[type[pi.PiEvent], ...]] = ()
+    end_events: ClassVar[tuple[type[pi.PiEvent], ...]] = ()
+    _start_phases: ClassVar[dict[type[pi.PiEvent], type[TurnPhase]]] = {}
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        for event_type in cls.start_events:
+            TurnPhase._start_phases[event_type] = cls
+
     stall_reason: ClassVar[str] = "model_no_progress"
     # An excursion (tool, retry, compaction) runs without RPC events; an input
     # queued behind it cannot start yet, so its start budget waits and the
@@ -92,23 +98,20 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         return phase
 
     def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
-        for member in TurnPhase.members_with(TurnPhase):
-            if member.starts(event):
+        for event_type in type(event).__mro__:
+            member = TurnPhase._start_phases.get(event_type)
+            if member is not None:
                 return member.enter(self, event, active_tools)
-        if self.ends(event) and self.may_finish(active_tools):
+        if self.matches_end(event) and self.may_finish(active_tools):
             return ModelWaitPhase()
         return self
-
-    @classmethod
-    def starts(cls, event: pi.PiEvent) -> bool:
-        return False
 
     @classmethod
     def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
         return cls()
 
-    def ends(self, event: pi.PiEvent) -> bool:
-        return False
+    def matches_end(self, event: pi.PiEvent) -> bool:
+        return any(event_type in self.end_events for event_type in type(event).__mro__)
 
     def may_finish(self, active_tools: set[str]) -> bool:
         return True
@@ -125,12 +128,8 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
 
 class Excursion(TurnPhase):
+    declared_name = None
     pauses_input_clock = True
-
-    @classmethod
-    @abstractmethod
-    def starts(cls, event: pi.PiEvent) -> bool:
-        """Concrete excursions declare their entry events."""
 
 
 class PromptAcceptancePhase(TurnPhase):
@@ -196,18 +195,13 @@ class SettlingStatsPhase(LabeledActivity, TurnPhase):
 class CompactionPhase(LabeledActivity, StallExempt, Excursion):
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
 
-    @classmethod
-    def starts(cls, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, pi.CompactionStart)
+    start_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (pi.CompactionStart,)
+    end_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (pi.CompactionEnd,)
 
     @classmethod
     def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
         return current.compacting()
 
-    def ends(self, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, pi.CompactionEnd)
     activity_state = ActivityState.WORKING
     label = "Compacting context"
 
@@ -233,14 +227,8 @@ class CompactionPhase(LabeledActivity, StallExempt, Excursion):
 
 
 class ProviderRetryPhase(LabeledActivity, StallExempt, Excursion):
-    @classmethod
-    def starts(cls, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, pi.AutoRetryStart)
-
-    def ends(self, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, pi.AutoRetryEnd)
+    start_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (pi.AutoRetryStart,)
+    end_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (pi.AutoRetryEnd,)
     stall_reason = "retry_no_progress"
     label = "Provider retry"
     # The recovery re-requests each refused empty response; its end event
@@ -249,14 +237,10 @@ class ProviderRetryPhase(LabeledActivity, StallExempt, Excursion):
 
 
 class SummarizationRetryPhase(LabeledActivity, StallExempt, Excursion):
-    @classmethod
-    def starts(cls, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, (pi.SummarizationRetryScheduled, pi.SummarizationRetryAttemptStart))
-
-    def ends(self, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, pi.SummarizationRetryFinished)
+    start_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (
+        pi.SummarizationRetryScheduled, pi.SummarizationRetryAttemptStart,
+    )
+    end_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (pi.SummarizationRetryFinished,)
     stall_reason = "summarization_retry_no_progress"
     label = "Summary retry"
 
@@ -281,14 +265,8 @@ class ToolRunningPhase(LabeledActivity, Excursion):
     def may_finish(self, active_tools: set[str]) -> bool:
         return not active_tools
 
-    @classmethod
-    def starts(cls, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, pi.ToolExecutionStart)
-
-    def ends(self, event: pi.PiEvent) -> bool:
-        from . import pi_events as pi
-        return isinstance(event, pi.ToolExecutionEnd)
+    start_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (pi.ToolExecutionStart,)
+    end_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (pi.ToolExecutionEnd,)
 
     @classmethod
     def enter(cls, current: TurnPhase, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
@@ -296,7 +274,7 @@ class ToolRunningPhase(LabeledActivity, Excursion):
         return current.tool_started(event.tool_call_id or name, name)
 
     def on(self, event: pi.PiEvent, active_tools: set[str]) -> TurnPhase:
-        if self.ends(event):
+        if self.matches_end(event):
             return self.tool_ended(event.tool_call_id or event.tool_name or "tool")
         return super().on(event, active_tools)
 

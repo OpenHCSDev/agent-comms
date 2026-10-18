@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, TYPE_CHECKING
 
-from .agent_events import ToolStart
 from .declared_family import DeclaredFamily
+
+if TYPE_CHECKING:
+    from .agent_events import ToolStart
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
@@ -37,6 +39,8 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
     @classmethod
     def start(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
+        from .agent_events import ToolStart
+
         declaration = cls.for_name(name)
         return ToolStart(call_id, name, cls.caption(name, arguments), arguments, declaration.acp_kind)
 
