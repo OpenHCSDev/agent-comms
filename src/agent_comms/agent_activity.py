@@ -118,8 +118,7 @@ class AgentActivity:
         with _store_lock(self._wire_lock_path, shared=True):
             self._emit_activity(Activity.create(thread, state, detail))
 
-    def activity_of(self, thread: str, *, snapshot: RegistrySnapshot | None = None) -> ObservedActivity:
-        snapshot = snapshot or self.registry.snapshot()
+    def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
         return self._observed(participant, owner,

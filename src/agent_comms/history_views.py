@@ -236,13 +236,12 @@ class HistoryViews:
         )
 
     def last_sent_timestamps(
-        self, sent: Mapping[str, float], *, registry: RegistrySnapshot | None = None,
+        self, sent: Mapping[str, float], *, registry: RegistrySnapshot,
     ) -> Mapping[str, float]:
         """Map captured sender clocks through the selected registry names."""
-        snapshot = self.registry.snapshot() if registry is None else registry
         canonical: dict[str, float] = {}
         for sender, timestamp in sent.items():
-            name = snapshot.canonical_name(sender)
+            name = registry.canonical_name(sender)
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
 

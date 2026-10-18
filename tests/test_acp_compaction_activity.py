@@ -28,7 +28,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
     process = ProcessIdentity.capture(os.getpid())
 
     def activity(state, detail):
-        current = comms.agents.activity_of("project")
+        current = comms.agents.activity_of("project", snapshot=comms.registry.snapshot())
         assert (current.state, current.detail) == (state, detail)
         view = next(item for item in comms.views.thread_views() if item.thread.name == "project")
         assert view.activity == current
@@ -59,7 +59,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
         phase = phase.tool_ended("next-tool")
         yield ae.NativePhaseChanged(phase, process)
         yield ae.ToolEnd(id="next-tool", name="read", ok=True)
-        assert comms.agents.activity_of("project").state is ActivityState.THINKING
+        assert comms.agents.activity_of("project", snapshot=comms.registry.snapshot()).state is ActivityState.THINKING
         yield ae.StreamSettled()
         activity(ActivityState.THINKING, "Finishing turn")
         # Aborting compaction is not a failed model turn; the terminal owns that result.
@@ -68,7 +68,7 @@ async def test_compaction_activity_survives_tool_updates_and_restores_latest_sta
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         await agent.turns.run_agent_turn("project", "project", "Read these files")
-        assert comms.agents.activity_of("project").state is ActivityState.IDLE
+        assert comms.agents.activity_of("project", snapshot=comms.registry.snapshot()).state is ActivityState.IDLE
     finally:
         await agent.shutdown()
 
@@ -85,12 +85,12 @@ async def test_compaction_eof_still_finishes_activity(tmp_path, monkeypatch):
         yield fake_input_started(args, kwargs)
         yield ae.NativePhaseChanged(ModelWaitPhase().compacting(), ProcessIdentity.capture(os.getpid()))
         yield ae.CompactionStart(reason=ThresholdCompactionReason)
-        assert comms.agents.activity_of("project").detail == "Compacting context"
+        assert comms.agents.activity_of("project", snapshot=comms.registry.snapshot()).detail == "Compacting context"
 
     monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
     try:
         with pytest.raises(RequestError, match="Internal error"):
             await agent.turns.run_agent_turn("project", "project", "Read files")
-        assert comms.agents.activity_of("project").state is ActivityState.IDLE
+        assert comms.agents.activity_of("project", snapshot=comms.registry.snapshot()).state is ActivityState.IDLE
     finally:
         await agent.shutdown()

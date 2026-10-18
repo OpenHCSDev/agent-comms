@@ -188,7 +188,7 @@ class TestCrashRecovery:
         with open(wired.agents.activity._path, "ab") as output:
             output.write(b'{"thread": "PR111"')
 
-        assert wired.agents.activity_of("PR111").detail == "first"
+        assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).detail == "first"
         wired.agents.set_activity("PR111", ActivityState.WORKING, "second")
-        assert wired.agents.activity_of("PR111").detail == "second"
+        assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).detail == "second"
         assert (wired.agents.activity._path.parent / "activity.jsonl.corrupt").exists()

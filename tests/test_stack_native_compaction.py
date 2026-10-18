@@ -311,7 +311,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
             if any(isinstance(field, CompactionChangedUpdate)
                    and isinstance(field.event, ae.CompactionEnd)
                    for field in decode_updates(update.field_meta or {})):
-                resumed_activity.append(comms.agents.activity_of("project"))
+                resumed_activity.append(comms.agents.activity_of("project", snapshot=comms.registry.snapshot()))
 
     owner.on_connect(Client())
     await owner.new_session(str(project))
@@ -324,13 +324,13 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
         assert entered
         # Pi announced compaction_start before its summary request; Core publishes it.
         async with asyncio.timeout(5):
-            while (activity := comms.agents.activity_of("project")).state is not ActivityState.WORKING:
+            while (activity := comms.agents.activity_of("project", snapshot=comms.registry.snapshot())).state is not ActivityState.WORKING:
                 await asyncio.sleep(0.02)
         assert activity.detail == "Compacting context"
         release_summary.set()
         await asyncio.wait_for(turn, timeout=30)
         assert resumed_activity and "Compacting" not in resumed_activity[-1].detail
-        assert comms.agents.activity_of("project").state is ActivityState.IDLE
+        assert comms.agents.activity_of("project", snapshot=comms.registry.snapshot()).state is ActivityState.IDLE
     finally:
         release_summary.set()
         if not turn.done():
