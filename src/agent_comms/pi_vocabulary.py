@@ -50,13 +50,8 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     @classmethod
     async def apply(cls, session, message):
         session.output.error_message = None
-        tokens = message.measured_tokens
-        if tokens is not None and session.accepts_output:
-            session.usage.used = session.usage.confirmed = tokens
-            yield session.context_info()
-        elif session.usage.provisional:
-            session.usage.used = session.usage.confirmed
-            yield session.context_info()
+        for event in message.measured_tokens.settle(session):
+            yield event
         session.usage.provisional = False
 
     @classmethod

@@ -9,19 +9,23 @@ import pytest
 from agent_comms.native_arguments import SelectedModel
 
 from agent_comms.pi_commands import GetState, PiCommand, Prompt
-from agent_comms.pi_events import MessageEnd, Response, UnknownPiEvent
+from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
 from agent_comms.pi_payloads import (
     AssistantMessage,
     MissingData,
     MissingToolResult,
     ProvidedToolResult,
     ReportedModel,
+    ReportedTokens,
     StateData,
     TextContent,
     ToolCallContent,
     UnknownData,
     UnreportedModel,
+    UnreportedTokens,
+    UnreportedUsage,
 )
+from agent_comms.turn_usage import UsageAccount
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import PiRpcChannel
 
@@ -304,3 +308,22 @@ def test_answer_given_before_a_later_input_stands_when_that_input_ends_without_t
     assert isinstance(PendingTrackedTerminal().tool_round().later_input([]), PendingTrackedTerminal)
     unchecked = PendingTrackedTerminal().append("first answer").later_input(["different stream"])
     assert isinstance(unchecked, PendingTrackedTerminal)
+
+
+def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
+    for usage in (None, {"totalTokens": 0}, {"totalTokens": 7}):
+        message = {"role": "assistant", "content": [], **({} if usage is None else {"usage": usage})}
+        event = decode({"type": "message_update", "message": message, "usage": None})
+        assert isinstance(event, MessageUpdate) and isinstance(event.usage, UnreportedUsage)
+        account = UsageAccount()
+        event.message.measured_tokens.confirm(account)
+        charged = event.message.usage.charges(account)
+        if usage is None:
+            assert isinstance(event.message.usage, UnreportedUsage) and charged == ()
+        else:
+            assert [charge.usage for charge in charged] == [event.message.usage]
+        if usage == {"totalTokens": 7}:
+            assert event.message.measured_tokens == ReportedTokens(7) and account.confirmed == 7
+        else:
+            assert event.message.measured_tokens == UnreportedTokens() and account.confirmed is None
+        assert "usage" not in event.to_wire() and decode(event.to_wire()).usage == event.usage

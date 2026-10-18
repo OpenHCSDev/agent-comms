@@ -233,8 +233,7 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
         if response.success:
             context = response.data.require_payload().context_usage
             if context is not None:
-                if context.tokens is not None and context.tokens > 0:
-                    session.usage.confirm(context.tokens)
+                context.token_total.confirm(session.usage)
                 if not session.native.attestation.uncertain:
                     session.usage.size = context.context_window or session.usage.size
             yield session.context_info()
