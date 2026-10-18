@@ -40,6 +40,10 @@ import time
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+# This file's tree is the target revision: the tool and every step it runs import that
+# tree's src, never the src the checkout being upgraded has installed.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
 from cutover.carry import CarryChain, CarryLedger, Step
 
 from agent_comms.coordination_database import CoordinationStore
@@ -160,12 +164,25 @@ class Revisions:
 
 
 def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> dict:
-    """Run one step from the revision that declares it, with ``stack``'s Python."""
+    """Run one step from the revision that declares it, with that revision's src and
+    ``stack``'s Python: the target's staged stack, never the installed one."""
     tree = revisions.tree(step.revision)
-    sources = (tree / "tools",) if flags[:1] == ("--before-stop",) else (tree / "src", tree / "tools")
-    environment = stack.environment(*sources)
+    environment = stack.environment(tree / "src", tree / "tools")
     output = run(stack.python, "-m", f"cutover.{step.name}", root, *flags, cwd=tree, env=environment)
     return json.loads(output.strip().splitlines()[-1])
+
+
+def before_stop(
+    root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
+) -> list[dict]:
+    """What the running installation needs before its own stop command reads the bus."""
+    return [carry(step, root, stack, revisions, "--before-stop", "--apply") for step in pending]
+
+
+def carry_all(
+    root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
+) -> list[dict]:
+    return [carry(step, root, stack, revisions, "--apply") for step in pending]
 
 
 def copy_bus(root: Path, copy: Path) -> None:
@@ -200,7 +217,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         copy_bus(root, copy)
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
         before = bus_files(copy)
-        steps = [carry(step, copy, stack, revisions, "--apply") for step in pending]
+        steps = [*before_stop(copy, pending, stack, revisions),
+                 *carry_all(copy, pending, stack, revisions)]
         files = carried(copy, before, steps)
         return {"steps": steps, "files": files, "read": stack.verify(copy)}
 
@@ -284,18 +302,19 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
                       "rehearsal": rehearse(root, pending, staged, revisions)}
             if rehearse_only:
                 return report
-            report["live"] = live(checkout, root, current, target, pending, installed, revisions)
+            report["live"] = live(checkout, root, current, target, pending, installed, staged, revisions)
             return report
         finally:
             revisions.close()
 
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
-         installed: Stack, revisions: Revisions) -> dict:
+         installed: Stack, staged: Stack, revisions: Revisions) -> dict:
+    """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
+    and reads back its own owners."""
     running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
                if thread["role"] == "agent" and thread["status"] == "running"]
-    for step in pending:
-        carry(step, root, installed, revisions, "--before-stop", "--apply")
+    before_stop(root, pending, staged, revisions)
     for name in running:
         installed.cli(root, "stop", "--name", name)
     lock = checkout / "stack/uv.lock"
@@ -310,10 +329,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
         installed.relock()
         installed.prepare_native()
-        steps = []
-        for step in pending:
-            carry(step, root, installed, revisions)
-            steps.append(carry(step, root, installed, revisions, "--apply"))
+        steps = carry_all(root, pending, staged, revisions)
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
     except BaseException:
