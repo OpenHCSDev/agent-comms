@@ -367,7 +367,8 @@ class HistoryViews:
             clocks = self.bus.activity_index.snapshot(source)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry), display_activity,
+                self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
+                display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
