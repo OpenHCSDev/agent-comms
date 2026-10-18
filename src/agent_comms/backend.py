@@ -19,7 +19,9 @@ import asyncio
 import json
 import secrets
 import unicodedata
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
+from collections.abc import (
+    AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterable, Iterator, Sequence,
+)
 from contextlib import AsyncExitStack, aclosing, contextmanager
 from functools import partial
 from pathlib import Path
@@ -242,7 +244,7 @@ class TurnSession:
         previous = self.watchdog.phase
         async for update in self.watchdog.observe(event, self):
             yield update
-        async for update in self.apply_native_event(event):
+        for update in await self.apply_native_event(event):
             yield update
         self.watchdog.transition(event, self.active_tools)
         for update in self.native_phase_changes(previous):
@@ -257,9 +259,8 @@ class TurnSession:
         """
         self.request_observer(progress, self.native.proc.identity)
 
-    async def apply_native_event(self, event):
-        async for update in event.apply(self):
-            yield update
+    async def apply_native_event(self, event) -> tuple[events.AgentEvent, ...]:
+        return tuple([update async for update in event.apply(self)])
 
     @property
     def accepts_output(self):
@@ -422,8 +423,7 @@ class TurnSession:
                             await self.native.proc.stdin.drain()
                         except (BrokenPipeError, ConnectionResetError):
                             pass
-                    async for event in self.initialize_rpc():
-                        yield event
+                    await self.initialize_rpc()
                     while True:
                         self.skip = False
                         async for event in self.receive_record():
@@ -452,11 +452,9 @@ class TurnSession:
                         if self.finished:
                             break
                     self.finished = False
-                    async for event in self.retain_or_close():
-                        yield event
-                    async for event in self.finish_diagnostics():
-                        yield event
-                    async for event in self.finish_result():
+                    await self.retain_or_close()
+                    await self.finish_diagnostics()
+                    for event in self.finish_result():
                         yield event
             finally:
                 if not self.native_session.child_state.retained:
@@ -552,7 +550,7 @@ class TurnSession:
             context_contributions=self.context_contributions,
         )
 
-    async def initialize_rpc(self) -> AsyncIterator[events.AgentEvent]:
+    async def initialize_rpc(self) -> None:
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
         self.model_name: str | None = None
@@ -562,10 +560,8 @@ class TurnSession:
         self.watchdog.reading()
         self.active_tools: set[str] = set()
         self.started_during_abort: list[str | None] = []
-        if False:
-            yield
 
-    async def retain_or_close(self) -> AsyncIterator[events.AgentEvent]:
+    async def retain_or_close(self) -> None:
         await self.native.finish_input()
         identity = self.native.attestation.identity
         if (
@@ -579,17 +575,12 @@ class TurnSession:
             outcome = await self.native.shutdown(graceful=True)
             if isinstance(outcome, TimedOutOutcome):
                 self.output.record_failure(failures.BackendDidNotExit("agent backend did not exit"))
-        if False:
-            yield
 
-    async def finish_diagnostics(self) -> AsyncIterator[events.AgentEvent]:
+    async def finish_diagnostics(self) -> None:
         self.error_text = (
             "" if self.native.proc.alive() else await self.native.proc.stderr_tail()
         )
         self.output.startup_error(self.error_text)
-        if False:
-            yield
 
-    async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
-        for event in self.output.done(self, self.error_text):
-            yield event
+    def finish_result(self) -> Iterable[events.AgentEvent]:
+        yield from self.output.done(self, self.error_text)

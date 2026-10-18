@@ -360,8 +360,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def apply_native_event(self, event):
         await self.dispatch(event)
-        if False:
-            yield
+        return ()
 
     async def next_event(self) -> pi.PiEvent:
         try:

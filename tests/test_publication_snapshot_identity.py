@@ -11,7 +11,7 @@ from agent_comms.mentions import ThreadMention
 from agent_comms.messages import InfoKind, Message, MessageKind, NoticeRole, QuestionKind
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.response_conversation import ResponseConversation
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from test_coordination_response import _ready
 
 
@@ -20,12 +20,12 @@ def test_publication_snapshot_is_frozen_content_not_delivery_enrichment():
     delivered = replace(
         original,
         seq=31,
-        sender_role=ThreadRole.USER,
+        sender_role=UserThreadRole,
         mentions=ThreadMention.find(original.body, lambda name: name),
     )
     assert delivered.publication_snapshot == original
     assert delivered.publication_snapshot.message_id == original.message_id
-    assert delivered.seq == 31 and delivered.sender_role is ThreadRole.USER
+    assert delivered.seq == 31 and delivered.sender_role == UserThreadRole
     assert delivered.mentions  # Capture does not mutate or strip the durable source.
     for kind in MessageKind.members_with(MessageKind):
         if kind is not original.type:

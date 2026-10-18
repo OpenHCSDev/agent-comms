@@ -165,7 +165,8 @@ class HistoricalDisplay:
     def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
         """Acknowledge exactly painted historical membership in its own ledger."""
         viewer = registry.require(self.displayed.viewer)
-        if viewer.incarnation != self.displayed.viewer_identity or viewer.role.executable:
+        viewer.role.require_user(ValueError("Historical viewer changed; refresh history"))
+        if viewer.incarnation != self.displayed.viewer_identity:
             raise ValueError("Historical viewer changed; refresh history")
         if self.source not in archive.sources():
             raise ValueError("Historical source detached; refresh history")
@@ -506,7 +507,7 @@ class DMDisplayBasis:
         """
         try:
             selected = next(
-                thread for thread in snapshot.threads.values() if not thread.role.executable
+                human for thread in snapshot.threads.values() for human in thread.role.human(thread)
             )
             viewer = snapshot.threads[self.viewer]
             target = snapshot.participant(self.requested_peer)
@@ -558,7 +559,8 @@ class DMDisplayScope(MessageDisplayScope):
             second = snapshot.participant(peer)
         except (KeyError, UnregisteredThreadError) as error:
             raise ValueError("DM display identity changed; refresh the page.") from error
-        if first.role.executable or first.incarnation == second.incarnation:
+        first.role.require_user(ValueError("DM display identity changed; refresh the page."))
+        if first.incarnation == second.incarnation:
             raise ValueError("DM display identity changed; refresh the page.")
         return cls.capture(first.name, second.name, snapshot)
 

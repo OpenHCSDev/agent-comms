@@ -11,7 +11,7 @@ from agent_comms.native_tools import BashTool
     ('Read', {'file_path':'a.py'}, 'read', {'path':'a.py'}, 'Read a.py', None),
     ('Grep', {'pattern':'needle'}, 'grep', {'pattern':'needle'}, 'Search needle', None),
     ('Edit', {'file_path':'a.py','old_string':'old\n','new_string':'new\n','replace_all':True}, 'edit',
-     {'path':'a.py','edits':[{'old_string':'old\n','new_string':'new\n'}],'replace_all':True},
+     {'path':'a.py','old_string':'old\n','new_string':'new\n','replace_all':True},
      'Edit a.py', '-old\n+new\n'),
     ('Write', {'file_path':'a.py','content':'new\n'}, 'write', {'path':'a.py','content':'new\n'}, 'Write a.py', '+new\n'),
     ('MultiEdit', {'file_path':'a.py','edits':[{'old_string':'a\n','new_string':'b\n'},{'old_string':'c\n','new_string':'d\n'}]}, 'edit',

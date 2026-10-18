@@ -464,7 +464,7 @@ class TestSelectedTargetActions:
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
         from agent_comms.cli_commands import StartCliCommand
         from agent_comms.thread_execution import ExternalThreadExecution
-        from agent_comms.thread_identity import ThreadRole
+        from agent_comms.thread_identity import UserThreadRole
         from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
         from agent_comms.threads import Thread
 
@@ -472,7 +472,7 @@ class TestSelectedTargetActions:
         comms.registry.declare(comms.registry.new_thread('external', frozenset({'team'}), str(tmp_path), execution=ExternalThreadExecution), StoppedThreadStatus())
         comms.registry.declare(comms.registry.new_thread('archived', frozenset({'team'}), str(tmp_path)),
                                ArchivedThreadStatus())
-        comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=ThreadRole.USER),
+        comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=UserThreadRole),
                                StoppedThreadStatus())
         from agent_comms.channel_targets import ChannelTarget
 

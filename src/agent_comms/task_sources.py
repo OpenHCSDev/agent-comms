@@ -11,7 +11,13 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .goals import GoalRevision
 from .message_reference import MessageReference
-from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation, ThreadRole, TurnId, TurnIdentity
+from .thread_identity import (
+    RecordedThreadIncarnation,
+    ThreadIncarnation,
+    TurnId,
+    TurnIdentity,
+    UserThreadRole,
+)
 from .turn_context import Provenance, WireProvenance
 
 if TYPE_CHECKING:
@@ -212,7 +218,7 @@ class TaskAttachment(DeclaredFamily, affix="TaskAttachment"):
 
     def original_wording_provenance(self, original: Message) -> dict[str, object]:
         return dict(wording=FieldCodec.encode(original.reference),
-                    author=original.sender, author_role=original.sender_role.value)
+                    author=original.sender, author_role=FieldCodec.encode(original.sender_role))
 
     def selected_sources(self, message: Message) -> tuple[Message, ...]:
         return (message,)
@@ -280,7 +286,9 @@ class UserTaskSupersession(TaskAttachment, declared_name="user_supersession"):
         return True
 
     def require_publication(self, sender, registry, original_source) -> None:
-        registry.require(sender).role.require_user()
+        registry.require(sender).role.require_user(
+            RelationViolationError("A task revision requires the original human sender")
+        )
         previous = self.change.require_original(original_source).task.require_scoped_task()
         previous.require_user_revision(sender, registry)
 
@@ -491,7 +499,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
             raise RelationViolationError("USER pin must address its original recipient")
 
     def require_publication(self, sender, registry, original_source):
-        registry.require(sender).role.require_user()
+        registry.require(sender).role.require_user(
+            RelationViolationError("A USER pin requires the original human sender")
+        )
         self.require_user_revision(sender, registry)
         if original_source is None:
             raise RelationViolationError("USER pin requires the certified original message")
@@ -504,7 +514,9 @@ class HumanConstraintPin(ScopedTaskDeclaration):
 
     def require_wording_publication(self, registry, original_source):
         delivery, = original_source.references((self.subject,))
-        delivery.message.sender_role.require_user()
+        delivery.message.sender_role.require_user(
+            RelationViolationError("Original wording must come from a human sender")
+        )
         if delivery.audience.sender_lookup != self.source_user.lookup:
             raise RelationViolationError("USER pin differs from its original human author")
         if not delivery.audience.includes_lookup(self.recipient.lookup):
@@ -541,7 +553,7 @@ class NativeInputConstraintPin(HumanConstraintPin):
     def original_wording_provenance(self, original: StoredInput) -> dict[str, object]:
         origin = original.origin.require_human()
         return dict(wording=FieldCodec.encode(original.context_provenance()),
-                    author=origin.author.sender, author_role=ThreadRole.USER.value)
+                    author=origin.author.sender, author_role=FieldCodec.encode(UserThreadRole))
 
     def require_wording_publication(self, registry, original_source):
         from .input_disposition import InputDispositions

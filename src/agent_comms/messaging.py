@@ -19,7 +19,7 @@ from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationR
 from .publisher import InitialWrites, OwnerPublisher
 from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
-from .thread_identity import ThreadRole
+from .thread_identity import UserThreadRole
 from .threads import Thread
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
@@ -72,10 +72,9 @@ class Messaging:
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
-            if not owner.role.executable:
-                raise RelationViolationError(
-                    "Human messages require the explicit user-message operation."
-                )
+            owner.role.require_executable(RelationViolationError(
+                "Human messages require the explicit user-message operation."
+            ))
             message = Message(
                 sender=owner.name,
                 target=target,
@@ -123,14 +122,14 @@ class Messaging:
         name, suffix = "user", 2
         while self.registry.name_reserved(name):
             name, suffix = f"user-{suffix}", suffix + 1
-        thread = self.registry.new_thread(name, frozenset(), worktree, role=ThreadRole.USER)
+        thread = self.registry.new_thread(name, frozenset(), worktree, role=UserThreadRole)
         self.registry.register(thread)
         return thread
 
     def _user_identities(self):
         """Derive existing humans from the original registered declarations."""
-        return (thread for thread in self.registry.all_threads().values()
-                if self.bus.reads.human(thread.role))
+        return (human for thread in self.registry.all_threads().values()
+                for human in thread.role.human(thread))
 
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""

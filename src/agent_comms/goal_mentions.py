@@ -59,12 +59,18 @@ def bind_goal_mentions(
                     token=token
                 )
             )
-        elif not peer.role.executable:
-            bindings.append(NonExecutableMentionBinding(token=token))
         else:
             bindings.append(
-                ResolvedMentionBinding(
-                    token=token, peer_name=peer.name, peer_created_at=peer.created_at
+                next(
+                    (
+                        ResolvedMentionBinding(
+                            token=token,
+                            peer_name=executor.name,
+                            peer_created_at=executor.created_at,
+                        )
+                        for executor in peer.role.executor(peer)
+                    ),
+                    NonExecutableMentionBinding(token=token),
                 )
             )
     return GoalMentionSource(

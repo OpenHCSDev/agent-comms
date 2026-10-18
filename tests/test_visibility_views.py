@@ -4,7 +4,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.registry_document import RosterVisibility
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 
 
@@ -22,7 +22,7 @@ def test_roster_visibility_selects_threads_and_channel_members(tmp_path, visibil
     comms.owners.stop("stopped")
     comms.owners.stop("archived")
     comms.threads.archive("archived")
-    comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=ThreadRole.USER))
+    comms.registry.declare(comms.registry.new_thread('human', frozenset({'team'}), str(tmp_path), role=UserThreadRole))
     assert comms.registry.status("stopped") == StoppedThreadStatus()
     assert comms.registry.status("archived") == ArchivedThreadStatus()
 

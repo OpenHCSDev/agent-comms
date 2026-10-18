@@ -90,7 +90,10 @@ class ProcessState(WireValue):
     @abstractmethod
     def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
     @abstractmethod
-    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool: ...
+    def claims_owner(self, status: ThreadStatus) -> bool: ...
+
+    @abstractmethod
+    def require_held_by(self, role: type[ThreadRole]) -> None: ...
     @abstractmethod
     def conflicts_with(self, previous: ProcessState) -> bool: ...
 
@@ -159,8 +162,11 @@ class NoProcess(ProcessState):
     def allows_goal_observation(self, status: ThreadStatus) -> bool:
         return False
 
-    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
+    def claims_owner(self, status: ThreadStatus) -> bool:
         return False
+
+    def require_held_by(self, role: type[ThreadRole]) -> None:
+        """No process is held, so any role may declare it."""
 
     def conflicts_with(self, previous: ProcessState) -> bool:
         return False
@@ -243,8 +249,13 @@ class ProcessIdentity(ProcessState):
     def allows_goal_observation(self, status: ThreadStatus) -> bool:
         return status.active
 
-    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
-        return role.executable and status.active
+    def claims_owner(self, status: ThreadStatus) -> bool:
+        return status.active
+
+    def require_held_by(self, role: type[ThreadRole]) -> None:
+        role.require_executable(
+            RelationViolationError("A human thread cannot hold an owner process")
+        )
 
     def conflicts_with(self, previous: ProcessState) -> bool:
         return self != previous
