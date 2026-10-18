@@ -1,6 +1,7 @@
 """Selected execution and ACP followups share one live input lifetime."""
 
 import asyncio
+from contextlib import asynccontextmanager, nullcontext
 from dataclasses import replace
 
 import pytest
@@ -11,6 +12,7 @@ from agent_comms import coordinated_runtime, private_nk_entrypoint
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
 from agent_comms.input_attempt import ClearedUnsentInput, NotSentInput, ReservedInput
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
 from agent_comms.tracked_turn import TrackedTurnSession
 from test_acp_private_nk_delivery import _session
 from test_acp_private_nk_delivery import tmp_path as private_root_fixture
@@ -19,6 +21,14 @@ from stored_inputs import stored_inputs
 from selected_owner_rpc_fixture import scripted_owner, recorded_request, requests
 
 tmp_path = private_root_fixture
+
+
+@asynccontextmanager
+async def selected_reply(agent, *, cancelled=False):
+    wake = agent.inputs.wake_tasks["beta"]
+    yield wake
+    with pytest.raises(asyncio.CancelledError) if cancelled else nullcontext():
+        await wake
 
 
 def accepted_input(response):
@@ -137,28 +147,23 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        wake = agent.inputs.wake_tasks["beta"]
-        response = await asyncio.wait_for(
-            agent.prompt("beta", [{"type": "text", "text": "Fresh input"}]), 2
-        )
-        input_id = accepted_input(response).input_id
-        if change == "clear":
-            await agent.inputs.clear_queued_inputs("beta")
-        elif change == "missing_key":
-            agent.inputs.following_sources["beta"].pop(input_id)
-        elif change == "foreign_key":
-            agent.inputs.following_sources["beta"][input_id] = replace(
-                agent.inputs.following_sources["beta"][input_id], keys=(old_key,)
+        async with selected_reply(agent, cancelled=change == "cancel") as wake:
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh input"}]), 2
             )
-        else:
-            wake.cancel()
-        release.set()
-        assert await asyncio.wait_for(turn, 8) == 1
-        if change == "cancel":
-            with pytest.raises(asyncio.CancelledError):
-                await asyncio.wait_for(wake, 8)
-        else:
-            await asyncio.wait_for(wake, 8)
+            input_id = accepted_input(response).input_id
+            if change == "clear":
+                await agent.inputs.clear_queued_inputs("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(input_id)
+            elif change == "foreign_key":
+                agent.inputs.following_sources["beta"][input_id] = replace(
+                    agent.inputs.following_sources["beta"][input_id], keys=(old_key,)
+                )
+            else:
+                wake.cancel()
+            release.set()
+            assert await asyncio.wait_for(turn, 8) == 1
         rows = stored_inputs(agent.inputs.dispositions.root).rows
         assert rows[old_key] == old_row
         assert isinstance(rows[f"acp:{input_id}"], expected_state)
@@ -234,7 +239,12 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         elif change == "missing_key":
             agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
         elif change == "foreign_key":
-            execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            execution.original = replace(
+                execution.original,
+                batch=replace(execution.original.batch, originals=(
+                    replace(execution.original.batch.originals[0], key="acp:historical-uncertain"),
+                )),
+            )
         expected.update(
             goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
         )
@@ -246,7 +256,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
 
     async def native(*args, **kwargs):
         with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
-            assert allowed is False
+            assert isinstance(allowed, AuthorityChangedSend)
         yield events.InputRefused(id=None)
         yield events.StreamSettled()
         yield events.Done(ok=False, text="Authority changed before send")
@@ -258,12 +268,13 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        response = await asyncio.wait_for(
-            agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
-        )
-        input_id = accepted_input(response).input_id
-        release.set()
-        await asyncio.wait_for(turn, 8)
+        async with selected_reply(agent):
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
         refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
         assert isinstance(refused, NotSentInput)
         assert refused.public_status == "not_sent" and refused.unresolved
@@ -466,19 +477,19 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         original_key = agent.inputs.original_sources["beta"].notice_keys[0]
         first_id = original_key.removeprefix("acp:")
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
-            assert allowed is True
+            assert isinstance(allowed, GrantedSend)
         assert kwargs["native_start"](None, "a" * 32, args[2])
         started.append(first_id)
         yield events.InputStarted(id=None)
         command = kwargs["steering_queue"].get_nowait()
         second_id = command.input_id.value
         with kwargs["send_boundary"](second_id, "b" * 32, command.content.text) as allowed:
-            assert allowed is True
+            assert isinstance(allowed, GrantedSend)
         assert kwargs["native_start"](second_id, "b" * 32, command.content.text)
         started.append(second_id)
         yield events.InputStarted(id=second_id)
-        with kwargs["send_boundary"](second_id, "c" * 32, command["message"]) as allowed:
-            assert allowed is False
+        with kwargs["send_boundary"](second_id, "c" * 32, command.content.text) as allowed:
+            assert isinstance(allowed, AuthorityChangedSend)
         yield events.StreamSettled()
         yield events.Done(ok=True, text="Both fresh inputs handled")
 
@@ -488,17 +499,18 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        first = await agent.prompt(
-            "beta",
-            [
-                {"type": "text", "text": "First fresh input"},
-                {"type": "image", "data": "eA==", "mimeType": "image/png"},
-            ],
-        )
-        second = await agent.prompt("beta", [{"type": "text", "text": "Second fresh input"}])
-        expected = [accepted_input(response).input_id for response in (first, second)]
-        release.set()
-        await asyncio.wait_for(turn, 8)
+        async with selected_reply(agent):
+            first = await agent.prompt(
+                "beta",
+                [
+                    {"type": "text", "text": "First fresh input"},
+                    {"type": "image", "data": "eA==", "mimeType": "image/png"},
+                ],
+            )
+            second = await agent.prompt("beta", [{"type": "text", "text": "Second fresh input"}])
+            expected = [accepted_input(response).input_id for response in (first, second)]
+            release.set()
+            await asyncio.wait_for(turn, 8)
         assert started == expected
         assert all(
             not stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{key}"].unresolved for key in expected
