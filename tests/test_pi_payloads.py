@@ -30,6 +30,42 @@ def decode(record):
     return PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
 
 
+@pytest.mark.asyncio
+async def test_action_events_use_shared_stream_without_inventing_updates():
+    from unittest.mock import AsyncMock, Mock
+
+    session = SimpleNamespace(
+        explicit_interrupt=False,
+        skip=False,
+        extension_ui=SimpleNamespace(answer=AsyncMock(), fail=AsyncMock()),
+        output=SimpleNamespace(start_message=Mock()),
+        watchdog=SimpleNamespace(prompt_accepted=False),
+        active_tools=set(),
+    )
+    records = (
+        {"type": "steering_interrupt_started"},
+        {"type": "extension_ui_request", "method": "input", "id": "question"},
+        {"type": "extension_ui_request", "method": "unknown", "id": "unknown"},
+        {"type": "message_start", "message": {"role": "assistant", "content": []}},
+        {"type": "message_end", "message": {"role": "user", "content": []}},
+        {"type": "unrecognized_notification"},
+    )
+    for record in records:
+        assert [update async for update in decode(record).apply(session)] == []
+    assert session.explicit_interrupt and session.skip
+    session.extension_ui.answer.assert_awaited_once()
+    session.extension_ui.fail.assert_not_awaited()
+    session.output.start_message.assert_called_once()
+
+    updates = [update async for update in decode({
+        "type": "tool_execution_start", "toolCallId": "call", "toolName": "read",
+        "args": {"path": "sample"},
+    }).apply(session)]
+    assert len(updates) == 1 and updates[0].id == "call"
+    assert session.active_tools == {"call"}
+    assert session.watchdog.prompt_accepted
+
+
 @pytest.mark.parametrize("command", ["switch_session"])
 def test_selected_command_decodes_original_native_error_envelope(command):
     # Exact error(id, command, message) shape from the committed native RPC owner.
