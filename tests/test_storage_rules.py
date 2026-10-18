@@ -1,6 +1,7 @@
 """Registered storage is the single owner; ordinary edits do not walk or save it."""
 from dataclasses import replace
 from pathlib import Path
+import runpy
 
 import pytest
 
@@ -12,6 +13,19 @@ from agent_comms.storage_rules import (
     WriteStorageEffect, shell_storage_effects,
 )
 from agent_comms.threads import Thread
+
+
+def test_resource_checker_uses_storage_allocation_floor():
+    checker = runpy.run_path(str(Path(__file__).resolve().parents[1] / 'tools' / 'agent-resource-check'))
+    floor = StorageRule().floor_gib
+    assert floor == 5.0
+    assert checker['LIMITS']['/home'][1] == floor
+    free = {path: 100 * checker['GIB'] for path in checker['LIMITS']}
+    memory = {'MemAvailable': 100 * checker['GIB'], 'SwapTotal': 0, 'SwapFree': 0, 'full_avg60': 0}
+    free['/home'] = (floor - 0.1) * checker['GIB']
+    assert checker['severity'](free, memory)[0] == 'critical'
+    free['/home'] = (floor + 0.1) * checker['GIB']
+    assert checker['severity'](free, memory)[0] == 'warning'
 
 
 def test_storage_paths_round_trip_inside_collections(tmp_path):
