@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 import sqlite3
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -81,14 +81,51 @@ class AnsweredRuleReviewEntry(RuleReviewEntry):
             )
 
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
-        drawn = DrawnRule.one(db, reviewer=reviewer, n=self.n)
-        if drawn is None:
+        drawn = DrawnRule.select(db, reviewer=reviewer, n=self.n)
+        if not drawn:
             raise ValueError(f"{reviewer} has no review that drew rule {self.n}.")
-        if drawn.cited and not re.search(r"\S+\.py:\d+|P\d+", self.text):
+        if drawn[0].cited and not re.search(r"\S+\.py:\d+|P\d+", self.text):
             raise ValueError(
                 "A correct-maintenance answer names the file:line or P-number it was applied to."
             )
         RuleAnswer(reviewer, self.n, self.text).upsert(db)
+
+
+class RuleReview(ABC):
+    """A reviewer's latest review as the store reads it, saying why its actions are refused."""
+
+    @abstractmethod
+    def due(self, reviewer: str, max_age: int) -> tuple[tuple[str, float], ...]:
+        """Each reason the reviewer's actions are refused, with when it began."""
+
+
+class NoRuleReview(RuleReview):
+    def due(self, reviewer: str, max_age: int) -> tuple[tuple[str, float], ...]:
+        return ((f"no rule review recorded for {reviewer}", 0.0),)
+
+
+@dataclass(frozen=True)
+class DrawnRuleReview(RuleReview):
+    at: float
+    unanswered: tuple[int, ...]
+
+    def due(self, reviewer: str, max_age: int) -> tuple[tuple[str, float], ...]:
+        if self.unanswered:
+            drawn = time.strftime("%H:%M", time.localtime(self.at))
+            return (
+                (
+                    f"drawn rules {list(self.unanswered)} of the {drawn} review are unanswered",
+                    self.at,
+                ),
+            )
+        if (age := time.time() - self.at) > max_age:
+            return (
+                (
+                    f"last rule review was {int(age // 60)} min ago (max {max_age // 60})",
+                    self.at + max_age,
+                ),
+            )
+        return ()
 
 
 @dataclass(frozen=True)
@@ -97,14 +134,13 @@ class RuleReviews(ThreadOwnedState, TypedStore):
     filename = "rule_reviews.sqlite3"
     rows = (DrawnRule, RuleAnswer)
 
-    def unanswered(self, reviewer: str) -> tuple[float, tuple[int, ...]] | None:
-        """When the reviewer's latest review drew and which drawn rules lack an answer."""
+    def review(self, reviewer: str) -> RuleReview:
+        """The reviewer's latest review: when it drew and which drawn rules lack an answer."""
         with self.snapshot() as db:
             drawn = DrawnRule.select(db, reviewer=reviewer, order_by=("n",))
             answered = {answer.n for answer in RuleAnswer.select(db, reviewer=reviewer)}
-        if not drawn:
-            return None
-        return drawn[0].drawn_at, tuple(rule.n for rule in drawn if rule.n not in answered)
+        unanswered = tuple(rule.n for rule in drawn if rule.n not in answered)
+        return DrawnRuleReview(drawn[0].drawn_at, unanswered) if drawn else NoRuleReview()
 
     def write(self, reviewer: str, entry: RuleReviewEntry) -> None:
         with self.writing() as db:

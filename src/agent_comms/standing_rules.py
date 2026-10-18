@@ -115,17 +115,8 @@ class RulesDue(StatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        review = RuleReviews(comms.root).unanswered(commander)
-        if review is None:
-            return (cls(f"no rule review recorded for {commander}", 0.0),)
-        at, missing = review
-        if missing:
-            drawn = time.strftime("%H:%M", time.localtime(at))
-            return (cls(f"drawn rules {list(missing)} of the {drawn} review are unanswered", at),)
-        if (age := time.time() - at) > cls.max_age:
-            why = f"last rule review was {int(age // 60)} min ago (max {cls.max_age // 60})"
-            return (cls(why, at + cls.max_age),)
-        return ()
+        review = RuleReviews(comms.root).review(commander)
+        return tuple(cls(why, since) for why, since in review.due(commander, cls.max_age))
 
 
 @dataclass(frozen=True)
