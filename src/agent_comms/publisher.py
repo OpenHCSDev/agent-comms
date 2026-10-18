@@ -24,6 +24,8 @@ from .bus_publication import (
     initial_sideband,
 )
 from .channel_targets import CommandTarget, NamedTarget
+from .coordinator import Coordination
+from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (
     ClaimRelease,
     ClaimTransition,
@@ -36,13 +38,14 @@ from .errors import (
     RelationViolationError,
     UnregisteredThreadError,
 )
+from .field_codec import FieldCodec
 from .mentions import ThreadMention
 from .messages import Message
+from .private_bus_checkpoint import (
+    install_private_bus_checkpoint,
+    opened_private_checkpoint_unlocked,
+)
 from .private_path import FileRevision
-from .coordinator import Coordination
-from .delivery_policy import InitialDeliveryPolicy
-from .field_codec import FieldCodec
-from .private_bus_checkpoint import install_private_bus_checkpoint, opened_private_checkpoint_unlocked
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import StoreLock, _store_lock
@@ -50,11 +53,11 @@ from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
 
-    from .registration import Registration
     from .private_bus_checkpoint import CertifiedSourceRead
+    from .registration import Registration
 
-from .catalog_store import ChannelCatalog
 from .catalog_document import CatalogDocument
+from .catalog_store import ChannelCatalog
 from .wire_log import WireLog
 from .wire_metadata import WireMetadata
 
