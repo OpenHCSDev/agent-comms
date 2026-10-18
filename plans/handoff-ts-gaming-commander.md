@@ -14,8 +14,11 @@ with Tristan. Pull `main` first.
    `tools/rts` copy.
 2. **Phase 0 (store conversion) and Phase 1 (one owner for orders)** of the
    same plan, in parallel. Then 3 → 2 → 4 → 5 → 6/7 → 8 → 9 as its dependency
-   table says. Matrix rows 23-28 are the rules and design added on 2026-10-18;
-   they land in phases 3, 6 and 7. The reasons and sketches are in
+   table says. Matrix rows 23-32 are the rules and design added on 2026-10-18:
+   rows 23-25 and 29-31 land in phase 3 (works line, traced reassignment,
+   wording corrections, no handoff of finished checked work, proofs bound to
+   their build, intent as a deletion target); rows 26-28 and 32 land in phases
+   6 and 7 (decision-only alerts, momentum, load, where unit time goes). The reasons and sketches are in
    `docs/agents/commander-game.md`.
 3. **The claude.ai connector** (`plans/comms-claude-connector-pr.md`), step 1
    only (prove a custom connector's tool reaches the model in claude.ai), and

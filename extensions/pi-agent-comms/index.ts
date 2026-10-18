@@ -6,6 +6,7 @@
  */
 
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 
@@ -52,8 +53,8 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 
 export default function (pi: ExtensionAPI) {
 	const currentThread = process.env.AGENT_COMMS_THREAD;
-	const startup = run(["tools", ...(currentThread ? ["--name", currentThread] : [])]);
-	let serviceTier = startup.service_tier;
+	pi.registerFlag("comms-catalog", { type: "string", description: "Core native launch catalog" });
+	let serviceTier: unknown;
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
 	const managed = process.env.AGENT_COMMS_MANAGED === "1";
@@ -136,7 +137,12 @@ export default function (pi: ExtensionAPI) {
 		});
 	}
 
-	const catalog = startup.tools as ToolDeclaration[];
+	pi.on("session_start", () => {
+		const path = pi.getFlag("comms-catalog");
+		if (typeof path !== "string") throw new Error("Native launch did not supply its tool catalog");
+		const startup = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+		serviceTier = startup.service_tier;
+		const catalog = startup.tools as ToolDeclaration[];
 	for (const declaration of catalog) {
 		pi.registerTool({
 			name: declaration.name,
@@ -190,4 +196,5 @@ export default function (pi: ExtensionAPI) {
 			},
 		});
 	}
+	});
 }
