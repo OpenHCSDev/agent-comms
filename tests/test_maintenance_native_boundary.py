@@ -10,8 +10,8 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
-from agent_comms import native_pi
+import agent_comms.coordinated_runtime as runtime
+import agent_comms.native_pi as native_pi
 from agent_comms.maintenance_barrier import MaintenancePhase
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordinator import Coordination

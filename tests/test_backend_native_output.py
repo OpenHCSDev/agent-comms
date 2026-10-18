@@ -4,7 +4,7 @@ import asyncio
 import json
 import os
 
-from agent_comms import agent_events as events
+import agent_comms.agent_events as events
 from agent_comms.image_inputs import ImageInput
 from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.turn_failure import TerminalFailure

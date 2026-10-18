@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import backend
+import agent_comms.backend as backend
 
 pytestmark = pytest.mark.refactor_guard
 

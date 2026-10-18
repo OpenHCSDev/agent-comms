@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
+import agent_comms.coordinated_runtime as runtime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsAgent
 from agent_comms.comms import Comms
@@ -32,7 +32,7 @@ from test_coordinated_runtime import _fake_model, _root
 @pytest.fixture
 def nominal_broker_stub(monkeypatch):
     # Keep this stub focused on owner binding; broker and native tests cover IPC.
-    from agent_comms import selected_tool_broker as broker
+    import agent_comms.selected_tool_broker as broker
 
     intent_type = broker.SelectedToolIntent
     mode_type = broker.SelectedToolMode

@@ -48,7 +48,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monke
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
         # A fresh lifecycle derives its package from the pin; the reviewed layout refuses another.
-        from agent_comms import private_nk_entrypoint
+        import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 
         with monkeypatch.context() as patch:
             patch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: tmp_path / "other-package")

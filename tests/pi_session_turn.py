@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import aclosing
 from pathlib import Path
 
-from agent_comms import backend
+import agent_comms.backend as backend
 from agent_comms.pi_native_backend import PersistentPiSession
 
 

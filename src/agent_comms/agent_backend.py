@@ -68,6 +68,9 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def read_keys(self):
         return (self.read_key,)
 
+    def transcript_cursor(self, frontier, offset, *, source):
+        return frontier.cursor(source.read_key, offset)
+
     def history_locations(self, thread, registry, visited):
         yield self, False
         yield from thread.inherited_history(registry, visited)
@@ -410,7 +413,7 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         if AgentBackend._sealed:
             raise BackendDeclarationError(
                 f"{cls.__name__}: the AgentBackend registry is sealed; declare backends "
-                "in a module imported by agent_backend before it seals."
+                "before the Thread backend lookup seals its declarations."
             )
         super().__init_subclass__(**options)
         cls.location_type._backend = cls

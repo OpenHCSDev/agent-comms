@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import Registration
+from agent_comms.registration import Registration
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_document import RegistryDocument
@@ -351,7 +351,7 @@ class TestRegistration:
     def test_private_guard_faults_never_promote_an_unfsynced_owner(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, fail_at: str
     ) -> None:
-        from agent_comms import store_files
+        import agent_comms.store_files as store_files
 
         root = tmp_path / "isolated-private-root"
         comms = Comms(root)
@@ -412,7 +412,7 @@ class TestRegistration:
                 [
                     sys.executable,
                     "-c",
-                    "from agent_comms import Registration; "
+                    "from agent_comms.registration import Registration; "
                     "from pathlib import Path; import sys; "
                     "Registration(Path(sys.argv[1])).require('a')",
                     str(root / "registry.json"),

@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import pi_commands as commands
+import agent_comms.pi_commands as commands
 from agent_comms.backend import TurnSession
 from agent_comms.native_startup import NativeStartup
 from agent_comms.native_attestation import KnownSessionAttestation, ObservedAttestation

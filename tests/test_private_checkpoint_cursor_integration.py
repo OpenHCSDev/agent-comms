@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
+import agent_comms.coordinated_runtime as runtime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema

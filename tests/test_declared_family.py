@@ -112,7 +112,7 @@ def test_checkpoint_schema_query_stays_local_but_external_names_still_discover()
     result = subprocess.run(
         [sys.executable, "-c", textwrap.dedent("""
             import os, sqlite3, sys, tempfile
-            from agent_comms import private_bus_checkpoint as checkpoint
+            import agent_comms.private_bus_checkpoint as checkpoint
             from agent_comms.typed_table import TypedTable
 
             # A real checkpoint schema can be installed and decoded with only

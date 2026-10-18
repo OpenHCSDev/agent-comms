@@ -8,8 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import agent_events as ae
-from agent_comms import backend, native_pi, pi_events
+import agent_comms.agent_events as ae
+import agent_comms.backend as backend
+import agent_comms.native_pi as native_pi
+import agent_comms.pi_events as pi_events
 from agent_comms.acp_extension import RequestFailedUpdate
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.tracked_turn import PendingTrackedTerminal, TrackedTurnSession

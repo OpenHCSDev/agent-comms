@@ -299,7 +299,7 @@ def test_same_message_id_does_not_override_frozen_full_envelope(changes) -> None
 
 
 def test_full_cohort_validates_large_frozen_n_with_one_envelope_digest(monkeypatch) -> None:
-    from agent_comms import wake as wake_module
+    import agent_comms.wake as wake_module
 
     members = tuple(
         FrozenRecipient(f"lookup-{index:04d}", f"member-{index:04d}") for index in range(1024)

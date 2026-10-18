@@ -29,7 +29,7 @@ def test_readiness_budget_is_size_aware_bounded_and_not_a_turn_deadline():
 async def test_cancel_during_extended_preflight_reaps_child(
     tmp_path, monkeypatch
 ):
-    from agent_comms import backend
+    import agent_comms.backend as backend
 
     policy = NativeStartupPolicy(
         readiness_seconds=0.05,
