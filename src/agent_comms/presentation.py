@@ -407,7 +407,7 @@ class ChannelReadMark(ABC):
 class ReadAll(ChannelReadMark):
     @contextmanager
     def reading(self, presentation, target, viewer):
-        with presentation.bus.log._opened_wire_snapshot() as source:
+        with presentation.bus.log.opened_wire_snapshot() as source:
             with DisplaySelection.reading(
                 presentation.registry, presentation.catalog, presentation.bus.reads,
                 NamedViewer(viewer),
@@ -498,7 +498,7 @@ class BusPresentation:
         target = CommandTarget.named(target).require_channel()
         with ExitStack() as resources:
             with _store_lock(self._wire_lock_path, shared=True):
-                source = resources.enter_context(self.bus.log._opened_wire_snapshot())
+                source = resources.enter_context(self.bus.log.opened_wire_snapshot())
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
@@ -800,7 +800,7 @@ class WireRevision(ReadState):
         """Every source is a group; missing files contribute no revision."""
         paths = cls.source_paths(views)
         with views.bus.log.locked(shared=True) as source:
-            through_seq = views.bus.log._committed_sequence_unlocked(source)
+            through_seq = views.bus.log.committed_sequence_unlocked(source)
             captured = {
                 name: tuple(revision for path in group
                             if (revision := FileRevision.capture(path)) is not None)
@@ -821,7 +821,7 @@ class WireRevision(ReadState):
             return frozenset(names)
         if self.through_seq > earlier.through_seq:
             snapshot = comms.registry.snapshot()
-            with comms.bus.log._opened_wire_snapshot() as source:
+            with comms.bus.log.opened_wire_snapshot() as source:
                 if source.changed_since(self.bus_log[0]):
                     raise StaleRevision("Wire source changed before route attribution")
                 with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:

@@ -48,7 +48,7 @@ async def test_native_full_four_tools_publish_and_release(
     old_seq = initial.message.seq
     if after_cutover:
         with comms.bus.log.locked():
-            marker = comms.bus.log._private_marker_unlocked()
+            marker = comms.bus.log.private_marker_unlocked()
             marker.claimed_after_seq = marker.last_seq
             comms.bus.log.write_metadata_unlocked(marker)
         fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")

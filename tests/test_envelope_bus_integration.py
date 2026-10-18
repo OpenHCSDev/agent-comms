@@ -276,9 +276,9 @@ def test_raw_alias_claim_is_refused_before_append_or_projection(
         "generation": "b" * 32,
     }
     with store_files._store_lock(comms.bus.log.path):
-        metadata = comms.bus.log._private_marker_unlocked()
+        metadata = comms.bus.log.private_marker_unlocked()
         with pytest.raises(ValueError, match="canonical absolute path"):
-            comms.bus.log._append_private_unlocked(metadata, record)
+            comms.bus.log.append_private_unlocked(metadata, record)
     assert list(comms.views.full_history_page().messages) == [first]
     assert list(comms.bus.log.claim_projection()) == [str(worktree / "a.py")]
     with pytest.raises(RelationViolationError, match="not its original source"):
@@ -577,7 +577,7 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
 
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
     with store_files._store_lock(comms.bus.log.path):
-        metadata = comms.bus.log._private_marker_unlocked()
+        metadata = comms.bus.log.private_marker_unlocked()
         return list(comms.bus.log.verified_records_unlocked(metadata))
 
 

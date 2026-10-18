@@ -417,7 +417,7 @@ def test_pending_marker_recovers_only_after_canonical_cold_parse(
     witness, rows, more = _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     assert [item.message.seq for item in rows] == [1, 2]
     assert witness.through_seq == 2 and not more
-    assert isinstance(comms.bus.log._private_marker_unlocked().seal, checkpoint.FinalSeal)
+    assert isinstance(comms.bus.log.private_marker_unlocked().seal, checkpoint.FinalSeal)
 
 
 def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, monkeypatch) -> None:
@@ -615,7 +615,7 @@ def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch
         asyncio.run(copied.bus.log.read_certified_async(
             lambda source: source.require_new_human_message("human", "new-message")
         ))
-    assert copied.bus.log._private_marker_unlocked().last_seq == 2
+    assert copied.bus.log.private_marker_unlocked().last_seq == 2
     assert copied.bus.log.path.read_bytes() == original
     with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
         assert db.execute("SELECT through_seq FROM prefix_certificate").fetchone() == (1,)

@@ -77,6 +77,9 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
         chain.pending(("carry_b",))
     with pytest.raises(ValueError, match="does not declare"):
         chain.pending(("carry_a", "carry_z"))
+    tail = repo.commit({"carry_c": None})
+    assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
+        ("carry_a", held), ("carry_b", "HEAD"), ("carry_c", repo.git("rev-parse", f"{tail}^"))]
 
 
 @pytest.mark.parametrize("steps", [

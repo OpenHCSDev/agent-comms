@@ -40,7 +40,7 @@ class ResponseConversation:
     @classmethod
     def capture(cls, bus, snapshot, obligation: ResponseObligation):
         originals = cls.source_references(snapshot, obligation)
-        marker = bus.log._private_marker_unlocked()
+        marker = bus.log.private_marker_unlocked()
         sources = bus.log.delivery_cohorts_unlocked(
             marker.root_id, tuple(reference.seq for reference in originals)
         )

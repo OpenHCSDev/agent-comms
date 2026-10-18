@@ -49,7 +49,7 @@ def test_scan_and_candidate_share_physical_boundary(tmp_path, extra, newline):
     path.chmod(0o600)
     log = WireLog(path)
     log.write_metadata_unlocked(metadata)
-    with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         if extra or not newline:
             with pytest.raises(RelationViolationError):
                 WakeCandidateIndex._replay_prefix(source, 0, 0, max_rows=1, max_bytes=1)
@@ -74,6 +74,6 @@ def test_oversized_append_preserves_marker_and_sequence(tmp_path):
         metadata = log.read_metadata_unlocked(required=True)
         previous = metadata.last_seq
         with pytest.raises(RelationViolationError, match='Private bus row exceeds the byte limit'):
-            log._append_private_unlocked(metadata, row)
+            log.append_private_unlocked(metadata, row)
         assert metadata.last_seq == previous
     assert (log.path.read_bytes(), log.metadata_path.read_bytes()) == before

@@ -20,7 +20,7 @@ from test_private_human_ingress import _root
 
 def source_witness(bus):
     with bus.log.locked(blocking=False):
-        return verify_private_bus_checkpoint_unlocked(bus.log, bus.log._private_marker_unlocked())
+        return verify_private_bus_checkpoint_unlocked(bus.log, bus.log.private_marker_unlocked())
 
 
 def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):

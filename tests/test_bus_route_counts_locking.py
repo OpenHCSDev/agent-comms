@@ -15,7 +15,7 @@ from agent_comms.wire_log import CurrentSnapshotOpening
 
 
 def _open_source(comms):
-    return comms.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening())
+    return comms.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening())
 
 
 def _sync(comms, decode=None):

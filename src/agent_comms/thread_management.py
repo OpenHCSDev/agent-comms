@@ -339,7 +339,7 @@ class ThreadManagement:
             with self.bus.log.locked():
                 metadata = self.bus.log.read_metadata_unlocked(required=True)
                 if metadata.private:
-                    self.bus.log._private_marker_unlocked()
+                    self.bus.log.private_marker_unlocked()
                     private = True
         if private:
             _require_no_private_owner_rename(self.root)

@@ -84,7 +84,7 @@ def _drain_candidate(root: Path) -> None:
                 result = index.catch_up_committed_append(
                     hint, start=FirstBuild()
                 )
-                with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
+                with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as snapshot:
                     route_result = routes.sync(
                         snapshot,
                         lambda record: DeliveryMessage.from_wire(record, root_id=snapshot.metadata.root_id),

@@ -82,7 +82,7 @@ class MessageBus:
     @contextmanager
     def opened_activity(self) -> Iterator[ActivityClocks]:
         """Own a fresh bus cut for callers without an existing snapshot."""
-        with self.log._opened_wire_snapshot(
+        with self.log.opened_wire_snapshot(
             opening=CurrentSnapshotOpening(), prepared_indexes=self.log.prepare_append_indexes(),
         ) as source:
             yield self.activity_index.snapshot(source)
@@ -102,7 +102,7 @@ class MessageBus:
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
             with _store_lock(self.log.path.parent / "wire", shared=True):
-                source = stack.enter_context(self.log._opened_wire_snapshot(
+                source = stack.enter_context(self.log.opened_wire_snapshot(
                     prepared_indexes=prepared,
                 ))
                 with DisplaySelection.reading(
@@ -135,7 +135,7 @@ class MessageBus:
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
         seen = self.reads.cursor(delivery.actor, snapshot)
-        with self.log._opened_wire_snapshot() as source:
+        with self.log.opened_wire_snapshot() as source:
             source.messages_for_references((after,) if after is not None else ())
             with projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}

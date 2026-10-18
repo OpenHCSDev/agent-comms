@@ -358,7 +358,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         # above must have happened automatically before inspecting pointers.
         owner = comms.registry.require("questioner")
         with comms.bus.log.locked():
-            marker = comms.bus.log._private_marker_unlocked()
+            marker = comms.bus.log.private_marker_unlocked()
             pointers = addressed_source_pointers_unlocked(
                 comms.bus.log, marker, RecordedThreadIncarnation("fixture", owner.created_at).lookup
             )
