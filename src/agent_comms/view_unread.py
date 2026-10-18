@@ -20,6 +20,7 @@ from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
+from .launch_runtime import ThreadLaunch
 from .native_entries import NativeEntry
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
@@ -193,7 +194,7 @@ class IndexSlice:
     @classmethod
     def initialize_worker(cls, cancelled: Event) -> None:
         """Bind the parent's cancellation signal, never its agent identity or stores."""
-        os.environ.pop("AGENT_COMMS_THREAD", None)
+        ThreadLaunch.strip(os.environ)
         cls._worker_cancellation = cancelled
 
     @classmethod

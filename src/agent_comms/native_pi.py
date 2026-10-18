@@ -24,7 +24,7 @@ from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
 from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .field_codec import FieldCodec
 from .jsonl_stream import unique_fields
 from .native_input_record import NativeInputCommit, NativeInputIdText
@@ -412,7 +412,7 @@ class NativePiRpcLaunch:
         for name in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE"):
             env.pop(name, None)
         env["NODE_DISABLE_COMPILE_CACHE"] = "1"
-        env["PI_WORKTREE"] = str(cwd)
+        env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
         env.update(configuration.encode_native())
         argv = (
