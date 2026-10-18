@@ -204,6 +204,16 @@ does not ask the commander how it feels; it forks a slice for the oldest debt
 and refuses new orders until the debt is back under the limit. No form to fill,
 one number to read, and the response is automatic.
 
+**Self-report alongside, calibrated like predictions.** Tristan's correction
+(2026-10-18): the commander did recognise its own skimming when asked, so the
+self-report carries signal even if nobody's introspection is reliable. Each
+tick the commander also writes one word: `sharp`, `stretched` or `skimming`.
+It is recorded next to the measured debts, and the two are compared the same
+way predictions are compared with outcomes. Agreement makes the cheap word
+trustworthy; `sharp` while look debt is 6 is itself a flag that the
+commander's sense of its load is off, shown on the HUD. Either signal crossing
+its limit triggers the fork.
+
 ## Done so far
 
 - `order.py send` requires a "Works when: <user-visible run>" line; `done`
