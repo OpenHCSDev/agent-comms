@@ -200,7 +200,6 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
         ))
 
     async def configure(self, thread, model, thinking):
-        from .native_pi import NativePiUnavailable
         from .pi_commands import SetModel, SetThinkingLevel
 
         commands = []
@@ -211,10 +210,8 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
         if not commands:
             raise ValueError('A configuration change names a model or a thinking level')
         state = await self.apply_configuration(thread, commands)
-        selected, level = state.model.display_name, FieldCodec.encode(state.thinking_level)
-        if selected is None or level is None:
-            raise NativePiUnavailable('Pi configuration did not report model and thinking level')
-        return selected, level
+        reported = state.model.require_selection(model if model is not None else state.model.display_name)
+        return reported.display_name, FieldCodec.encode(state.thinking_level)
 
 
 class PiNativeBackend(
