@@ -416,10 +416,7 @@ class GoalDeclaration(WireValue):
         from .task_sources import TurnTaskScope
         return TurnTaskScope(project=thread.worktree)
 
-    def context_segments(self, thread, goals):
-        return ()
-
-    def retained_task_facts(self):
+    def context_goals(self) -> tuple[Goal, ...]:
         return ()
 
     def permits_continuation(self, goal_id: str) -> bool:
@@ -460,9 +457,8 @@ class GoalDeclaration(WireValue):
     def contacts(self, owner, registry):
         return (), ()
 
-    def peer_state(self, owner, relation, goals):
-        from .turn_context import PeerState
-        return PeerState(owner.name, relation.relevance, relation.note, None)
+    def peer_instructions(self, owner, goals) -> str | None:
+        return None
 
     def apply_set_goal(self, action, ctx):
         return action.create_goal(ctx)
@@ -586,13 +582,8 @@ class Goal(GoalDeclaration):
         from .task_sources import GoalTaskScope
         return GoalTaskScope(project=thread.worktree, goal=self.checkpoint)
 
-    def context_segments(self, thread, goals):
-        from .turn_context import GoalSegment
-        return (GoalSegment.capture(thread, self, goals),)
-
-    def retained_task_facts(self):
-        from .retained_task_facts import GoalTaskFact
-        return (GoalTaskFact(self),)
+    def context_goals(self) -> tuple[Goal, ...]:
+        return (self,)
 
     def continues(self, goal_id: str) -> bool:
         return self.id == goal_id
@@ -646,10 +637,8 @@ class Goal(GoalDeclaration):
     def contacts(self, owner, registry):
         return self.mention_source.contacts(self, owner, registry)
 
-    def peer_state(self, owner, relation, goals):
-        from .turn_context import PeerState
-        return PeerState(owner.name, relation.relevance, relation.note,
-                         self.instructions(self.order.todos(goals, owner.incarnation, self.id)))
+    def peer_instructions(self, owner, goals) -> str:
+        return self.instructions(self.order.todos(goals, owner.incarnation, self.id))
 
     def apply_set_goal(self, action, ctx):
         if (self.text, self.order) != (action.text.strip(), action.order):

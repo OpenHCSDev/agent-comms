@@ -395,8 +395,7 @@ class LaunchPermit(GoalPermit):
         return True
 
     def prepare_context(self, turn) -> None:
-        for segment in turn.thread.goal.active().context_segments(turn.thread, turn.runner.comms.goals):
-            turn.context = turn.context.prepend(segment)
+        turn.context = turn.context.with_goal(turn.thread, turn.runner.comms.goals)
 
     def require_send(self, store) -> None:
         OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()

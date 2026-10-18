@@ -37,15 +37,19 @@ class OwnerGoalSnapshot(GoalSnapshot):
 
 class GoalDisplay(DeclaredFamily):
     can_control: ClassVar[bool] = True
-    shows: ClassVar[type[GoalDeclaration] | None] = None
+    _shows: ClassVar[dict[type[GoalDeclaration], type[GoalDisplay]]] = {}
+
+    def __init_subclass__(cls, **kwargs) -> None:
+        super().__init_subclass__(**kwargs)
+        shown = cls.__dict__.get("shows")
+        if shown is not None:
+            if shown in GoalDisplay._shows:
+                raise TypeError(f"Duplicate goal display for {shown.__name__}")
+            GoalDisplay._shows[shown] = cls
 
     @classmethod
     def current(cls, goal: GoalDeclaration) -> GoalDisplay:
-        matching = tuple(member for member in cls.members_with(cls)
-                         if member.shows is type(goal))
-        if len(matching) != 1:
-            raise ValueError(f"No unique goal display for {type(goal).__name__}")
-        return matching[0].from_declaration(goal)
+        return cls._shows[type(goal)].from_declaration(goal)
 
     @property
     @abstractmethod

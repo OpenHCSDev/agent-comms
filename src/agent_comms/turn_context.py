@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any, Self
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
-from .goals import Goal, NoGoal
+from .goals import Goal
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
@@ -824,8 +824,9 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else NoGoal()
-        return goal.peer_state(view.thread, relation, goals)
+        instructions = (view.thread.goal.active().peer_instructions(view.thread, goals)
+                        if relation.relevance.grants(GoalShown) else None)
+        return cls(view.thread.name, relation.relevance, relation.note, instructions)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1062,9 +1063,13 @@ class TurnContext:
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        for segment in owner.goal.active().context_segments(owner, comms.goals):
-            context = context.prepend(segment)
-        return context.with_awareness(comms, owner, relations, blocking=True)
+        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
+
+    def with_goal(self, owner: Thread, goals) -> TurnContext:
+        context = self
+        for goal in owner.goal.active().context_goals():
+            context = context.prepend(GoalSegment.capture(owner, goal, goals))
+        return context
 
     def with_awareness(
         self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False
