@@ -1,4 +1,5 @@
 """A published native reply automatically reaches the original channel sender."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -223,11 +224,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         project.mkdir()
         projects[name] = project
         comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture', thinking_level='off')
+            comms.registry.new_thread(name, frozenset({'team'}), str(project), model=f'roundtrip-local/{name}' if broadcast else 'roundtrip-local/fixture', thinking_level=OffThinkingLevel)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(
         comms,
         runtime_enabled=True,
@@ -360,7 +359,7 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         # above must have happened automatically before inspecting pointers.
         owner = comms.registry.require("questioner")
         with comms.bus.log.locked():
-            marker = comms.bus.log._private_marker_unlocked()
+            marker = comms.bus.log.private_marker_unlocked()
             pointers = addressed_source_pointers_unlocked(
                 comms.bus.log, marker, RecordedThreadIncarnation("fixture", owner.created_at).lookup
             )
@@ -461,7 +460,6 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert current.session_file == old.session_file
                 assert Path(current.session_file).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"
-            comms.owners.pin_private_nk_launch(comms.root, root_id, package)
             attachment = CommsClient(
                 comms, runtime_enabled=True,
             )

@@ -1,3 +1,4 @@
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.messages import Membership
 import os
 from dataclasses import replace
@@ -10,7 +11,7 @@ from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import ActivityState
 from agent_comms.channel_targets import BuiltinChannel
 from agent_comms.channels import AllOfMatch, AnyOfMatch, TagChannel, SavedView, ViewKind, ViewPredicate
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
     DeleteExclusiveInactiveThreadsTagDisposition,
@@ -21,6 +22,7 @@ from agent_comms.display_order import (
     LastActivityThreadSort, LastMessageThreadSort, LastUserInputChannelSort, ThreadSort,
 )
 from agent_comms.errors import RelationViolationError
+from agent_comms.registry_document import RosterVisibility
 from agent_comms.thread_management import ForkSpec
 from agent_comms.thread_status import ArchivedThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
@@ -40,7 +42,7 @@ def test_channel_metadata_round_trips_without_changing_routing(tmp_path):
     assert channel.parent == "#ui" and channel.archived
 
     observer = wire(tmp_path)
-    projected = {view.channel.name: view for view in observer.views.channel_views(show_archived=True)}
+    projected = {view.channel.name: view for view in observer.views.channel_views(RosterVisibility(archived=True))}
     assert projected["#api"].channel.parent == "#ui"
     assert projected["#api"].channel.archived
     assert {name: view.members for name, view in projected.items()} == before
@@ -88,7 +90,7 @@ def test_exclusive_tag_deletion_uses_original_storage_and_preserves_survivors(tm
         path = tmp_path / (name + '.jsonl')
         path.write_text('{"original_saved_history":"' + name + '"}\n')
         saved[name] = path.read_bytes()
-        process = ProcessIdentity.capture(os.getpid()) if name == 'active' else None
+        process = ProcessIdentity.capture(os.getpid()) if name == 'active' else NoProcess()
         comms.registry.declare(comms.registry.new_thread(name, frozenset(tags), str(tmp_path), session_file=str(path), process_identity=process), status)
     comms.channels.set_channel_pinned('remove', True)
     comms.channels.set_thread_pinned('keep', 'multi', True)
@@ -322,7 +324,10 @@ def test_saved_view_names_are_reserved_for_tags_and_legacy_channels(tmp_path):
 
 
 def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
-    from agent_comms.importing import ImportedMessage, ImportFormat, ImportRole, ImportSnapshot
+    import json
+
+    from agent_comms.cli_bridges.history import OfflineHistory
+    from agent_comms.harness_install import OpenCodeHarness
 
     comms = setup_wire(tmp_path)
     predicate = ViewPredicate(AnyOfMatch, frozenset({"api"}))
@@ -335,28 +340,16 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
         comms.threads.claim_thread("claimed", tags=frozenset({"reserved"}), worktree=str(tmp_path))
 
     source = tmp_path / "foreign.json"
-    source.write_text("{}")
-
-    class SnapshotSource:
-        @staticmethod
-        def read(*_args):
-            return ImportSnapshot(
-                ImportFormat.OPENCODE,
-                "foreign",
-                str(tmp_path),
-                "Foreign",
-                (ImportedMessage(ImportRole.USER, "continue"),),
-                "",
-                1,
-                0,
-                (),
-                "continue",
-            )
+    source.write_text(json.dumps({
+        "info": {"id": "foreign", "title": "Foreign", "directory": str(tmp_path)},
+        "messages": [{"info": {"id": "user", "sessionID": "foreign", "role": "user", "time": {"created": 1}},
+                      "parts": [{"id": "user-0", "sessionID": "foreign", "messageID": "user",
+                                 "type": "text", "text": "continue"}]}],
+    }))
 
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.import_thread(
-            source,
-            SnapshotSource(),  # type: ignore[arg-type]
+            OfflineHistory.of(OpenCodeHarness, source, None),
             name="imported",
             tags=frozenset({"reserved"}),
         )
@@ -367,7 +360,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     )
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.create(
-            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level="high", task="task", tags=frozenset({"reserved"})),
+            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level=HighThinkingLevel, task="task", tags=frozenset({"reserved"})),
         )
 
     after = comms.registry.snapshot()

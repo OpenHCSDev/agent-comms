@@ -240,7 +240,7 @@ class ChannelTarget(NamedTarget):
     def resolve(self, snapshot, catalog) -> ResolvedChannel:
         channel = catalog.resolve(self.name)
         members = tuple(ResolvedThread(thread, snapshot.status(thread.name))
-                        for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+                        for thread in snapshot.channel_audience()
                         if channel.matches(thread.tags))
         return ResolvedChannel(channel, members)
 
@@ -272,7 +272,7 @@ class ChannelTarget(NamedTarget):
 
     def initial_delivery(self, sender, message, snapshot, catalog):
         channel = catalog.resolve(self.name)
-        names = [thread.name for thread in snapshot.visible_threads(show_stopped=True, show_archived=False)
+        names = [thread.name for thread in snapshot.channel_audience()
                  if thread.name != sender and channel.matches(thread.tags)]
         return self, message, names
 

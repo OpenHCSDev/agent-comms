@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import pytest
@@ -14,8 +14,9 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
-from agent_comms.registry_document import RegistryDocument
+from agent_comms.registry_document import RegistryDocument, ThreadSlice
 from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import SharedLock
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
@@ -79,6 +80,14 @@ def test_one_thread_entry_decodes_only_that_thread_and_matches_the_document(tmp_
         RegistryDocument.entry_from_wire(raw, "missing")
 
 
+def test_a_document_field_without_a_thread_slice_is_refused_at_definition():
+    with pytest.raises(TypeError, match="Unsliced.rows declares no thread slice"):
+        @ThreadSlice.required
+        @dataclass
+        class Unsliced:
+            rows: dict = field(default_factory=dict)
+
+
 def test_registry_update_persists_across_reopen(tmp_path):
     registry = Registration(tmp_path / "registry.json")
     registry.register(owner(tmp_path, registry=registry))
@@ -109,7 +118,7 @@ def test_registry_readers_share_lock_and_exclude_writer(tmp_path):
     registry.register(owner(tmp_path, registry=registry))
     other = RegistryStore(registry.store.path)
     with registry.store.reading():
-        with other.locked(shared=True, blocking=False):
+        with other.locked(mode=SharedLock(), blocking=False):
             assert other._read_unlocked().threads["owner"].name == "owner"
         with pytest.raises(BlockingIOError), other.locked(blocking=False):
             pytest.fail("writer entered during reader")

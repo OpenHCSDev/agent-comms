@@ -11,6 +11,7 @@ implementation modules (``backend``, ``pi_commands``, ``pi_events``,
 
 from __future__ import annotations
 
+from .field_codec import FieldCodec
 import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from dataclasses import dataclass
@@ -172,7 +173,7 @@ class PersistentPiSession:
 
 
 class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
-    """Pi session queries; each transport supplies request(thread, command)."""
+    """Interpret Pi queries; each backend owns how commands reach its host."""
 
     async def context_usage(self, thread):
         from .pi_commands import GetSessionStats
@@ -193,15 +194,14 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
     async def models(self, thread):
         from .pi_commands import GetAvailableModels
 
-        data = await self.request(thread, GetAvailableModels())
+        data = await self.model_catalog(thread, GetAvailableModels())
         return tuple(dict.fromkeys(
             model.display_name for model in data.models if model.provider and model.id
         ))
 
     async def configure(self, thread, model, thinking):
         from .native_pi import NativePiUnavailable
-        from .pi_commands import SetModel, SetThinkingLevel, GetState
-        from .pi_vocabulary import ThinkingLevel
+        from .pi_commands import SetModel, SetThinkingLevel
 
         commands = []
         if model is not None:
@@ -210,10 +210,8 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
             commands.append(SetThinkingLevel(level=thinking))
         if not commands:
             raise ValueError('A configuration change names a model or a thinking level')
-        for command in commands:
-            await self.request(thread, command)
-        state = await self.request(thread, GetState())
-        selected, level = state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)
+        state = await self.apply_configuration(thread, commands)
+        selected, level = state.model.display_name, FieldCodec.encode(state.thinking_level)
         if selected is None or level is None:
             raise NativePiUnavailable('Pi configuration did not report model and thinking level')
         return selected, level
@@ -265,7 +263,7 @@ class PiNativeBackend(
         from .pi_vocabulary import ThinkingLevel
 
         return self.agent_args.with_model(thread.model).with_thinking(
-            ThinkingLevel.optional_name(thread.thinking_level)
+            thread.thinking_level
         ).argv
 
     # -- lifecycle --------------------------------------------------------
@@ -318,6 +316,7 @@ class PiNativeBackend(
             native_start=delivery.input_started,
             request_observer=delivery.request_progress,
             persistent_session=self,
+            root=self.comms.root,
             ui_request=delivery.ui_request,
         ):
             yield event
@@ -344,3 +343,14 @@ class PiNativeBackend(
         )
         return PiSessionFile(identity.session_file)
 
+    async def model_catalog(self, thread: Thread, command):
+        return await command.discover(self.agent_bin, self.agent_args.argv)
+
+    async def apply_configuration(self, thread: Thread, commands):
+        arguments = self.arguments(thread)
+        for command in commands:
+            state = await command.configure(self.agent_bin, arguments, worktree=Path(thread.worktree))
+            arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
+                state.thinking_level
+            ).argv
+        return state

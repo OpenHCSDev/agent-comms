@@ -15,6 +15,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from agent_comms.turn_watchdog import ModelWait
 
 from agent_comms import native_pi, native_prompt_send
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -184,7 +185,7 @@ async def _same_loop_backpressure_case(directory: Path, mode: str):
         native_turn = TrackedTurnSession.execute
 
         async def bounded_turn(*args, **kwargs):
-            return await native_turn(*args, **kwargs, model_wait_timeout=0.35)
+            return await native_turn(*args, **kwargs, model_wait=ModelWait(0.35))
 
         patch.setattr(TrackedTurnSession, "execute", bounded_turn)
         patch.setattr("agent_comms.backend.CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS",0.35)

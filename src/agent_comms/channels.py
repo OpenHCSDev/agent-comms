@@ -8,14 +8,20 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
+from typing import TYPE_CHECKING
 
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import MembershipChange
 from .threads import Thread
+from .tool_result import ToolResult
+
+if TYPE_CHECKING:
+    from .registry_document import RosterVisibility
 
 
 class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
@@ -39,7 +45,7 @@ class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
 
 
 @dataclass(frozen=True, slots=True)
-class Channel(DeclaredFamily, affix="Channel"):
+class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     """A captured channel presentation with behavior supplied by its declaration."""
 
     name: str
@@ -129,8 +135,8 @@ class Channel(DeclaredFamily, affix="Channel"):
 class Channels(dict[str, Channel]):
     """The captured declarations select the channels shown by a roster."""
 
-    def visible(self, show_archived: bool) -> Iterator[Channel]:
-        return (channel for channel in self.values() if show_archived or not channel.archived)
+    def visible(self, visibility: RosterVisibility) -> Iterator[Channel]:
+        return (channel for channel in self.values() if visibility.archived or not channel.archived)
 
 
 class PredicateChannel:
@@ -335,7 +341,7 @@ class ViewPredicate:
 
 
 @dataclass(frozen=True, slots=True)
-class SavedView:
+class SavedView(ToolResult):
     """A named non-routable projection over authoritative channels or activity."""
 
     name: str = field(metadata={"catalog_exclude": True})

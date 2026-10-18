@@ -20,7 +20,7 @@ from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
 from agent_comms.field_codec import FieldCodec
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCodeHarness
-from agent_comms.importing import ImportBuffer, ImportReceipt, ImportSnapshot, ImportedSessionMetadata
+from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.thread_identity import ThreadProvenance
 from agent_comms.thread_status import StoppedThreadStatus
@@ -110,6 +110,9 @@ def test_claude_subagent_keeps_its_task_its_commander_and_its_tools(tmp_path):
     lines(subagent, [
         {"type": "fork-context-ref", "agentId": "a1", "parentSessionId": "session"},
         claude_prompt("t", "Your task: fix the importer"),
+        {"type": "api-request-shape", "sessionId": "session", "shapeHash": "h", "shape": {"system": []}},
+        {"type": "api-request-blob", "sessionId": "session", "hash": "b", "message": {"role": "user"}},
+        {"type": "api-request", "sessionId": "session", "id": "q", "shapeHash": "h", "params": {}},
         claude_prompt("r", "<system-reminder>harness note</system-reminder>", isMeta=True),
         claude_tool("c", "g1", "Glob", {}),
         claude_result("e", "g1", "pattern is required", error=True),
@@ -230,7 +233,7 @@ def test_codex_instructions_are_authenticated_historical_references_not_current_
     assert all(isinstance(ref, CodexRolloutProvenance) for ref in refs)
     assert tuple(ref.public_text(comms) for ref in refs) == (
         "Historical base π.\n", "Historical developer λ.\n")
-    assert FieldCodec.decode(ImportReceipt, acknowledgement.to_wire()) == acknowledgement
+    assert FieldCodec.decode(ThreadImported, acknowledgement.to_wire()) == acknowledgement
     assert acknowledgement.harness is CodexHarness
     saved = [json.loads(line) for line in Path(acknowledgement.session_file).read_text().splitlines()]
     metadata = next(record["data"] for record in saved if record["type"] == "custom")

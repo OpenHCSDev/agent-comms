@@ -14,11 +14,12 @@ from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
-from agent_comms.read_basis import DMDisplayScope
+from agent_comms.read_basis import DMDisplayScope, ReadCursor
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.wire_metadata import ArchivedAccess, WritableAccess
-from agent_comms.wire_log import CurrentSnapshotOpening
+from agent_comms.wire_log import (CurrentSnapshotOpening, OpenedWireSnapshot, SavedPrefixOpening,
+                                  ScannedWireSnapshot, WireSnapshot)
 
 
 def retained_source(root, count, *, access=ArchivedAccess()):
@@ -46,11 +47,24 @@ def retained_source(root, count, *, access=ArchivedAccess()):
     return comms.bus
 
 
+@pytest.mark.parametrize("seen,before,unread", [
+    (ReadCursor(3), 7, True),
+    (ReadCursor(6), 7, False),
+    (ReadCursor(3, (6,)), 7, False),
+    (ReadCursor(3), 6, False),
+    (ReadCursor(9), 10, False),
+])
+def test_older_unread_excludes_read_prefix_and_exceptions(tmp_path, seen, before, unread):
+    bus = retained_source(tmp_path / 'archive', 9)
+    scope = DMDisplayScope(frozenset({'b'}), frozenset({'a'}))
+    assert bus.conversation_older_unread(scope, before=before, seen=seen) is unread
+
+
 def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_path):
     empty = Comms(tmp_path / 'empty').bus
     assert empty.full_history_page().messages == ()
     scope = DMDisplayScope(frozenset({'a'}), frozenset({'b'}))
-    assert not empty.conversation_older_unread(scope, before=1, seen=frozenset())
+    assert not empty.conversation_older_unread(scope, before=1, seen=ReadCursor())
     assert not (empty.log.path.parent / 'bus_page_index.sqlite3').exists()
 
     bus = retained_source(tmp_path / 'owned', 9, access=WritableAccess())
@@ -82,9 +96,27 @@ def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_pat
     assert (path.read_bytes(), archive.log.path.read_bytes()) == original
 
 
+@pytest.mark.parametrize("opening,cut", [(SavedPrefixOpening(), OpenedWireSnapshot),
+                                         (CurrentSnapshotOpening(), ScannedWireSnapshot)])
+def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, opening, cut):
+    bus = retained_source(tmp_path / 'sparse', 200)
+    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        wanted = [message for message, _ in opened.public_records() if message.seq in (7, 150)]
+    decoded = []
+    page_records = WireSnapshot.public_page_records.__func__
+    monkeypatch.setattr(WireSnapshot, 'public_page_records', classmethod(
+        lambda cls, record, size, metadata: decoded.append(record['seq'])
+        or page_records(cls, record, size, metadata)))
+    with bus.log.opened_wire_snapshot(opening=opening) as opened:
+        assert type(opened) is cut
+        references = tuple(message.reference for message in wanted)
+        assert opened.messages_for_references(references) == tuple(wanted)
+    assert decoded == [7, 150]
+
+
 def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
     bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
-    with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         message, _ = next(opened.public_records())
     with BusPageIndex(bus.log.path) as index:
         index.invalidate()
@@ -92,7 +124,7 @@ def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
     captured = threading.Semaphore(0)
 
     def read_reference():
-        with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             with BusPageIndex(bus.log.path) as index:
                 assert not index.covers(opened)
             captured.release()
@@ -112,5 +144,5 @@ def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
                     reader.result(timeout=0.05)
         assert [reader.result(timeout=5) for reader in readers] == [(message,), (message,)]
     with BusPageIndex(bus.log.path) as index:
-        with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             assert index.covers(opened)

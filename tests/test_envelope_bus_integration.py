@@ -130,7 +130,7 @@ def _participants(tmp_path: Path) -> tuple[Comms, Path]:
     worktree.mkdir()
     (worktree / "a.py").write_text("one")
     (worktree / "b.py").write_text("two")
-    comms = Comms(tmp_path / "wire", private_initial_writes=True, private_claim_writes=True)
+    comms = Comms(tmp_path / "wire")
     for name in ("alice", "bob", "observer"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(worktree)))
     comms.messaging.initialize_private_initial_protocol()
@@ -276,9 +276,9 @@ def test_raw_alias_claim_is_refused_before_append_or_projection(
         "generation": "b" * 32,
     }
     with store_files._store_lock(comms.bus.log.path):
-        metadata = comms.bus.log._private_marker_unlocked()
+        metadata = comms.bus.log.private_marker_unlocked()
         with pytest.raises(ValueError, match="canonical absolute path"):
-            comms.bus.log._append_private_unlocked(metadata, record)
+            comms.bus.log.append_private_unlocked(metadata, record)
     assert list(comms.views.full_history_page().messages) == [first]
     assert list(comms.bus.log.claim_projection()) == [str(worktree / "a.py")]
     with pytest.raises(RelationViolationError, match="not its original source"):
@@ -471,7 +471,7 @@ def test_concurrent_whole_set_exactly_one_winner(tmp_path: Path) -> None:
     simultaneous = Barrier(2)
 
     def attempt(name: str) -> str:
-        owner = Comms(comms.root, private_claim_writes=True)
+        owner = Comms(comms.root)
         simultaneous.wait(timeout=3)
         try:
             owner.messaging.send_message(
@@ -577,7 +577,7 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
 
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:
     with store_files._store_lock(comms.bus.log.path):
-        metadata = comms.bus.log._private_marker_unlocked()
+        metadata = comms.bus.log.private_marker_unlocked()
         return list(comms.bus.log.verified_records_unlocked(metadata))
 
 
@@ -723,7 +723,7 @@ def kill_at_boundary(fd):
     real_fsync(fd)
 store_files.os.fsync = kill_at_boundary
 from agent_comms.envelope_claim_transitions import ExistingFileClaim
-Comms(root, private_claim_writes=True).messaging.send_message(
+Comms(root).messaging.send_message(
     'alice', 'bob', 'Interrupted claim', claims=[ExistingFileClaim(Path('a.py'))]
 )
 """

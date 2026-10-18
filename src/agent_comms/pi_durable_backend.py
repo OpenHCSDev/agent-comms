@@ -1,6 +1,7 @@
 """Opt-in Pi Durable: existing Pi records, RPC correlation and history owners."""
 from __future__ import annotations
 
+from .field_codec import FieldCodec
 import asyncio
 import fcntl
 from contextlib import ExitStack, contextmanager
@@ -25,6 +26,7 @@ from .native_transcript import StoredRecord
 from .pi_commands import Abort, GetState, PiCommand, SetModel, SetThinkingLevel
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
+from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
 
@@ -146,7 +148,7 @@ class Open(HostQuery):
     cwd: str
     provider: str | None
     model_id: str | None = field(metadata={'wire_name': 'modelId'})
-    thinking_level: str | None = field(metadata={'wire_name': 'thinkingLevel'})
+    thinking_level: ThinkingLevelField = field(metadata={'wire_name': 'thinkingLevel'})
     auth_path: str = field(metadata={'wire_name': 'authPath'})
     response_payload = RecoveryData
 
@@ -360,6 +362,14 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
 
     async def request(self, thread, command):
         return await (await self.open(thread)).request(command)
+
+    async def model_catalog(self, thread, command):
+        return await self.request(thread, command)
+
+    async def apply_configuration(self, thread, commands):
+        for command in commands:
+            await self.request(thread, command)
+        return await self.request(thread, GetState())
 
     async def run_turn(self, thread, content, delivery):
         child = await self.open(thread)

@@ -123,7 +123,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     def observed_phase(self, phase):
         return phase
 
-    def observe_request(self, observer: Callable[[RequestProgress], None] | None) -> bool:
+    def observe_request(self, observer: Callable[[RequestProgress], None]) -> bool:
         """A transport measurement is independent of turn-phase publication."""
         return False
 
@@ -269,9 +269,8 @@ class AgentStart(NativePiEvent):
 class ModelRequestProgress(NativePiEvent):
     progress: "RequestProgress"
 
-    def observe_request(self, observer: Callable[[RequestProgress], None] | None) -> bool:
-        if observer is not None:
-            observer(self.progress)
+    def observe_request(self, observer: Callable[[RequestProgress], None]) -> bool:
+        observer(self.progress)
         return True
 
 

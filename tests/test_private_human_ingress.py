@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import asyncio
 import os
 import subprocess
@@ -12,7 +13,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.bus_publication import HumanOrigin
+from agent_comms.bus_publication import AgentOrigin, HumanOrigin
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
@@ -86,22 +87,40 @@ def test_explicit_root_override_preserves_private_user_receipt(
     assert selected.bus.log.read_delivery_cohort(root_id, sent.seq).message == sent
 
 
-def test_private_user_requires_typed_origin_and_exact_registered_identity(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("origin_of", "speaker", "refused", "lost"),
+    [
+        (lambda user: AgentOrigin(), "alice", "executable", OSError),
+        (
+            lambda user: HumanOrigin(user.name, user.created_at, user.worktree),
+            None,
+            "USER origin",
+            HumanInitialUnknownError,
+        ),
+    ],
+    ids=["agent", "human"],
+)
+def test_initial_origin_owns_sender_check_and_append_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, origin_of, speaker, refused, lost
+) -> None:
     comms, _, _, _ = _root(tmp_path)
     user = comms.messaging.user_identity(str(tmp_path))
-    message = Message(user.name, "alice", "untrusted", InfoKind)
-    with pytest.raises(RelationViolationError, match="executable"):
-        comms.bus.publisher.publish_initial_cohort(message)
-    with pytest.raises(RelationViolationError, match="executable"):
-        comms.bus.publisher.publish_ordinary(message)
-    with pytest.raises(RelationViolationError, match="USER origin"):
-        comms.bus.publisher.publish_ordinary(
-            message,
-            _human_origin=HumanOrigin(user.name, user.created_at + 1, user.worktree),
-        )
-    with pytest.raises(RelationViolationError, match="Human messages"):
-        comms.messaging.send_message(user.name, "alice", "agent impersonation")
+    origin = origin_of(user)
+    accepted = speaker or user.name
+    other = user.name if speaker else "alice"
+    with pytest.raises(RelationViolationError, match=refused):
+        comms.bus.publisher.publish_ordinary(Message(other, "bob", "refused", InfoKind), origin=origin)
     assert comms.bus.log.latest_sequence() == 0
+    original = comms.bus.log.append_private_unlocked
+
+    def fail_after_append(metadata, row):
+        original(metadata, row)
+        raise OSError("simulated lost acknowledgement after durable append")
+
+    monkeypatch.setattr(comms.bus.log, "append_private_unlocked", fail_after_append)
+    with pytest.raises(lost):
+        comms.bus.publisher.publish_ordinary(Message(accepted, "bob", "uncertain", InfoKind), origin=origin)
+    assert len(list(comms.bus.full_history_page().messages)) == 1
 
 
 def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
@@ -109,9 +128,9 @@ def test_duplicate_human_id_denied_before_second_append(tmp_path: Path) -> None:
     user = comms.messaging.user_identity(str(tmp_path))
     message = Message(user.name, "alice", "one input", InfoKind, timestamp=123456.0)
     origin = HumanOrigin(user.name, user.created_at, user.worktree)
-    first = comms.bus.publisher.publish_ordinary(message, _human_origin=origin)
+    first = comms.bus.publisher.publish_ordinary(message, origin=origin)
     with pytest.raises(RelationViolationError, match="already exists"):
-        comms.bus.publisher.publish_ordinary(message, _human_origin=origin)
+        comms.bus.publisher.publish_ordinary(message, origin=origin)
     assert [row.message_id for row in list(comms.bus.full_history_page().messages)] == [first.message_id]
 
 
@@ -119,7 +138,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms, _, root_id, _ = _root(tmp_path)
-    original = comms.bus.log._append_private_unlocked
+    original = comms.bus.log.append_private_unlocked
     calls = 0
 
     def fail_after_append(metadata, row):
@@ -128,7 +147,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
         original(metadata, row)
         raise OSError("simulated lost acknowledgement after durable append")
 
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', fail_after_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', fail_after_append)
     with pytest.raises(HumanInitialUnknownError, match="do not retry") as raised:
         comms.messaging.send_user_message("alice", "uncertain", worktree=str(tmp_path))
     assert calls == 1
@@ -137,7 +156,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     initial = comms.bus.log.read_delivery_cohort(root_id, error.wire_seq)
     assert initial.message.message_id == error.message_id
     assert len(list(comms.bus.full_history_page().messages)) == 1
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', original)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', original)
     user = comms.registry.require(initial.message.sender)
     same_input = Message(
         user.name,
@@ -149,7 +168,7 @@ def test_post_append_error_is_unknown_and_never_automatically_replayed(
     with pytest.raises(RelationViolationError, match="already exists"):
         comms.bus.publisher.publish_ordinary(
             same_input,
-            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
     assert len(list(comms.bus.full_history_page().messages)) == 1
 
@@ -160,7 +179,7 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     comms, _, root_id, _ = _root(tmp_path)
     original_open = os.open
     captured = {}
-    original_append = comms.bus.log._append_private_unlocked
+    original_append = comms.bus.log.append_private_unlocked
 
     def fail_bus_open(path, *args, **kwargs):
         if Path(path) == comms.bus.log.path and args[0] & os.O_WRONLY:
@@ -172,13 +191,13 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
         original_append(metadata, row)
 
     monkeypatch.setattr(os, "open", fail_bus_open)
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', capture_then_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', capture_then_append)
     with pytest.raises(HumanInitialUnknownError, match="UNKNOWN") as raised:
         comms.messaging.send_user_message("alice", "first input", worktree=str(tmp_path))
     assert raised.value.wire_root_id == root_id
     assert captured["id"] == raised.value.message_id
     assert list(comms.bus.full_history_page().messages) == []
-    assert comms.bus.log._private_marker_unlocked().last_seq == 1
+    assert comms.bus.log.private_marker_unlocked().last_seq == 1
     monkeypatch.setattr(os, "open", original_open)
     second = Comms(comms.root)
     user = second.registry.require(captured["from"])
@@ -186,13 +205,13 @@ def test_reservation_only_unknown_blocks_same_id_and_later_gap(
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
         second.bus.publisher.publish_ordinary(
             same,
-            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
     assert list(second.bus.full_history_page().messages) == []
     with pytest.raises(RelationViolationError, match="reservation has UNKNOWN"):
         second.messaging.send_user_message("alice", "different new human input", worktree=str(tmp_path))
     assert list(second.bus.full_history_page().messages) == []
-    later_agent = second.messaging.send_initial_cohort("alice", "bob", "unrelated agent input")
+    later_agent = publish_initial(second, "alice", "bob", "unrelated agent input")
     assert later_agent.seq == 2
     with pytest.raises(RelationViolationError, match="sequence gap has UNKNOWN"):
         second.messaging.send_user_message("alice", "new human input", worktree=str(tmp_path))
@@ -203,13 +222,13 @@ def test_cancellation_after_append_entry_is_typed_unknown(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     comms, _, root_id, _ = _root(tmp_path)
-    original = comms.bus.log._append_private_unlocked
+    original = comms.bus.log.append_private_unlocked
 
     def cancel_after_append(metadata, row):
         original(metadata, row)
         raise asyncio.CancelledError("cancelled after durable append")
 
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', cancel_after_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', cancel_after_append)
     with pytest.raises(HumanInitialUnknownError, match="outcome UNKNOWN") as raised:
         comms.messaging.send_user_message("alice", "cancelled after append", worktree=str(tmp_path))
     assert comms.bus.log.read_delivery_cohort(root_id, raised.value.wire_seq).message.message_id == (
@@ -224,6 +243,9 @@ def test_preappend_route_or_target_denial_has_no_bus_row(tmp_path: Path) -> None
         comms.messaging.send_user_message("#any", "wrong route", worktree=str(tmp_path))
     with pytest.raises(UnregisteredThreadError, match="not a registered thread"):
         comms.messaging.send_user_message("unregistered", "wrong peer", worktree=str(tmp_path))
+    user = comms.messaging.user_identity(str(tmp_path))
+    with pytest.raises(RelationViolationError, match="Human messages"):
+        comms.messaging.send_message(user.name, "alice", "agent impersonation")
     assert comms.bus.log.latest_sequence() == 0
 
 
@@ -276,7 +298,7 @@ async def test_cancelled_ui_wait_does_not_replay_a_blocked_send(
 
     comms, _, root_id, _ = _root(tmp_path)
     entered, release = threading.Event(), threading.Event()
-    original = comms.bus.log._append_private_unlocked
+    original = comms.bus.log.append_private_unlocked
     calls = 0
 
     def blocked_append(metadata, row):
@@ -286,7 +308,7 @@ async def test_cancelled_ui_wait_does_not_replay_a_blocked_send(
         assert release.wait(5)
         original(metadata, row)
 
-    monkeypatch.setattr(comms.bus.log, '_append_private_unlocked', blocked_append)
+    monkeypatch.setattr(comms.bus.log, 'append_private_unlocked', blocked_append)
     pending = asyncio.create_task(
         asyncio.to_thread(comms.messaging.send_user_message, "alice", "cancelled", worktree=str(tmp_path))
     )

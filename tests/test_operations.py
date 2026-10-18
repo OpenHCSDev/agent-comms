@@ -1,3 +1,4 @@
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.read_basis import NamedViewer
 import json
 import os
@@ -220,10 +221,6 @@ class TestThreadOps:
         assert answer.model == "configured/model"
         assert answer.context_usage.used == 25
 
-    def test_presence_omits_expensive_viewer_pending_counts(self, wired):
-        rows = {row["name"]: row for row in wired.views.presence()}
-        assert "pending" not in rows["fixer"]
-
     def test_runtime_info_rejects_unknown_thread(self, wired):
         with pytest.raises(UnregisteredThreadError):
             wired.agents.observe_runtime_info("ghost", AgentInfo(model="model"))
@@ -240,11 +237,22 @@ class TestThreadOps:
         names = {row["name"] for row in wired.views.list_threads(active_only=True)}
         assert names == {"PR111"}
 
-    def test_thread_detail(self, wired):
-        detail = wired.views.thread_detail("fixer")
-        assert detail["is_fork"] is True
-        assert detail["task"] == "fix auth"
-        assert detail["process_identity"] is None
+    @pytest.mark.parametrize("counted", [True, False])
+    def test_every_reader_writes_one_thread_record(self, wired, counted):
+        """list_threads, thread_detail and who/presence write one thread's record from one parent."""
+        views = wired.views
+        rows = {
+            "detail": views.thread_detail("fixer", include_pending=counted).to_wire(),
+            "roster": next(row for row in (views.who() if counted else views.presence())
+                           if row["name"] == "fixer"),
+            **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
+               if counted else {}),
+        }
+        record = rows["detail"]
+        assert ("pending" in record) is counted
+        assert record["is_fork"] is True and record["task"] == "fix auth"
+        for row in rows.values():
+            assert {key: row[key] for key in record} == record
 
     def test_thread_detail_fail_closed(self, wired):
         with pytest.raises(UnregisteredThreadError):
@@ -260,13 +268,13 @@ class TestThreadOps:
         session_file = tmp_path / "session.jsonl"
 
         attached = wired.threads.attach_session(
-            wired.registry.require("fixer"), str(session_file), pid=123
+            wired.registry.require("fixer"), str(session_file), process=ProcessIdentity.capture(os.getpid())
         )
 
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
         assert attached.task == "fix auth"
-        assert attached.pid == 123
+        assert attached.pid == os.getpid()
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
@@ -279,7 +287,7 @@ class TestThreadOps:
         session_file.write_text(
             json.dumps({"type": "model_change", "provider": "test", "modelId": "saved"}) + "\n"
         )
-        attached = wired.threads.attach_session(wired.registry.require("fixer"), str(session_file))
+        attached = wired.threads.attach_session((attachment_owner := wired.registry.require("fixer")), str(session_file), process=attachment_owner.process_identity)
         assert attached.model == "test/saved"
         assert wired.registry.require("fixer").model == "test/saved"
 
@@ -456,11 +464,11 @@ class TestThreadOps:
 class TestFork:
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(ValueError, match="Canonical saved session required"):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model="test/model", thinking_level="high", task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
 
 
 class TestLedgerOps:
@@ -521,7 +529,7 @@ class TestLedgerOps:
 class TestPollAndWire:
     def test_poll_snapshot(self, wired):
         wired.messaging.send("PR111", "fixer", "hello")
-        snap = wired.views.poll("fixer")
+        snap = wired.views.poll("fixer").to_wire()
         assert snap["thread"]["name"] == "fixer"
         assert len(snap["inbox"]) == 1
         assert [peer["name"] for peer in snap["peers"]] == ["PR111"]
@@ -531,7 +539,7 @@ class TestPollAndWire:
     def test_poll_current_thread_from_env(self, wired, monkeypatch, tmp_path):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "fixer")
         monkeypatch.setenv("PI_WORKTREE", str(tmp_path))
-        snap = wired.views.poll()
+        snap = wired.views.poll().to_wire()
         assert snap["thread"]["name"] == "fixer"
 
     def test_adopt_current_registers_from_env(self, comms, monkeypatch, tmp_path):

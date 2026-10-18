@@ -6,7 +6,7 @@ from .exporting import (
     WireExportBoundary,
     WireExportFormat,
     WireExportLimit,
-    WireExportReceipt,
+    WireExportProvenance,
     WireExportScope,
     WireTranscriptExporter,
 )
@@ -16,16 +16,16 @@ from .historical_views import (
     HistoryCursor,
     HistorySource,
 )
-from .importing import ImportLimits, ImportReceipt, ImportSnapshot
+from .importing import ImportLimits, ThreadImported, ImportSnapshot
 from .mentions import MentionQuery
 from .read_basis import Conversation, DisplayedConversation, HistoricalDisplay
 from .read_ledger import ReadLedger
 from .registration import Registration
-from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
-# Compose backends only after their shared record dependencies have loaded.
+# CLI defaults ask the declared backend family, so register it before tools.
 from . import pi_native_backend, pi_durable_backend
 from .agent_backend import AgentBackend
+from .tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
 
 AgentBackend.seal()
 
@@ -35,12 +35,12 @@ __all__ = [
     "Conversation",
     "MentionQuery",
     "ImportLimits",
-    "ImportReceipt",
+    "ThreadImported",
     "ImportSnapshot",
     "WireExportBoundary",
     "WireExportFormat",
     "WireExportLimit",
-    "WireExportReceipt",
+    "WireExportProvenance",
     "WireExportScope",
     "WireTranscriptExporter",
     "Registration",

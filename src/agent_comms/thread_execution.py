@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 from abc import ABC, abstractmethod
-import os
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .child_process import ProcessState
 from .errors import RelationViolationError
 from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
 
@@ -15,6 +14,42 @@ if TYPE_CHECKING:
     from .threads import Thread
     from .registry_document import RegistrySnapshot
     from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
+
+
+class ThreadCommandAvailability:
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return True
+
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return cls.available_for(status, process=thread.process_identity)
+
+
+class NativeOwnerCommand(ThreadCommandAvailability):
+    @classmethod
+    def available_for_thread(cls, thread: Thread, status: ThreadStatus) -> bool:
+        return thread.execution.native_command_available(
+            cls, status, process=thread.process_identity,
+        )
+
+
+class OwnerLifecycleControl(ThreadCommandAvailability):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.allows_owner_control()
+
+
+class StartOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.allows_owner_start(process=process)
+
+
+class ArchiveOwnerControl(OwnerLifecycleControl):
+    @classmethod
+    def available_for(cls, status: ThreadStatus, *, process: ProcessState) -> bool:
+        return status.stopped
 
 
 class ConversationPreparation(ABC):
@@ -41,7 +76,7 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return preparation.external()
 
     @classmethod
-    def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
+    def native_command_available(cls, command, status, *, process: ProcessState) -> bool:
         return False
 
     @classmethod
@@ -78,12 +113,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
 class NativeThreadExecution(ThreadExecution):
     @classmethod
-    def native_command_available(cls, command, status, *, owner_pid: int) -> bool:
-        return command.available_for(status, owner_pid=owner_pid)
+    def native_command_available(cls, command, status, *, process: ProcessState) -> bool:
+        return command.available_for(status, process=process)
 
     @classmethod
     def restart_candidates(cls, thread: Thread, status):
-        if thread.pid == os.getpid():
+        if thread.process_identity.runs_here():
             return ()
         return (thread,) if thread.role.executable and status.active and thread.process_alive else ()
 
@@ -99,21 +134,16 @@ class NativeThreadExecution(ThreadExecution):
     def owner_binding(cls, snapshot: RegistrySnapshot, thread: Thread):
         from .thread_presentation import LiveThreadOwnerBinding, UnavailableThreadOwnerBinding
 
-        try:
-            snapshot.require_active(thread.name)
-            process = thread.require_process()
-        except RelationViolationError:
+        if not snapshot.statuses[thread.name].active or not thread.process_alive:
             return UnavailableThreadOwnerBinding()
-        if not process.alive():
-            return UnavailableThreadOwnerBinding()
-        return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), process)
+        return LiveThreadOwnerBinding(
+            snapshot.owner_identity(thread.name), thread.require_process(),
+        )
 
     @classmethod
-    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
+    def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        if status.active and thread.has_process:
-            return binding.native_presentation(ordinary)
-        return ordinary
+        return status.native_presentation(thread.process_identity, ordinary, binding)
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):
@@ -123,7 +153,7 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def project_activity(cls, thread: Thread, activity):
         """A running native owner displays its current turn phase."""
-        return thread.turn_state.project_activity(activity) if thread.has_process else activity
+        return thread.turn_state.project_activity(activity)
 
 
 class ExternalThreadExecution(ThreadExecution):
@@ -139,14 +169,9 @@ class ExternalThreadExecution(ThreadExecution):
         return NoBridgeThreadStatus()
 
     @classmethod
-    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
+    def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        if not status.active:
-            return ordinary
-        if thread.has_process and not thread.process_alive:
-            return replace(ordinary, marker="○", summary="CLI offline",
-                           status=ordinary.status.without_work())
-        return ordinary
+        return status.external_presentation(thread.process_identity, ordinary)
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):

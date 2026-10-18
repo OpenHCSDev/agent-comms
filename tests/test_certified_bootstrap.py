@@ -20,7 +20,7 @@ from test_private_human_ingress import _root
 
 def source_witness(bus):
     with bus.log.locked(blocking=False):
-        return verify_private_bus_checkpoint_unlocked(bus.log, bus.log._private_marker_unlocked())
+        return verify_private_bus_checkpoint_unlocked(bus.log, bus.log.private_marker_unlocked())
 
 
 def test_fresh_root_claims_source_gaps_and_empty_cursor(tmp_path):
@@ -108,9 +108,7 @@ async def test_unconfigured_acp_attach_refuses_before_creating_owner(tmp_path):
 )
 async def test_configured_acp_new_and_retained_attach_use_same_certified_root(tmp_path):
     comms = Comms(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    package = Path(os.environ["AC_NATIVE_COPIED_PACKAGE"])
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(
         comms,
         auto_wake=False,

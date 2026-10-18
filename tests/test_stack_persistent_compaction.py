@@ -216,10 +216,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             runtime_enabled=True,
             auto_wake=False,
         )
-        monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner.configured_root_id)
-        monkeypatch.setenv(
-            "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(owner.private_nk_native_package)
-        )
         updates = []
 
         class Client:
@@ -227,9 +223,6 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
         owner.on_connect(Client())
-        comms.owners.pin_private_nk_launch(
-            comms.root, owner.configured_root_id, owner.private_nk_native_package
-        )
         attachment = CommsClient(
             comms,
             agent_bin=native,
@@ -246,7 +239,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         compact_task = None
         try:
             await owner.new_session(str(project))
-            comms.threads.attach_session(comms.registry.require("worker"), str(session))
+            comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
             await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "WARMUP"), 20)
             retained = owner.turns.persistent_backends["worker"].child_state.idle().child.proc
             assert retained is not None and retained.returncode is None, json.dumps(

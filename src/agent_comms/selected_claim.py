@@ -32,7 +32,7 @@ from .errors import RelationViolationError
 from .messages import ClaimNoticeKind, Message
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
-from .store_files import StoreLock, _store_lock
+from .store_files import SharedLock, StoreLock, _store_lock
 from .threads import Thread
 
 
@@ -40,13 +40,9 @@ def verify_selected_wake(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
 ) -> None:
     """Reject any unselected, stale, stopped, or unrelated N/K execution."""
-    if type(comms) is not Comms or type(store) is not Coordination:
-        raise TypeError("Wake claim_scope requires the actual wire and coordinator stores")
-    if type(claim_scope) is not WakeClaim or type(owner_name) is not str:
-        raise IdentityConflict("Wake claim_scope is not typed")
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
-    with _store_lock(comms._wire_lock_path, shared=True):
+    with _store_lock(comms._wire_lock_path, mode=SharedLock()):
         _require_no_private_owner_rename(comms.root)
         try:
             with comms.bus.log.certified_read() as source:
@@ -130,10 +126,6 @@ def _selected_claim_boundary(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
 ):
     """One wire/bus/registry boundary for selected claim acquisition."""
-    if type(comms) is not Comms or type(store) is not Coordination:
-        raise TypeError("Wake claim requires the actual wire and coordinator stores")
-    if type(claim_scope) is not WakeClaim or type(owner_name) is not str:
-        raise IdentityConflict("Wake claim claim_scope is not typed")
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
     bus = comms.bus
@@ -151,7 +143,7 @@ def _selected_claim_boundary(
             raise IdentityConflict("Selected wake owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
-        metadata = bus.log._private_marker_unlocked()
+        metadata = bus.log.private_marker_unlocked()
         if metadata.root_id != claim_scope.wire_root_id:
             raise IdentityConflict("Selected wake belongs to another wire root")
         if claim_scope.source_seq <= metadata.claimed_after_seq:
@@ -195,14 +187,13 @@ def publish_selected_resource_claim(
                 raise ClaimConflict(existing)
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
-        committed = bus.publisher.publish_claim_envelope(
+        committed = bus.publisher._publish_claim_envelope_unlocked(
+            bus_lock, registry,
             Message(owner.name, owner.name, "Claimed", ClaimNoticeKind),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],
-            _locked_registry_snapshot=registry,
-            _bus_lock=bus_lock,
-            _claim=claim_scope,
+            claim=claim_scope,
         )
         transition = committed.claim_transition
         assert transition is not None and transition.generation is not None
@@ -294,16 +285,8 @@ def write_selected_claimed_file(
     subprocesses, or human edits. Failure after truncation/write is UNKNOWN;
     callers must inspect, never automatically retry this operation.
     """
-    if type(comms) is not Comms or type(store) is not Coordination:
-        raise TypeError("Selected write requires the actual wire and coordinator stores")
-    if (
-        type(claim_scope) is not WakeClaim
-        or type(owner_name) is not str
-        or type(claimed) is not ClaimOwner
-        or type(contents) is not bytes
-        or len(contents) > 1024 * 1024
-    ):
-        raise IdentityConflict("Selected write requires a bounded typed claim and bytes")
+    if len(contents) > 1024 * 1024:
+        raise IdentityConflict("Selected write requires bounded bytes")
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Selected write coordinator belongs to another root")
     if not hasattr(os, "O_NOFOLLOW"):
@@ -323,7 +306,7 @@ def write_selected_claimed_file(
             raise IdentityConflict("Selected write owner stopped or changed") from error
         owner, generation = captured.thread, captured.claimed_generation
         _require_no_private_owner_rename(comms.root)
-        marker = bus.log._private_marker_unlocked()
+        marker = bus.log.private_marker_unlocked()
         if marker.root_id != claim_scope.wire_root_id:
             raise IdentityConflict("Selected write belongs to another private root")
         initial = _committed_source(bus_lock, claim_scope, "Selected write source is not committed")

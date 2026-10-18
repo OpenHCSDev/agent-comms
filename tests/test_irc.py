@@ -23,7 +23,7 @@ def chat(wired):
         comms.registry.new_thread(name='fixer', tags=frozenset({'ci'}), worktree=fixer.worktree, parent='PR111', task=fixer.task, process_identity=fixer.process_identity)
     )
     comms.registry.declare(
-        comms.registry.new_thread(name='PR112', tags=frozenset({'docs'}), worktree='/tmp/wt2', process_identity=None)
+        comms.registry.new_thread(name='PR112', tags=frozenset({'docs'}), worktree='/tmp/wt2')
     )
     return comms
 

@@ -15,11 +15,11 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 from pathlib import Path
 
+from .bus_route_counts import CompletingRouteCounts
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import wire
 from .coordination_errors import CoordinationError
-from .owner_restart import StoppedOwnerFailure
 
 
 def _fail(error: BaseException) -> int:
@@ -52,19 +52,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
             args = build_parser().parse_args(argv)
-            command = CliCommand.from_namespace(args)
+            command = CliCommand.decode(args.command).from_namespace(args)
             from .active_route import resolve_comms_route
 
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.hold_client_route())
-            comms = wire(route)
+            # One CLI call answers in full; only the UI yields between index units.
+            comms = wire(route, projection=CompletingRouteCounts)
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130
-    except StoppedOwnerFailure as exc:
-        # Do not ignore a failure after starting to stop an owner.
-        exc.abandon()
-        return _fail(exc)
     except (ValueError, OSError, CoordinationError) as exc:
         return _fail(exc)
     return 0

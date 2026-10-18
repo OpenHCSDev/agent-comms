@@ -195,7 +195,7 @@ class MessageReadRequest[T](ABC):
     def indexed(self, index, source: WireSnapshot) -> T: ...
 
     def read(self, log) -> T:
-        with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+        with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             return self.read_opened(source)
 
     def read_opened(self, source: WireSnapshot) -> T:
@@ -261,7 +261,7 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
         return self.scope.unread_before(message, self.before, self.seen)
 
     def indexed(self, index, source: WireSnapshot) -> bool:
-        with closing(OlderTraversal(self.before).offsets(index, self.scope, source.boundary)) as rows:
+        with closing(self.scope.offsets(index, lower=self.seen.high_water, upper=self.before, descending=True, before_offset=source.boundary)) as rows:
             candidates = (row for row in rows if self.includes(row))
             return any(True for _ in self.indexed_records(source, candidates))
 

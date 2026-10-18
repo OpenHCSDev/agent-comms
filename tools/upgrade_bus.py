@@ -1,0 +1,345 @@
+#!/usr/bin/env python3
+"""Upgrade a retained bus and the checkout that runs it, in one command.
+
+    python tools/upgrade_bus.py [--checkout DIR] [--root ~/.agent-comms] [--to origin/main] [--rehearse]
+
+``--checkout`` is the installation to upgrade (by default, the one holding
+this file); run the command from the target revision so its steps are known.
+
+The target revision's stack is built in a temporary worktree, relocked to the
+latest OpenHCSDev mains, and must import Toad and the ACP client. The bus
+ledger (``carries.json``) names the carry steps still pending; each runs from
+the revision that declares it (``tools/cutover/carry.py``). Every run first
+rehearses on a copy of the bus: the steps, then ``who``, ``threads`` and
+``history`` reads, and every file no step names as rewritten must be
+byte-identical. ``--rehearse``
+stops there.
+
+A live run then stops the running agent owners with the installed CLI, backs
+the bus up (tar plus a hash of every file), moves the checkout,
+relocks and syncs its stack, prepares native Pi, carries the bus, reads it
+back, and starts only the owners it stopped. A failure after the backup
+restores the bus, the route, the checkout and its stack, and restarts those
+owners. Nothing is sent and no input is replayed: owners start by the normal
+start path, which never replays uncertain inputs.
+"""
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+import tarfile
+import tempfile
+import time
+from dataclasses import dataclass, replace
+from pathlib import Path
+
+from cutover.carry import CarryChain, CarryLedger, Step
+
+REPO = Path(__file__).resolve().parents[1]
+CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
+ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
+
+
+class UpgradeRefused(Exception):
+    """The upgrade stopped before it changed anything it cannot restore."""
+
+
+def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) -> str:
+    print("+", " ".join(map(str, command)), file=sys.stderr, flush=True)
+    completed = subprocess.run([str(part) for part in command], cwd=cwd, env=env,
+                               capture_output=True, text=True)
+    if completed.returncode:
+        raise UpgradeRefused(f"{command[0]} failed: {completed.stderr.strip() or completed.stdout.strip()}")
+    return completed.stdout
+
+
+def bus_files(root: Path) -> dict[str, str]:
+    """Every regular file under the bus but its lock files, by content hash."""
+    return {str(path.relative_to(root)): hashlib.sha256(path.read_bytes()).hexdigest()
+            for path in sorted(root.rglob("*"))
+            if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")}
+
+
+def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
+    """Only the files a step names as rewritten may differ from ``before``."""
+    after = bus_files(root)
+    changed = {name for name in before.keys() | after.keys() if before.get(name) != after.get(name)}
+    unnamed = sorted(changed - {name for step in steps for name in step["rewritten"]})
+    if unnamed:
+        raise UpgradeRefused(f"Carries changed files no step names: {unnamed}")
+    return {"identical": len(before.keys() - changed), "rewritten": len(changed)}
+
+
+@dataclass(frozen=True)
+class Stack:
+    """One checkout's stack environment: the Python and CLI an installation runs."""
+
+    checkout: Path
+    home: Path = Path.home()
+
+    @property
+    def python(self) -> Path:
+        return self.checkout / "stack/.venv/bin/python"
+
+    def relock(self) -> None:
+        """OpenHCSDev packages track their mains; the lock only records this resolution."""
+        run("uv", "lock", "--project", "stack", "--upgrade", "--python", "3.14", cwd=self.checkout)
+        run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=self.checkout)
+        self.imports()
+
+    def imports(self) -> None:
+        run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
+
+    def prepare_native(self) -> None:
+        run(self.checkout / "stack/bin/prepare-pi-native", cwd=self.checkout)
+
+    def environment(self, *paths: Path) -> dict:
+        """``paths`` first; then this checkout's ``src``. ``home`` holds the route its clients read."""
+        return {**os.environ, "HOME": str(self.home),
+                "PYTHONPATH": os.pathsep.join(map(str, (*paths, self.checkout / "src")))}
+
+    def cli(self, root: Path, *arguments: str) -> dict:
+        """One JSON CLI result for this bus alone, never the route's, waiting while the
+        route index is still being built."""
+        environment = {**self.environment(), "AGENT_COMMS_ROOT": str(root)}
+        for _ in range(240):
+            completed = subprocess.run(
+                [str(self.python), "-c", "from agent_comms.cli import main; main()", "--root", str(root),
+                 *arguments], cwd=self.checkout, env=environment, capture_output=True, text=True)
+            if "Route index covers" not in completed.stdout:
+                break
+            time.sleep(5)
+        result = json.loads(completed.stdout or "{}")
+        if completed.returncode or "error" in result:
+            raise UpgradeRefused(f"agent-comms {' '.join(arguments)}: "
+                                 f"{completed.stdout.strip() or completed.stderr.strip()}")
+        return result
+
+    def verify(self, root: Path) -> dict[str, int]:
+        threads = self.cli(root, "threads")["threads"]
+        present = self.cli(root, "who")
+        history = self.cli(root, "history", "--everything", "--limit", "50")
+        return {"threads": len(threads), "who": len(present), "history": len(history.get("messages", ()))}
+
+
+@dataclass
+class Revisions:
+    """Temporary worktrees of the revisions the pending steps come from."""
+
+    repo: Path
+    scratch: Path
+
+    def __post_init__(self) -> None:
+        self.trees: dict[str, Path] = {}
+
+    def tree(self, revision: str) -> Path:
+        if revision not in self.trees:
+            path = self.scratch / f"tree-{revision[:12]}"
+            run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
+            self.trees[revision] = path
+        return self.trees[revision]
+
+    def close(self) -> None:
+        for path in self.trees.values():
+            subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(path)])
+
+
+def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> dict:
+    """Run one step from the revision that declares it, with ``stack``'s Python."""
+    tree = revisions.tree(step.revision)
+    sources = (tree / "tools",) if flags[:1] == ("--before-stop",) else (tree / "src", tree / "tools")
+    environment = stack.environment(*sources)
+    output = run(stack.python, "-m", f"cutover.{step.name}", root, *flags, cwd=tree, env=environment)
+    return json.loads(output.strip().splitlines()[-1])
+
+
+def copy_bus(root: Path, copy: Path) -> None:
+    """Copy under the bus's wire lock so no writer tears the copy; sockets are skipped."""
+    def sockets(directory: str, names: list[str]) -> set[str]:
+        return {name for name in names
+                if stat.S_ISSOCK(os.lstat(os.path.join(directory, name)).st_mode)}
+
+    from agent_comms.store_files import _store_lock
+
+    with _store_lock(root / "wire"):
+        shutil.copytree(root, copy, symlinks=True, ignore=sockets)
+
+
+def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
+    """A home whose route is the real one, selecting the copy wherever it selected the bus."""
+    home = scratch / "home"
+    route = ROUTE.relative_to(Path.home())
+    (home / route).parent.mkdir(mode=0o700, parents=True)
+    if ROUTE.exists():
+        record = json.loads(ROUTE.read_text())
+        if Path(record["root"]).resolve() == root.resolve():
+            record["root"] = str(copy)
+        (home / route).write_text(json.dumps(record))
+        (home / route).chmod(0o600)
+    return home
+
+
+def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions) -> dict:
+    with tempfile.TemporaryDirectory(dir=root.parent, prefix=f".{root.name}.rehearsal.") as scratch:
+        copy = Path(scratch) / root.name
+        copy_bus(root, copy)
+        stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
+        before = bus_files(copy)
+        steps = [carry(step, copy, stack, revisions, "--apply") for step in pending]
+        files = carried(copy, before, steps)
+        return {"steps": steps, "files": files, "read": stack.verify(copy)}
+
+
+@dataclass
+class Backup:
+    root: Path
+    route: Path
+    path: Path
+
+    @classmethod
+    def take(cls, root: Path, route: Path) -> Backup:
+        path = root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}"
+        path.mkdir(mode=0o700)
+        with tarfile.open(path / "bus.tar", "w") as archive:
+            archive.add(root, root.name)  # tarfile skips sockets
+        (path / "files.json").write_text(json.dumps(bus_files(root), indent=1))
+        if route.exists():
+            shutil.copy2(route, path / "active-route.json")
+        return cls(root, route, path)
+
+    def files(self) -> dict[str, str]:
+        return json.loads((self.path / "files.json").read_text())
+
+    def restore(self) -> None:
+        """Extract beside the bus, then swap, so a failed extract leaves the bus as it was."""
+        staged = Path(tempfile.mkdtemp(dir=self.root.parent, prefix=f".{self.root.name}.restore."))
+        with tarfile.open(self.path / "bus.tar") as archive:
+            archive.extractall(staged, filter="tar")
+        failed = self.root.with_name(f".{self.root.name}.failed-{time.strftime('%Y%m%dT%H%M%S')}")
+        os.rename(self.root, failed)
+        os.rename(staged / self.root.name, self.root)
+        staged.rmdir()
+        if self.files() != bus_files(self.root):
+            raise UpgradeRefused(f"The restored bus differs from the backup; the failed bus is at {failed}")
+        if (self.path / "active-route.json").exists():
+            shutil.copy2(self.path / "active-route.json", self.route)
+        print(f"Restored the bus; the failed one is kept at {failed}", file=sys.stderr)
+
+
+def route_readers() -> None:
+    """Toad and ACP clients hold the route directory shared; an upgrade needs them closed."""
+    directory = Path.home() / ".local/state/agent-comms"
+    if not directory.exists():
+        return
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        from agent_comms.active_route import route_lock_holders
+
+        holders = "; ".join(f"PID {holder.pid}: {holder.command}" for holder in route_lock_holders(descriptor))
+        raise UpgradeRefused(f"Close the Agent Comms clients first: {holders}") from None
+    finally:
+        os.close(descriptor)
+
+
+def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dict:
+    current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
+    run("git", "-C", checkout, "fetch", "-q", "origin")
+    target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
+    if subprocess.run(["git", "-C", str(checkout), "merge-base", "--is-ancestor", current, target]).returncode:
+        raise UpgradeRefused(f"{target[:12]} does not follow the checkout's {current[:12]}")
+    if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
+        raise UpgradeRefused("The checkout has local changes")
+    applied = CarryLedger(root).applied()
+    # A bus from before the ledger runs every step; each leaves carried data unchanged.
+    try:
+        pending = CarryChain.at(checkout, target).pending(applied or ())
+    except ValueError as error:
+        raise UpgradeRefused(str(error)) from None
+    installed = Stack(checkout)
+    if not rehearse_only and not installed.python.exists():
+        raise UpgradeRefused(f"No installed stack at {installed.python}")
+    with tempfile.TemporaryDirectory(prefix="upgrade-bus.") as scratch:
+        revisions = Revisions(checkout, Path(scratch))
+        try:
+            staged = Stack(revisions.tree(target))
+            staged.relock()
+            report = {"from": current, "to": target, "pending": [step.name for step in pending],
+                      "rehearsal": rehearse(root, pending, staged, revisions)}
+            if rehearse_only:
+                return report
+            report["live"] = live(checkout, root, current, target, pending, installed, revisions)
+            return report
+        finally:
+            revisions.close()
+
+
+def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
+         installed: Stack, revisions: Revisions) -> dict:
+    running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
+               if thread["role"] == "agent" and thread["status"] == "running"]
+    for step in pending:
+        carry(step, root, installed, revisions, "--before-stop", "--apply")
+    for name in running:
+        installed.cli(root, "stop", "--name", name)
+    lock = checkout / "stack/uv.lock"
+    try:
+        route_readers()
+        backup = Backup.take(root, ROUTE)
+    except BaseException:
+        start(installed, root, running)
+        raise
+    shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
+    try:
+        run("git", "-C", checkout, "merge", "--ff-only", "-q", target)
+        installed.relock()
+        installed.prepare_native()
+        steps = []
+        for step in pending:
+            carry(step, root, installed, revisions)
+            steps.append(carry(step, root, installed, revisions, "--apply"))
+        files = carried(root, backup.files(), steps)
+        read = installed.verify(root)
+    except BaseException:
+        backup.restore()
+        run("git", "-C", checkout, "reset", "--keep", "-q", current)
+        if (backup.path / "uv.lock").exists():
+            shutil.copy2(backup.path / "uv.lock", lock)
+        run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=checkout)
+        installed.prepare_native()
+        start(installed, root, running)
+        raise
+    start(installed, root, running)
+    return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
+            "backup": str(backup.path)}
+
+
+def start(stack: Stack, root: Path, names: list[str]) -> None:
+    for name in names:
+        stack.cli(root, "start", "--name", name)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--checkout", type=lambda value: Path(value).expanduser().resolve(), default=REPO)
+    parser.add_argument("--root", type=lambda value: Path(value).expanduser().resolve(),
+                        default=Path.home() / ".agent-comms")
+    parser.add_argument("--to", default="origin/main")
+    parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
+    args = parser.parse_args()
+    try:
+        print(json.dumps(upgrade(args.checkout, args.root, args.to, args.rehearse), indent=2))
+    except UpgradeRefused as error:
+        raise SystemExit(f"upgrade-bus: {error}")
+
+
+if __name__ == "__main__":
+    main()

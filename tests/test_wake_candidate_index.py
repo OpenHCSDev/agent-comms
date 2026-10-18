@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import json
 import multiprocessing
 import os
@@ -62,26 +63,42 @@ def _maintain_in_process(root: str, root_id: str, through_bytes: int, start, res
         results.put(("ok", outcome.caught_up))
 
 
-def _private(tmp_path: Path) -> tuple[Comms, str, dict[str, str]]:
-    root = tmp_path / "wire"
-    root.mkdir(mode=0o700)
-    comms = Comms(root)
+@pytest.fixture
+def participants(private_comms, tmp_path: Path) -> dict[str, str]:
+    """This file's three team members on the shared private bus, by lookup."""
     created = {"sender": 17001.0, "Alice": 17002.0, "Bob": 17003.0}
     for name, identity in created.items():
-        comms.registry.declare(
-            comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=identity)
+        private_comms.registry.declare(
+            private_comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=identity)
         )
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    lookup = {name: RecordedThreadIncarnation("fixture", identity).lookup for name, identity in created.items()}
-    return comms, root_id, lookup
+    return {name: RecordedThreadIncarnation("fixture", identity).lookup for name, identity in created.items()}
 
 
-def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) -> None:
-    comms, root_id, _lookup = _private(tmp_path)
+def test_unbuilt_index_rejects_pages_and_resume_without_creating_storage(private_comms, participants):
+    comms, lookup = private_comms, participants
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    message = publish_initial(comms, "sender", "Alice", "not indexed")
     index = WakeCandidateIndex(comms.bus.log)
-    comms.messaging.send_initial_cohort("sender", "#team", "initial")
+    with pytest.raises(ProjectionUnavailableError, match="stale or unrelated"):
+        index.page(root_id=root_id, recipient_lookup=lookup["Alice"], after_seq=0,
+                   required_through_seq=message.seq)
+    with pytest.raises(ProjectionRebuildRequiredError, match="initial build"):
+        index._verified_checkpoint(root_id)
+    hint = index.notify_committed_append(root_id=root_id,
+                                        through_bytes=comms.bus.log.path.stat().st_size)
+    with pytest.raises(ProjectionRebuildRequiredError, match="initial build"):
+        index.catch_up_committed_append(hint)
+    assert not index.path.exists()
+    assert not index.path.with_name(f".{index.filename}.lock").exists()
+
+
+def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path, private_comms, participants) -> None:
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    index = WakeCandidateIndex(comms.bus.log)
+    publish_initial(comms, "sender", "#team", "initial")
     for number in range(128):
-        comms.messaging.send_initial_cohort(
+        publish_initial(comms, 
             "sender", "#team", f"{number:04d} " + "x" * 4096
         )
     expected_seq = comms.bus.log.latest_sequence()
@@ -115,9 +132,11 @@ def test_two_processes_serialize_checkpoint_replay_and_commit(tmp_path: Path) ->
     assert count == distinct_count
 
 
-def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
-    comms, root_id, lookup = _private(tmp_path)
-    message = comms.messaging.send_initial_cohort('sender', 'Alice', 'fixture')
+def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path, private_comms, participants):
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
+    message = publish_initial(comms, 'sender', 'Alice', 'fixture')
     index = WakeCandidateIndex(comms.bus.log)
     assert index.maintain(start=FirstBuild())
     with sqlite3.connect(index.path) as db:
@@ -134,8 +153,8 @@ def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path):
         index.catch_up_committed_append(hint)
 
 
-def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_path):
-    comms, _root_id, _lookup = _private(tmp_path)
+def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_path, private_comms, participants):
+    comms = private_comms
     index = WakeCandidateIndex(comms.bus.log)
     assert index.maintain(start=FirstBuild())
     with sqlite3.connect(index.path) as db:
@@ -147,10 +166,12 @@ def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_pa
 
 
 def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
-    tmp_path: Path,
+    tmp_path: Path, private_comms, participants,
 ) -> None:
-    comms, root_id, lookup = _private(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
+    message = publish_initial(comms, "sender", "#team", "@Alice investigate")
     index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ProjectionUnavailableError):
         index.page(
@@ -225,18 +246,20 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
 )
 def test_maintenance_limits_fail_before_schema_or_checkpoint(
     tmp_path: Path, limits: dict[str, object], expected: str
-) -> None:
-    comms, _, _ = _private(tmp_path)
+, private_comms, participants) -> None:
+    comms = private_comms
     index = WakeCandidateIndex(comms.bus.log)
     with pytest.raises(ValueError, match=expected):
         index.maintain(**limits)
     assert not index.path.exists()
 
 
-def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path: Path) -> None:
-    comms, root_id, lookup = _private(tmp_path)
-    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
-    second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
+def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path: Path, private_comms, participants) -> None:
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
+    first = publish_initial(comms, "sender", "Alice", "first")
+    second = publish_initial(comms, "sender", "Alice", "second")
     index = WakeCandidateIndex(comms.bus.log)
     assert not index.maintain(start=RebuildIndex(), max_rows=1)
     with pytest.raises(ProjectionUnavailableError, match="stale"):
@@ -286,9 +309,11 @@ def test_bounded_maintenance_replays_append_without_duplicate_or_cursor(tmp_path
         )
 
 
-def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path) -> None:
-    comms, root_id, lookup = _private(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "Alice", "a" * 4096)
+def test_byte_budget_never_publishes_a_partial_candidate(tmp_path: Path, private_comms, participants) -> None:
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
+    message = publish_initial(comms, "sender", "Alice", "a" * 4096)
     index = WakeCandidateIndex(comms.bus.log)
     # A batch budget smaller than the next record admits that one record
     # alone; it never publishes a partial candidate.
@@ -324,10 +349,12 @@ def _replace_rows(comms: Comms, rows: list[dict]) -> None:
     path.chmod(0o600)
 
 
-def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> None:
-    comms, root_id, lookup = _private(tmp_path)
+def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path, private_comms, participants) -> None:
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        publish_initial(comms, "sender", "Alice", f"message {number}")
         for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
@@ -359,10 +386,12 @@ def test_invalid_intervening_response_blocks_later_candidate(tmp_path: Path) -> 
 )
 def test_response_identity_must_match_private_bus_before_later_candidate(
     tmp_path: Path, corrupt: str, expected: str
-) -> None:
-    comms, root_id, lookup = _private(tmp_path)
+, private_comms, participants) -> None:
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        publish_initial(comms, "sender", "Alice", f"message {number}")
         for number in (1, 2, 3)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
@@ -394,18 +423,20 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
 @pytest.mark.parametrize("first_batch_rows", [2, 4], ids=["stored-key", "same-batch"])
 def test_duplicate_private_response_key_rejected_by_unique_constraint(
     tmp_path: Path, first_batch_rows: int
-) -> None:
+, private_comms, participants) -> None:
     """Exercise decoder/transaction invariants, not certify a rewritten bus."""
-    comms, root_id, lookup = _private(tmp_path)
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
     messages = [
-        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+        publish_initial(comms, "sender", "Alice", f"message {number}")
         for number in (1, 2, 3, 4)
     ]
     rows = [json.loads(raw) for raw in comms.bus.log.path.read_text().splitlines()]
     rows[1:3] = [_as_response(row, root_id, "duplicate-execution") for row in rows[1:3]]
     _replace_rows(comms, rows)
     index = WakeCandidateIndex(comms.bus.log)
-    with comms.bus.log._opened_wire_snapshot(opening=SavedPrefixOpening()) as source:
+    with comms.bus.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source:
         stat = os.fstat(source.stream.fileno())
         first_batch = index._replay_prefix(
             source, 0, 0, max_rows=first_batch_rows, max_bytes=256 * 1024
@@ -464,9 +495,11 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
         comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
 
 
-def test_candidate_decode_releases_writer_and_discards_a_losing_batch(tmp_path, monkeypatch):
-    comms, root_id, lookup = _private(tmp_path)
-    messages = [comms.messaging.send_initial_cohort("sender", "Alice", body)
+def test_candidate_decode_releases_writer_and_discards_a_losing_batch(tmp_path, monkeypatch, private_comms, participants):
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
+    messages = [publish_initial(comms, "sender", "Alice", body)
                 for body in ("first", "second")]
     index = WakeCandidateIndex(comms.bus.log)
     replay = WakeCandidateIndex._replay_prefix
@@ -492,9 +525,11 @@ def test_candidate_decode_releases_writer_and_discards_a_losing_batch(tmp_path, 
     assert [entry.source_seq for entry in completed.entries] == [m.seq for m in messages]
 
 
-def test_maintenance_replays_its_captured_cut_not_a_later_partial_append(tmp_path, monkeypatch):
-    comms, root_id, lookup = _private(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "Alice", "committed prefix")
+def test_maintenance_replays_its_captured_cut_not_a_later_partial_append(tmp_path, monkeypatch, private_comms, participants):
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
+    message = publish_initial(comms, "sender", "Alice", "committed prefix")
     index = WakeCandidateIndex(comms.bus.log)
     replay = WakeCandidateIndex._replay_prefix
     cuts = []
@@ -514,9 +549,11 @@ def test_maintenance_replays_its_captured_cut_not_a_later_partial_append(tmp_pat
     ).entries] == [message.seq]
 
 
-def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_path: Path) -> None:
-    comms, root_id, lookup = _private(tmp_path)
-    message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_path: Path, private_comms, participants) -> None:
+    comms = private_comms
+    root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
+    lookup = participants
+    message = publish_initial(comms, "sender", "Alice", "first")
     index = WakeCandidateIndex(comms.bus.log)
     assert index.maintain(start=RebuildIndex())
     source = comms.bus.log.path

@@ -1,5 +1,6 @@
 """Retained history never becomes work for a different thread incarnation."""
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 import os
 import sqlite3
@@ -41,7 +42,7 @@ def test_missing_projection_has_no_revision_and_one_current_row_query(tmp_path):
         assert state == UnrecordedRouteSource()
         assert state.through == 0
         assert len(queries) == 1
-        with comms.bus.log._opened_wire_snapshot() as source:
+        with comms.bus.log.opened_wire_snapshot() as source:
             assert not state.matches_source(source)
             assert state.needs_rebuild(source)
             state.check_source(source, RouteIndexReady())
@@ -78,7 +79,7 @@ def test_timestamp_index_handles_unordered_times_and_sparse_seen_rows(tmp_path):
     birth = comms.registry.require("recipient").created_at
     messages = [
         comms.bus.publisher.publish_ordinary(
-            Message("sender", "recipient", f"row {index}", InfoKind, timestamp=timestamp)
+            Message("sender", "recipient", f"row {index}", InfoKind, timestamp=timestamp), origin=AgentOrigin()
         )
         for index, timestamp in enumerate((birth + 2, birth - 1, birth + 1, birth - 2))
     ]
@@ -137,7 +138,7 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
 def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
     """A source truncated in place below the recorded offset cannot answer.
 
-    The append-only writer (wire_log._append_private_unlocked, os.O_APPEND)
+    The append-only writer (wire_log.append_private_unlocked, os.O_APPEND)
     never truncates, so a digest-verified recorded revision is safe to answer
     from. A source that loses the bytes that digest covers fails it and
     rebuilds, the same way a replaced source does.
@@ -208,7 +209,7 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
         writer.commit()
     with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == [ExtraRouteStatisticRow(7)]
-    with comms.bus.log._opened_wire_snapshot() as source:
+    with comms.bus.log.opened_wire_snapshot() as source:
         assert routes.sync(source, lambda _: ()).complete
     with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == []
@@ -221,13 +222,13 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     birth = comms.registry.require(viewer).created_at
     first = comms.bus.publisher.publish_ordinary(
-        Message("sender", viewer, "inside cut", InfoKind, timestamp=birth + 2)
+        Message("sender", viewer, "inside cut", InfoKind, timestamp=birth + 2), origin=AgentOrigin()
     )
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         later = comms.bus.publisher.publish_ordinary(Message(
             "sender", viewer, "outside cut", InfoKind,
             timestamp=birth - 1 if birth_crossing else birth + 3,
-        ))
+        ), origin=AgentOrigin())
         comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
             viewer, (later,), basis.registry, comms.bus.log.path,
         ))

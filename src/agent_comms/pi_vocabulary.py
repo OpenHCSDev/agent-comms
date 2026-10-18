@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Annotated, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, FieldRepresentation
+from .native_arguments import ThinkingArgument
+
+if TYPE_CHECKING:
+    from .backend import TurnSession
 
 
 class PiStopReason(DeclaredFamily, affix="StopReason"):
@@ -34,6 +40,11 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     @classmethod
     def permits_progress(cls):
         return True
+
+    @classmethod
+    def interrupted(cls, session: TurnSession) -> bool:
+        """An abort the user asked for by sending now: the request was replaced, not failed."""
+        return session.explicit_interrupt and cls.explicit_abort
 
     @classmethod
     async def apply(cls, session, message):
@@ -94,7 +105,8 @@ class FailedPiStop(FinishedPiStop):
 
     @classmethod
     async def apply(cls, session, message):
-        session.output.record_failure(cls.declared_failure(message))
+        if not cls.interrupted(session):
+            session.output.record_failure(cls.declared_failure(message))
         async for event in super().apply(session, message):
             yield event
 
@@ -121,9 +133,7 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
     async def apply(cls, session, message):
         async for event in super().apply(session, message):
             yield event
-        if not (session.explicit_interrupt and cls.explicit_abort) and (
-            session.watchdog.phase.holds_refusal_reports
-        ):
+        if not cls.interrupted(session) and session.watchdog.phase.holds_refusal_reports:
             # A refusal the recovery is re-requesting is interim evidence; the
             # recovery's own end event reports the final outcome.
             return
@@ -133,7 +143,7 @@ class ErrorStopReason(FailedPiStop, PiStopReason):
             (message.error_message or "").strip() or f"Model request {cls.declared_name}",
             message.diagnostics, source=NativeMessageFailureSource(message),
         )
-        if not (session.explicit_interrupt and cls.explicit_abort):
+        if not cls.interrupted(session):
             yield error
 
 
@@ -193,8 +203,55 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def optional_name(cls, level):
-        return None if level is None else level.declared_name
+    def native_arguments(cls):
+        return (ThinkingArgument(FieldCodec.encode(cls)),)
+
+    @classmethod
+    def launch_arguments(cls):
+        return tuple(token for argument in cls.native_arguments() for token in argument.argv)
+
+    @classmethod
+    def applied(cls, current):
+        return cls
+
+    @classmethod
+    def observed(cls, level):
+        return cls
+
+
+class NoThinkingOverride(ThinkingLevel):
+    declared_name = None
+
+    @classmethod
+    def native_arguments(cls):
+        return ()
+
+    @classmethod
+    def applied(cls, current):
+        return current
+
+    @classmethod
+    def observed(cls, level):
+        return level
+
+
+class ThinkingLevelValue(FieldRepresentation):
+    accepts_null = True
+
+    @classmethod
+    def decode(cls, value):
+        return NoThinkingOverride if value is None else ThinkingLevel.decode(FieldCodec.decode(str, value))
+
+    @classmethod
+    def encode(cls, value):
+        return FieldCodec.encode(value)
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type[ThinkingLevel] | None)
+
+
+ThinkingLevelField = Annotated[type[ThinkingLevel], ThinkingLevelValue]
 
 
 class OffThinkingLevel(ThinkingLevel):

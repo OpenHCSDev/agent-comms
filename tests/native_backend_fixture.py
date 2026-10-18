@@ -68,7 +68,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         def acquire():
             comms = agent._comms
             owned = agent.sessions.declare_thread(str(project))
-            return comms.threads.attach_session(owned, str(session))
+            return comms.threads.attach_session(owned, str(session), process=owned.process_identity)
 
         thread = await Coordination.run_worker(acquire)
         await agent.sessions.bind_owned(thread, thread.name)
@@ -155,7 +155,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 self.native_arguments(),
                 text,
                 str(self.project),
-                session_file=str(self.session),
+                root=self.root, session_file=str(self.session),
                 persistent_session=self.persistent,
                 steering_queue=queue,
                 native_start=self.started,
@@ -183,7 +183,6 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
 @asynccontextmanager
 async def native_backend_fixture(tmp_path):
-    package = pinned_native_package().resolve()
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     project.mkdir(mode=0o700)
     config.mkdir(mode=0o700)
@@ -238,11 +237,9 @@ async def native_backend_fixture(tmp_path):
             }
         )
     )
-    root_id = Comms(root).messaging.initialize_private_initial_protocol()
+    Comms(root).messaging.initialize_private_initial_protocol()
     environment = {
         "AGENT_COMMS_ROOT": str(root),
-        "AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID": root_id,
-        "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE": str(package),
         "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
         "PI_CODING_AGENT_DIR": str(config),
     }

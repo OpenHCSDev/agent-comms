@@ -1,5 +1,5 @@
 """Actual fork worker held before its socket, with the pinned native model on loopback."""
-from agent_comms.native_package import pinned_native_package
+from agent_comms.pi_vocabulary import OffThinkingLevel
 
 import asyncio
 import json
@@ -25,7 +25,6 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     await fixture.persistent.close()
     fixture.provider.text = "Cold fork first reply received."
     comms = Comms(fixture.root)
-    package = pinned_native_package()
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     arguments = [
         "--provider",
@@ -42,11 +41,8 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         "--no-tools",
     ]
     monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(arguments))
-    with comms.bus.log.locked():
-        root_id = comms.bus.log.read_metadata_unlocked().root_id
-    comms.owners.pin_private_nk_launch(fixture.root, root_id, package)
     comms.registry.declare(
-        comms.registry.new_thread('parent', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')
+        comms.registry.new_thread('parent', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level=OffThinkingLevel)
     )
     launched = []
     launch = ParentedProcess.launch
@@ -59,7 +55,6 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         return child
 
     monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     client = CommsClient(
         comms,
         agent_bin=launcher,
@@ -78,7 +73,7 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         child = await asyncio.to_thread(
             comms.threads.create,
             ForkSpec.from_task(name="cold-fork", parent="parent", project=str(fixture.project),
-                     model="response-local/fixture", thinking_level="off", task="One new cold fork diagnostic input"),
+                     model="response-local/fixture", thinking_level=OffThinkingLevel, task="One new cold fork diagnostic input"),
             launcher,
         )
         endpoint = socket_path(fixture.root, child.pid)

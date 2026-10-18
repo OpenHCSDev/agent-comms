@@ -39,12 +39,12 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
     forged.write_text("#!/bin/sh\necho not-native\n")
     forged.chmod(0o755)
     with pytest.raises(NativePiUnavailable, match="validated native"):
-        NativePiRpcLaunch.managed(str(forged), (), worktree=tmp_path)
+        NativePiRpcLaunch.managed(str(forged), (), root=tmp_path, worktree=tmp_path)
     assert verified == []
     launch = NativePiRpcLaunch.managed(
         "pi",
         ("--provider", "local", "--model", "fixture"),
-        worktree=tmp_path,
+        root=tmp_path, worktree=tmp_path,
         environment={"NODE_OPTIONS": "--import=/untrusted.js", "PI_WORKTREE": "/wrong"},
     )
     assert verified == [package]
@@ -63,7 +63,7 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
         ("--version",),
     ):
         with pytest.raises(NativePiUnavailable):
-            NativePiRpcLaunch.managed("pi", arguments, worktree=tmp_path)
+            NativePiRpcLaunch.managed("pi", arguments, root=tmp_path, worktree=tmp_path)
 
 
 async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypatch):
@@ -114,7 +114,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
             "--session-dir",
             str(tmp_path / "sessions"),
         ),
-        worktree=tmp_path,
+        root=tmp_path, worktree=tmp_path,
         environment={"PI_CODING_AGENT_DIR": str(tmp_path / "agent-config")},
     )
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=12) as child:
@@ -149,14 +149,12 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
         project.mkdir()
         caller_project.mkdir()
         comms = Comms(base / "wire")
-        root_id = comms.messaging.initialize_private_initial_protocol()
+        comms.messaging.initialize_private_initial_protocol()
         comms.registry.declare(comms.registry.new_thread('headless', frozenset(), str(project)))
         env = dict(
             os.environ,
             AGENT_COMMS_ROOT=str(comms.root),
             AGENT_COMMS_THREAD="headless",
-            AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-            AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=package,
             AGENT_COMMS_AGENT_BIN="pi",
             AGENT_COMMS_AGENT_ARGS="",
             PYTHONPATH=str(Path(events.__file__).parent.parent),
@@ -178,7 +176,6 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
             registered = comms.registry.require("headless")
             assert registered.pid == child.pid
             assert registered.worktree == str(project)
-            comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
             client = CommsClient(comms)
             try:
                 loaded = await client.load_session(str(project), "headless")

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
+from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .thread_presentation import ThreadPresentation
+from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
+    from .registry_document import RosterVisibility
 
 
 @dataclass(frozen=True)
@@ -22,7 +24,7 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     visible: ClassVar[bool] = False
 
     @abstractmethod
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         """Whether this lifecycle belongs in the requested executable roster."""
 
     def require_visible(self) -> None:
@@ -65,8 +67,18 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def allows_owner_control(self) -> bool:
         return True
 
-    def allows_owner_start(self, *, owner_pid: int) -> bool:
+    def allows_owner_start(self, *, process: ProcessState) -> bool:
         return self.allows_owner_control()
+
+    def native_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
+        return ordinary
+
+    def external_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation,
+    ) -> ThreadPresentation:
+        return ordinary
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         return ThreadPresentation(title, "○", self.declared_name.title())
@@ -81,14 +93,28 @@ class ActiveThreadPresence:
     def require_active(self) -> None:
         pass
 
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         return True
 
     def for_deletion(self) -> ThreadStatus:
         raise RelationViolationError("Stop a running thread before permanently deleting it.")
 
-    def allows_owner_start(self, *, owner_pid: int) -> bool:
-        return owner_pid <= 0
+    def allows_owner_start(self, *, process: ProcessState) -> bool:
+        return process.allows_owner_start()
+
+    def native_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
+        return process.native_presentation(ordinary, binding)
+
+    def external_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation,
+    ) -> ThreadPresentation:
+        if process.offline():
+            return replace(
+                ordinary, marker="○", summary="CLI offline", status=ordinary.status.without_work(),
+            )
+        return ordinary
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         return activity.ordinary_presentation(title)
@@ -115,8 +141,8 @@ class StoppedThreadStatus(ThreadStatus):
         pass
     visible = True
 
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
-        return show_stopped
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return visibility.stopped
 
 
 class CliInboxPresence:
@@ -142,7 +168,7 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
     It has no launched process to stop or restart, so it stays in every view.
     """
 
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         return True
 
     def require_self_rename(self) -> None:
@@ -153,8 +179,8 @@ class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):
 
 
 class ArchivedThreadStatus(ThreadStatus):
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
-        return show_archived
+    def in_view(self, visibility: RosterVisibility) -> bool:
+        return visibility.archived
 
     def restored(self) -> ThreadStatus:
         return self
@@ -164,7 +190,7 @@ class ArchivedThreadStatus(ThreadStatus):
 
 
 class DeletingThreadStatus(ThreadStatus):
-    def in_view(self, *, show_stopped: bool = True, show_archived: bool = False) -> bool:
+    def in_view(self, visibility: RosterVisibility) -> bool:
         return False
 
     def require_mutable(self, name: str) -> None:

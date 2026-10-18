@@ -1,5 +1,6 @@
 """The append owner schedules optional work after the whole lock lifetime."""
 
+from conftest import publish_initial
 from contextvars import Context
 from functools import partial
 from tempfile import TemporaryDirectory
@@ -8,6 +9,7 @@ import threading
 
 import pytest
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms import candidate_maintenance, selected_claim
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import (
@@ -188,7 +190,7 @@ def test_successful_append_is_not_lost_when_later_outer_work_fails(tmp_path, not
         calls, finished = notifications(comms)
         with pytest.raises(ValueError, match="later work failed"):
             with _store_lock(comms._wire_lock_path):
-                comms.bus.publisher.publish_ordinary(Message("sender", "member000", "committed", InfoKind))
+                comms.bus.publisher.publish_ordinary(Message("sender", "member000", "committed", InfoKind), origin=AgentOrigin())
                 assert not calls
                 raise ValueError("later work failed")
         assert calls == [comms.bus.log.path.stat().st_size]
@@ -210,7 +212,7 @@ async def test_joined_worker_append_waits_for_outer_async_lock(tmp_path, notific
 
         def append():
             assert permission.get() == "unbound"
-            return comms.bus.publisher.publish_ordinary(Message("sender", "member000", "joined", InfoKind))
+            return comms.bus.publisher.publish_ordinary(Message("sender", "member000", "joined", InfoKind), origin=AgentOrigin())
 
         async with _async_store_lock(comms._wire_lock_path):
             await Coordination.run_worker(append)
@@ -231,7 +233,7 @@ def test_uncertain_checkpoint_does_not_schedule_or_retry_append(tmp_path, monkey
 
         monkeypatch.setattr("agent_comms.private_bus_checkpoint.append_private_bus_checkpoint_unlocked", fail)
         with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-            comms.messaging.send_initial_cohort("sender", "member000", "one original")
+            publish_initial(comms, "sender", "member000", "one original")
         assert calls == []
         # The controlled fault happens AFTER the source fsync. It is not
         # absence, and no second attempt is made to repair or replay it.
@@ -243,7 +245,7 @@ def test_uncertain_checkpoint_does_not_schedule_or_retry_append(tmp_path, monkey
 def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkeypatch):
     comms, store, index, root_id = _root(tmp_path, recipients=1)
     try:
-        comms.messaging.send_initial_cohort("sender", "member000", "first")
+        publish_initial(comms, "sender", "member000", "first")
         assert index.maintain(start=RebuildIndex())
         root = index.log.path.parent
         candidate_maintenance._pending[root] = (index.log, index.log.path.stat().st_size)
@@ -260,7 +262,7 @@ def test_retiring_worker_does_not_delete_successor_notification(tmp_path, monkey
                 original_guard.release()
                 if retired and not successor:
                     successor.append(True)
-                    comms.messaging.send_initial_cohort("sender", "member000", "successor")
+                    publish_initial(comms, "sender", "member000", "successor")
 
         monkeypatch.setattr(candidate_maintenance, "_guard", InterleavedLock())
         monkeypatch.setattr(candidate_maintenance, "schedule_candidate_catchup", _SCHEDULE)

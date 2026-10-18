@@ -5,6 +5,7 @@ Provider-free native fake only: a source certificate is not an ACK or input perm
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import os
 import tempfile
 from pathlib import Path
@@ -41,7 +42,7 @@ def tmp_path():
 def _root(tmp_path: Path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), model='openai-codex/gpt-6-sol'),
@@ -50,7 +51,7 @@ def _root(tmp_path: Path):
     for person in people:
         comms.registry.declare(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
-    first = comms.messaging.send_initial_cohort("sender", "#team", "selected one")
+    first = publish_initial(comms, "sender", "#team", "selected one")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
         install_private_response_schema(store)
@@ -72,10 +73,10 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
     ).run()
     assert first_turn is not None and first_turn.cursor_status == "proven"
     for number in range(1000):
-        comms.messaging.send_initial_cohort(
+        publish_initial(comms, 
             "sender", "other", f"unrelated-{number:04}-" + "x" * 8700
         )
-    second = comms.messaging.send_initial_cohort(
+    second = publish_initial(comms, 
         "sender", "#team", "selected after 1000 other rows"
     )
     assert second.seq == first.seq + 1001 and comms.bus.log.path.stat().st_size > 8 * 1024 * 1024
@@ -107,8 +108,8 @@ async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monke
         ).run()
     assert len(bad_calls) == 1  # failed input is UNKNOWN; never retry it
     for number in range(101):
-        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
-    later = comms.messaging.send_initial_cohort("sender", "alpha", "later selected")
+        publish_initial(comms, "sender", "other", f"unrelated-{number}")
+    later = publish_initial(comms, "sender", "alpha", "later selected")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, later.seq, store)
     good, good_calls = _fake_model(decision="IGNORE")
@@ -146,7 +147,7 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
 
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", uncertain)
     with pytest.raises(RelationViolationError, match="outcome UNKNOWN"):
-        comms.messaging.send_initial_cohort("sender", "other", "uncertain other original")
+        publish_initial(comms, "sender", "other", "uncertain other original")
     assert len(comms.bus.log.path.read_bytes().splitlines()) == first.seq + 1
     monkeypatch.setattr(checkpoint, "append_private_bus_checkpoint_unlocked", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:

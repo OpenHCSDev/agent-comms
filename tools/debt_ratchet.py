@@ -7,10 +7,15 @@ import argparse
 import ast
 import io
 import json
+import os
+import re
 import subprocess
+import sys
+import tempfile
 import tokenize
 import typing
 from abc import abstractmethod
+from collections import Counter
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
@@ -19,6 +24,7 @@ from refactor_audit.measures import FamilyFlattened as AuditFamilyFlattened
 from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsenceProbe
 
 from agent_comms.declared_family import DeclaredFamily
+from cutover.carry import STEPS, Step
 from agent_comms.field_codec import FieldCodec, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
@@ -127,6 +133,87 @@ class PerFileMeasure(CountedSource):
 
 class PerFileOccurrenceMeasure(PerFileMeasure, OccurrenceMeasure):
     """A per-node count, kept separately for each file."""
+
+
+class CheckedRevision(Measure):
+    """A checker's findings per changed file. Both revisions are checked under the head's
+    configuration, so the difference is the code's alone. A path missing at one revision counts
+    zero there, as in every per-file measure."""
+
+    finding: typing.ClassVar[re.Pattern[str]]  # One output line per finding; group 1 is its path.
+
+    @staticmethod
+    @abstractmethod
+    def command(root: str, selected: list[str]) -> list[str]:
+        """The checker's arguments after `python -m`."""
+
+    @staticmethod
+    def environment(root: str) -> dict[str, str]:
+        return dict(os.environ)
+
+    @classmethod
+    def findings(cls, repo: Path, ref: str, head: str, root: str, changed: set[str]) -> Counter[str]:
+        selected = sorted(changed & python_paths(repo, ref, root))
+        if not selected:
+            return Counter()
+        with tempfile.TemporaryDirectory(prefix="debt-ratchet-check-") as scratch:
+            subprocess.run(["tar", "-x", "-C", scratch], input=git(repo, "archive", ref), check=True, timeout=60)
+            configuration = Path(scratch) / "pyproject.toml"
+            configuration.unlink(missing_ok=True)
+            if git(repo, "ls-tree", "--name-only", head, "--", "pyproject.toml"):
+                configuration.write_bytes(git(repo, "show", f"{head}:pyproject.toml"))
+            result = subprocess.run([sys.executable, "-m", *cls.command(root, selected)],
+                                    cwd=scratch, env=cls.environment(root), capture_output=True, text=True,
+                                    timeout=600)
+        if result.returncode not in (0, 1):
+            raise ValueError(f"{cls.__name__} could not check {ref}: {result.stderr}")
+        return Counter(match[1] for match in cls.finding.finditer(result.stdout + result.stderr))
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        def snapshot(ref: str) -> dict[str, int]:
+            found = cls.findings(repo, ref, head, root, changed)
+            return {f"{cls.__name__}:{path}": found[path] for path in sorted(changed)}
+        return snapshot(base), snapshot(head)
+
+
+class Unformatted(CheckedRevision):
+    """1 when Black would rewrite the file: a formatted file stays formatted."""
+
+    finding = re.compile(r"^would reformat (.+)$", re.MULTILINE)
+
+    @staticmethod
+    def command(root: str, selected: list[str]) -> list[str]:
+        return ["black", "--check", *selected]
+
+
+class LintFindings(CheckedRevision):
+    """Ruff diagnostics under the selected rules."""
+
+    finding = re.compile(r"^(.+?\.py):\d+:\d+: ", re.MULTILINE)
+
+    @staticmethod
+    def command(root: str, selected: list[str]) -> list[str]:
+        return ["ruff", "check", "--no-cache", "--output-format", "concise", *selected]
+
+
+class TypeErrors(CheckedRevision):
+    """Mypy errors per changed file. Mypy reads the whole root, so a file's count can change when
+    another file does."""
+
+    finding = re.compile(r"^(.+?\.py):\d+: error: ", re.MULTILINE)
+
+    @staticmethod
+    def command(root: str, selected: list[str]) -> list[str]:
+        # Mypy validates each cached module against its file, so the analysis of installed packages
+        # carries from one revision to the next while the checked tree is read fresh.
+        cache = Path.home() / ".cache/agent-comms-debt-ratchet/mypy"
+        return ["mypy", "--explicit-package-bases", "--cache-dir", str(cache), "--no-error-summary", root]
+
+    @staticmethod
+    def environment(root: str) -> dict[str, str]:
+        """Module names start at the source directory, as they do when the package is installed."""
+        return {**os.environ, "MYPYPATH": Path(root).parts[0]}
 
 
 class SourceLines(Measure):
@@ -898,6 +985,33 @@ class AnyAnnotation(PerFileMeasure):
     def count(cls, source: bytes, filename: str) -> int:
         return len(cls.uses(source, filename))
 
+
+
+class EditedCarry(Measure):
+    """Carry steps edited, renamed, or added under a deleted step's name.
+
+    A bus that already ran a step never runs its edit, and a bus that had not
+    yet run the original loses it; a deleted step's name still names that step
+    in every ledger that recorded it. A different change is a new step.
+    """
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
+                          base, head, "--", str(STEPS)).decode().split("\0")[:-1])
+        edited = 0
+        for status in fields:
+            path = next(fields)
+            if status[0] in "RC":
+                next(fields)
+            name = Path(path).stem
+            if not (name.startswith("carry_") and path.endswith(".py")):
+                continue
+            if status[0] in "MRC" or status == "T":
+                edited += Step.declared(name, git(repo, "show", f"{base}:{path}"), base) is not None
+            elif status == "A":
+                edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
+        return {cls.__name__: 0}, {cls.__name__: edited}
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:
     return subprocess.check_output(["git", "-C", str(repo), *args], input=input, timeout=20)

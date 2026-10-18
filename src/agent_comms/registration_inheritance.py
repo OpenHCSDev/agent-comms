@@ -11,24 +11,30 @@ class RegistrationInheritance(ABC):
     def choose(cls, incoming: T, previous: T) -> T:
         return previous if cls.inherits(incoming) else incoming
 
-    @staticmethod
+    @classmethod
     @abstractmethod
-    def inherits(incoming: object) -> bool: ...
+    def inherits(cls, incoming) -> bool: ...
 
 
 class InheritMissing(RegistrationInheritance):
-    @staticmethod
-    def inherits(incoming: object) -> bool:
+    @classmethod
+    def inherits(cls, incoming) -> bool:
         return incoming is None
 
 
 class InheritEmpty(RegistrationInheritance):
-    @staticmethod
-    def inherits(incoming: object) -> bool:
+    @classmethod
+    def inherits(cls, incoming) -> bool:
         return not incoming
 
 
 class InheritPrevious(RegistrationInheritance):
-    @staticmethod
-    def inherits(incoming: object) -> bool:
+    @classmethod
+    def inherits(cls, incoming) -> bool:
         return True
+
+
+class InheritThinkingLevel(RegistrationInheritance):
+    @classmethod
+    def choose(cls, incoming, previous):
+        return incoming.applied(previous)

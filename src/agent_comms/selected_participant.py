@@ -22,6 +22,7 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .publisher import ParticipantPublisher
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import ObservedAttestation
@@ -29,7 +30,7 @@ from .native_input_owner import ParticipantOwner, RegistryOwner
 from .notification_assignment import NotificationAssignment, NotificationAssignmentRead
 from .participant_store import ParticipantSnapshot
 from .pi_events import TurnContextObserved
-from .presentation import MessageNotification, SentMessageOutcome
+from .presentation import MessageNotification, OwnerOutcomes, SentMessageOutcome
 from .private_registry_guard import _require_no_private_owner_rename
 from .selected_source_batch import SelectedSource, SelectedSourceBatch
 from .threads import Thread
@@ -123,10 +124,7 @@ class SelectedParticipant(MroDispatch):
     @classmethod
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
-        bus = MessageBus(
-            comms.root / "bus.jsonl", comms.registry, private_response_writes=True,
-            private_claim_writes=comms.bus.publisher._private_claim_writes,
-        )
+        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, ParticipantPublisher)
         owner, participant, pending, sent_outcomes = await Coordination.run_async(
             store.session.path,
             lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
@@ -171,7 +169,8 @@ class SelectedParticipant(MroDispatch):
     ) -> tuple[SentMessageOutcome, ...]:
         """Project optional prompt context from the drain's captured source and SQL cuts."""
         notifications = MessageNotification.for_sources(
-            comms.root, comms.registry, owner, sources, assignment_read=assignment_read,
+            comms.root, comms.registry, OwnerOutcomes.of(owner), sources,
+            assignment_read=assignment_read,
         )
         return tuple(
             outcome

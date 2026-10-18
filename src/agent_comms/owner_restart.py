@@ -12,6 +12,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING
 
+from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
 from .owner_launch import RetainedOwnerLaunch
 from .launch_runtime import LaunchRuntime, RestartEnvironment, RestoredRuntime
@@ -137,7 +138,7 @@ class OwnerRestartHandoff:
         threads = tuple(owner.require_current(snapshot) for owner in self.owners)
         return tuple(OwnerRestartResult(
             thread.name, owner.launch.process.pid,
-            launch(thread, owner.launch).pid,
+            launch(thread, owner.launch).require_process().pid,
         ) for thread, owner in zip(threads, self.owners, strict=True))
 
 
@@ -186,18 +187,23 @@ class StoppedOwnerBatch:
         except BaseException as cause:
             # Transfer the SAME batch and original opened wire resource. The
             # caller owns disposition before exiting; credentials stay in RAM.
-            failure = StoppedOwnerFailure(self, operation)
-            failure.__cause__ = cause
-            operation.failed(failure)
+            operation.failed(StoppedOwnerFailure(self, operation, cause))
         self.close()
         return results
 
 
-class StoppedOwnerFailure(Exception):
+class StoppedOwnerFailure(CoordinationError):
     """A failed fenced/stopped phase, not an unsignalled restart refusal."""
 
-    def __init__(self, stopped: StoppedOwnerBatch | FencedOwnerBatch, operation: OwnerCutover):
-        super().__init__('Cutover failed after fencing; retirement ownership requires explicit disposition')
+    def __init__(
+        self, stopped: StoppedOwnerBatch | FencedOwnerBatch, operation: OwnerCutover,
+        cause: BaseException,
+    ):
+        super().__init__(
+            'Cutover failed after fencing; retirement ownership requires explicit disposition: '
+            f'{type(cause).__name__}: {cause}'
+        )
+        self.__cause__ = cause
         self.stopped = stopped
         self.operation = operation
 
@@ -270,9 +276,7 @@ class FencedOwnerBatch:
                                          self.request.launch_runtime)
             stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.ownership.pop_all())
         except BaseException as cause:
-            failure = StoppedOwnerFailure(progress, cutover)
-            failure.__cause__ = cause
-            cutover.failed(failure)
+            cutover.failed(StoppedOwnerFailure(progress, cutover, cause))
         return stopped.complete(cutover)
 
 

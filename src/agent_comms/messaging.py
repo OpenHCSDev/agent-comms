@@ -11,12 +11,14 @@ from .registration import Registration
 
 if TYPE_CHECKING:
     pass
+from .bus_publication import AgentOrigin, HumanOrigin
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
+from .publisher import InitialWrites, OwnerPublisher
 from .change_report import ChangeReport
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
 from .task_sources import TaskAttachment, NoTaskAttachment
@@ -84,8 +86,9 @@ class Messaging:
                 report=report,
                 answers=self._answered_by(owner, target),
             )
+            publisher: OwnerPublisher = self.bus.publisher
             if claims or releases:
-                committed = self.bus.publisher.publish_claim_envelope(
+                committed = publisher.publish_claim_envelope(
                     message,
                     worktree=Path(owner.worktree),
                     incarnation=str(owner.created_at),
@@ -93,7 +96,7 @@ class Messaging:
                     releases=releases,
                 )
             else:
-                committed = self.bus.publisher.publish_ordinary(message)
+                committed = publisher.publish_ordinary(message, origin=AgentOrigin())
         return committed
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
@@ -109,27 +112,9 @@ class Messaging:
 
     def initialize_private_initial_protocol(self) -> str:
         """Initialize the private protocol on a fresh owner-only root."""
+        publisher: InitialWrites = self.bus.publisher
         with _store_lock(self._wire_lock_path):
-            return self.bus.publisher.initialize_private_protocol()
-
-    def send_initial_cohort(
-        self,
-        sender: str,
-        target: str,
-        body: str,
-        type: Type[MessageKind] = InfoKind,
-        *,
-        role: MessageRole = ConversationRole(),
-    ) -> Message:
-        """Test-gated full-N send. No automatic SQL acceptance or live wake."""
-        type.require_sendable()
-        with _store_lock(self._wire_lock_path):
-            if sender not in self.registry or not self.registry.require(sender).role.executable:
-                raise RelationViolationError("Initial sender must be a registered executable.")
-            committed = self.bus.publisher.publish_initial_cohort(
-                Message(sender=sender, target=target, body=body, type=type, role=role)
-            )
-        return committed
+            return publisher.initialize_private_protocol()
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""
@@ -149,7 +134,7 @@ class Messaging:
 
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             for thread in self._user_identities():
                 return thread
         # Creation is a write, with its original exclusive recheck. Observing
@@ -201,11 +186,9 @@ class Messaging:
                 task, role=NoticeRole())
 
     def _publish_user_under_wire_lock(self, user, target, body, task, *, role=ConversationRole()):
-        from .bus_publication import HumanOrigin
-
         return self.bus.publisher.publish_ordinary(
             Message(user.name, target, body, InfoKind, task=task, role=role),
-            _human_origin=HumanOrigin(user.name, user.created_at, user.worktree),
+            origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
 
     def acknowledge(
@@ -220,7 +203,7 @@ class Messaging:
         rejects a replaced bus, so another reader or acknowledgment loses nothing.
         """
         basis = self.bus.delivered(name, references)
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             self.bus.reads.mark_displayed(basis.viewer, basis)
         return basis.message_count
 

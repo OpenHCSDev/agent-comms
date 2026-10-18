@@ -44,7 +44,7 @@ class TestCliSuccess:
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         code, out = cli(
             tmp_path,
-            "invoke",
+            "tool",
             "--tool",
             "comms_threads",
             "--arguments",
@@ -125,7 +125,8 @@ class TestCliSuccess:
 
     def test_rename_self_uses_declared_caller(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        code, out = cli(tmp_path, "rename-self", "--from", "a", "--to", "renamed")
+        code, out = cli(tmp_path, "tool", "--tool", "comms_rename_self", "--from", "a",
+                        "--arguments", '{"new_name":"renamed"}')
         assert code == 0
         assert out == {"previous": "a", "current": "renamed", "changed": True}
         _, detail = cli(tmp_path, "thread", "--name", "a")
@@ -166,7 +167,7 @@ class TestCliFailClosed:
         assert code == 1 and "no native prompt transport" in out["error"]
 
     def test_generic_invocation_rejects_non_object_arguments(self, cli, tmp_path):
-        code, out = cli(tmp_path, "invoke", "--tool", "comms_threads", "--arguments", "[]")
+        code, out = cli(tmp_path, "tool", "--tool", "comms_threads", "--arguments", "[]")
         assert code == 1 and "JSON object" in out["error"]
 
     def test_unknown_sender_is_error_exit_code(self, cli, tmp_path):
@@ -326,9 +327,10 @@ class TestSelectedTargetActions:
         assert explicit.agent_bin == '/operator/native'
         assert explicit.agent_args == ['--no-extensions']
         from agent_comms.cli import build_parser
-        parsed = CliCommand.from_namespace(build_parser().parse_args([
+        options = build_parser().parse_args([
             'restart', '--name', 'alpha', '--agent-bin', '/operator/native',
-            '--agent-args=--no-extensions']))
+            '--agent-args=--no-extensions'])
+        parsed = CliCommand.decode(options.command).from_namespace(options)
         assert parsed == explicit
         with pytest.raises(ValueError, match='cannot be overridden'):
             action.bound[0].edited({'all': True})
@@ -444,7 +446,7 @@ class TestSelectedTargetActions:
         assert comms.registry.snapshot() == original
         assert comms.channels.catalog.read() == catalog
 
-    def test_channel_stop_deduplicates_selected_member_and_preserves_single_result(self, tmp_path):
+    def test_channel_stop_deduplicates_selected_member(self, tmp_path):
         from agent_comms.cli_commands import StopCliCommand, TargetBatchResult, TargetEdit
         from agent_comms.thread_status import RunningThreadStatus
 
@@ -458,7 +460,6 @@ class TestSelectedTargetActions:
         assert {outcome.result.stopped for outcome in result.outcomes} == {"alpha", "beta"}
         assert all(comms.registry.status(name).stopped for name in ("alpha", "beta"))
         assert not result.reconnect_targets()
-        assert StopCliCommand.execute_target(comms, "alpha", {}).stopped == "alpha"
 
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
         from agent_comms.cli_commands import StartCliCommand
@@ -580,3 +581,23 @@ class TestSelectedTargetActions:
         assert result.outcomes[1].result.archived == "alpha"
         with pytest.raises(ValueError, match="single target"):
             TargetEdit(ForkCliCommand, ("alpha", "beta"), {}).apply(comms)
+
+
+def test_result_kind_decides_exit_code_and_reconnected_targets():
+    from agent_comms.cli_commands import (
+        StartCliCommand, TargetBatchResult, TargetCompleted, TargetFailed, ThreadStoppedResult,
+    )
+    from agent_comms.owner_lifecycle import OwnerStartResult
+
+    launched = OwnerStartResult("alpha", 11, True)
+    attached = OwnerStartResult("beta", 12, False)
+    batch = TargetBatchResult((
+        TargetCompleted("alpha", StartCliCommand(name="alpha"), launched),
+        TargetCompleted("beta", StartCliCommand(name="beta"), attached),
+        TargetFailed("gamma", "ValueError", "gone"),
+    ))
+    assert launched.reconnect_targets() == ("alpha",) and attached.reconnect_targets() == ()
+    assert batch.reconnect_targets() == ("alpha",)
+    assert batch.exit_code() == 1
+    assert TargetBatchResult(batch.outcomes[:2]).exit_code() == 0
+    assert ThreadStoppedResult("alpha").exit_code() == 0

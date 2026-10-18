@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from .active_route import CommsRoute, resolve_comms_route
+from .bus_route_counts import OpenedRouteCounts
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
@@ -14,6 +15,7 @@ from .history_views import HistoryViews
 from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
+from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
 from .relationships import ThreadRelationships
 from .thread_management import ThreadManagement
@@ -23,18 +25,18 @@ from .transcripts import Transcripts
 
 class Comms:
     def __init__(
-        self, root: CommsRoute | Path, *, private_initial_writes: bool = True, private_claim_writes: bool = True
+        self, root: CommsRoute | Path, publisher: type[Publisher] = OwnerPublisher, *,
+        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ) -> None:
         self.route = resolve_comms_route(root)
-        if private_initial_writes or private_claim_writes:
-            self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        publisher.prepare_root(self.root)
         self._wire_lock_path = self.root / "wire"
         self.registry = Registration(self.root / "registry.json")
         self.bus = MessageBus(
             self.root / "bus.jsonl",
             self.registry,
-            private_initial_writes=private_initial_writes,
-            private_claim_writes=private_claim_writes,
+            publisher,
+            projection=projection,
         )
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
@@ -66,14 +68,8 @@ class Comms:
         return self.route.root
 
 
-def wire(root: CommsRoute | Path | str | None = None) -> Comms:
+def wire(
+    root: CommsRoute | Path | str | None = None, *, projection: type[OpenedRouteCounts] = OpenedRouteCounts
+) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
-    route = resolve_comms_route(root)
-    launch = route.launch()  # A bad handoff refuses before the root is created.
-    comms = Comms(route)
-    if launch is not None:
-        # Service binding retains the bus-locked durable verification.
-        comms.owners.pin_private_nk_launch(
-            launch.validated_root, launch.wire_root_id, launch.native_package
-        )
-    return comms
+    return Comms(resolve_comms_route(root), projection=projection)

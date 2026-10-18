@@ -16,7 +16,7 @@ from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.goal_waits import GoalWaits
 from agent_comms.locked_store import LockedStore
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
 from agent_comms.goal_waits import RecordedGoalWait
 
 
@@ -34,8 +34,8 @@ def wait(goal_id="goal"):
     )
 
 
-def _hold_lock(path, shared, ready, release):
-    with _store_lock(path, shared=shared):
+def _hold_lock(path, mode, ready, release):
+    with _store_lock(path, mode=mode):
         ready.set()
         if not release.wait(10):
             raise TimeoutError("lock holder was not released")
@@ -208,8 +208,8 @@ def test_shared_readers_overlap_and_exclude_writer(tmp_path):
     GoalWaits(path).record(wait())
     ready1, ready2, release = event(), event(), event()
     with (
-        process(_hold_lock, path, True, ready1, release),
-        process(_hold_lock, path, True, ready2, release),
+        process(_hold_lock, path, SharedLock(), ready1, release),
+        process(_hold_lock, path, SharedLock(), ready2, release),
     ):
         try:
             assert ready1.wait(5) and ready2.wait(5)
@@ -226,7 +226,7 @@ def test_shared_readers_overlap_and_exclude_writer(tmp_path):
 def test_exclusive_writer_blocks_snapshot_and_other_writer(tmp_path):
     path = tmp_path / "goal_waits.json"
     ready, release, started, done = event(), event(), event(), event()
-    with process(_hold_lock, path, False, ready, release):
+    with process(_hold_lock, path, ExclusiveLock(), ready, release):
         try:
             assert ready.wait(5)
             with process(_read, path, started, done):

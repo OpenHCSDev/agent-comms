@@ -9,6 +9,7 @@ from agent_comms.coordination_contracts import (
 )
 from agent_comms.coordination_errors import (
     IdentityConflict,
+    ParticipantNotRegistered,
     StaleRevision,
 )
 from agent_comms.coordination_results import AlreadyApplied, Applied
@@ -59,7 +60,7 @@ class ParticipantStore:
             generation = OwnerGenerations.one(self.session._connection, owner_lookup=lookup)
             pointer = CurrentExecutions.one(self.session._connection, owner_lookup=lookup)
             if person is None or generation is None or pointer is None:
-                raise IdentityConflict("participant aggregate is not registered")
+                raise ParticipantNotRegistered("participant aggregate is not registered")
             aliases = tuple(
                 row.alias
                 for row in ParticipantAliases.read(

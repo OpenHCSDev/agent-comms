@@ -224,6 +224,11 @@ def prepare_mcp_dependencies(extension: Path, destination: Path, environment: di
             stderr=sys.stderr,
             timeout=120,
         )
+        # npm 10 leaves an empty scope directory for each omitted package and
+        # npm 12 does not; without them the tree is the install, whichever npm ran.
+        for path in sorted((staging / "node_modules").rglob("*"), reverse=True):
+            if path.is_dir() and not path.is_symlink() and not any(path.iterdir()):
+                path.rmdir()
         for name in ("index.mjs", "README.md"):
             shutil.copyfile(extension / name, staging / name)
         for name in ("src", "bin"):

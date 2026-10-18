@@ -8,15 +8,17 @@ from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
 
 from .agent_backend import AgentBackend
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
-from .pi_vocabulary import SERVICE_TIER_ENVIRONMENT, ServiceTier, ThinkingLevel
+from .pi_vocabulary import (
+    SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField,
+)
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
-from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
+from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious, InheritThinkingLevel
 from .storage_rules import StoragePath, StorageRoots, StorageRule
 from .thread_identity import (
     ThreadProvenance,
@@ -44,13 +46,13 @@ class Thread(ThreadProvenance):
     worktree: str = field(kw_only=False)
     parent: str | None = None
     task: str | None = None
-    process_identity: ProcessIdentity | None = None
+    process_identity: ProcessState = field(default_factory=NoProcess)
     session_file: str | None = field(
         default=None, kw_only=True, metadata={"registration_inheritance": InheritMissing}
     )
     model: str | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
-    thinking_level: type[ThinkingLevel] | None = field(
-        default=None, metadata={"registration_inheritance": InheritMissing}
+    thinking_level: ThinkingLevelField = field(
+        default=NoThinkingOverride, metadata={"registration_inheritance": InheritThinkingLevel}
     )
     service_tier: ServiceTier = field(
         default=ServiceTier.PRIORITY, kw_only=True,
@@ -158,7 +160,7 @@ class Thread(ThreadProvenance):
         self.incarnation.require_recorded()  # Archives may lack a birth; live threads may not.
         object.__setattr__(self, "role", ThreadRole(self.role))
         if self.active_turn is not None:
-            if self.active_turn.owner_pid != self.pid:
+            if not self.process_identity.owns_turn(self.active_turn):
                 raise RelationViolationError("A turn must belong to the registered executor.")
             if self.active_turn.turn_generation is not None and (
                 type(self.active_turn.turn_generation) is not int
@@ -183,8 +185,6 @@ class Thread(ThreadProvenance):
             raise RelationViolationError(f"Thread {self.name!r} cannot be its own parent.")
         if self.model is not None and not self.model.strip():
             raise ValueError("Thread model cannot be empty.")
-        if self.thinking_level is not None:
-            object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
 
     def require_original_model_configuration(self, original: Thread) -> None:
         changed = any((
@@ -198,13 +198,13 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None, thinking_level: str | None = None,
+        self, *, model: str | None = None, thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
         return replace(
             self,
             model=self.model if model is None else model.strip(),
-            thinking_level=self.thinking_level if thinking_level is None else thinking_level,
+            thinking_level=thinking_level.applied(self.thinking_level),
             service_tier=self.service_tier if service_tier is None else service_tier,
         )
 
@@ -213,25 +213,18 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: str | None,
+        self, *, model: str | None, thinking_level: type[ThinkingLevel],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(
             self,
             model=model if self.needs_model_observation() else self.model,
-            thinking_level=(
-                self.thinking_level if self.thinking_level is not None else thinking_level
-            ),
+            thinking_level=self.thinking_level.observed(thinking_level),
         )
 
     @property
-    def pid(self) -> int:
-        """Numeric OS projection of the sole stored process authority."""
-        return self.process_identity.pid if self.process_identity is not None else 0
-
-    @property
     def process_alive(self) -> bool:
-        return self.process_identity is not None and self.process_identity.alive()
+        return self.process_identity.alive()
 
     @classmethod
     def require_declaration(cls, value: Thread) -> None:
@@ -248,9 +241,7 @@ class Thread(ThreadProvenance):
 
     def require_process(self) -> ProcessIdentity:
         self.role.require_executable()
-        if self.process_identity is None:
-            raise RelationViolationError(f"Thread {self.name!r} has no owner process")
-        return self.process_identity
+        return self.process_identity.require(f"Thread {self.name!r} has no owner process")
 
 
     def require_idle(self) -> None:
@@ -353,10 +344,6 @@ class Thread(ThreadProvenance):
     def goal_checkpoint(self) -> GoalCheckpoint:
         return (PresentGoalCheckpoint(self.goal.checkpoint)
                 if self.goal is not None else AbsentGoalCheckpoint())
-
-    @property
-    def has_process(self) -> bool:
-        return self.process_identity is not None
 
     def same_launch(self, other: Thread) -> bool:
         """Whether both records describe one process serving one saved session with one model setting.

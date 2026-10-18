@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .activity import Activity, ActivityState
+from .activity import Activity, ActivityState, ObservedActivity
 if TYPE_CHECKING:
     from . import pi_events as pi
 
@@ -66,7 +66,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         """Record this phase's declared activity, without observation-only readiness."""
         return Activity.create(thread, self.activity_state, self.activity_detail)
 
-    def project_activity(self, activity):
+    def project_activity(self, activity: ObservedActivity) -> ObservedActivity:
         """Display this phase while preserving the acquired drain readiness."""
         return activity.with_status(self.activity_state, self.activity_detail)
 

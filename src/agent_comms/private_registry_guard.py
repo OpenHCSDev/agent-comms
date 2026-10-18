@@ -17,12 +17,24 @@ next write reuses the abandoned slot.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import stat
 import struct
+from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from . import store_files
+from .coordinator import Coordination
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
+from .private_path import fsync_directory
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 _MAGIC = b"ACRG"
 _VERSION = 1
@@ -96,7 +108,25 @@ def _decode(data: bytes, root_id: bytes) -> tuple[int, int, bytes]:
     return seq, phase, digest
 
 
-class PrivateRegistryGuard:
+class RegistryPrivacy(ABC):
+    """What a registry root's protocol marker decides, selected by the registry store."""
+
+    @abstractmethod
+    def write(self, registry_path: Path, text: str) -> None: ...
+
+    @abstractmethod
+    def register_restored(self, threads: Iterable[Thread]) -> None: ...
+
+
+class PublicRegistry(RegistryPrivacy):
+    def write(self, registry_path: Path, text: str) -> None:
+        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+
+    def register_restored(self, threads: Iterable[Thread]) -> None:
+        """A public bus has no coordinator identities for restored threads."""
+
+
+class PrivateRegistryGuard(RegistryPrivacy):
     def __init__(self, registry_path: Path, wire_root_id: str):
         if (
             type(wire_root_id) is not str
@@ -226,6 +256,22 @@ class PrivateRegistryGuard:
         finally:
             os.close(fd)
 
+    def write(self, registry_path: Path, text: str) -> None:
+        # A pending guard after any failed write MUST remain fail-closed.
+        digest = hashlib.sha256(b"present\0" + text.encode("utf-8")).digest()
+        sequence, slot = self.prepare(digest)
+        store_files._atomic_write_text(registry_path, text, fsync_parent=True)
+        self.commit(sequence, slot, digest)
+
+    def register_restored(self, threads: Iterable[Thread]) -> None:
+        """Stopped subscribers still belong to frozen audiences; their coordinator identities
+        must exist before any cohort can be accepted."""
+        with Coordination(str(self.registry_path.parent / "coordination.sqlite3")) as store:
+            for thread in threads:
+                store.participants.register(
+                    thread.incarnation.require_recorded().lookup, thread.name, thread.name,
+                    committed=True)
+
     def create_pending(self) -> None:
         """Caller holds bus then registry locks; no marker may exist yet."""
         self._trusted_root()
@@ -282,6 +328,32 @@ class PrivateRegistryGuard:
 
 
 PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
+
+
+@dataclass(frozen=True, kw_only=True)
+class PrivateOwnerRenameIntent:
+    """Written before a private owner rename changes either store; while it exists, private
+    publication and selected execution stay blocked."""
+
+    lookup: str
+    old: str
+    new: str
+    generation: int
+    wire_root_id: str = field(metadata={"wire_name": "wireRootId"})
+    version: int = 1
+    completed: bool = False
+
+    def write(self, root: Path) -> None:
+        store_files._atomic_write_text(root / PRIVATE_OWNER_RENAME_PENDING,
+                           json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
+
+    @classmethod
+    def complete(cls, root: Path) -> None:
+        """A completed record proves a finished transition if the unlink is uncertain."""
+        intent = root / PRIVATE_OWNER_RENAME_PENDING
+        replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
+        intent.unlink()
+        fsync_directory(root)
 
 
 def _require_no_private_owner_rename(root: Path) -> None:

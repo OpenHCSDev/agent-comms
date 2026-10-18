@@ -33,12 +33,13 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
+from . import presentation
 from .wire_record import WireRecord
 from .messages import Message
 from .private_path import FileRevision
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
@@ -46,7 +47,6 @@ from .threads import Thread
 if TYPE_CHECKING:
     from .history_views import HistoryViews
     from .message_bus import MessageBus
-    from .presentation import ThreadView, WireRevision
     from .registration import Registration
 
 
@@ -102,7 +102,7 @@ class MutualThreadRelation(ABC):
     def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
         return ()
 
-    def entry(self, identity: ThreadIncarnation, person: ThreadView | None,
+    def entry(self, identity: ThreadIncarnation, person: presentation.ThreadView | None,
               available: bool, current: RelationshipEntry | None) -> RelationshipEntry:
         return RelationshipEntry(
             identity.name, "thread", person if available else None,
@@ -244,7 +244,7 @@ class GoalMentionDiagnostic:
 class RelationshipEntry:
     target: str
     kind: str
-    person: ThreadView | None = None
+    person: presentation.ThreadView | None = None
     sequence: int = 0
     timestamp: float = 0
     detail: str = ""
@@ -413,7 +413,7 @@ class CollaboratingRelationshipGroup(SortableRelationshipGroup):
 class RelationshipContext:
     registry: RegistrySnapshot
     thread: Thread
-    people: dict[str, ThreadView]
+    people: dict[str, presentation.ThreadView]
     messages: tuple[Message, ...]
     delivery: DeliveryScope
     edges: tuple[Collaboration, ...]
@@ -698,12 +698,12 @@ class ThreadRelationships:
         self._recent: tuple[Message, ...] = ()
         self._limited = False
 
-    def revision(self) -> WireRevision:
+    def revision(self) -> presentation.WireRevision:
         """What a snapshot derives from; equal revisions show the same thing."""
         return self.views.revision()
 
     def collaborations(self, owner: str) -> tuple[Collaboration, ...]:
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
@@ -736,7 +736,7 @@ class ThreadRelationships:
         self, owner: str
     ) -> tuple[tuple[GoalDerivedContact, ...], tuple[GoalMentionDiagnostic, ...]]:
         """Read-only mutual view; never changes an explicit contact or delivery."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             contacts, diagnostics = self._goal_contacts(registry)
@@ -747,7 +747,7 @@ class ThreadRelationships:
 
     def peer_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Every other registered thread with its relevance to ``owner``, most relevant first."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
@@ -781,7 +781,7 @@ class ThreadRelationships:
 
     def context_relations(self, owner: str) -> tuple[PeerRelation, ...]:
         """Open contacts, the parent and current-incarnation recent direct work."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             registry = self.registry.snapshot()
             thread = registry.require(owner)
             relations = self.peer_relations(owner)
@@ -807,7 +807,7 @@ class ThreadRelationships:
 
     def contacts(self, owner: str) -> Contacts:
         """Combine manual and bound-goal contacts without reading a bus row."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             registry = self.registry.snapshot()
             thread = self.registry.require(owner)
             edges = self.store.read().resolved(registry).collaborations
@@ -867,7 +867,7 @@ class ThreadRelationships:
         with self._lock:
             if revision == self._recent_revision:
                 return self._recent, self._limited
-            with self.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+            with self.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
                 return self._opened_recent_messages(source)
 
 
@@ -901,7 +901,7 @@ class ThreadRelationships:
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             registry = self.registry.snapshot()
             thread = registry.require(owner)
             state = self.store.read().resolved(registry)
@@ -910,7 +910,7 @@ class ThreadRelationships:
             delivery = DeliveryScope.capture(thread.name, registry, self.views.channels.catalog.read())
         people = {
             view.thread.name: view
-            for view in self.views.thread_views(show_stopped=True, show_archived=True)
+            for view in self.views.thread_views(RosterVisibility(archived=True))
         }
         messages, limited = self._recent_messages()
 
