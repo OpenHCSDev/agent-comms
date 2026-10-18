@@ -223,9 +223,10 @@ def guard_default_route_write(expected_root: Path, *, blocking: bool = True) -> 
             raise ValueError("active comms route directory changed or is not owned")
         if stat.S_IMODE(info.st_mode) != 0o700:
             os.fchmod(directory, 0o700)
-        route = read_active_route(path)
-        current_root = route.root if route is not None else Path.home() / ".agent-comms"
-        if expected_root.expanduser().resolve(strict=True) != current_root.resolve(strict=True):
+        route = read_active_route(path) or LocalRoute(Path.home() / ".agent-comms")
+        # Local roots may be created under this guard. ActiveRoute owns the
+        # stronger observation of an already published root and its identity.
+        if expected_root.expanduser().resolve() != route.observe_root():
             raise ValueError("default comms route changed before write")
         yield
     finally:
