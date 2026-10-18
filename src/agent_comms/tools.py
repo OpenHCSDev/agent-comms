@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, Any, ClassVar, Type
+from typing import TYPE_CHECKING, ClassVar, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .cli_commands import (
@@ -94,7 +94,9 @@ def tool_field(
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolRequest[Caller: ToolCaller = ToolCaller](ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool):
+class ToolRequest[Caller: ToolCaller = ToolCaller](
+    ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
+):
     family_discriminator = "tool"
     description: ClassVar[str]
     context: ClassVar[str | None] = None
@@ -1044,7 +1046,7 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
 
-    def apply(self, ctx: Comms) -> Any:
+    def apply(self, ctx: Comms) -> JsonObject:
         return {"tools": tool_catalog()}
 
 
@@ -1055,16 +1057,13 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
     tool: str = option("--tool")
-    arguments: dict[str, Any] = option(
-        "--arguments",
-        help="Tool arguments as a JSON object",
-        default_factory=dict,
-        parser_default="{}",
-        normalize=_json_object,
+    arguments: str = option(
+        "--arguments", help="Tool arguments as a JSON object", default="{}",
     )
 
-    def apply(self, ctx: Comms) -> Any:
-        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller))
+    def apply(self, ctx: Comms) -> JsonObject:
+        return invoke_tool(ctx, self.tool, _json_object(self.arguments),
+                           caller=ToolCaller.from_actor(self.caller))
 
 
 def tool_catalog() -> list[JsonObject]:

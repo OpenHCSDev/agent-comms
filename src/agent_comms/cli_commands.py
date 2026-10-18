@@ -7,6 +7,7 @@ command catalog. Existing CLI spellings belong to the store_files.
 from __future__ import annotations
 
 import argparse
+from abc import abstractmethod
 import json
 import asyncio
 import os
@@ -1295,13 +1296,24 @@ class ActivityCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadLifecycleCliCommand(ThreadCommandAvailability, CliCommand):
+class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
+    @classmethod
+    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+        return (cls.thread_binding(thread),) if cls.available_for_thread(thread, status) else ()
+
+    @classmethod
+    @abstractmethod
+    def thread_binding(cls, thread): ...
+
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadLifecycleCliCommand(ThreadBoundCliCommand):
     multiple_targets = True
     name: str = option("--name", target_bound=True)
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        return (cls(name=thread.name),) if cls.available_for_thread(thread, status) else ()
+    def thread_binding(cls, thread):
+        return cls(name=thread.name)
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
@@ -1371,14 +1383,14 @@ class ReleaseCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveCliCommand(ArchiveOwnerControl, CliCommand):
+class ArchiveCliCommand(ArchiveOwnerControl, ThreadBoundCliCommand):
     help = "Archive a stopped thread"
     multiple_targets = True
     name: str = option("--name", target_bound=True)
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        return (cls(name=thread.name),) if cls.available_for_thread(thread, status) else ()
+    def thread_binding(cls, thread):
+        return cls(name=thread.name)
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
         ctx.threads.archive(self.name)
@@ -1431,7 +1443,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ForkCliCommand(NativeOwnerCommand, NewThreadCliCommand):
+class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliCommand):
     help = "Fork a child pi thread"
     spec_type = ForkSpec
     parent: str = option("--parent", target_bound=True)
@@ -1441,9 +1453,9 @@ class ForkCliCommand(NativeOwnerCommand, NewThreadCliCommand):
         return ()
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        return (cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
-                    model=thread.model, thinking_level=thread.thinking_level),) if cls.available_for_thread(thread, status) else ()
+    def thread_binding(cls, thread):
+        return cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
+                   model=thread.model, thinking_level=thread.thinking_level)
 
 
 @dataclass(frozen=True, kw_only=True)
