@@ -392,6 +392,16 @@ class RecordedSegmentManifest:
             raise ValueError("Context predecessor is not an earlier record")
         return (self.previous,)
 
+    def keyframe(
+        self, original: SegmentManifest, offset: int | None,
+    ) -> tuple[tuple[ContextEntryReference, ...], int | None]:
+        if self.previous is None:
+            count, source = len(self.entries), offset
+        else:
+            count, source = self.inherited_entries, self.previous
+        return (tuple(ContextEntryReference.from_manifest(child)
+                      for child in original.contributors[:count]), source)
+
     def record_text(
         self, original: SegmentManifest, previous_value: SegmentManifest, offset: int | None,
     ) -> RecordedSegmentManifest:
@@ -408,8 +418,6 @@ class RecordedSegmentManifest:
                 position: int = 0) -> SegmentManifest:
         prior = (predecessors[self.previous].segments[position]
                  if self.previous is not None and predecessors is not None else None)
-        if prior is not None and prior.previous is not None:
-            raise ValueError("Context source must contain the full segment, not another reference")
         previous = prior.restore(entries) if prior is not None else None
         original = self.manifest
         if self.previous is not None and previous is None:
@@ -779,15 +787,11 @@ class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
         header = replace(original, provenance=provenance, contributors=(), captured_text=())
         references = tuple(ContextEntryReference.from_manifest(child)
                            for child in original.contributors)
-        prior = ()
+        prior: tuple[ContextEntryReference, ...] = ()
         keyframe_offset = None
         if (previous is not None and previous_value is not None
                 and recording_turn % cls.keyframe_interval):
-            keyframe_offset = previous.previous if previous.previous is not None else previous_offset
-            prefix = (previous.inherited_entries if previous.previous is not None
-                      else len(previous.entries))
-            prior = tuple(ContextEntryReference.from_manifest(child)
-                          for child in previous_value.contributors[:prefix])
+            prior, keyframe_offset = previous.keyframe(previous_value, previous_offset)
         inherited = 0
         for before, current in zip(prior, references, strict=False):
             if before != current:
@@ -1109,11 +1113,11 @@ class RecordedContextManifest:
         previous: CapturedWireSource[RecordedContextManifest, ContextManifest] | None = None,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
         recording_turn = 1
-        prior = ()
+        prior: tuple[RecordedSegmentManifest, ...] = ()
         if previous is not None:
-            recorded = previous.pointer.decode_bytes(previous.raw, previous.source.root_id)
-            prior = recorded.segments
-            recording_turn += recorded.recording_turn
+            previous_record = previous.pointer.decode_bytes(previous.raw, previous.source.root_id)
+            prior = previous_record.segments
+            recording_turn += previous_record.recording_turn
         parts = []
         for position, segment in enumerate(manifest.segments):
             old = value = offset = None

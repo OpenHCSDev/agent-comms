@@ -865,10 +865,8 @@ class RecordedContextManifestSources(
     ) -> dict[RecordedContextManifestSources, CapturedWireSource[
         RecordedContextManifest, ContextManifest]]:
         """Resolve only referenced predecessors and entries, decoding outside locks."""
-        rows = {row.offset: row for row, _ in captured}
-        raw = {row.offset: value for row, value in captured}
-        recorded = {offset: rows[offset].decode_bytes(value, prefix.root_id)
-                    for offset, value in raw.items()}
+        recorded = {row.offset: row.decode_bytes(value, prefix.root_id)
+                    for row, value in captured}
         selected = tuple(recorded)
         dependencies = {(predecessor, position)
                         for offset in selected
