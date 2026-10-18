@@ -4,7 +4,7 @@ Includes dependencies, package metadata, hidden files and native resources; no
 mtime cache or caller-provided success marker. Not a sandbox against arbitrary
 same-UID code or an installer mutating code after verification. Preparation must
 publish new build directories, never edit a package used by a running process.
-This stdlib-only file is also invoked directly by the preparation/launch scripts.
+Preparation and launch scripts invoke the same package module entrypoint.
 Shared resources must be read-only. Their content commitment is unchanged when
 another deployment acquires an inode name; private mutable state is unrelated.
 """
@@ -20,10 +20,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-# Preparation executes this file directly before Core dependencies exist.
-# Only imported launch consumers need Core's filesystem roles.
-if __package__:
-    from .private_path import PrivateDirectoryRole, TrustedAncestorRole
+from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
@@ -413,7 +410,7 @@ if __name__ == "__main__":
         verify_native_package(Path(sys.argv[1]))
     else:
         raise SystemExit(
-            "Usage: native_package.py [--digest|--write-manifest] PACKAGE_DIR | "
+            "Usage: python -m agent_comms.native_package [--digest|--write-manifest] PACKAGE_DIR | "
             "--share-resources NEW_PACKAGE DEPLOYMENTS | "
             "--install-sources PACKAGE_DIR SNAPSHOT_ROOT"
         )
