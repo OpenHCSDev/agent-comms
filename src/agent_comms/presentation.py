@@ -64,6 +64,45 @@ if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
 
 
+class OutcomeViewer(ABC):
+    """Who reads a delivery window decides which of its outcomes are shown."""
+
+    @abstractmethod
+    def includes(self, source: CommittedDelivery, recipient: FrozenRecipient) -> bool:
+        pass
+
+    @abstractmethod
+    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+        pass
+
+
+class AllOutcomes(OutcomeViewer):
+    """An unscoped reader sees every recipient's outcome and every human read."""
+
+    def includes(self, source: CommittedDelivery, recipient: FrozenRecipient) -> bool:
+        return True
+
+    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+        return True
+
+
+@dataclass(frozen=True, slots=True)
+class OwnerOutcomes(OutcomeViewer):
+    """A sender sees all outcomes; a recipient sees only its original outcome."""
+
+    lookup: str
+
+    @classmethod
+    def of(cls, owner: Thread) -> OwnerOutcomes:
+        return cls(owner.incarnation.lookup)
+
+    def includes(self, source: CommittedDelivery, recipient: FrozenRecipient) -> bool:
+        return self.lookup in (source.audience.sender_lookup, recipient.recipient_lookup)
+
+    def sees_direct_read(self, source: CommittedDelivery) -> bool:
+        return source.audience.sender_lookup == self.lookup
+
+
 @dataclass(frozen=True, slots=True)
 class MessageNotification:
     """Read-only display of one recipient's durable assignment decision."""
@@ -131,7 +170,8 @@ class MessageNotification:
             log,
             references,
             lambda sources: cls.delivery_window(
-                root, registry, sources, NotificationAssignment.read(root, sources)
+                root, registry, sources, NotificationAssignment.read(root, sources),
+                viewer=AllOutcomes(),
             ),
         )
 
@@ -152,7 +192,7 @@ class MessageNotification:
     @classmethod
     def delivery_window(
         cls, root: Path, registry: Registration, sources: Sequence[CommittedDelivery],
-        assignment_read: NotificationAssignmentRead, *, owner_lookup: str | None = None,
+        assignment_read: NotificationAssignmentRead, *, viewer: OutcomeViewer,
     ):
         """Project the original frozen audience even before handling is recorded."""
         from .agent_activity import AgentActivity
@@ -162,20 +202,13 @@ class MessageNotification:
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
             ((source, recipient) for source in sources for recipient in source.audience.recipients
-             if cls.includes_recipient(source, recipient, owner_lookup)),
+             if viewer.includes(source, recipient)),
             snapshot=snapshot,
         )
         return cls.project_delivery_window(
             root, snapshot, sources, observations,
-            owner_lookup=owner_lookup, assignment_read=assignment_read,
+            viewer=viewer, assignment_read=assignment_read,
         )
-
-    @staticmethod
-    def includes_recipient(source: CommittedDelivery, recipient: FrozenRecipient,
-                           owner_lookup: str | None) -> bool:
-        """A sender sees all outcomes; a recipient sees only its original outcome."""
-        return (owner_lookup is None or source.audience.sender_lookup == owner_lookup
-                or recipient.recipient_lookup == owner_lookup)
 
     @classmethod
     def recorded_delivery_window(cls, root: Path, namespace: RegistryProvenance,
@@ -189,15 +222,14 @@ class MessageNotification:
         }
         return cls.project_delivery_window(
             root, namespace, sources, observations,
-            assignment_read=NotificationAssignment.read(root, sources),
+            assignment_read=NotificationAssignment.read(root, sources), viewer=AllOutcomes(),
         )
 
     @classmethod
     def project_delivery_window(
         cls, root: Path, snapshot: RegistryProvenance,
         sources: Sequence[CommittedDelivery], observations: Mapping[str, RecipientActivity],
-        *, assignment_read: NotificationAssignmentRead,
-        owner_lookup: str | None = None,
+        *, assignment_read: NotificationAssignmentRead, viewer: OutcomeViewer,
     ) -> dict[tuple[int, str], tuple[MessageNotification, ...]]:
         """Original assignment and read authorities own both display projections."""
         from .notification_assignment import NotificationAssignment
@@ -214,7 +246,7 @@ class MessageNotification:
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
-                if not cls.includes_recipient(source, outcome.recipient, owner_lookup):
+                if not viewer.includes(source, outcome.recipient):
                     continue
                 observation = observations[outcome.recipient.recipient_lookup]
                 notification = observation.after_inbox_read(
@@ -231,7 +263,7 @@ class MessageNotification:
                     )
                 )
             direct_read = cls.direct_read_notification(
-                source, snapshot, reads, document, owner_lookup=owner_lookup
+                source, snapshot, reads, document, viewer=viewer
             )
             if direct_read is not None:
                 result[key].append(direct_read)
@@ -239,14 +271,11 @@ class MessageNotification:
 
     @classmethod
     def direct_read_notification(
-        cls, source, snapshot, reads, document, *, owner_lookup
+        cls, source, snapshot, reads, document, *, viewer: OutcomeViewer
     ) -> MessageNotification | None:
         """Project a human DM read even though humans have no wake assignment."""
         message = source.message
-        if (
-            source.audience.recipients
-            or (owner_lookup is not None and source.audience.sender_lookup != owner_lookup)
-        ):
+        if source.audience.recipients or not viewer.sees_direct_read(source):
             return None
         target = CommandTarget.named(message.target).direct_peer(snapshot)
         if target is None or not reads.human(target.role):
@@ -281,15 +310,13 @@ class MessageNotification:
 
     @classmethod
     def for_sources(
-        cls, root: Path, registry: Registration, owner: Thread,
+        cls, root: Path, registry: Registration, viewer: OutcomeViewer,
         sources: Sequence[CommittedDelivery], *,
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
         """Project outcomes from the caller's original certified source window."""
         projected = cls.delivery_window(
-            root, registry, sources,
-            owner_lookup=owner.incarnation.lookup,
-            assignment_read=assignment_read,
+            root, registry, sources, assignment_read, viewer=viewer,
         )
         return tuple(
             replace(notification, message=source.message)

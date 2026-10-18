@@ -15,7 +15,7 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.notification_assignment import NotificationAssignment
-from agent_comms.presentation import MessageNotification
+from agent_comms.presentation import AllOutcomes, MessageNotification, OwnerOutcomes
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.read_basis import ReadCursor
 from agent_comms.registry_provenance import RegisteredRecipient, RetiredRecipient
@@ -70,7 +70,7 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     ) == ()
     window = MessageNotification.delivery_window(
         comms.root, comms.registry, (original,),
-        NotificationAssignment.read(comms.root, (original,)),
+        NotificationAssignment.read(comms.root, (original,)), viewer=AllOutcomes(),
     )
     assert (sent.seq, sent.message_id) in window
     assert all(not item.displayed_to for item in window[(sent.seq, sent.message_id)])
@@ -168,3 +168,24 @@ def test_activity_log_projects_only_requested_threads(tmp_path):
     assert set(log.current_for(("peer-7",))) == {"peer-7"}
     assert log.current_for(()) == {}
     assert len(log.all_current()) == 10
+
+
+@pytest.mark.parametrize(("viewer_of", "seen"), [
+    (lambda lookups: AllOutcomes(), {"peer-a", "peer-b"}),
+    (lambda lookups: OwnerOutcomes(lookups["sender"]), {"peer-a", "peer-b"}),
+    (lambda lookups: OwnerOutcomes(lookups["peer-a"]), {"peer-a"}),
+])
+def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, seen):
+    comms = canonical_goal_wire(tmp_path / "bus")
+    for name in ("sender", "peer-a", "peer-b"):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset({"ci"}), str(tmp_path)))
+    sent = comms.messaging.send_message("sender", "#ci", "channel outcome")
+    with comms.bus.log.certified_read() as source:
+        original = source.delivery(sent.seq)
+    lookups = {name: thread.incarnation.lookup
+               for name, thread in comms.registry.snapshot().threads.items()}
+    window = MessageNotification.delivery_window(
+        comms.root, comms.registry, (original,),
+        NotificationAssignment.read(comms.root, (original,)), viewer=viewer_of(lookups),
+    )
+    assert {item.recipient for item in window[(sent.seq, sent.message_id)]} == seen
