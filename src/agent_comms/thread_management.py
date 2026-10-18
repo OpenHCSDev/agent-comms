@@ -402,6 +402,7 @@ class ThreadManagement:
         """Every store whose rows end with a thread declaration."""
         from .goal_waits import GoalWaits
         from .relationships import RelationshipStore
+        from .rule_reviews import RuleReviews
         from .view_unread import transcript_read_state
 
         states = (
@@ -414,6 +415,7 @@ class ThreadManagement:
             transcript_read_state(self.bus.reads.path),
             GoalWaits.at(self.root),
             RelationshipStore.at(self.root),
+            RuleReviews(self.root),
         )
         ThreadOwnedState.require_complete(states)
         return states

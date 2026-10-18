@@ -2,9 +2,9 @@
 
 The rules have one source each: the commander skill's bold-lead lines, every feedback rule in the configured rule
 directories (the packaged rules first, then the project's own memory), and paper 1's correct-maintenance results
-(the packaged correct-maintenance rule). `review` prints all of them and draws three, two always from the paper, that must each be answered with how the current tick obeys or breaks it. order refuses every
-commander action (send, strike, done, close, problem, hunt, say, fold, drop) until the last review is answered and
-younger than MAX_AGE; rotate prints RULES DUE when it is stale.
+(the packaged correct-maintenance rule). `review` prints all of them and draws three, two always from the paper, that must each be answered with how the current tick obeys or breaks it. Core records each
+review and answer (CommsRuleReviewTool); its RulesDue member refuses every commander action in order and prints
+RULES DUE in rotate until the last review is answered and fresh.
 
   agent-comms-commander rules review [--as FORK]                 print the rules, draw three
   agent-comms-commander rules answer N "<10+ words>" [--as FORK]  answer drawn rule N with what this tick does about it
@@ -12,16 +12,18 @@ younger than MAX_AGE; rotate prints RULES DUE when it is stale.
 Every fork reviews for itself (forks must know correct maintenance, not carry dogma): a fork's
 actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
 """
-import glob, json, os, random, re, sys, time
+import glob, os, random, re, sys
 
+from ..rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviewEntry
+from ..standing_rules import RulesDue
+from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
+from .order import COMMS, call
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
-LOG = f'{CONFIG.state}/rules.jsonl'
 SKILL = str(CONFIG.skill)
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
-MAX_AGE = 20 * 60
 DRAWN = 3
 # Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
 PINNED = ('branch-vs-polymorphism', 'factor-into-parent-hard-rule', 'paper-is-law-no-dogma')
@@ -43,34 +45,9 @@ def rules() -> list[str]:
     return found
 
 
-def last(who: str = ME) -> tuple[dict | None, list[dict]]:
-    rows = [r for r in (json.loads(l) for l in open(LOG)) if r.get('who', ME) == who] if os.path.exists(LOG) else []
-    return next((r for r in reversed(rows) if r['kind'] == 'review'), None), rows
-
-
-def refused(who: str = ME) -> tuple[str, float] | None:
-    """Why this commander's actions are refused now and since when, or None when fresh."""
-    review, rows = last(who)
-    if review is None:
-        return f'no rule review recorded for {who}', 0.0
-    at = review['at']
-    answered = {r['n'] for r in rows if r['kind'] == 'answer' and r['at'] >= at}
-    if missing := [n for n in range(1, len(review["drawn"]) + 1) if n not in answered]:
-        drawn = time.strftime("%H:%M", time.localtime(at))
-        return f'drawn rules {missing} of the {drawn} review are unanswered', at
-    if (age := time.time() - at) > MAX_AGE:
-        return f'last rule review was {int(age / 60)} min ago (max {MAX_AGE // 60})', at + MAX_AGE
-    return None
-
-
-def stale(who: str = ME) -> str | None:
-    return refusal[0] if (refusal := refused(who)) else None
-
-
-def require(who: str = ME):
-    if why := stale(who):
-        flag = '' if who == ME else f' --as {who}'
-        sys.exit(f'REFUSED, nothing recorded: {why}. Run agent-comms-commander rules review{flag}, then answer each drawn rule{flag}.')
+def record(who: str, entry: RuleReviewEntry) -> None:
+    read: StandingRulesRead = call(CommsRuleReviewTool(entry=entry, reviewer=who))
+    print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
 def review(who: str = ME):
@@ -86,35 +63,28 @@ def review(who: str = ME):
     if len(pinned) != len(PINNED):
         sys.exit(f'Pinned rule missing from the rule directories: {sorted(set(PINNED) - {r.split(":", 1)[0] for r in pinned})}')
     drawn += [r for r in pinned if r not in drawn]
-    with open(LOG, 'a') as f:
-        f.write(json.dumps({'kind': 'review', 'who': who, 'at': time.time(), 'drawn': drawn}) + '\n')
+    record(who, DrawnRuleReviewEntry(tuple(drawn), len(drawn) if who != ME else 2))
     print('\nAnswer each with what this tick does about it (agent-comms-commander rules answer N "..."):')
     for n, r in enumerate(drawn, 1):
         print(f'  {n}. {r}')
 
 
 def answer(n: int, text: str, who: str = ME):
-    review, _ = last(who)
-    if review is None or not 1 <= n <= len(review["drawn"]):
-        sys.exit('REFUSED: no review drawn, or N out of range')
-    if len(text.split()) < 10:
-        sys.exit('REFUSED: say in 10+ words what this tick does about the rule, naming a unit, problem or file')
-    if (n <= 2 or who != ME) and not re.search(r'\S+\.py:\d+|P\d+', text):
-        sys.exit('REFUSED: a correct-maintenance answer names the file:line or P-number it was applied to')
-    with open(LOG, 'a') as f:
-        f.write(json.dumps({'kind': 'answer', 'who': who, 'at': time.time(), 'n': n, 'rule': review['drawn'][n - 1], 'text': text}) + '\n')
-    print(stale(who) or 'review complete; commander actions allowed')
+    record(who, AnsweredRuleReviewEntry(n, text))
 
 
 def main(a):
     who = ME
     if '--as' in a:
         i = a.index('--as'); who = a[i + 1]; del a[i:i + 2]
-    if a == ['review']:
-        review(who)
-    elif a[:1] == ['answer'] and len(a) == 3 and a[1].isdigit():
-        answer(int(a[1]), a[2], who)
-    elif a == ['stale']:
-        print(stale(who) or 'fresh')
-    else:
-        sys.exit(__doc__)
+    try:
+        if a == ['review']:
+            review(who)
+        elif a[:1] == ['answer'] and len(a) == 3 and a[1].isdigit():
+            answer(int(a[1]), a[2], who)
+        elif a == ['stale']:
+            print(RulesDue.reason(COMMS, who) or 'fresh')
+        else:
+            sys.exit(__doc__)
+    except ValueError as refused:  # Core owns what a review and an answer may say
+        sys.exit(f'REFUSED: {refused}')

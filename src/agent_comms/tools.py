@@ -47,7 +47,8 @@ from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, GoalDeclaration, OrderCheck
-from .standing_rules import StandingRule
+from .rule_reviews import RuleReviewEntry, RuleReviews
+from .standing_rules import RulesDue, StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
 from .messages import Message
@@ -813,6 +814,19 @@ class CommsStandingRulesTool(ThreadReadTool):
     def apply(self, comms: Comms, caller: ToolCaller) -> StandingRulesRead:
         broken = StandingRule.broken(comms, caller.subject(self.thread), self.after)
         return StandingRulesRead(tuple(rule.line() for rule in broken))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsRuleReviewTool(ThreadToolRequest):
+    label = "Record rule review"
+    description = "Record the rules a review drew, or the answer to one drawn rule; replies what is still due."
+    entry: RuleReviewEntry = tool_field("A drawn review, or the answer to drawn rule n")
+    reviewer: str = tool_field("Fork reviewing for itself; omit to review as yourself", default="")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
+        reviewer = self.reviewer or caller.name
+        RuleReviews(comms.root).write(reviewer, self.entry)
+        return StandingRulesRead(tuple(rule.line() for rule in RulesDue.violations(comms, reviewer)))
 
 
 @dataclass(frozen=True, kw_only=True)

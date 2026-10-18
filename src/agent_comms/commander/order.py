@@ -33,7 +33,7 @@ from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
-from ..standing_rules import HuntDue
+from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
@@ -42,7 +42,7 @@ from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntTex
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
-from . import capacity, rules
+from . import capacity
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -733,7 +733,10 @@ class RuledVerb(CommanderVerb):
 
     def gate(self) -> None:
         super().gate()
-        rules.require(self.who)
+        for due in RulesDue.violations(COMMS, self.who):
+            flag = '' if self.who == ME else f' --as {self.who}'
+            sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander rules review{flag},'
+                     f' then answer each drawn rule{flag}.')
 
 
 def unstrike(task: str, why: str, at: str | None = None) -> None:
