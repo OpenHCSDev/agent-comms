@@ -1,11 +1,10 @@
 """agent-comms-connector: the claude.ai connector, a Streamable HTTP MCP server beside Core.
 
-The server is a transport over the ToolRequest family: ``tools/list`` reports the schema of
-every member, saying whether it changes the bus, and ``tools/call`` dispatches to that
-member's ``invoke()`` as the declared caller claude-ai. OAuth stands in front of every MCP
-request. The owner approves each authorization on this machine with ``agent-comms-connector
-approve REQUEST``, and tokens are kept only as digests under
-``~/.local/state/agent-comms/connector/``.
+The server is a transport over the ToolRequest family: ``tools/list`` reports every member
+and whether it changes the bus; ``tools/call`` runs ``invoke()`` as the caller claude-ai.
+OAuth stands in front of every MCP request. The owner approves each authorization on this
+machine with ``agent-comms-connector approve REQUEST``, and tokens are kept only as digests
+under ``~/.local/state/agent-comms/connector/``.
 
 Usage:
   agent-comms-connector serve [--root ROOT] [--issuer URL]
