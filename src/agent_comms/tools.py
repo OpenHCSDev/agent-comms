@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import os
 from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
@@ -30,7 +29,7 @@ from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import LaunchRuntime, ThreadLaunch
+from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
@@ -1168,9 +1167,10 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
+    name: str | None = option("--name", default=None, help="Calling thread")
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
-        caller = ToolCaller.from_actor(os.environ.get(ThreadLaunch.variable("name")))
+        caller = ToolCaller.from_actor(self.name)
         return caller.catalog(ctx, tuple(tool_catalog()))
 
 
