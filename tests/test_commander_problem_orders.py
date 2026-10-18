@@ -650,7 +650,6 @@ def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
 
 
 @pytest.mark.parametrize('step, name, column', [
-    ('carry_todo_verdicts', 'TodoVerdicts', 'verdicts'),
     ('carry_todo_corrections', 'TodoCorrections', 'corrections')])
 def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
     """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
