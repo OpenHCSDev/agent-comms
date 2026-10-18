@@ -61,7 +61,7 @@ def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_pa
 
     assert kinds(broken(cleanup_gib=0, floor_gib=0, max_checkouts=1)) == set()
     over, = [rule for rule in broken(cleanup_gib=0, floor_gib=0, max_checkouts=0) if type(rule) is UnitStorage]
-    assert over.storage.checkouts == (home.resolve(), extra.resolve())
+    assert over.checkouts == (home.resolve(), extra.resolve())
     assert over.line() == ('VIOLATION storage quota: worker holds 1 checkouts besides home, limit 0'
                            ' -> order the cleanup')
     cleanup, = [rule for rule in broken(cleanup_gib=free + 100, floor_gib=0) if type(rule) is DiskLow]
