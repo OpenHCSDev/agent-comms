@@ -15,6 +15,8 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
+from .bus_activity_index import ChannelActivity
+from .bus_display_index import DisplayMetricScope, DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
@@ -25,7 +27,6 @@ from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
 
 if TYPE_CHECKING:
-    from .bus_display_index import DisplayMetricScope, DisplayMetrics
     from .wire_log import WireSnapshot
 
 
@@ -49,7 +50,7 @@ class BusPageSource(PageIndexTable, TypedTable):
 
     def covers(self, snapshot: WireSnapshot) -> bool:
         return (snapshot.same_file(self.revision.identity)
-                and snapshot.complete_boundary <= self.revision.size
+                and snapshot.complete_prefix.boundary <= self.revision.size
                 and snapshot.fingerprint(self.revision.size) == self.tail)
 
 
@@ -175,7 +176,7 @@ class BusPageIndex:
 
     def prepare(self, opened: WireSnapshot) -> None:
         """Bring this disposable index up to the caller's original source cut."""
-        while opened.complete_boundary:
+        while opened.complete_prefix.boundary:
             saved, source, offset, rows = self._prepare(opened)
             if saved == source:
                 return
@@ -197,7 +198,7 @@ class BusPageIndex:
                     last_rows = BusPageRow.select(self.connection, order_by=("seq",),
                                                   descending=True, limit=1)
         revision = opened.revision
-        size = opened.complete_boundary
+        size = opened.complete_prefix.boundary
         if saved is not None and saved.covers(opened):
             return saved, saved, saved.revision.size, ()
         offset = saved.revision.size if saved is not None else 0
@@ -297,16 +298,17 @@ class BusPageIndex:
             except (ValueError, TypeError) as error:
                 raise StaleBusPageIndexError("Indexed row has invalid fields") from error
 
-    def display_metrics(self, semantics: DisplayMetricScope, before_offset: int) -> DisplayMetrics:
-        clocks, counts = semantics.empty_metrics
+    def display_snapshot(self, semantics: DisplayMetricScope, before_offset: int) -> DisplaySnapshot:
+        snapshot = DisplaySnapshot.empty(semantics)
         seen, names = semantics.seen, tuple(semantics.viewer_names)
         for scope in semantics.scopes:
             predicate, parameters = scope.index_predicate
             row, = BusPageRow.select(self.connection, row_type=BusPageMetrics,
                 where=f"offset < ? AND ({predicate})",
                 parameters=(seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters))
-            clocks[scope.channel], counts[scope.channel] = (row.last, row.human), row.count
-        return clocks, counts
+            snapshot.activity[scope.channel] = ChannelActivity(row.last, row.human)
+            snapshot.counts[scope.channel] = row.count
+        return snapshot
 
 
 class EmptyBusPageIndex(BusPageIndex):
@@ -318,5 +320,5 @@ class EmptyBusPageIndex(BusPageIndex):
     def _offsets(self, *args, **kwargs):
         yield from ()
 
-    def display_metrics(self, semantics, boundary):
-        return semantics.empty_metrics
+    def display_snapshot(self, semantics, boundary):
+        return DisplaySnapshot.empty(semantics)
