@@ -57,13 +57,16 @@ class Repository:
 
 def test_steps_at_head_form_one_chain_and_each_module_declares_its_step():
     chain = CarryChain.at(REPO, "HEAD")
+    names = [step.name for step in chain.steps]
     assert chain.steps[0].after is None
-    assert [step.after for step in chain.steps[1:]] == [step.name for step in chain.steps[:-1]]
+    assert [step.after for step in chain.steps[1:]] == names[:-1]
     for step in chain.steps:
         if step.revision == "HEAD":
             (declared,) = [value for value in vars(importlib.import_module(f"cutover.{step.name}")).values()
                            if isinstance(value, type) and issubclass(value, Carry) and value is not Carry]
-            assert (declared.name(), declared.after) == (step.name, step.after)
+            assert declared.name() == step.name
+            # A deleted line may run between a step and the step it names.
+            assert declared.after is None or names.index(declared.after) < names.index(step.name)
 
 
 def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
@@ -82,6 +85,33 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
     tail = repo.commit({"carry_c": None})
     assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
         ("carry_a", held), ("carry_b", "HEAD"), ("carry_c", repo.git("rev-parse", f"{tail}^"))]
+
+
+def test_a_step_added_after_a_deleted_line_runs_after_it_for_both_real_ledgers(tmp_path):
+    """Today's history: route_index and wake_index were deleted before display_counts forked
+    from their parent, then todo_releases (17:15) and order_run arrived. Every bus that ran
+    the deleted line keeps a pending list, at 17:15 and at main."""
+    repo = Repository(tmp_path)
+    repo.commit({"carry_external_pages": step_source(None)})
+    repo.commit({"carry_route_index": step_source("carry_external_pages"),
+                 "carry_wake_index": step_source("carry_route_index")})
+    repo.commit({"carry_route_index": None, "carry_wake_index": None})
+    repo.commit({"carry_display_counts": step_source("carry_external_pages")})
+    repo.commit({"carry_todo_voids": step_source("carry_display_counts"),
+                 "carry_turn_records": step_source("carry_todo_voids")})
+    released = repo.commit({"carry_todo_releases": step_source("carry_turn_records")})
+    repo.commit({"carry_order_run": step_source("carry_wake_index"),
+                 "carry_todo_releases": step_source("carry_order_run")})
+    # The laptop's ledger; ts-gaming's adds carry_order_run, applied before it reached main.
+    laptop = ("carry_external_pages", "carry_display_counts", "carry_todo_voids",
+              "carry_turn_records", "carry_route_index", "carry_wake_index")
+
+    def pending(revision: str, applied: tuple[str, ...]) -> list[str]:
+        return [step.name for step in CarryChain.at(tmp_path, revision).pending(applied)]
+
+    assert pending(released, laptop) == ["carry_todo_releases"]
+    assert pending("HEAD", (*laptop, "carry_order_run")) == ["carry_todo_releases"]
+    assert pending("HEAD", laptop) == ["carry_order_run", "carry_todo_releases"]
 
 
 def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgrades_in_order(tmp_path):
@@ -296,14 +326,20 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
                                  "native_package": str(tmp_path)}))
     route.chmod(0o600)
 
-    steps = [step.name for step in CarryChain.at(REPO, "HEAD").steps if step.revision == "HEAD"]
+    chain = CarryChain.at(REPO, "HEAD").steps
+    steps = [step.name for step in chain if step.revision == "HEAD"]
     for name in steps:
+        # The older bus ran each deleted step while the tree still held it.
+        for deleted in chain[len(CarryLedger(root).applied() or ()):]:
+            if deleted.revision == "HEAD":
+                break
+            CarryLedger(root).record(deleted.name)
         before = bus_files(root)
         carried(root, before, [run_step(name, root)])
         applied = run_step(name, root, "--apply")
         carried(root, before, [applied])
         assert run_step(name, root)["changed"] == 0, name
-    assert CarryLedger(root).applied() == tuple(steps)
+    assert CarryLedger(root).applied() == tuple(step.name for step in chain)
 
     (thread,) = Comms(root).registry.snapshot().threads.values()
     assert thread.earlier_projects == (Path("/earlier/project"),)

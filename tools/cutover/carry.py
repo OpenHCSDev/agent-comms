@@ -235,10 +235,10 @@ class CarryChain:
                 if step is not None:
                     known[name] = step
         # Oldest first: the order every step reached this revision along its first parents.
-        entered = [Path(path).stem for path in reversed(git(
-            repo, "log", "--first-parent", "-m", "--no-renames", "--format=", "--name-only",
-            "--diff-filter=A", revision,
-            "--", str(STEPS)).decode().split()) if Path(path).name.startswith("carry_") and path.endswith(".py")]
+        added = git(repo, "log", "--first-parent", "-m", "--no-renames", "--format=", "--name-only",
+                    "--diff-filter=A", revision, "--", str(STEPS)).decode().split()
+        entered = [Path(path).stem for path in reversed(added)
+                   if Path(path).name.startswith("carry_") and path.endswith(".py")]
         for name in entered:
             if f"{name}.py" not in tree:
                 step = cls.deleted(repo, revision, name)
@@ -267,7 +267,9 @@ class CarryChain:
         return cls(tuple(reversed(steps)))
 
     @staticmethod
-    def spliced(known: dict[str, Step], revision: str, entered: Callable[[str], int]) -> dict[str, Step]:
+    def spliced(
+        known: dict[str, Step], revision: str, entered: Callable[[str], int]
+    ) -> dict[str, Step]:
         """Each step runs after the step it names, and of the steps ready to run, the one
         that entered history first runs first: a bus ran steps in the order they reached
         it, so a step added after a deleted line runs after that line instead of stranding
@@ -281,7 +283,7 @@ class CarryChain:
         tail = None
         while waiting:
             ready = next((step for step in waiting
-                          if step.after in ordered or (step.after is None and not ordered)), None)
+                          if step.after == tail or step.after in ordered), None)
             if ready is None:
                 return known
             waiting.remove(ready)
