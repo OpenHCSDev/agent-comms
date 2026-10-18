@@ -594,16 +594,14 @@ class TypeSwitchArms(DispatchArms, TypeSwitch):
     pass
 
 
-class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileOccurrenceMeasure):
+class BuiltinHandlerTypeSwitch(BuiltinHandlerDeclarations, PerFileMeasure):
     """Share the audit collector; per-file counts prevent moving primitive debt."""
 
     @classmethod
-    def occurrences(cls, node: ast.AST) -> int:
-        return cls.count_module(node) if isinstance(node, ast.Module) else 0
-
-    @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        return super().count(source, filename) if cls.admits(filename) else 0
+        if not cls.admits(filename):
+            return 0
+        return cls.count_module(ast.parse(source, filename))
 
 
 class GodClassExcess(GitMeasure):
