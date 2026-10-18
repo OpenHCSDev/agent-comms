@@ -87,6 +87,11 @@ class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
     def full_expectation(self):
         return "this is yours; answer the original committed message"
 
+    def recipient_decision(self, recipient: str, audience: MessageAudience):
+        from .wake import WakeDecision
+
+        return WakeDecision(recipient, audience, self)
+
 
 class PassiveWake(NoSourceProof, WakePolicy):
     active = False
@@ -100,6 +105,15 @@ class PassiveWake(NoSourceProof, WakePolicy):
     @classmethod
     def engagement_type(cls) -> type[Engagement]:
         raise IntegrityViolationError("passive claim cannot engage")
+
+
+class UnmentionedWake(PassiveWake):
+    """A delivered observer, not even a passive claim."""
+
+    def recipient_decision(self, recipient: str, audience: MessageAudience):
+        from .wake import NoWakeDecision
+
+        return NoWakeDecision(recipient)
 
 
 class BoundedTriageWake(TriageSourceProof, WakePolicy):

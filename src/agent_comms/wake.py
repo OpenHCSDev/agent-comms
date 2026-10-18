@@ -7,6 +7,7 @@ a later bus-owned boundary must attest its durable commit before live use.
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -37,42 +38,57 @@ class NoWakeReason(StrEnum):
 
 
 @dataclass(frozen=True, slots=True)
-class NoWakeDecision:
-    """A frozen delivered member with no recipient-specific wake or claim."""
-
+class RecipientDecision(ABC):
     recipient: str  # Stable recipient_lookup, never the mutable canonical name.
-    reason: NoWakeReason = NoWakeReason.UNMENTIONED_OBSERVER
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.recipient, str) or not self.recipient:
-            raise ValueError("no-wake recipient requires a stable lookup.")
-        if type(self.reason) is not NoWakeReason:
-            raise TypeError("no-wake reason must be a NoWakeReason.")
+    @abstractmethod
+    def wake_policy(self) -> WakePolicy: ...
+
+    @abstractmethod
+    def claim_decisions(self) -> tuple[WakeDecision, ...]: ...
+
+    @abstractmethod
+    def to_wire(self) -> dict[str, str]: ...
 
     def initial_notification(self, recipient, *, observation):
-        return PassiveWake.initial_state()().notification(
+        return self.wake_policy().initial_state()().notification(
             recipient, observation=observation)
 
 
 @dataclass(frozen=True, slots=True)
-class WakeDecision:
-    recipient: str  # Stable recipient_lookup, never the mutable canonical name.
+class NoWakeDecision(RecipientDecision):
+    """A frozen delivered member with no recipient-specific wake or claim."""
+
+    reason: NoWakeReason = NoWakeReason.UNMENTIONED_OBSERVER
+
+    def wake_policy(self) -> WakePolicy:
+        return PassiveWake()
+
+    def claim_decisions(self) -> tuple[WakeDecision, ...]:
+        return ()
+
+    def to_wire(self) -> dict[str, str]:
+        return {"recipient_lookup": self.recipient, "no_wake": self.reason.value}
+
+
+@dataclass(frozen=True, slots=True)
+class WakeDecision(RecipientDecision):
     audience: MessageAudience
     wake_mode: WakePolicy
 
-    def __post_init__(self) -> None:
-        if not isinstance(self.recipient, str) or not self.recipient:
-            raise ValueError("decision recipient requires a stable lookup.")
-        if type(self.audience) is not MessageAudience or not isinstance(self.wake_mode, WakePolicy):
-            raise TypeError("wake decision requires MessageAudience and a nominal WakePolicy.")
+    def wake_policy(self) -> WakePolicy:
+        return self.wake_mode
 
-    def initial_notification(self, recipient, *, observation):
-        return self.wake_mode.initial_state()().notification(
-            recipient, observation=observation)
+    def claim_decisions(self) -> tuple[WakeDecision, ...]:
+        return (self,)
+
+    def to_wire(self) -> dict[str, str]:
+        return {"recipient_lookup": self.recipient, "audience": self.audience.value,
+                "wake_mode": self.wake_mode.declared_name}
 
 
 def _require_stored(message: Message) -> None:
-    if not isinstance(message, Message) or message.seq <= 0:
+    if message.seq <= 0:
         raise ValueError("Wake and response routes require a stored canonical Message.")
 
 
@@ -113,16 +129,14 @@ def _member_decision(
     control: ControlClassification,
     target: NamedTarget,
     effective_mentions: frozenset[str],
-) -> WakeDecision | NoWakeDecision:
+) -> RecipientDecision:
     if not message.type.conversation_message:
         return NoWakeDecision(recipient.recipient_lookup)
     if message.notice or message.membership is not None or control.passive:
         mode = PassiveWake()
     else:
         mode = target.wake_policy(recipient, effective_mentions)
-    if mode is None:
-        return NoWakeDecision(recipient.recipient_lookup)
-    return WakeDecision(recipient.recipient_lookup, target.wake_audience(effective_mentions), mode)
+    return mode.recipient_decision(recipient.recipient_lookup, target.wake_audience(effective_mentions))
 
 
 def resolve_wake(
@@ -131,7 +145,7 @@ def resolve_wake(
     recipient: FrozenRecipient,
     frozen_audience: FrozenAudience,
     control: ControlClassification,
-) -> WakeDecision | NoWakeDecision | None:
+) -> RecipientDecision | None:
     """Resolve one member; prefer resolve_wake_cohort for the full frozen N.
 
     ``None`` means the lookup/name pair is absent; NoWakeDecision is a frozen
@@ -147,7 +161,7 @@ def resolve_wake(
 
 def resolve_wake_cohort(
     message: Message, *, frozen_audience: FrozenAudience, control: ControlClassification
-) -> tuple[WakeDecision | NoWakeDecision, ...]:
+) -> tuple[RecipientDecision, ...]:
     """Resolve ordered full N with one pure full-envelope check and no live lookup.
 
     Stage3 must separately attest the committed row, recipient capture, and

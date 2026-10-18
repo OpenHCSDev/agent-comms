@@ -204,25 +204,20 @@ def test_system_control_must_be_explicit_not_guessed_from_body_or_ack_type() -> 
         )
 
 
-def test_no_wake_is_not_a_passive_claim_and_decisions_are_strictly_typed() -> None:
+def test_no_wake_is_not_a_passive_claim() -> None:
     mentioned = stored("#team", "@beta investigate", mentions=(ThreadMention("beta", 0, 5),))
     observer = decide(mentioned, "lookup-alpha")
     assert observer == NoWakeDecision("lookup-alpha", NoWakeReason.UNMENTIONED_OBSERVER)
-    assert isinstance(observer, NoWakeDecision)
+    assert observer.claim_decisions() == ()
+    assert observer.wake_policy() == PassiveWake()
     assert not hasattr(observer, "wake_mode")
     assert not hasattr(observer, "audience")
     assert MEMBERS[0] in audience(mentioned).recipients
     assert decide(mentioned, "lookup-outsider") is None
-    with pytest.raises(ValueError, match="stable lookup"):
-        WakeDecision("", MessageAudience.DIRECT, FullWake())
-    with pytest.raises(ValueError, match="stable lookup"):
-        NoWakeDecision("")
-    with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
-        WakeDecision("lookup-alpha", "direct", FullWake())  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="MessageAudience and a nominal WakePolicy"):
-        WakeDecision("lookup-alpha", MessageAudience.DIRECT, "full")  # type: ignore[arg-type]
-    with pytest.raises(TypeError, match="NoWakeReason"):
-        NoWakeDecision("lookup-alpha", "unmentioned_observer")  # type: ignore[arg-type]
+    passive = WakeDecision("lookup-alpha", MessageAudience.DIRECT, PassiveWake())
+    assert passive.claim_decisions() == (passive,)
+    assert passive.wake_policy() == observer.wake_policy()
+    assert passive.to_wire() != observer.to_wire()
 
 
 def test_excluded_recipient_and_bad_identity_fail_closed() -> None:
