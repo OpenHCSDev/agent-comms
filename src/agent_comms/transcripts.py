@@ -588,7 +588,7 @@ class Transcripts:
             start, end = traversal.bounds(initial, consumed)
             has_older = reader.has_older(start.offset) or start.wire.sequence > 0
         events = traversal.finish(records)
-        if not traversal.ascending and page.records.request_earlier(start.offset) and not events:
+        if traversal.request_earlier(page.records, start.offset) and not events:
             raise CoordinationReadUnavailable("Waiting for the bridge's earlier transcript page")
         if page.inherited and not after and (cursor is None or cursor == frontier):
             events = (*events, *self._fork_start_events(thread))

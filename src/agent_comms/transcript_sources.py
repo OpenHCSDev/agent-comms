@@ -214,6 +214,9 @@ class TranscriptTraversal(ABC):
             projected.close()
             native.close()
 
+    def request_earlier(self, records, offset: int) -> bool:
+        return records.request_earlier(offset)
+
     ascending = False
     # Reading newest-first meets a round's result before its call.
     descending_rounds = True
@@ -244,6 +247,9 @@ class EarlierTranscript(TranscriptTraversal):
 
 
 class LaterTranscript(TranscriptTraversal):
+    def request_earlier(self, records, offset: int) -> bool:
+        return False
+
     ascending = True
     descending_rounds = False
 

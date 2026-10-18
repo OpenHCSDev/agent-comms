@@ -343,12 +343,6 @@ class PageItem:
     item_id: str
     update: TranscriptUpdate
 
-    def record(self) -> FinishedItem:
-        return self.update.page_record(self.turn_id, self.item_id)
-
-    def add_to(self, history: ImportBuffer) -> None:
-        self.update.add_to(history)
-
 
 @dataclass(frozen=True)
 class PublishedPage(TranscriptUpdate):
@@ -357,19 +351,23 @@ class PublishedPage(TranscriptUpdate):
     earlier: ExternalPage
 
     def publish(self, output: ThreadOutput) -> None:
-        output.transcript.publish_page(tuple(item.record() for item in self.items), self.earlier)
+        records = tuple(item.update.page_record(item.turn_id, item.item_id) for item in self.items)
+        self.write(output.transcript, records)
+
+    def write(self, transcript: ExternalTranscript, records: tuple[FinishedItem, ...]) -> None:
+        transcript.publish_page(records, self.earlier)
 
     def add_to(self, history: ImportBuffer) -> None:
         for item in self.items:
-            item.add_to(history)
+            item.update.add_to(history)
 
 
 @dataclass(frozen=True)
 class EarlierPublishedPage(PublishedPage):
     request: EarlierItems
 
-    def publish(self, output: ThreadOutput) -> None:
-        output.transcript.prepend(self.request, tuple(item.record() for item in self.items), self.earlier)
+    def write(self, transcript: ExternalTranscript, records: tuple[FinishedItem, ...]) -> None:
+        transcript.prepend(self.request, records, self.earlier)
 
 
 @dataclass(frozen=True)

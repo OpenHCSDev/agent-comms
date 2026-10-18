@@ -112,6 +112,33 @@ async def test_pager_requests_two_older_pages_through_the_bridges_real_socket(tm
         await runner.cleanup()
 
 
+async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
+    from agent_comms.cli_bridges.codex_protocol import ItemsPage
+    comms = wire(tmp_path / 'root')
+    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external('cli')
+    output = ThreadOutput(transcript, comms.agents)
+    page = ItemsPage.model_validate({'data': [entry('new', 2000)], 'nextCursor': 'p1'}).publication()
+    page.publish(output)
+    frames = asyncio.Queue()
+    watching = asyncio.create_task(transcript.watch_requests(
+        lambda row: frames.put_nowait(EarlierItems.from_row(row))))
+    try:
+        assert not transcript.request_earlier(1)  # The local item has not been consumed.
+        assert transcript.request_earlier(0)
+        first = await asyncio.wait_for(frames.get(), 3)
+        # A reconnect republishes the newest snapshot while the old frame is queued.
+        page.publish(output)
+        assert transcript.request_earlier(0)
+        second = await asyncio.wait_for(frames.get(), 3)
+        assert first.request.request_id != second.request.request_id
+        assert not transcript.pending(first) and transcript.pending(second)
+    finally:
+        watching.cancel()
+        with suppress(asyncio.CancelledError):
+            await watching
+
+
 def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path):
     from agent_comms.cli_bridges.codex_protocol import BusInput, ItemsPage
     from agent_comms.external_transcript import EarlierPage
@@ -122,7 +149,7 @@ def test_hidden_page_items_keep_import_events_but_own_no_visible_events(tmp_path
                  'content': [{'type': 'text', 'text': 'Already on the bus'}]},
     }], 'nextCursor': ''}).publication()
     item, = page.items
-    assert item.record().events == ()
+    assert item.update.page_record(item.turn_id, item.item_id).events == ()
     assert item.update.events[0].text == 'Already on the bus'
     assert page.earlier == EarlierPage('')  # An opaque empty cursor is still a string.
 

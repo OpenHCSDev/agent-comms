@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.external_transcript import ExternalTranscriptRead
+from agent_comms.external_transcript import NoStoreRead, StoreRead
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
@@ -56,7 +56,7 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
     read = comms.transcripts.capture_page_read("codex")
     reading_draft = threading.Event()
     release = threading.Event()
-    current_draft = ExternalTranscriptRead.current_draft
+    current_draft = StoreRead.current_draft
 
     def pause_draft(source):
         draft = current_draft(source)
@@ -64,7 +64,7 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
         assert release.wait(timeout=5)
         return draft
 
-    monkeypatch.setattr(ExternalTranscriptRead, "current_draft", pause_draft)
+    monkeypatch.setattr(StoreRead, "current_draft", pause_draft)
     with ThreadPoolExecutor(max_workers=2) as executor:
         page = executor.submit(read._read_page)
         assert reading_draft.wait(timeout=5)
@@ -81,6 +81,21 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
     assert captured_page.events == ()
     assert captured_draft.events[0].text == "Writing"
     assert transcript.current_draft() is None
+
+
+def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
+    comms = wire(tmp_path / 'wire')
+    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    transcript = comms.transcripts.external('cli')
+    with transcript.reading() as read:
+        assert isinstance(read, NoStoreRead)
+        assert read.start == 0 and read.cut().offset == 0
+        assert not read.has_older(0) and not read.request_earlier(0)
+        assert list(read.reverse(0)) == list(read.forward(0, 0)) == []
+        assert read.turns(2) == read.frames() == ()
+        assert read.current_draft() is None
+    transcript.end_turn()
+    assert not transcript.path.exists()
 
 
 def test_a_native_session_thread_takes_no_cli_items(tmp_path):

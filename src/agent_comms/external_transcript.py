@@ -13,9 +13,10 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
+from uuid import uuid4
 
 from .declared_family import DeclaredFamily
 from .native_transcript import RecordsCut
@@ -37,7 +38,7 @@ class ExternalPage(DeclaredFamily):
     def has_older(self, offset: int, row) -> bool:
         return offset >= row.seq
 
-    def request(self, transcript, row) -> bool:
+    def request(self, transcript, row, offset: int) -> bool:
         return False
 
     def frames(self, row) -> tuple:
@@ -56,19 +57,25 @@ class EarlierPage(ExternalPage):
     def has_older(self, offset: int, row) -> bool:
         return True
 
-    def request(self, transcript, row) -> bool:
+    def request(self, transcript, row, offset: int) -> bool:
+        if super().has_older(offset, row):
+            return False  # Local records remain; the provider is not needed yet.
+        return self.request_page(transcript, row)
+
+    def request_page(self, transcript, row) -> bool:
         with transcript.writing() as connection:
             if transcript.oldest(connection) != [row]:
                 return True  # The read retries against the newly published prefix.
-            row.continue_with(connection, RequestedEarlierPage(self.cursor))
+            row.continue_with(connection, RequestedEarlierPage(self.cursor, uuid4().hex))
         return True
 
 
 @dataclass(frozen=True)
 class RequestedEarlierPage(EarlierPage):
     """Demand is a transition of the stored continuation, not a second cursor store."""
+    request_id: str
 
-    def request(self, transcript, row) -> bool:
+    def request_page(self, transcript, row) -> bool:
         return True  # A deferred read keeps the request without another write.
 
     def frames(self, row) -> tuple:
@@ -85,6 +92,9 @@ class ExternalPageRow(TypedRow):
 
     def has_older(self, offset: int) -> bool:
         return self.earlier.has_older(offset, self)
+
+    def request_earlier(self, transcript, offset: int) -> bool:
+        return self.has_older(offset) and self.earlier.request(transcript, self, offset)
 
     def continue_with(self, connection, earlier: ExternalPage) -> None:
         ExternalItemRow.update(connection, where="thread=? AND turn_id=? AND item_id=?",
@@ -162,19 +172,46 @@ class ExternalCut(RecordsCut, TypedRow):
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscriptRead(TranscriptSource):
-    """One SQLite snapshot of a sessionless transcript's finished and draft rows."""
-
+    """A bound external source; subclasses own absent and connected reads."""
     transcript: ExternalTranscript
-    connection: Connection | None
 
-    @property
-    def lookup(self) -> str:
-        return self.transcript.lookup
+    def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
+        return self._records("seq > ? AND seq <= ?", (after, through), descending=False)
+
+    def reverse(self, before: int) -> Iterator[ExternalRecord]:
+        return self._records("seq <= ?", (before,), descending=True)
+
+
+@dataclass(frozen=True, slots=True)
+class NoStoreRead(ExternalTranscriptRead):
+    def cut(self) -> ExternalCut:
+        return ExternalCut(0)
+
+    def has_older(self, offset: int) -> bool:
+        return False
+
+    def _records(self, where, parameters, *, descending):
+        yield from ()
+
+    def turns(self, last):
+        return ()
+
+    def pending(self, request) -> bool:
+        return False
+
+    def frames(self) -> tuple:
+        return ()
+
+    def end_turn(self) -> None:
+        pass
+
+
+@dataclass(frozen=True, slots=True)
+class StoreRead(ExternalTranscriptRead):
+    connection: Connection
 
     @property
     def start(self) -> int:
-        if self.connection is None:
-            return 0
         rows = self.transcript.oldest(self.connection)
         return rows[0].seq - 1 if rows else 0
 
@@ -185,50 +222,45 @@ class ExternalTranscriptRead(TranscriptSource):
         return offset <= through
 
     def has_older(self, offset: int) -> bool:
-        if self.connection is None:
-            return False
-        rows = self.transcript.oldest(self.connection)
-        return bool(rows) and rows[0].has_older(offset)
+        return any(row.has_older(offset) for row in self.transcript.oldest(self.connection))
+
+    def request_earlier(self, offset: int) -> bool:
+        return any(row.request_earlier(self.transcript, offset)
+                   for row in self.transcript.oldest(self.connection))
+
+    def pending(self, request) -> bool:
+        return bool(self.transcript._requested(self.connection, request))
+
+    def frames(self) -> tuple:
+        return tuple(frame for row in self.transcript.oldest(self.connection)
+                     for frame in row.earlier.frames(row))
+
+    def end_turn(self) -> None:
+        with self.transcript.writing() as connection:
+            ExternalDraftRow.delete(connection, thread=self.transcript.lookup)
 
     def current_draft(self) -> ExternalDraftRow | None:
-        if self.connection is None:
-            return None
-        return ExternalDraftRow.one(self.connection, thread=self.lookup)
+        return ExternalDraftRow.one(self.connection, thread=self.transcript.lookup)
 
     def cut(self) -> ExternalCut:
-        if self.connection is None:
-            return ExternalCut(0)
         return self.transcript._cut(self.connection)
 
     def _records(self, where: str, parameters: tuple, *,
                  descending: bool) -> Iterator[ExternalRecord]:
-        if self.connection is None:
-            return
-        rows = ExternalItemRow.stream(
+        with closing(ExternalItemRow.stream(
             self.connection, where=where, parameters=parameters, order_by=("seq",),
-            descending=descending, thread=self.lookup)
-        try:
+            descending=descending, thread=self.transcript.lookup)) as rows:
             for row in rows:
                 yield ExternalRecord(row.seq, row.events)
-        finally:
-            rows.close()
 
     def turns(self, last: int) -> tuple[TurnDigest, ...]:
-        if self.connection is None:
-            return ()
         return tuple(
             TurnDigest(turn_id, tuple(
                 event
                 for row in ExternalItemRow.select(
-                    self.connection, thread=self.lookup, turn_id=turn_id, order_by=("seq",))
+                    self.connection, thread=self.transcript.lookup, turn_id=turn_id, order_by=("seq",))
                 for event in row.events))
-            for turn_id in ExternalItemRow.recent_turn_ids(self.connection, self.lookup, last))
-
-    def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
-        return self._records("seq > ? AND seq <= ?", (after, through), descending=False)
-
-    def reverse(self, before: int) -> Iterator[ExternalRecord]:
-        return self._records("seq <= ?", (before,), descending=True)
+            for turn_id in ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup, last))
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, TypedStore):
@@ -277,18 +309,12 @@ class ExternalTranscript(TranscriptSource, TypedStore):
                 rows[0].continue_with(connection, earlier)
 
     def request_earlier(self, offset: int) -> bool:
-        if not self.path.exists():
-            return False
-        with self.snapshot() as connection:
-            rows = self.oldest(connection)
-        if not rows or offset >= rows[0].seq:
-            return False
-        row, = rows
-        return row.has_older(offset) and row.earlier.request(self, row)
+        with self.reading() as records:
+            return records.request_earlier(offset)
 
     def pending(self, request) -> bool:
-        with self.snapshot() as connection:
-            return bool(self._requested(connection, request))
+        with self.reading() as records:
+            return records.pending(request)
 
     def _requested(self, connection, request) -> list[ExternalPageRow]:
         return [row for row in self.oldest(connection)
@@ -315,11 +341,8 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         previous = ()
         async for _ in WireWatch.observations(*(WatchSource.modified_file(path)
                                                for path in self.source_paths(self.root))):
-            current = ()
-            if self.path.exists():
-                with self.snapshot() as connection:
-                    current = tuple(frame for row in self.oldest(connection)
-                                    for frame in row.earlier.frames(row))
+            with self.reading() as records:
+                current = records.frames()
             for frame in current:
                 if frame not in previous:
                     emit(frame)
@@ -331,19 +354,19 @@ class ExternalTranscript(TranscriptSource, TypedStore):
             ExternalDraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
 
     def end_turn(self) -> None:
-        if not self.path.exists():
-            return
-        with self.writing() as connection:
-            ExternalDraftRow.delete(connection, thread=self.lookup)
+        with self.reading() as records:
+            records.end_turn()
 
     @contextmanager
     def reading(self):
-        """Retain one read transaction across cut, page records, and draft."""
-        if not self.path.exists():
-            yield ExternalTranscriptRead(self, None)
-            return
-        with self.snapshot() as connection:
-            yield ExternalTranscriptRead(self, connection)
+        """Decode absence once; connected reads retain one WAL snapshot."""
+        try:
+            self.path.stat()
+        except FileNotFoundError:
+            yield NoStoreRead(self)
+        else:
+            with self.snapshot() as connection:
+                yield StoreRead(self, connection)
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalItemRow.select(connection, row_type=ExternalCut, thread=self.lookup)[0]
