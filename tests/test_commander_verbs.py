@@ -36,8 +36,11 @@ DOCUMENTED = [
     ("judge", "show worker", {"thread": "worker"}),
     ("judge", "show", {"thread": None}),
     ("judge", "alarm", {}),
-    ("judge", "ok 0123456789:ab --serves 'the words' --line one --line two --why why --fork f1",
-     {"ids": ("0123456789:ab",), "serves": "the words", "lines": ("one", "two"), "why": "why", "fork": "f1"}),
+    ("judge", "ok 0123456789:ab --msg m1 --serves 'the words' --line one --line two --why why --fork f1",
+     {"ids": ("0123456789:ab",), "msg": "m1", "serves": "the words", "lines": ("one", "two"), "why": "why",
+      "fork": "f1"}),
+    ("judge", "ok-unowned 0123456789:ab --msg m1 --serves 'the words' --line one --why why --no-owner proof",
+     {"serves": "the words", "no_owner": "proof"}),
     ("judge", "back 0123456789:ab --msg m1 --line one --why why --roast r --fix f --slop state"
               " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
      {"ids": ("0123456789:ab",), "msg": "m1", "lines": ("one",), "roast": "r", "fix": "f", "slop_kind": "state",

@@ -1,4 +1,5 @@
 """Compiled native recovery owns closure; Core preserves the original failure."""
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -233,9 +234,9 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
 
     agent.sessions.client = Client()
     package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
     try:
         await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
         with pytest.raises(RequestError) as caught:
