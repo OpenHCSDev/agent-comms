@@ -411,12 +411,14 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         # A standby's wait graph reads other threads' entries: any registry
         # change runs its tick, including closed-group recovery. Nothing on a
         # clock does.
-        from agent_comms.goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
+        from agent_comms.goal_presentation import (
+            GoalExecution, GoalExecutionState, GoalSnapshot, GoalWaitTarget,
+        )
 
         recovered = []
         monkeypatch.setattr(comms.goals, "recover_closed_goal_wait", recovered.append)
         sender = comms.registry.require("sender")
-        agent.inputs.effects.turns.goals.goal_execution_signatures["beta"] = (None, GoalExecution(
+        agent.inputs.effects.turns.goals.goal_snapshots["beta"] = GoalSnapshot(None, GoalExecution(
             GoalExecutionState.STANDBY, "goal", (GoalWaitTarget(sender.incarnation.require_recorded()),),
         ))
         comms.registry.declare(comms.registry.new_thread('unrelated', frozenset(), str(tmp_path)))
@@ -425,7 +427,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         for _ in range(3):
             await tick()
         assert len(drains) == settled + 2 and recovered == ["beta"]
-        agent.inputs.effects.turns.goals.goal_execution_signatures.pop("beta")
+        agent.inputs.effects.turns.goals.goal_snapshots.pop("beta")
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()

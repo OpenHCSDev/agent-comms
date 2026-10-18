@@ -1874,12 +1874,12 @@ class TestLiveConfigSync:
                 sent.append(update)
 
         async def assert_snapshot_update():
-            goal, execution = wired.goals.goal_snapshot("proj")
+            snapshot = wired.goals.goal_snapshot("proj")
             await agent.sessions.config.sync_thread("proj")
             info = [update for update in sent if isinstance(update, SessionInfoUpdate)]
             assert len(info) == 1
             assert facts(info[0].field_meta, GoalChangedUpdate) == (
-                GoalChangedUpdate(goal, execution),
+                GoalChangedUpdate(snapshot.goal, snapshot.execution),
             )
             assert "title" not in info[0].model_fields_set
             sent.clear()
@@ -1901,12 +1901,12 @@ class TestLiveConfigSync:
                 StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("child",)),
             )
             await assert_snapshot_update()
-            before_goal, before_execution = wired.goals.goal_snapshot("proj")
+            before = wired.goals.goal_snapshot("proj")
             wired.registry.rename("child", "renamed-child")
-            after_goal, after_execution = wired.goals.goal_snapshot("proj")
-            assert after_goal == before_goal
-            assert after_execution != before_execution
-            assert after_execution.wait_for[0].name == "renamed-child"
+            after = wired.goals.goal_snapshot("proj")
+            assert after.goal == before.goal
+            assert after.execution != before.execution
+            assert after.execution.wait_for[0].name == "renamed-child"
             await assert_snapshot_update()
             wired.goals.update_goal(
                 "proj", ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id))
