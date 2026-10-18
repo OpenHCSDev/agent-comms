@@ -24,10 +24,8 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
 )
-from .native_tool_call import NativeToolCall, SelectedToolDenied
+from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied
 from .native_tools import NativeExecutableTool
-from .storage_rules import StorageDecision
-from .native_tool_call import NativeToolMode
 from .selected_tool_broker import (
     OwnerToolSocket,
     consume_selected_slot,
@@ -39,7 +37,6 @@ from .selected_tool_broker import (
 @dataclass
 class CodingCall(NativeToolCall):
     tool: NativeExecutableTool
-    storage_decisions: tuple[StorageDecision, ...] = field(default=(), init=False, compare=False, repr=False)
 
     @property
     def name(self) -> str:
@@ -48,8 +45,6 @@ class CodingCall(NativeToolCall):
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
     ) -> None:
-        for decision in self.storage_decisions:
-            decision.complete()
         slot = self.slot(input_id, round_number)
         record_selected_terminal(directory, slot, slot)
 
@@ -126,7 +121,7 @@ class CodingToolOwner:
             try:
                 effects = call.tool.storage_effects(Path(owner.worktree))
                 if effects:
-                    call.storage_decisions = (self.comms.registry.decide_storage(self.owner_name, effects),)
+                    self.comms.registry.decide_storage(self.owner_name, effects)
             except SelectedToolDenied as error:
                 raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
             resource = call.tool.claim

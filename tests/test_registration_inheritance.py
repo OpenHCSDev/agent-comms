@@ -43,7 +43,7 @@ def test_registry_redeclaration_inherits_metadata_but_respects_explicit_values(t
         auto_title_pending=True,
         title="retained",
     )
-    initial = replace(initial, worktree=str(tmp_path), storage_roots=initial.storage_roots.adding(tmp_path))
+    initial = replace(initial, worktree=str(tmp_path))
     comms.registry.declare(initial)
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))
     restored = comms.registry.require("owner")
@@ -113,7 +113,7 @@ def test_project_change_retains_executing_source_but_refuses_another_input(tmp_p
         saved = str(old / 'native.jsonl')
         observed = comms.registry.attach_native_session(original, saved)
         current = comms.registry.require('owner')
-        assert current.worktree == str(new) and current.storage_roots.checkouts == (old, new)
+        assert current.worktree == str(new) and current.earlier_projects == (old,)
         assert current.session_file == observed.thread.session_file == saved
         assert observed.thread.worktree == str(old)
         assert observed.turn_lease == original.turn_lease == current.turn_lease
