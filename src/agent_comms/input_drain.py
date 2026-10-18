@@ -381,7 +381,7 @@ class InputObservation:
                 state = await step.apply(self, session_id, watcher)
 
     def _bus_marker(self):
-        return self.comms.bus.log._private_marker_unlocked()
+        return self.comms.bus.log.private_marker_unlocked()
 
     async def _shared_changes_concern_other_owners(
         self, session_id: str, settled: SettledTick, revision: TickRevision,

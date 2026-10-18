@@ -9,12 +9,15 @@ from abc import abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from .coordination_errors import IdentityConflict
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
+
+if TYPE_CHECKING:
+    from .pi_vocabulary import ThinkingLevel
 
 
 @dataclass(frozen=True)
@@ -272,8 +275,8 @@ class NativeArguments:
             ModelArgument, *SelectedModel.decode(selected).arguments
         )
 
-    def with_thinking(self, selected: str | None) -> NativeArguments:
-        return self.replace(ThinkingArgument, *((ThinkingArgument(selected),) if selected else ()))
+    def with_thinking(self, selected: type[ThinkingLevel]) -> NativeArguments:
+        return self.replace(ThinkingArgument, *selected.native_arguments())
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:

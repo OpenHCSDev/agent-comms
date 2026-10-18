@@ -22,7 +22,7 @@ from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
 from .read_ledger import ReadLedger
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
 
@@ -142,14 +142,14 @@ class BusPageIndex:
 
     @contextmanager
     def prepared(self, opened: WireSnapshot):
-        with _store_lock(self.bus_path, shared=True):
+        with _store_lock(self.bus_path, mode=SharedLock()):
             if self.covers(opened):
                 with self.snapshot():
                     yield
                 return
         opened.metadata.access.require_append()
         self.sync()
-        with _store_lock(self.bus_path, shared=True), self.snapshot():
+        with _store_lock(self.bus_path, mode=SharedLock()), self.snapshot():
             if not self.covers(opened):
                 raise StaleBusPageIndexError("Page index does not cover its opened source")
             yield
@@ -170,7 +170,7 @@ class BusPageIndex:
         """Prepare a freshly opened source; incomplete source is an error."""
         from .wire_log import CurrentSnapshotOpening, WireLog
 
-        with WireLog(self.bus_path)._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source, _store_lock(self.bus_path):
+        with WireLog(self.bus_path).opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source, _store_lock(self.bus_path):
             self.prepare(source)
         return True
 

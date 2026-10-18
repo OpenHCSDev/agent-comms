@@ -1,4 +1,5 @@
 """Installed owner IPC/native over original retained history; provider only is controlled."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -121,7 +122,7 @@ async def test_installed_retained_greeting_then_managed_read(native_backend, mon
                 original.backup(target)
         Path(str(saved) + ".input-proof").chmod(0o600)
         comms.registry.register(replace(thread, session_file=str(saved),
-                                       model="response-local/fixture", thinking_level="off"))
+                                       model="response-local/fixture", thinking_level=OffThinkingLevel))
         await attachment.load_session(str(fixture.project), session)
         fixture.provider.text = "LATENCY_GREETING_OK"
         begin = time.perf_counter_ns()

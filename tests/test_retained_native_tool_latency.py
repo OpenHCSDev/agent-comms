@@ -1,4 +1,5 @@
 """Real selected native tools over an isolated retained source; localhost only."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -77,7 +78,7 @@ async def test_installed_retained_native_read_round_preserves_original_inputs(tm
         with sqlite3.connect(str(saved) + ".input-proof") as target_db:
             original_db.backup(target_db)
     Path(str(saved) + ".input-proof").chmod(0o600)
-    comms.registry.register(replace(owner, model="response-local/fixture", thinking_level="off", session_file=str(saved)))
+    comms.registry.register(replace(owner, model="response-local/fixture", thinking_level=OffThinkingLevel, session_file=str(saved)))
     for number in range(3):
         (tmp_path / f"read-{number}.txt").write_text(f"Isolated native read {number}\n")
     config = tmp_path / "config"

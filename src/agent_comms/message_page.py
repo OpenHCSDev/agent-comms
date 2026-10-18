@@ -195,7 +195,7 @@ class MessageReadRequest[T](ABC):
     def indexed(self, index, source: WireSnapshot) -> T: ...
 
     def read(self, log) -> T:
-        with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+        with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             return self.read_opened(source)
 
     def read_opened(self, source: WireSnapshot) -> T:

@@ -205,7 +205,7 @@ def test_display_index_registers_once_and_only_view_snapshots_capture_indexes(wi
     assert len(indexes) == baseline + 1
     assert wired.views.presentation.display_index("PR111") is first
     assert len(indexes) == baseline + 1
-    with wired.bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+    with wired.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert source._append_checkpoints == {}
     with wired.views.presentation.snapshot(viewer=NamedViewer("PR111")) as (_basis, source):
         assert set(source._append_checkpoints) == set(indexes)

@@ -1,5 +1,6 @@
 """One tool declaration controls presentation without granting coding authority."""
 
+from pathlib import Path
 import asyncio
 import json
 
@@ -229,7 +230,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
                 ],
                 "Read owned.txt once and answer",
                 str(native.project),
-                session_file=str(native.session),
+                root=Path(str(native.project)), session_file=str(native.session),
                 persistent_session=native.persistent,
                 native_start=native.started,
             )

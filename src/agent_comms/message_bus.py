@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
-from .bus_route_counts import OpenedRouteCounts, WaitingRouteCounts
+from .bus_route_counts import CompletingRouteCounts, OpenedRouteCounts
 from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
@@ -31,7 +31,7 @@ from .read_basis import (
     WatchAcknowledgment, ReadCursor,
 )
 from .routing import DeliveryScope
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 
 if TYPE_CHECKING:
     from .presentation import DisplaySelection
@@ -60,11 +60,13 @@ class MessageBus:
         private_response_writes: bool = False,
         private_initial_writes: bool = False,
         private_claim_writes: bool = False,
+        projection: type[OpenedRouteCounts] = OpenedRouteCounts,
     ):
         from .catalog_store import ChannelCatalog
         from .read_ledger import ReadLedger
 
         self.reads = ReadLedger.at(bus_path.parent)
+        self.projection = projection
         self.log = WireLog(bus_path)
         self.history = HistoryArchive(bus_path)
         self._registry = registry
@@ -82,7 +84,7 @@ class MessageBus:
     @contextmanager
     def opened_activity(self) -> Iterator[ActivityClocks]:
         """Own a fresh bus cut for callers without an existing snapshot."""
-        with self.log._opened_wire_snapshot(
+        with self.log.opened_wire_snapshot(
             opening=CurrentSnapshotOpening(), prepared_indexes=self.log.prepare_append_indexes(),
         ) as source:
             yield self.activity_index.snapshot(source)
@@ -101,8 +103,8 @@ class MessageBus:
 
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
-            with _store_lock(self.log.path.parent / "wire", shared=True):
-                source = stack.enter_context(self.log._opened_wire_snapshot(
+            with _store_lock(self.log.path.parent / "wire", mode=SharedLock()):
+                source = stack.enter_context(self.log.opened_wire_snapshot(
                     prepared_indexes=prepared,
                 ))
                 with DisplaySelection.reading(
@@ -135,7 +137,7 @@ class MessageBus:
         delivery = DeliveryScope.capture(name, snapshot, catalog)
         selection = delivery.selection(target, snapshot, catalog)
         seen = self.reads.cursor(delivery.actor, snapshot)
-        with self.log._opened_wire_snapshot() as source:
+        with self.log.opened_wire_snapshot() as source:
             source.messages_for_references((after,) if after is not None else ())
             with projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
@@ -164,7 +166,7 @@ class MessageBus:
             async for _ in changes:
                 snapshot = self._registry.snapshot()
                 messages = await asyncio.to_thread(
-                    self.inbox_at, name, snapshot, after=after, projection=WaitingRouteCounts)
+                    self.inbox_at, name, snapshot, after=after, projection=CompletingRouteCounts)
                 if not reader.current(self._registry.snapshot()):
                     raise UnregisteredThreadError("Watched thread was removed or replaced")
                 for message in messages:
@@ -201,7 +203,7 @@ class MessageBus:
         seen = {
             actor: basis.document.cursor(actor, basis.registry, source) for actor in deliveries
         }
-        with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
+        with self.projection(self.log.path, source, basis.registry, deliveries) as index:
             counts = index.unseen_counts(seen)
         return {name: counts[actor] for name, actor in actors.items()}
 

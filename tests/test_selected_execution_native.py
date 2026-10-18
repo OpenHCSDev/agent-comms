@@ -1,4 +1,5 @@
 """SelectedExecution with pinned native Pi, local deterministic coding provider."""
+from agent_comms.pi_vocabulary import LowThinkingLevel
 from binding_reads import binding_rows
 
 import asyncio
@@ -48,7 +49,7 @@ async def test_native_full_four_tools_publish_and_release(
     old_seq = initial.message.seq
     if after_cutover:
         with comms.bus.log.locked():
-            marker = comms.bus.log._private_marker_unlocked()
+            marker = comms.bus.log.private_marker_unlocked()
             marker.claimed_after_seq = marker.last_seq
             comms.bus.log.write_metadata_unlocked(marker)
         fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
@@ -56,7 +57,7 @@ async def test_native_full_four_tools_publish_and_release(
         with Coordination(str(root / "coordination.sqlite3")) as store:
             accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     owner = comms.registry.require("beta")
-    comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level="low"))
+    comms.registry.register(replace(owner, model="selected-offline/fixture", thinking_level=LowThinkingLevel))
     assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     (tmp_path / "input.txt").write_text("state=BEFORE\n")
     requests = []

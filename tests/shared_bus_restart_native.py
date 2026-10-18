@@ -3,6 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
+from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
 import hashlib
 import shutil
@@ -74,7 +75,7 @@ def configured_stage(arguments, configured, snapshot, *, continue_existing=False
     service = Comms(stage/'wire', private_initial_writes=True)
     if continue_existing:
         with service.bus.log.locked():
-            root_id = service.bus.log._private_marker_unlocked().root_id
+            root_id = service.bus.log.private_marker_unlocked().root_id
     else:
         root_id = service.messaging.initialize_private_initial_protocol()
     binary = Path(sys.executable).with_name('pi-comms-native')
@@ -802,7 +803,7 @@ async def run(arguments):
     for index in range(arguments.registry_size):
         service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:
-        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level='off', task='Provider-free isolated restart acceptance; reply to each original once'))
+        service.registry.declare(service.registry.new_thread(name, frozenset({'team'} if arguments.collective else ()), str(project), model='restart-local/fixture', thinking_level=OffThinkingLevel, task='Provider-free isolated restart acceptance; reply to each original once'))
     if arguments.saved_source:
         for name in names:
             owner = service.registry.require(name)

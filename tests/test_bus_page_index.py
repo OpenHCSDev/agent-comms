@@ -84,7 +84,7 @@ def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_pat
 
 def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
     bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
-    with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         message, _ = next(opened.public_records())
     with BusPageIndex(bus.log.path) as index:
         index.invalidate()
@@ -92,7 +92,7 @@ def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
     captured = threading.Semaphore(0)
 
     def read_reference():
-        with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             with BusPageIndex(bus.log.path) as index:
                 assert not index.covers(opened)
             captured.release()
@@ -112,5 +112,5 @@ def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
                     reader.result(timeout=0.05)
         assert [reader.result(timeout=5) for reader in readers] == [(message,), (message,)]
     with BusPageIndex(bus.log.path) as index:
-        with bus.log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             assert index.covers(opened)

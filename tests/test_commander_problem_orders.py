@@ -211,3 +211,28 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
                 'sent.jsonl', 'hunts.jsonl'} & {
         path.name for path in (repo.parent / 'state').iterdir()}
+
+
+def test_commander_refuses_jargon_before_core_records_the_problem(commander_script):
+    """A refused outgoing text leaves Core without the problem, so "nothing recorded" is true."""
+    script, repo = commander_script
+    (repo / 'count.txt').write_text('0\n')
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+    assert script.open_todos() == [] and 'Problem: NEW' in body.read_text()
+
+
+def test_commander_refuses_a_check_that_prints_no_count(commander_script):
+    """done could never pass a check that prints no integer, so send refuses it before Core records anything."""
+    script, repo = commander_script
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: git grep -c no-such-text -> 0\n"
+                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    with pytest.raises(SystemExit, match='the check printed no integer'):
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+    assert script.open_todos() == []

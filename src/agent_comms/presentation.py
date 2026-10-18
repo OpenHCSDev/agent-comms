@@ -36,7 +36,7 @@ from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, Nam
 from .read_ledger import ReadLedger
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .runtime_info import RuntimeInfo
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .wire_log import WireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
@@ -69,7 +69,7 @@ class OutcomeViewer(ABC):
     """Who reads a delivery window decides which of its outcomes are shown."""
 
     @abstractmethod
-    def includes(self, source: CommittedDelivery, recipient: FrozenRecipient) -> bool:
+    def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
         pass
 
     @abstractmethod
@@ -80,7 +80,7 @@ class OutcomeViewer(ABC):
 class AllOutcomes(OutcomeViewer):
     """An unscoped reader sees every recipient's outcome and every human read."""
 
-    def includes(self, source: CommittedDelivery, recipient: FrozenRecipient) -> bool:
+    def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
         return True
 
     def sees_direct_read(self, source: CommittedDelivery) -> bool:
@@ -97,8 +97,8 @@ class OwnerOutcomes(OutcomeViewer):
     def of(cls, owner: Thread) -> OwnerOutcomes:
         return cls(owner.incarnation.lookup)
 
-    def includes(self, source: CommittedDelivery, recipient: FrozenRecipient) -> bool:
-        return self.lookup in (source.audience.sender_lookup, recipient.recipient_lookup)
+    def includes(self, sender_lookup: str, recipient: FrozenRecipient) -> bool:
+        return self.lookup in (sender_lookup, recipient.recipient_lookup)
 
     def sees_direct_read(self, source: CommittedDelivery) -> bool:
         return source.audience.sender_lookup == self.lookup
@@ -110,6 +110,7 @@ class MessageNotification:
 
     window_limit: ClassVar[int] = 120
     recipient_identity: FrozenRecipient
+    sender_lookup: str
     state: DeliveryProgress
     message: Message | None = None
     displayed_to: tuple[ThreadIncarnation, ...] = ()
@@ -128,8 +129,9 @@ class MessageNotification:
     def sent_outcome(self) -> SentMessageOutcome | None:
         if not self.changed or self.message is None:
             return None
-        return SentMessageOutcome(self.recipient_identity, self.state, message=self.message,
-                                  answer=self.answer, answered_at_ms=self.answered_at_ms)
+        return SentMessageOutcome(self.recipient_identity, self.sender_lookup, self.state,
+                                  message=self.message, answer=self.answer,
+                                  answered_at_ms=self.answered_at_ms)
 
     @classmethod
     def ordered(cls, notifications: Iterable[MessageNotification]) -> tuple[MessageNotification, ...]:
@@ -203,7 +205,7 @@ class MessageNotification:
         snapshot = registry.snapshot()
         observations = AgentActivity(root, registry).observe_recipients(
             ((source, recipient) for source in sources for recipient in source.audience.recipients
-             if viewer.includes(source, recipient)),
+             if viewer.includes(source.audience.sender_lookup, recipient)),
             snapshot=snapshot,
         )
         return cls.project_delivery_window(
@@ -247,11 +249,11 @@ class MessageNotification:
         for source, outcomes in NotificationAssignment.for_deliveries(sources, rows):
             key = (source.message.seq, source.message.message_id)
             for outcome in outcomes:
-                if not viewer.includes(source, outcome.recipient):
+                if not viewer.includes(source.audience.sender_lookup, outcome.recipient):
                     continue
                 observation = observations[outcome.recipient.recipient_lookup]
                 notification = observation.after_inbox_read(
-                    outcome.project(observation), source, reads, document, snapshot
+                    outcome.project(observation, source.audience.sender_lookup), source, reads, document, snapshot
                 )
                 displayed_to = observation.displayed_recipient(
                     notification, source, reads, document, snapshot
@@ -289,6 +291,7 @@ class MessageNotification:
             return None
         return cls(
             recipient,
+            source.audience.sender_lookup,
             HumanReadProgress(),
             displayed_to=displayed_to,
             changed=True,
@@ -395,7 +398,7 @@ class ChannelReadMark(ABC):
     """A read request carries its own source cut and displayed-message selection."""
 
     def apply(self, presentation: BusPresentation, target: str, viewer: str) -> None:
-        with _store_lock(presentation._wire_lock_path, shared=True):
+        with _store_lock(presentation._wire_lock_path, mode=SharedLock()):
             with self.reading(presentation, target, viewer) as displayed:
                 presentation.bus.reads.mark_displayed(displayed.viewer, displayed)
 
@@ -407,7 +410,7 @@ class ChannelReadMark(ABC):
 class ReadAll(ChannelReadMark):
     @contextmanager
     def reading(self, presentation, target, viewer):
-        with presentation.bus.log._opened_wire_snapshot() as source:
+        with presentation.bus.log.opened_wire_snapshot() as source:
             with DisplaySelection.reading(
                 presentation.registry, presentation.catalog, presentation.bus.reads,
                 NamedViewer(viewer),
@@ -497,8 +500,8 @@ class BusPresentation:
         """Local display projection; underlying channel history remains target-owned."""
         target = CommandTarget.named(target).require_channel()
         with ExitStack() as resources:
-            with _store_lock(self._wire_lock_path, shared=True):
-                source = resources.enter_context(self.bus.log._opened_wire_snapshot())
+            with _store_lock(self._wire_lock_path, mode=SharedLock()):
+                source = resources.enter_context(self.bus.log.opened_wire_snapshot())
                 with DisplaySelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
@@ -799,8 +802,8 @@ class WireRevision(ReadState):
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
         """Every source is a group; missing files contribute no revision."""
         paths = cls.source_paths(views)
-        with views.bus.log.locked(shared=True) as source:
-            through_seq = views.bus.log._committed_sequence_unlocked(source)
+        with views.bus.log.locked(mode=SharedLock()) as source:
+            through_seq = views.bus.log.committed_sequence_unlocked(source)
             captured = {
                 name: tuple(revision for path in group
                             if (revision := FileRevision.capture(path)) is not None)
@@ -821,7 +824,7 @@ class WireRevision(ReadState):
             return frozenset(names)
         if self.through_seq > earlier.through_seq:
             snapshot = comms.registry.snapshot()
-            with comms.bus.log._opened_wire_snapshot() as source:
+            with comms.bus.log.opened_wire_snapshot() as source:
                 if source.changed_since(self.bus_log[0]):
                     raise StaleRevision("Wire source changed before route attribution")
                 with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
@@ -845,11 +848,11 @@ class WireRevision(ReadState):
             if references:
                 outcomes = MessageNotification.references(comms.root, comms.registry, comms.bus.log, references)
                 for name, view in remaining.items():
-                    lookup = view.read_identity.thread.incarnation.lookup
+                    viewer = OwnerOutcomes.of(view.read_identity.thread)
                     current = tuple(replace(item, message=None)
                                     for reference in (*view.incoming_references, *view.sent_references)
                                     for item in outcomes[reference.seq, reference.message_id]
-                                    if reference in view.sent_references or item.recipient_identity.recipient_lookup == lookup)
+                                    if viewer.includes(item.sender_lookup, item.recipient_identity))
                     before = tuple(replace(item, message=None)
                                    for item in (*view.notifications, *view.sent_notifications))
                     if current != before:

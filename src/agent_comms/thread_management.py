@@ -36,7 +36,7 @@ from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
-from .pi_vocabulary import ServiceTier, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
@@ -245,7 +245,7 @@ class ThreadManagement:
         worktree: str,
         process: ProcessState = NO_PROCESS,
         model: str | None = None,
-        thinking_level: str | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         auto_title_pending: bool = False,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
@@ -339,7 +339,7 @@ class ThreadManagement:
             with self.bus.log.locked():
                 metadata = self.bus.log.read_metadata_unlocked(required=True)
                 if metadata.private:
-                    self.bus.log._private_marker_unlocked()
+                    self.bus.log.private_marker_unlocked()
                     private = True
         if private:
             _require_no_private_owner_rename(self.root)
@@ -461,7 +461,7 @@ class ThreadManagement:
 
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
-        thinking_level: str | None = None, service_tier: ServiceTier | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride, service_tier: ServiceTier | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -481,7 +481,7 @@ class ThreadManagement:
             return updated
 
     def initialize_native_configuration(
-        self, name: str, *, model: str | None, thinking_level: str | None,
+        self, name: str, *, model: str | None, thinking_level: type[ThinkingLevel],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):
@@ -516,7 +516,9 @@ class ThreadManagement:
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
-                current.initialized_native_configuration(model=saved_model, thinking_level=None),
+                current.initialized_native_configuration(
+                    model=saved_model, thinking_level=NoThinkingOverride,
+                ),
                 process_identity=process,
                 session_file=location.read_key,
             )

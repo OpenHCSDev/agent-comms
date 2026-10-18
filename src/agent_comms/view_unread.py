@@ -23,7 +23,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .native_entries import NativeEntry
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 
@@ -382,7 +382,7 @@ class NativeReplyPreparation(ReplyPreparation):
         # A busy writer retains this exact work; it does not invalidate other
         # sources. The wire lock orders publication against source deletion.
         try:
-            with _store_lock(state.path.parent / "wire", shared=True, blocking=False):
+            with _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False):
                 state._next_source = self.commit(database, wanted)
         except (BlockingIOError, CoordinationReadUnavailable):
             return self

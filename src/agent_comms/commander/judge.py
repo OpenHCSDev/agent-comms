@@ -21,7 +21,7 @@ the commander to that unit. Nothing here judges code; it only refuses to let an 
 """
 import hashlib, json, os, re, sys, time
 
-from ..todos import BluntText, FairText, PlainText
+from ..todos import BluntText
 from . import order
 from .config import CommanderConfig
 
@@ -163,8 +163,7 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
         if slop is None:
             sys.exit(order.Slop.USAGE)
         order.refuse(roast_text, BluntText)
-        order.refuse(' '.join((why, roast_text, fix, *lines)), FairText)
-        order.refuse(why + ' ' + roast_text, PlainText)
+        order.refuse(' '.join((why, roast_text, fix)), *order.OUTGOING)  # --line quotes the unit
         tasks = {}
         for thread in {edits[i]['thread'] for i in ids}:
             if msg not in {m['id'] for m in my_messages(thread)}:

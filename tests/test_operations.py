@@ -1,3 +1,4 @@
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.read_basis import NamedViewer
 import json
 import os
@@ -456,11 +457,11 @@ class TestThreadOps:
 class TestFork:
     def test_fork_requires_parent_session(self, wired):
         with pytest.raises(ValueError, match="Canonical saved session required"):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level="high", task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="PR111", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
 
     def test_fork_fail_closed_unknown_parent(self, wired):
         with pytest.raises(UnregisteredThreadError):
-            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model="test/model", thinking_level="high", task="t"))
+            wired.threads.create(ForkSpec.from_task(name="child", parent="ghost", project="/project", model="test/model", thinking_level=HighThinkingLevel, task="t"))
 
 
 class TestLedgerOps:

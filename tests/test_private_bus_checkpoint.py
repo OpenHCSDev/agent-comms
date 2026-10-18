@@ -22,7 +22,7 @@ from agent_comms.bus_source_page import AddressedPage
 from agent_comms.private_bus_checkpoint import (
     install_private_bus_checkpoint,
 )
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import ExclusiveLock, SharedLock, _store_lock
 from agent_comms.threads import Thread
 
 
@@ -417,7 +417,7 @@ def test_pending_marker_recovers_only_after_canonical_cold_parse(
     witness, rows, more = _page(comms, RecordedThreadIncarnation("fixture", 17002.0).lookup)
     assert [item.message.seq for item in rows] == [1, 2]
     assert witness.through_seq == 2 and not more
-    assert isinstance(comms.bus.log._private_marker_unlocked().seal, checkpoint.FinalSeal)
+    assert isinstance(comms.bus.log.private_marker_unlocked().seal, checkpoint.FinalSeal)
 
 
 def test_pending_checkpoint_does_not_repair_corrupt_sql_schema(tmp_path: Path, monkeypatch) -> None:
@@ -530,9 +530,9 @@ def test_copied_root_rebuilds_its_index(tmp_path: Path, copy_root: bool) -> None
     assert log.path.stat().st_ino != original_inode
     platform = Platform.current()
     with _store_lock_file(log.path) as lock_file:
-        platform.acquire_store_lock(lock_file.fileno(), shared=True, blocking=True)
+        platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
         with pytest.raises(CheckpointNeedsRepair, match="relocated"):
-            log._read_certified(lock_file, platform, lambda source: None, True)
+            log._read_certified(lock_file, platform, lambda source: None, SharedLock())
     # The real reader upgrades its lock and rebuilds the copied SQLite index.
     request = AddressedPage.capture(lookup=RecordedThreadIncarnation("fixture", 17002.0).lookup)
     witness, messages, _ = asyncio.run(log.read_certified_async(
@@ -615,7 +615,7 @@ def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch
         asyncio.run(copied.bus.log.read_certified_async(
             lambda source: source.require_new_human_message("human", "new-message")
         ))
-    assert copied.bus.log._private_marker_unlocked().last_seq == 2
+    assert copied.bus.log.private_marker_unlocked().last_seq == 2
     assert copied.bus.log.path.read_bytes() == original
     with sqlite3.connect(copied.root / "private_bus_checkpoint.sqlite3") as db:
         assert db.execute("SELECT through_seq FROM prefix_certificate").fetchone() == (1,)
@@ -655,11 +655,24 @@ def test_shared_reader_hands_lagged_suffix_to_exclusive_repair(tmp_path: Path, m
     platform = Platform.current()
     # A shared-lock reader never writes the checkpoint; it names the repair.
     with _store_lock_file(log.path) as lock_file:
-        platform.acquire_store_lock(lock_file.fileno(), shared=True, blocking=True)
+        platform.acquire_store_lock(lock_file.fileno(), mode=SharedLock(), blocking=True)
         with pytest.raises(checkpoint.CheckpointNeedsRepair):
-            log._read_certified(lock_file, platform, lambda source: None, True)
+            log._read_certified(lock_file, platform, lambda source: None, SharedLock())
     # The async reader then takes the exclusive lock, which repairs and reads.
     through = asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq))
     assert through == 2
     # Once repaired, a shared read succeeds without writing.
     assert asyncio.run(log.read_certified_async(lambda source: source.witness.through_seq)) == 2
+
+
+@pytest.mark.parametrize(("mode", "escalated"), [(SharedLock(), ExclusiveLock), (ExclusiveLock(), None)])
+def test_only_a_shared_reader_retries_a_needed_repair_exclusively(mode, escalated) -> None:
+    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
+
+    error = CheckpointNeedsRepair("lagged suffix")
+    if escalated is None:
+        with pytest.raises(CheckpointNeedsRepair) as raised:
+            mode.after_repair_needed(error)
+        assert raised.value is error
+    else:
+        assert type(mode.after_repair_needed(error)) is escalated
