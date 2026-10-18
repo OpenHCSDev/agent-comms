@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
 import ctypes
 import os
@@ -116,7 +116,7 @@ class WireWatch(ABC):
         pass
 
     @staticmethod
-    async def observations(*sources: WatchSource) -> AsyncIterator[WireWatch]:
+    async def observations(*sources: WatchSource) -> AsyncGenerator[WireWatch]:
         watcher = open_wire_watcher(*sources)
         try:
             while True:

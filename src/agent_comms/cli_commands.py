@@ -37,6 +37,7 @@ from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
+from .maintenance_barrier import MaintenanceHeldError
 from .command import Command
 from .comms import Comms
 from .config_options import (
@@ -1240,7 +1241,10 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
                 tasks.create_task(source.watch_requests(
                     lambda row: emit(EarlierItems.from_row(row).model_dump_json())))
 
-        asyncio.run(watch())
+        try:
+            asyncio.run(watch())
+        except* MaintenanceHeldError as held:  # the bridge reads it as its one held line
+            raise held.exceptions[0] from None
         return 0
 
 
