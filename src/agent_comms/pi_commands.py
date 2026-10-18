@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
 
+from . import turn_phase as phases
 from .native_turn_context import NativeContextData
 from . import agent_events as events
 from .declared_family import DeclaredFamily
@@ -178,8 +179,6 @@ class Prompt(PiCommand):
     async def on_response(
         cls, response: Response, session: TurnSession
     ) -> AsyncIterator[events.AgentEvent]:
-        from . import turn_phase as phases
-
         if response.id == session.prompt_id:
             session.watchdog.progress()
             if response.success:

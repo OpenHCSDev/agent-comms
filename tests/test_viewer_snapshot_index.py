@@ -1,5 +1,6 @@
 """A fresh sidebar view reuses validated bus history rather than decoding it."""
 
+from agent_comms.read_basis import NamedViewer
 import asyncio
 import json
 import os
@@ -89,7 +90,7 @@ def test_viewer_delivery_and_sent_share_original_cut(tmp_path, indexed):
         with pytest.raises(sqlite3.OperationalError) as unavailable:
             with closing(CoordinationStore.read_snapshot(index_path)):
                 pass
-    with comms.views.presentation.snapshot(viewer=viewer.name) as (basis, source):
+    with comms.views.presentation.snapshot(viewer=NamedViewer(viewer.name, comms.registry.snapshot())) as (basis, source):
         before = {"#team": 1}
         sent = comms.views.last_sent_timestamps(comms.bus.activity_clocks(source).sent, registry=basis.registry)
         if indexed:
@@ -383,7 +384,7 @@ def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_pat
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     before = comms.views.viewer_snapshot(str(tmp_path))
     # The real page owner builds the already-existing disposable offset index.
-    page = comms.views.presentation.channel_page("#team", viewer=viewer)
+    page = comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer, comms.registry.snapshot()))
     assert len(page.messages) == 100
     comms.bus.reads.mark_displayed(
         viewer, comms.bus.reads.capture(viewer, (messages[1], messages[90]),
@@ -454,7 +455,7 @@ def test_display_does_not_keep_read_counts_across_viewer_incarnations(tmp_path):
     comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
     message = comms.messaging.send_message("bob", "#team", "retained")
     viewer = comms.messaging.user_identity(str(tmp_path))
-    comms.views.presentation.channel_page("#team", viewer=viewer.name)
+    comms.views.presentation.channel_page("#team", viewer=NamedViewer(viewer.name, comms.registry.snapshot()))
     comms.views.viewer_snapshot(str(tmp_path))
     comms.bus.reads.mark_displayed(
         viewer.name, comms.bus.reads.capture(viewer.name, (message,),
@@ -586,7 +587,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     comms, _ = _root(tmp_path)
     first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
     comms.bus.log.record_context(manifest(comms.registry.require('Alice')))
-    with comms.views.presentation.snapshot(viewer='Alice') as (_, source):
+    with comms.views.presentation.snapshot(viewer=NamedViewer('Alice', comms.registry.snapshot())) as (_, source):
         assert isinstance(source, CertifiedOpenedWireSnapshot)
         # Original lock has ended. A genuine later publication cannot broaden
         # this descriptor's cut or make the captured observation visible.
@@ -651,7 +652,7 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
     with comms.bus.log._opened_wire_snapshot(need_sequence=False) as source:
         assert isinstance(source, CertifiedOpenedWireSnapshot)
         assert [message.message_id for message, _ in source.public_records()] == [first.message_id]
-    with comms.bus.snapshot(viewer='Alice') as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer('Alice', comms.registry.snapshot())) as (basis, source):
         assert source.through == first.seq < source.metadata.last_seq
         assert comms.bus.pending_counts_opened(source, basis) == {'#team': 1}
     with pytest.raises(RelationViolationError, match='differs from its durable marker'):

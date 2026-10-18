@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
@@ -31,7 +32,7 @@ from .message_reference import MessageReference
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, ReadCursor
+from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
 from .runtime_info import RuntimeInfo
 from .store_files import _store_lock
@@ -309,27 +310,22 @@ class DisplaySelection:
 
     registry: RegistrySnapshot
     catalog: CatalogDocument
-    viewer: str | None
+    viewer: DisplayViewer
     seen: ReadCursor
     document: ReadDocument
 
     @classmethod
     def capture(
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-        reads: ReadLedger, document: ReadDocument, viewer: str | None,
+        reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
     ) -> DisplaySelection:
-        canonical = snapshot.canonical_name(viewer) if viewer is not None else None
-        seen = (
-            reads.cursor(viewer, snapshot, document=document)
-            if viewer is not None else ReadCursor()
-        )
-        return cls(snapshot, catalog, canonical, seen, document)
+        return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
 
     @classmethod
     @contextmanager
     def reading(
         cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: str | None,
+        reads: ReadLedger, viewer: DisplayViewer,
     ) -> Iterator[DisplaySelection]:
         """Borrow the original identity resources and read the ledger once.
 
@@ -356,20 +352,63 @@ class DisplaySelection:
 
     @property
     def viewer_names(self) -> frozenset[str]:
-        return (
-            self.registry.names_for(self.viewer)
-            if self.viewer is not None
-            else frozenset()
-        )
+        return self.viewer.names(self.registry)
 
     def require_viewer(self) -> str:
-        if self.viewer is None:
-            raise ValueError("Viewer metrics require a named viewer")
-        return self.viewer
+        return self.viewer.require_name(self.registry)
 
     def scope(self, target: str) -> ChannelDisplayScope:
         channel = self.catalog.require_channel(target, self.registry.threads)
         return ChannelDisplayScope.capture(channel, self.registry)
+
+
+class ChannelReadMark(ABC):
+    """A read request carries its own source cut and displayed-message selection."""
+
+    def apply(self, presentation: BusPresentation, target: str, viewer: str) -> None:
+        with _store_lock(presentation._wire_lock_path, shared=True):
+            with self.reading(presentation, target, viewer) as displayed:
+                presentation.bus.reads.mark_displayed(viewer, displayed)
+
+    @abstractmethod
+    def reading(self, presentation: BusPresentation, target: str, viewer: str): ...
+
+
+@dataclass(frozen=True, slots=True)
+class ReadAll(ChannelReadMark):
+    @contextmanager
+    def reading(self, presentation, target, viewer):
+        with presentation.bus.log._opened_wire_snapshot() as source:
+            with DisplaySelection.reading(
+                presentation.registry, presentation.catalog, presentation.bus.reads,
+                NamedViewer(viewer, presentation.registry.snapshot()),
+            ) as basis:
+                scope = basis.scope(target)
+            # Page preparation takes the bus lock, so release registry first.
+            page = MessagePageRequest.every(scope).read_opened(source)
+            yield presentation.bus.reads.capture(
+                viewer, page.messages, basis.registry, presentation.bus.log.path,
+            )
+
+
+@dataclass(frozen=True, slots=True)
+class ReadThrough(ChannelReadMark):
+    through: int
+    expected_scope: ChannelDisplayScope
+
+    @contextmanager
+    def reading(self, presentation, target, viewer):
+        with DisplaySelection.reading(
+            presentation.registry, presentation.catalog, presentation.bus.reads,
+            NamedViewer(viewer, presentation.registry.snapshot()),
+        ) as basis:
+            displayed = self.expected_scope.require_displayed()
+            if basis.scope(target) != self.expected_scope:
+                raise ValueError("Channel display changed; refresh the displayed page.")
+            displayed.validate(
+                viewer, basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
+            )
+            yield displayed.through(self.through)
 
 
 class BusPresentation:
@@ -393,9 +432,9 @@ class BusPresentation:
         return index
 
     @contextmanager
-    def snapshot(self, viewer: str) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
+    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
         """Admit the display index before borrowing the bus-owned source cut."""
-        self.display_index(viewer)
+        self.display_index(viewer.name)
         with self.bus.snapshot(viewer) as selected:
             yield selected
 
@@ -404,7 +443,7 @@ class BusPresentation:
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
         with DisplaySelection.reading(
-            self.registry, self.catalog, self.bus.reads, viewer
+            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer, self.registry.snapshot())
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
@@ -420,7 +459,7 @@ class BusPresentation:
         self,
         target: str,
         *,
-        viewer: str | None = None,
+        viewer: DisplayViewer = AnonymousViewer(),
         before: int | None = None,
         after: int | None = None,
         limit: int = 100,
@@ -440,50 +479,16 @@ class BusPresentation:
             page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes
             ).read_opened(source)
-            if viewer is not None:
-                scope = replace(
-                    scope,
-                    displayed=self.bus.reads.capture(
-                        viewer, page.messages, basis.registry, self.bus.log.path
-                    ),
-                )
-            return replace(page, display_scope=scope)
+            return replace(page, display_scope=viewer.displayed_scope(scope, page, basis, self))
 
     def mark_channel_read(
         self,
         target: str,
         *,
         viewer: str,
-        through: int | None = None,
-        expected_scope: ChannelDisplayScope | None = None,
+        mark: ChannelReadMark,
     ) -> None:
-        with ExitStack() as stack, _store_lock(self._wire_lock_path, shared=True):
-            if through is None:
-                # Open the bus cut before the registry, as sending a message does.
-                source = stack.enter_context(self.bus.log._opened_wire_snapshot())
-            with DisplaySelection.reading(
-                self.registry, self.catalog, self.bus.reads, viewer
-            ) as basis:
-                current = basis.scope(target)
-                if through is not None:
-                    if expected_scope is None:
-                        raise ValueError("Channel display scope missing; refresh the displayed page.")
-                    displayed = expected_scope.require_displayed()
-                    if current != expected_scope:
-                        raise ValueError("Channel display changed; refresh the displayed page.")
-                    displayed.validate(
-                        viewer, basis.registry, self.bus.reads.bus_identity(self.bus.log.path)
-                    )
-                    self.bus.reads.mark_displayed(viewer, displayed.through(through))
-                    return
-            # Explicit Mark Read selects the channel's messages in this whole
-            # cut. The page index reads them once the registry is released,
-            # because it takes the bus lock.
-            page = MessagePageRequest.every(current).read_opened(source)
-            self.bus.reads.mark_displayed(
-                viewer,
-                self.bus.reads.capture(viewer, page.messages, basis.registry, self.bus.log.path),
-            )
+        mark.apply(self, target, viewer)
 
     def display_view_metrics(
         self,

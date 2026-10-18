@@ -178,8 +178,8 @@ async def configured_pure_channel(arguments):
     def read_original_bus():
         started = time.perf_counter()
         history = list(service.bus.full_history_page().messages)
-        service.bus.activity_clocks()
-        service.bus.pending_counts_all(names)
+        with service.bus.opened_activity():
+            service.bus.pending_counts_all(names)
         return {'seconds': time.perf_counter() - started, 'messages': len(history)}
 
     async def observe_original_bus():

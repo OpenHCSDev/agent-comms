@@ -1,3 +1,4 @@
+from agent_comms.read_basis import NamedViewer
 import os
 import subprocess
 import sys
@@ -9,6 +10,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.presentation import ReadThrough
 
 
 def test_channel_view_counts_are_not_agent_delivery_counts(tmp_path):
@@ -79,7 +81,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
     comms.channels.set_channel_any_mode("#team", True)
     comms.messaging.send_message("carol", "dave", "hidden old DM")
     comms.messaging.send_message("alice", "bob", "painted DM")
-    painted = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    painted = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     assert [message.seq for message in painted.messages] == [2]
 
     comms.channels.update_tags("carol", add=frozenset({"team"}))
@@ -88,8 +90,7 @@ def test_any_mode_rejects_stale_painted_page_after_participant_joins(tmp_path):
         comms.views.mark_channel_view_read(
             "#team",
             worktree=str(tmp_path),
-            through=painted.newest_seq,
-            expected_scope=painted.display_scope,
+            mark=ReadThrough(painted.newest_seq, painted.display_scope),
         )
     assert (
         wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == unread_after_join

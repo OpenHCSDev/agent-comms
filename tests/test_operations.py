@@ -1,3 +1,4 @@
+from agent_comms.read_basis import NamedViewer
 import json
 import os
 import subprocess
@@ -80,11 +81,11 @@ class TestMessaging:
         wired.messaging.send("PR111", "fixer", "direct two")
         wired.messaging.send("PR111", "#all", "global")
 
-        with wired.bus.snapshot(viewer="fixer") as (basis, source):
+        with wired.bus.snapshot(viewer=NamedViewer("fixer", wired.registry.snapshot())) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
         references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
         wired.messaging.acknowledge("fixer", references)
-        with wired.bus.snapshot(viewer="fixer") as (basis, source):
+        with wired.bus.snapshot(viewer=NamedViewer("fixer", wired.registry.snapshot())) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"#all": 1}
 
     def test_shared_history_page_contract(self, wired):

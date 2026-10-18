@@ -19,7 +19,7 @@ from contextlib import aclosing
 from dataclasses import MISSING, Field, asdict, dataclass, field, fields, replace
 from enum import Enum
 from pathlib import Path
-from typing import Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
 
 from acp.schema import SessionConfigSelectOption
 
@@ -31,7 +31,7 @@ from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
 from .cli_protocol import ArrivedMessage
-from .field_codec import FieldCodec, compile_decoder
+from .field_codec import FieldCodec, PathText, compile_decoder
 from .comms import Comms
 from .config_options import (
     CatalogConfigOption, CatalogSelection, ConfigOptions,
@@ -1164,6 +1164,34 @@ class RegisterCliCommand(CliCommand):
         )
         ctx.registry.declare(thread)
         return {"registered": self.name}
+
+
+@dataclass(frozen=True, kw_only=True)
+class InstallCliCommand(CliCommand):
+    help = "Set up every coding harness on this machine to use this bus, with the commander skill and tools"
+    project: Annotated[Path, PathText] = option("--project", default_factory=Path.cwd, parser_default=".")
+    repos: tuple[Annotated[Path, PathText], ...] = option("--repos", default=(), parser_default="", normalize=_tags)
+    commander: str = option("--commander", default="claude-code")
+
+    def apply(self, ctx: Comms) -> Any:
+        from .commander.config import CommanderConfig, Repo
+        from importlib.resources import files
+
+        from .harness_install import Harness
+
+        home = Path.home()
+        project = self.project.resolve()
+        config = CommanderConfig(
+            commander=self.commander, root=ctx.root, cli=Harness.bin("agent-comms"),
+            state=home / ".local/state/agent-comms/commander",
+            board=project / "docs/agents/fleet-board.md", narrative=project / "docs/agents/fleet-narrative.md",
+            skill=Path(str(files("agent_comms") / "skills/comms-commander/SKILL.md")), rules=(CommanderConfig.packaged_rules(),),
+            repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
+            worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
+        )
+        return {"config": str(config.write(home)),
+                **{type(harness).declared_name: harness.install(ctx, self.commander, project)
+                   for harness in Harness.present(home)}}
 
 
 @dataclass(frozen=True, kw_only=True)

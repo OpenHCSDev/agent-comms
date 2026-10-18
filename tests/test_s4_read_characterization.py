@@ -1,5 +1,7 @@
 """Current S4 Part B: authority lifetime and disposable-index recovery."""
 
+from agent_comms.read_basis import NamedViewer
+from agent_comms.presentation import ReadThrough
 from dataclasses import replace
 
 import pytest
@@ -16,10 +18,10 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     comms.registry.declare(comms.registry.new_thread('worker', frozenset({'team'}), str(tmp_path)))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     message = comms.messaging.send_message("worker", "#team", "painted")
-    page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=page.newest_seq,
-        expected_scope=page.display_scope,
+        "#team", worktree=str(tmp_path),
+        mark=ReadThrough(page.newest_seq, page.display_scope),
     )
     assert message.seq in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     original = comms.registry.require(viewer)
@@ -29,13 +31,13 @@ def test_replaced_human_incarnation_rejects_painted_proof_and_prior_reads(tmp_pa
     assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     with pytest.raises(ValueError):
         comms.views.mark_channel_view_read(
-            "#team", worktree=str(tmp_path), through=page.newest_seq,
-            expected_scope=page.display_scope,
+            "#team", worktree=str(tmp_path),
+            mark=ReadThrough(page.newest_seq, page.display_scope),
         )
-    refreshed = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    refreshed = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     comms.views.mark_channel_view_read(
-        "#team", worktree=str(tmp_path), through=refreshed.newest_seq,
-        expected_scope=refreshed.display_scope,
+        "#team", worktree=str(tmp_path),
+        mark=ReadThrough(refreshed.newest_seq, refreshed.display_scope),
     )
     assert message.seq in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
 
@@ -50,7 +52,7 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
     shown = comms.transcripts.transcript_checkpoint("worker")
     append(source, content="unpainted reply")
     message = comms.messaging.send_message("worker", "#team", "unpainted bus row")
-    page = comms.views.channel_display_page("#team", worktree=str(tmp_path))
+    page = comms.views.channel_display_page("#team", viewer=NamedViewer(comms.messaging.user_identity(str(tmp_path)).name, comms.registry.snapshot()))
     assert message.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 1
@@ -65,8 +67,8 @@ def test_index_rebuild_preserves_distinct_transcript_bus_and_delivery_facts(tmp_
         assert comms.bus.reads.read() == document
         assert comms.bus.pending_count("receiver", "#team") == 1
         comms.views.mark_channel_view_read(
-            "#team", worktree=str(tmp_path), through=page.newest_seq,
-            expected_scope=page.display_scope,
+            "#team", worktree=str(tmp_path),
+            mark=ReadThrough(page.newest_seq, page.display_scope),
         )
         assert rebuilt.counts(viewer, {"worker": str(source)}).counts == {"worker": 1}
         assert comms.bus.pending_count("receiver", "#team") == 1
