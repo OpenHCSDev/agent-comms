@@ -1410,7 +1410,8 @@ class RegisterCliCommand(CliCommand):
     process: ProcessState = option("--pid", default_factory=NoProcess,
         parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
     execution: type[ThreadExecution] = option(
-        "--execution", default_factory=Thread.default_execution, editor=ChoiceTargetField,
+        "--execution", default_factory=ThreadExecution.for_new_threads,
+        parser_default=FieldCodec.encode(ThreadExecution.for_new_threads()), editor=ChoiceTargetField,
     )
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -1422,8 +1423,8 @@ class RegisterCliCommand(CliCommand):
             parent=self.parent,
             task=self.task,
             process_identity=self.process,
-            execution=self.execution,
             backend=self.backend,
+            execution=self.execution,
         )
         location = self.backend.registered_location(ctx.root, self.worktree)
         ctx.registry.declare(replace(thread, session_file=location.read_key))

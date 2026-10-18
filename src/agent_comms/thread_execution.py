@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .child_process import ProcessState
 from .errors import RelationViolationError
-from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
+from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, StoppedThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -64,6 +64,10 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
     """The registration owns transport intent; presence does not imply an RPC."""
 
     @classmethod
+    def for_new_threads(cls) -> type[ThreadExecution]:
+        return NativeThreadExecution
+
+    @classmethod
     def require_native(cls) -> None:
         raise RelationViolationError("This participant checks its CLI inbox; it has no native prompt transport.")
 
@@ -112,6 +116,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
 
 class NativeThreadExecution(ThreadExecution):
+    @classmethod
+    def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
+        if requested.active and not thread.process_alive:
+            return StoppedThreadStatus()
+        return requested
+
     @classmethod
     def native_command_available(cls, command, status, *, process: ProcessState) -> bool:
         return command.available_for(status, process=process)

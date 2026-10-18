@@ -32,7 +32,7 @@ from .registration_inheritance import (
     InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
-from .thread_execution import NativeThreadExecution, ThreadExecution
+from .thread_execution import ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     ThreadProvenance,
@@ -97,7 +97,7 @@ class Thread(ThreadProvenance):
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
     role: type[ThreadRole] = AgentThreadRole
-    execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
+    execution: type[ThreadExecution] = field(default_factory=ThreadExecution.for_new_threads, kw_only=True,
                                             metadata={"wire_omit_default": True})
 
     backend: type[AgentBackend] = field(
@@ -108,10 +108,6 @@ class Thread(ThreadProvenance):
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
-
-    @classmethod
-    def default_execution(cls) -> type[ThreadExecution]:
-        return next(declared.default for declared in fields(cls) if declared.name == "execution")
 
     def inherited_history(self, registry, visited):
         if self.name in visited:

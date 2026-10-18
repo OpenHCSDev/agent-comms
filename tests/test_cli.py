@@ -71,9 +71,12 @@ class TestCliSuccess:
         assert code == 0 and out["threads"][0]["name"] == "a"
         assert out["threads"][0]["tags"] == ["x", "y"]
         from agent_comms.comms import Comms
-        from agent_comms.threads import Thread
+        from agent_comms.thread_execution import NativeThreadExecution
+        from agent_comms.thread_status import StoppedThreadStatus
 
-        assert Comms(tmp_path).registry.require("a").execution is Thread.default_execution()
+        registry = Comms(tmp_path).registry
+        assert registry.require("a").execution is NativeThreadExecution
+        assert isinstance(registry.status("a"), StoppedThreadStatus)
 
     def test_send_and_inbox_and_ack(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
@@ -95,8 +98,8 @@ class TestCliSuccess:
         import threading
         from agent_comms.comms import wire
 
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
+        cli(tmp_path, "register", "--name", "b", "--worktree", str(tmp_path), "--execution", "external")
         for body in ("one", "two", "three"):
             cli(tmp_path, "send", "--from", "a", "--to", "b", "--body", body)
         comms = wire(tmp_path)
@@ -115,8 +118,8 @@ class TestCliSuccess:
         assert [message.body for message in comms.bus.inbox("b")] == ["one", "three"]
 
     def test_thread_detail_and_stop_and_heartbeat(self, cli, tmp_path):
-        # A CLI registration is an inbox; only an attached process connects it.
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        # An external CLI registration is an inbox; only an attached process connects it.
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
         code, out = cli(tmp_path, "thread", "--name", "a")
         assert out["name"] == "a" and out["status"] == "no_bridge"
         code, out = cli(tmp_path, "heartbeat", "--name", "a")
@@ -134,13 +137,13 @@ class TestCliSuccess:
         assert out["status"] == "no_bridge"
 
     def test_archive_retains_thread_declaration(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "archived", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "archived", "--worktree", str(tmp_path), "--execution", "external")
         cli(tmp_path, "stop", "--name", "archived")
         code, out = cli(tmp_path, "archive", "--name", "archived")
         assert code == 0 and out == {"archived": "archived"}
 
     def test_rename_self_uses_declared_caller(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
         code, out = cli(tmp_path, "tool", "--tool", "comms_rename_self", "--from", "a",
                         "--arguments", '{"new_name":"renamed"}')
         assert code == 0
@@ -151,22 +154,22 @@ class TestCliSuccess:
     def test_ledger_read_and_merge(self, cli, tmp_path):
         merge_file = tmp_path / "merge.json"
         merge_file.write_text(json.dumps({"k": "v"}))
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
         code, out = cli(tmp_path, "ledger", "--merge-from", str(merge_file), "--author", "a")
         assert out == {"merged": True}
         code, out = cli(tmp_path, "ledger")
         assert out["k"] == "v"
 
     def test_poll(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
+        cli(tmp_path, "register", "--name", "b", "--worktree", str(tmp_path), "--execution", "external")
         cli(tmp_path, "send", "--from", "a", "--to", "b", "--body", "hi")
         code, out = cli(tmp_path, "poll", "--thread", "b")
         assert out["thread"]["name"] == "b" and len(out["inbox"]) == 1
 
     def test_fork_missing_session_reports_error(self, cli, tmp_path, fake_native_catalog):
         code, _ = cli(
-            tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native"
+            tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "native"
         )
         assert code == 0
         code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t",
@@ -176,7 +179,7 @@ class TestCliSuccess:
 
 class TestCliFailClosed:
     def test_fork_cli_parent_reports_transport_error(self, cli, tmp_path, fake_native_catalog):
-        code, _ = cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
+        code, _ = cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
         assert code == 0
         code, out = cli(tmp_path, "fork", "--name", "kid", "--parent", "a", "--task", "t",
                         "--model", "test/model")
@@ -187,7 +190,7 @@ class TestCliFailClosed:
         assert code == 1 and "JSON object" in out["error"]
 
     def test_unknown_sender_is_error_exit_code(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "b", "--worktree", str(tmp_path), "--execution", "external")
         code, out = cli(tmp_path, "send", "--from", "ghost", "--to", "b", "--body", "hi")
         assert code == 1 and "Sender" in out["error"]
 
@@ -227,7 +230,8 @@ class TestCliSubprocess:
                 "--name",
                 "a",
                 "--worktree",
-                "/wt",
+                str(tmp_path),
+                "--execution", "external",
             ],
             capture_output=True,
             text=True,
@@ -245,7 +249,7 @@ class TestStatusCommand:
     def test_status_shows_activity(self, cli, tmp_path):
         from agent_comms.activity import ActivityState
 
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--pid", str(os.getpid()))
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--pid", str(os.getpid()), "--execution", "external")
         from agent_comms.comms import wire
 
         comms = wire(tmp_path)
