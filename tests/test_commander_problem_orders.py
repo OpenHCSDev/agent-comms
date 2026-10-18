@@ -409,7 +409,7 @@ def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
     import sqlite3
     from contextlib import closing
     from cutover.carry_order_run import OrderRuns
-    from agent_comms.todos import TodoStore
+    from agent_comms.todos import MechanicalOrderRun, TodoStore
     comms, _caller = commander
     saved = create(commander, 'P1')
     path = TodoStore.path_in(comms.root)
@@ -420,7 +420,7 @@ def test_order_run_carry_gives_a_pre_p511_order_its_declared_run(commander):
         db.commit()
     with pytest.raises(MalformedRecord, match='run'):
         comms.goals.todos.get('P1')
-    assert OrderRuns.carry(comms.root, apply=False).detail == {'mechanical': 1, 'application': 0}
+    assert OrderRuns.carry(comms.root, apply=False).detail == {MechanicalOrderRun.declared_name: 1}
     assert OrderRuns.carry(comms.root, apply=True).changed == 1
     assert OrderRuns.carry(comms.root, apply=False).changed == 0
     assert comms.goals.todos.get('P1') == saved

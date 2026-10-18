@@ -5,20 +5,22 @@ or an application run when its body carries a ``Works when:`` line. No other
 field of a saved order is changed. Production readers accept only the new
 declared schema.
 """
+
 from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from contextlib import closing
 from pathlib import Path
+
+from cutover.carry import Carried, Carry
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, OrderRun, Todo, TodoStore
 
-from cutover.carry import Carried, Carry
-
-DECLARED = re.compile(rf'(?m)^\s*{re.escape(OrderRun.label)}\s*(.+?)\s*$')
+DECLARED = re.compile(rf"(?m)^\s*{re.escape(OrderRun.label)}\s*(.+?)\s*$")
 
 
 def declared_run(body: str) -> OrderRun:
@@ -26,24 +28,26 @@ def declared_run(body: str) -> OrderRun:
     return MechanicalOrderRun() if found is None else ApplicationOrderRun(found.group(1))
 
 
-def carry(root: Path, *, apply: bool) -> dict[str, int]:
+def carry(root: Path, *, apply: bool) -> Counter[str]:
     path = TodoStore.path_in(root)
-    counts = {'mechanical': 0, 'application': 0}
+    counts: Counter[str] = Counter()
     if not path.exists():
         return counts
     with closing(CoordinationStore.writer(path)) as db:
-        db.execute('BEGIN IMMEDIATE')
+        db.execute("BEGIN IMMEDIATE")
         try:
             table = Todo.declared_name
             rows = db.execute(f'SELECT "id", "text", "order" FROM "{table}"').fetchall()
             for todo_id, body, saved in rows:
                 order = json.loads(saved)
-                if 'run' in order:
+                if "run" in order:
                     continue
                 run = declared_run(body)
-                counts[FieldCodec.encode(run)['kind']] += 1
-                db.execute(f'UPDATE "{table}" SET "order" = ? WHERE "id" = ?',
-                           (json.dumps({**order, 'run': FieldCodec.encode(run)}), todo_id))
+                counts[run.declared_name] += 1
+                db.execute(
+                    f'UPDATE "{table}" SET "order" = ? WHERE "id" = ?',
+                    (json.dumps({**order, "run": FieldCodec.encode(run)}), todo_id),
+                )
             for _row in Todo.stream(db):
                 pass
             if apply:
@@ -57,17 +61,17 @@ def carry(root: Path, *, apply: bool) -> dict[str, int]:
 
 
 class OrderRuns(Carry):
-    """Saved problem orders gain their declared closing run; every other stored field stays as it was."""
+    """Saved problem orders gain their declared closing run; no other stored field changes."""
 
-    after = 'carry_todo_voids'
+    after = "carry_todo_voids"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         counts = carry(root, apply=apply)
         changed = sum(counts.values())
-        rewritten = tuple(path.name for path in root.glob(f'{TodoStore.path_in(root).name}*'))
-        return Carried(changed, counts, rewritten if changed and apply else ())
+        rewritten = tuple(path.name for path in root.glob(f"{TodoStore.path_in(root).name}*"))
+        return Carried(changed, dict(counts), rewritten if changed and apply else ())
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     OrderRuns.main()
