@@ -381,7 +381,7 @@ class JsonShapeFamily(WireValue):
         return self.value
 
 
-class TextRepresentation(FieldRepresentation):
+class TextRepresentation[V](FieldRepresentation):
     """External text scalars share strict decoding at the canonical boundary.
 
     Its schema names the representation, so text with no declared spelling never shares a stored
@@ -389,20 +389,20 @@ class TextRepresentation(FieldRepresentation):
     """
 
     @classmethod
-    def decode(cls, value: object) -> object:
+    def decode(cls, value: object) -> V:
         with MalformedRecord.refusing(f"Invalid {cls.__name__}"):
             return cls.from_text(FieldCodec.decode(str, value))
 
     @classmethod
     @abstractmethod
-    def from_text(cls, value: str) -> object: ...
+    def from_text(cls, value: str) -> V: ...
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
         return {"type": "string", "description": f"{cls.__module__}.{cls.__qualname__} text"}
 
 
-class SpelledText(TextRepresentation):
+class SpelledText(TextRepresentation[str]):
     """Text with one declared spelling: what decoding accepts and what its schema reports."""
 
     spelling: ClassVar[re.Pattern[str]]
@@ -410,11 +410,6 @@ class SpelledText(TextRepresentation):
     @classmethod
     def encode(cls, value: object) -> str:
         return cls.decode(value)
-
-    @classmethod
-    def decode(cls, value: object) -> str:
-        """A spelled text decodes to the text itself."""
-        return cast(str, super().decode(value))
 
     @classmethod
     def from_text(cls, value: str) -> str:
@@ -427,7 +422,7 @@ class SpelledText(TextRepresentation):
         return {"type": "string", "pattern": f"^(?:{cls.spelling.pattern})$"}
 
 
-class PathText(TextRepresentation):
+class PathText(TextRepresentation[Path]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, Path):
@@ -439,7 +434,7 @@ class PathText(TextRepresentation):
         return Path(value)
 
 
-class TimestampText(TextRepresentation):
+class TimestampText(TextRepresentation[datetime]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, datetime):

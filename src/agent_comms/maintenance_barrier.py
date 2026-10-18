@@ -130,7 +130,7 @@ class MaintenanceOperator:
             raise ValueError('Maintenance operator must have bounded identity')
 
 
-class MaintenanceOperatorText(TextRepresentation):
+class MaintenanceOperatorText(TextRepresentation[MaintenanceOperator]):
     @classmethod
     def from_text(cls, value: str) -> MaintenanceOperator:
         return MaintenanceOperator(value)

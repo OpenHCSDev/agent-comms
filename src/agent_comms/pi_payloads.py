@@ -404,7 +404,7 @@ class ProviderDiagnosticError(PiPayload):
         return f"{name} (code {self.code})" if self.code is not None else name
 
 
-class TransportStageText(TextRepresentation):
+class TransportStageText(TextRepresentation[ProviderTransportStage]):
     """The native provider's scalar spelling, not a second record decoder."""
 
     @classmethod
