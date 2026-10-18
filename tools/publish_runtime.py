@@ -4,9 +4,9 @@ Run with the target runtime's Python. The caller must review protocol and store
 compatibility first: this command performs no schema migration. Incompatible
 changes belong to the existing stopped-owner installation workflow.
 
-Command names come from installed package declarations. One atomic runtime
-pointer selects all new launches; existing owners retain their running code
-until Core's restart queue can stop them while idle.
+Command names come from installed package declarations. Publication records the
+new installation; ordinary launches keep their caller's runtime. Existing owners
+retain their code until Core's restart queue can stop them while idle.
 """
 from __future__ import annotations
 
