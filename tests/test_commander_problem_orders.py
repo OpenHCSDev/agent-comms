@@ -606,12 +606,10 @@ def test_unit_wording_gets_a_correction_not_a_strike(commander):
     ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released'),
     ('carry_todo_verdicts', 'TodoVerdicts', 'verdicts')])
 def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
-    """A store from before the column, so also before every later one, gains them empty once; its rows,
-    strikes and schema then read as declared."""
+    """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
     import sqlite3
     from contextlib import closing
     from agent_comms.todos import TodoStore
-    from agent_comms.todos import Todo
     carry = getattr(importlib.import_module(f'cutover.{step}'), name)
     comms, caller = commander
     todo = create(commander, 'P1')
@@ -619,10 +617,8 @@ def test_todo_record_carries_keep_every_stored_strike(commander, step, name, col
         todo.assignment, 'The unit delivered its order after the recorded deadline had already passed.')).apply(comms, caller)
     struck = comms.goals.todos.get('P1')
     path = TodoStore.path_in(comms.root)
-    names = [item.wire_name for item in Todo._fields()]
     with closing(sqlite3.connect(path)) as db:
-        for later in reversed(names[names.index(column):]):
-            db.execute(f'ALTER TABLE todo DROP COLUMN {later}')
+        db.execute(f'ALTER TABLE todo DROP COLUMN {column}')
         db.commit()
     with pytest.raises(Exception):
         comms.goals.todos.get('P1')

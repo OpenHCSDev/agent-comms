@@ -38,7 +38,6 @@ from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.todos import Todo, TodoStore
-from agent_comms.typed_table import _identifier
 
 STEPS = Path("tools/cutover")
 
@@ -326,8 +325,7 @@ class CarryChain:
 
 
 class TodoColumnCarry(Carry):
-    """Todo rows gain one declared record column, empty, together with every record column
-    declared after it, which its later step then finds present; every other column stays."""
+    """Todo rows gain one declared record column, empty; every other column stays as it was."""
 
     column: ClassVar[str]
 
@@ -348,31 +346,30 @@ class TodoColumnCarry(Carry):
 
     @classmethod
     def _carry(cls, db: sqlite3.Connection, *, apply: bool) -> int:
-        table, fields = _identifier(Todo.declared_name), Todo._fields()
-        actual = tuple(row[1] for row in db.execute(f"PRAGMA table_info({table})"))
+        table, fields = Todo.declared_name, Todo._fields()
+        (added,) = (item for item in fields if item.name == cls.column)
+        actual = tuple(row[1] for row in db.execute(f'PRAGMA table_info("{table}")'))
         expected = tuple(item.wire_name for item in fields)
         if actual == expected:
             for _row in Todo.stream(db):
                 pass
             db.rollback()
             return 0
-        kept = [item.name for item in fields].index(cls.column)
-        if actual != expected[:kept]:
+        if actual != tuple(item.wire_name for item in fields if item is not added):
             raise ValueError(f"Unexpected todo columns: {actual!r}")
-        names = tuple(_identifier(name) for name in expected)
-        selected = ", ".join(f"{'?' if index >= kept else name} AS {name}"
-                             for index, name in enumerate(names))
-        empty = tuple(item.encode(()) for item in fields[kept:])
-        rows = db.execute(f"SELECT {selected} FROM {table}", empty)
+        selected = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
+                             for item in fields)
+        empty = (added.encode(()),)
+        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
         count = sum(1 for _row in Todo.iterate(rows))
         if not apply:
             db.rollback()
             return count
-        saved = _identifier(f"{Todo.declared_name}_before_{cls.column}")
-        db.execute(f"ALTER TABLE {table} RENAME TO {saved}")
+        saved = f"{table}_before_{cls.column}"
+        db.execute(f'ALTER TABLE "{table}" RENAME TO "{saved}"')
         Todo.create(db)
-        columns = Todo._column_list(tuple(item.name for item in fields))
-        db.execute(f"INSERT INTO {table} ({columns}) SELECT {selected} FROM {saved}", empty)
-        db.execute(f"DROP TABLE {saved}")
+        columns = Todo._column_list(expected)
+        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {selected} FROM "{saved}"', empty)
+        db.execute(f'DROP TABLE "{saved}"')
         db.commit()
         return count
