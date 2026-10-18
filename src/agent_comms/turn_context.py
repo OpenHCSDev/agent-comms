@@ -8,7 +8,7 @@ import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
@@ -23,6 +23,7 @@ from .tool_result import DeclaredReply
 if TYPE_CHECKING:
     from .input_attempt import StoredInput
     from .presentation import ThreadView
+    from .private_bus_checkpoint import CapturedWireSource
     from .relationships import PeerRelation
     from .threads import Thread
 
@@ -375,15 +376,64 @@ class RecordedSegmentManifest:
 
     manifest: SegmentManifest
     entries: tuple[ContextEntryReference, ...] = ()
+    previous: int | None = field(default=None, metadata={"wire_omit_default": True})
+    inherited_entries: int = field(default=0, metadata={"wire_omit_default": True})
 
     def __post_init__(self) -> None:
         if self.entries and self.manifest.contributors:
             raise ValueError("Recorded segment cannot inline and reference contributors")
+        if self.inherited_entries < 0 or (self.inherited_entries and self.previous is None):
+            raise ValueError("Recorded transcript prefix requires its predecessor")
 
-    def restore(self, entries: dict[ContextEntryReference, SegmentManifest]) -> SegmentManifest:
-        if not self.entries:
-            return self.manifest
-        contributors = tuple(entries[reference] for reference in self.entries)
+    def predecessors(self, offset: int) -> tuple[int, ...]:
+        if self.previous is None:
+            return ()
+        if not 0 <= self.previous < offset:
+            raise ValueError("Context predecessor is not an earlier record")
+        return (self.previous,)
+
+    def keyframe(
+        self, original: SegmentManifest, offset: int | None,
+    ) -> tuple[tuple[ContextEntryReference, ...], int | None]:
+        if self.previous is None:
+            count, source = len(self.entries), offset
+        else:
+            count, source = self.inherited_entries, self.previous
+        return (tuple(ContextEntryReference.from_manifest(child)
+                      for child in original.contributors[:count]), source)
+
+    def record_text(
+        self, original: SegmentManifest, previous_value: SegmentManifest, offset: int | None,
+    ) -> RecordedSegmentManifest:
+        if (original.sha256 == previous_value.sha256
+                and original.captured_text and previous_value.captured_text):
+            reference = offset if self.manifest.captured_text else self.previous
+            if reference is None:
+                raise ValueError("Recorded text predecessor is missing")
+            return RecordedSegmentManifest(replace(original, captured_text=()), previous=reference)
+        return RecordedSegmentManifest(original)
+
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
+                predecessors: dict[int, RecordedContextManifest] | None = None,
+                position: int = 0) -> SegmentManifest:
+        prior = (predecessors[self.previous].segments[position]
+                 if self.previous is not None and predecessors is not None else None)
+        previous = prior.restore(entries) if prior is not None else None
+        original = self.manifest
+        if self.previous is not None and previous is None:
+            raise ValueError("Recorded segment predecessor is missing")
+        if previous is not None and previous.kind is not original.kind:
+            raise ValueError("Recorded segment predecessor has a different kind")
+        if (previous is not None and previous.sha256 == original.sha256
+                and not original.captured_text):
+            original = replace(original, captured_text=previous.captured_text)
+        if not self.entries and not self.inherited_entries:
+            return original
+        if self.inherited_entries and (
+                previous is None or self.inherited_entries > len(previous.contributors)):
+            raise ValueError("Recorded transcript prefix is missing")
+        contributors = (previous.contributors[:self.inherited_entries] if previous is not None else ())
+        contributors += tuple(entries[reference] for reference in self.entries)
         membership = tuple(
             source
             for contributor in contributors
@@ -391,8 +441,8 @@ class RecordedSegmentManifest:
             for source in source.entry_membership()
         )
         return replace(
-            self.manifest,
-            provenance=(*self.manifest.provenance, *membership),
+            original,
+            provenance=(*original.provenance, *membership),
             contributors=contributors,
         )
 
@@ -434,9 +484,14 @@ class ContextSegment(
 
     @classmethod
     def record_manifest(
-        cls, original: SegmentManifest
+        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
+        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
-        return RecordedSegmentManifest(original), ()
+        recorded = RecordedSegmentManifest(original)
+        if previous is not None and previous_value is not None:
+            recorded = previous.record_text(original, previous_value, previous_offset)
+        return recorded, ()
 
     def public_text(self) -> str:
         return self.text()
@@ -716,17 +771,37 @@ class NativeMessages:
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptSegment(NativeMessages, MeasuredNativeSegment):
+    keyframe_interval: ClassVar[int] = 32
+
     @classmethod
     def record_manifest(
-        cls, original: SegmentManifest
+        cls, original: SegmentManifest, previous: RecordedSegmentManifest | None = None,
+        previous_value: SegmentManifest | None = None, previous_offset: int | None = None,
+        *, recording_turn: int = 1,
     ) -> tuple[RecordedSegmentManifest, tuple[ContextEntryManifest, ...]]:
-        entries = tuple(ContextEntryManifest(child) for child in original.contributors)
+        if not original.contributors:
+            return super().record_manifest(original, previous, previous_value, previous_offset,
+                                           recording_turn=recording_turn)
+        provenance = tuple(source for source in original.provenance
+                           for source in source.turn_recording())
+        header = replace(original, provenance=provenance, contributors=(), captured_text=())
+        references = tuple(ContextEntryReference.from_manifest(child)
+                           for child in original.contributors)
+        prior: tuple[ContextEntryReference, ...] = ()
+        keyframe_offset = None
+        if (previous is not None and previous_value is not None
+                and recording_turn % cls.keyframe_interval):
+            prior, keyframe_offset = previous.keyframe(previous_value, previous_offset)
+        inherited = 0
+        for before, current in zip(prior, references, strict=False):
+            if before != current:
+                break
+            inherited += 1
+        entries = tuple(ContextEntryManifest(child) for child in original.contributors[inherited:])
         references = tuple(entry.reference for entry in entries)
-        provenance = tuple(source for source in original.provenance for source in source.turn_recording())
         return (
-            RecordedSegmentManifest(
-                replace(original, provenance=provenance, contributors=()), references
-            ),
+            RecordedSegmentManifest(header, references,
+                                    keyframe_offset if inherited else None, inherited),
             entries,
         )
 
@@ -1030,31 +1105,50 @@ class RecordedContextManifest:
     segments: tuple[RecordedSegmentManifest, ...]
     counter: str
     request_id: str | None = field(default=None, metadata={"wire_omit_default": True})
+    recording_turn: int = field(default=1, metadata={"wire_omit_default": True})
 
     @classmethod
     def capture(
-        cls, manifest: ContextManifest
+        cls, manifest: ContextManifest,
+        previous: CapturedWireSource[RecordedContextManifest, ContextManifest] | None = None,
     ) -> tuple[RecordedContextManifest, tuple[ContextEntryManifest, ...]]:
-        recorded, entries = zip(
-            *(segment.kind.record_manifest(segment) for segment in manifest.segments),
-            strict=True,
-        )
+        recording_turn = 1
+        prior: tuple[RecordedSegmentManifest, ...] = ()
+        if previous is not None:
+            previous_record = previous.pointer.decode_bytes(previous.raw, previous.source.root_id)
+            prior = previous_record.segments
+            recording_turn += previous_record.recording_turn
+        parts = []
+        for position, segment in enumerate(manifest.segments):
+            old = value = offset = None
+            if previous is not None and position < len(previous.value.segments):
+                candidate = previous.value.segments[position]
+                if candidate.kind is segment.kind:
+                    value = candidate
+                    old = prior[position]
+                    offset = previous.pointer.offset
+            parts.append(segment.kind.record_manifest(
+                segment, old, value, offset, recording_turn=recording_turn))
         return (
             cls(
                 manifest.thread,
                 manifest.turn,
-                tuple(recorded),
+                tuple(part for part, _ in parts),
                 manifest.counter,
                 manifest.request_id,
+                recording_turn,
             ),
-            tuple(entry for group in entries for entry in group),
+            tuple(entry for _, group in parts for entry in group),
         )
 
-    def restore(self, entries: dict[ContextEntryReference, SegmentManifest]) -> ContextManifest:
+    def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
+                previous: dict[int, RecordedContextManifest] | None = None) -> ContextManifest:
+        previous = {} if previous is None else previous
         return ContextManifest(
             self.thread,
             self.turn,
-            tuple(segment.restore(entries) for segment in self.segments),
+            tuple(segment.restore(entries, previous, position)
+                  for position, segment in enumerate(self.segments)),
             self.counter,
             self.request_id,
         )

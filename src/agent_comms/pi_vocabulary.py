@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from enum import StrEnum
 from typing import TYPE_CHECKING, Annotated
 
@@ -11,7 +12,6 @@ from .field_codec import FieldCodec, FieldRepresentation
 
 if TYPE_CHECKING:
     from .backend import TurnSession
-    from .native_arguments import ThinkingArgument
 
 
 class PiStopReason(DeclaredFamily, affix="StopReason"):
@@ -203,7 +203,7 @@ SERVICE_TIER_ENVIRONMENT = "AGENT_COMMS_SERVICE_TIER"
 class ThinkingChoice(ABC):
     @classmethod
     @abstractmethod
-    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]: ...
+    def native_arguments[T](cls, argument: Callable[[type[ThinkingLevel]], T]) -> tuple[T, ...]: ...
 
     @classmethod
     def applied(cls, current: type[ThinkingChoice]) -> type[ThinkingChoice]:
@@ -223,7 +223,7 @@ class ThinkingLevel(ThinkingChoice, DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
+    def native_arguments[T](cls, argument: Callable[[type[ThinkingLevel]], T]) -> tuple[T, ...]:
         return (argument(cls),)
 
     @classmethod
@@ -233,7 +233,7 @@ class ThinkingLevel(ThinkingChoice, DeclaredFamily, affix="ThinkingLevel"):
 
 class NoThinkingOverride(ThinkingChoice):
     @classmethod
-    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
+    def native_arguments[T](cls, argument: Callable[[type[ThinkingLevel]], T]) -> tuple[T, ...]:
         return ()
 
     @classmethod

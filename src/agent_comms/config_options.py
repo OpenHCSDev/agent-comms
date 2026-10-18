@@ -355,7 +355,7 @@ class SessionConfigOptions(ConfigOptions):
 
     @staticmethod
     def stored_settings(thread: Thread) -> UseSettings:
-        return UseSettings(thread.model, thread.thinking_level.wire_value())
+        return UseSettings(thread.model, thread.thinking_level)
 
     def turn_started(self, session_id: str, thread: Thread) -> None:
         self.settings_in_use.setdefault(session_id, self.stored_settings(thread))
