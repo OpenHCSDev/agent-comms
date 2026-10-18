@@ -16,6 +16,7 @@ def one_line(text: str, limit: int) -> str:
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
+    family_discriminator: ClassVar[str] = "tool"
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
 
