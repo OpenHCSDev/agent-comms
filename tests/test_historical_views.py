@@ -14,6 +14,7 @@ from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
+from agent_comms.message_page import PageBounds, PageTraversal
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -46,12 +47,14 @@ def setup(root, count=5):
 
 
 def collect(comms, method, *args, **kwargs):
-    page = getattr(comms.views, method)(*args, limit=3, **kwargs)
+    page = getattr(comms.views, method)(*args, bounds=PageBounds(limit=3), **kwargs)
     result = list(page.messages)
     for _ in range(40):
         if not page.has_older:
             return result
-        page = getattr(comms.views, method)(*args, before=page.oldest_cursor, limit=3, **kwargs)
+        page = getattr(comms.views, method)(
+            *args, bounds=PageBounds(PageTraversal.capture(before=page.oldest_cursor), 3), **kwargs
+        )
         result[0:0] = page.messages
     raise AssertionError("paging did not terminate")
 
@@ -88,7 +91,9 @@ def test_all_history_backward_and_forward(migrated, method, args, reader):
     forward = []
     cursor = HistoryCursor(source.key, 0)
     for _ in range(40):
-        page = getattr(live.views, method)(*args, after=cursor, limit=2, **scope)
+        page = getattr(live.views, method)(
+            *args, bounds=PageBounds(PageTraversal.capture(after=cursor), 2), **scope
+        )
         forward.extend(page.messages)
         if not page.has_newer:
             break
@@ -113,7 +118,8 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     _, _, live, source = migrated
     viewer = live.messaging.user_identity(str(live.root))
     page = live.views.channel_display_page(
-        "#team", before=HistoryCursor(source.key, 100), viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name), limit=3
+        "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
+        bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100)), 3),
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
     snapshot = live.registry.snapshot()
@@ -192,12 +198,12 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
 def test_byte_boundaries_and_stale_cursor(migrated):
     _, _, live, source = migrated
     page = live.views.channel_display_page(
-        "#team", before=HistoryCursor(source.key, 100), max_bytes=1
+        "#team", bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100)), max_bytes=1)
     )
     assert len(page.messages) == 1
     assert page.has_older
     with pytest.raises(ValueError):
-        live.views.channel_display_page("#team", before=HistoryCursor("detached", 2))
+        live.views.channel_display_page("#team", bounds=PageBounds(PageTraversal.capture(before=HistoryCursor("detached", 2))))
 
 
 def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
@@ -280,14 +286,17 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     assert {p.name: p.read_bytes() for p in old.root.iterdir() if p.is_file()} == original
     assert not (Path(source.root) / "unknown-input.json").exists()
     page = live.views.channel_display_page(
-        "#team", before=HistoryCursor(source.key, 100), viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name)
+        "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
+        bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100))),
     )
     path = Path(source.root) / "bus.jsonl"
     path.write_bytes(path.read_bytes() + b"\n")
     with pytest.raises(ValueError, match="snapshot changed"):
         live.views.mark_historical_view_read(page.historical_display)
     with pytest.raises(ValueError, match="snapshot changed"):
-        live.views.channel_display_page("#team", before=HistoryCursor(source.key, 100))
+        live.views.channel_display_page(
+            "#team", bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100)))
+        )
 
 
 def test_older_than_registry_incarnation_stays_unattributed(migrated):

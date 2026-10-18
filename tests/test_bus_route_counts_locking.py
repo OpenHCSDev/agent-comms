@@ -7,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import pytest
 
-from agent_comms.bus_route_counts import BusRouteCounts, RouteIndexRebuilding
+from agent_comms.bus_route_counts import BusRouteCounts, CompletingRouteCounts, RouteIndexRebuilding
 from agent_comms.comms import wire
 from agent_comms.routing import DeliveryMessage
 from agent_comms.threads import Thread
@@ -90,6 +90,23 @@ def test_reader_beyond_rebuild_bound_is_rebuilding(tmp_path, monkeypatch):
     monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
     with pytest.raises(RouteIndexRebuilding), comms.bus.snapshot(viewer=NamedViewer("recipient")) as (basis, source):
         comms.bus.pending_counts_opened(source, basis)
+
+
+@pytest.mark.parametrize("read", ("inbox", "pending_counts_opened"))
+def test_readers_use_the_bus_projection_to_complete_their_cut(tmp_path, monkeypatch, read):
+    comms = _case(tmp_path, monkeypatch)
+    for body in ("second", "third"):
+        comms.messaging.send_message("sender", "recipient", body)
+    monkeypatch.setattr(BusRouteCounts, "rebuild_bytes", 1)
+    reader = wire(tmp_path, projection=CompletingRouteCounts)
+
+    if read == "inbox":
+        assert [message.body for message in reader.bus.inbox("recipient")] == [
+            "first", "second", "third"
+        ]
+    else:
+        with reader.bus.snapshot(viewer=NamedViewer("recipient")) as (basis, source):
+            assert reader.bus.pending_counts_opened(source, basis) == {"sender": 3}
 
 
 def test_cli_who_completes_unindexed_history_that_the_ui_reads_unit_by_unit(

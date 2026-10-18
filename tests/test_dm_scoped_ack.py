@@ -16,6 +16,7 @@ from agent_comms.comms import wire
 from agent_comms.read_basis import DMDisplayBasis
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
+from agent_comms.message_page import PageBounds
 
 
 def _thread(root: Path, name: str) -> Thread:
@@ -29,7 +30,7 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     for index in range(50):
         comms.messaging.send("peer", viewer, f"old {index}")
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=5)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
     assert len(page.messages) == 5 and page.has_older
     assert page.display_basis is not None and page.display_basis.older_unread
     before = (
@@ -63,7 +64,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
     comms.views.mark_user_view_read("peer", worktree=str(tmp_path))
     assert comms.bus.pending_count(viewer, "peer") == 0
     comms.messaging.send("peer", viewer, "painted")
-    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), limit=5)
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
     proof = page.display_basis
     assert isinstance(proof, DMDisplayBasis) and not proof.older_unread
     painted = page.newest_seq

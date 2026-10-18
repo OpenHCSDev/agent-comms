@@ -224,7 +224,7 @@ if TYPE_CHECKING:
     from .bus_page_index import BusPageRow
     from .channels import Channel
     from .message_bus import MessageBus
-    from .message_page import MessagePage
+    from .message_page import MessagePage, PageBounds
     from .messages import Message
     from .registration import Registration
     from .registry_document import RegistrySnapshot
@@ -363,10 +363,7 @@ class DMDisplayBasis:
         peer: str,
         *,
         worktree: str,
-        before: int | None = None,
-        after: int | None = None,
-        limit: int = 100,
-        max_bytes: int = 256 * 1024,
+        bounds: PageBounds,
     ) -> MessagePage:
         """Fetch a bounded human DM page and its immutable identity/read basis.
 
@@ -385,9 +382,7 @@ class DMDisplayBasis:
             bus_identity = bus.reads.bus_identity(bus.log.path)
         # Native input writes use this same wire lock. Scoped page/read queries
         # use opened source snapshots, not live input permission.
-        page = bus.conversation_page(
-            scope, before=before, after=after, limit=limit, max_bytes=max_bytes
-        )
+        page = bounds.conversation(scope).read(bus.log)
         older_unread = False
         if page.has_older and page.messages:
             seen = bus.reads.cursor(viewer_name, snapshot)
