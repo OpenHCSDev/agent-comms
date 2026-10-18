@@ -23,7 +23,7 @@ from agent_comms.tools import (
     CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool, CommsRuleReviewTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
-    CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
+    CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
     CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool, CommsVerdictTool,
     CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
@@ -107,6 +107,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsTurnsTool, {"thread": "worker"}, lead
     yield CommsThreadsTool, {}, lead
     yield CommsThreadsTool, {}, nobody
+    yield CommsStandingRulesTool, {"thread": "lead"}, lead
     monkeypatch.setattr(WorkBranches, "read", lambda self, snapshot: ())  # It asks gh.
     yield CommsWorkBranchesTool, {"checkout": str(project)}, lead
     yield CommsCollaborationTool, {"action": "add", "peer": "worker", "note": "Pairing"}, lead

@@ -114,7 +114,8 @@ def strike_task(thread, msg):
     """
     if found := re.search(r'\bP\d+\b', next(m['text'] for m in my_messages(thread) if m['id'] == msg)):
         return found.group()
-    open_facts = sorted(t.id for t in order.open_todos(thread))
+    open_facts = sorted(t.id for t in order.COMMS.goals.todos.held_for_commander(
+        order.COMMS.registry.require(order.ME).incarnation, thread))
     if len(open_facts) != 1:
         sys.exit(f'Refused: {msg} names no P-number and {thread} has open tasks {open_facts}; cite the order message for the task')
     return open_facts[0]

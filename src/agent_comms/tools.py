@@ -781,7 +781,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
         orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
-                  if todo.state.open and todo.holder == self.unit]
+                  if todo.holder == self.unit]
         if not orders:
             raise ValueError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
@@ -803,7 +803,7 @@ class CommsTodoListTool(ThreadReadTool):
         listed = tuple(comms.goals.todos.for_commander(actor))
         pulls, storage = PullRequests(), comms.registry.storage_rule
         return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
-                                 for todo in listed if todo.state.open and todo.holder})
+                                 for todo in listed if todo.holder})
 
 
 @dataclass(frozen=True, kw_only=True)

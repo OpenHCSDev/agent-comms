@@ -79,7 +79,13 @@ class HuntDue(ReasonedStandingRule):
 
     @classmethod
     def hunted(cls, comms: Comms, commander: str) -> float:
-        hunts = (hunt for todo in cls.todos(comms, commander) for hunt in todo.hunts)
+        hunts = (
+            hunt
+            for todo in comms.goals.todos.history_for_commander(
+                comms.registry.require(commander).incarnation
+            )
+            for hunt in todo.hunts
+        )
         return max((hunt.at.recorded_at("A hunt") for hunt in hunts), default=0)
 
     @classmethod
@@ -151,7 +157,9 @@ class PlanIdle(StandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        todos = cls.todos(comms, commander)
+        todos = comms.goals.todos.history_for_commander(
+            comms.registry.require(commander).incarnation
+        )
         return tuple(
             cls(phase)
             for phase in PlanPhase.members_with(PlanPhase)

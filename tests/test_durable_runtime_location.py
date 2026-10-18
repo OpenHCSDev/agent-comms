@@ -82,9 +82,12 @@ try {
 
 def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_registration):
     location = DurableDatabase(str(tmp_path / 'history.sqlite3'))
-    subprocess.run(['node', '--input-type=module', '-e', SEED, location.path],
-                   cwd=Path(__file__).parents[1] / 'src/agent_comms', check=True,
-                   capture_output=True, timeout=20)
+    hosts = Path(__file__).parents[1] / 'src/agent_comms'
+    seeded = subprocess.run(['node', '--input-type=module', '-e', SEED, location.path],
+                            cwd=hosts, capture_output=True, text=True, timeout=20)
+    assert seeded.returncode == 0, (
+        f'seeding failed; the durable host needs its locked packages: '
+        f'npm ci --ignore-scripts --omit=dev in {hosts}\n{seeded.stderr[-2000:]}')
     async def journey():
         backend = PiDurableBackend()
         thread = thread_registration.new_thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
