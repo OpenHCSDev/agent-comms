@@ -886,8 +886,9 @@ class WireRevision(ReadState):
             earlier.goal_waits, earlier.expiry_period) else names & activity_changed
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
-            changed.update(name for name in status_names if (view := status_batch.view(name)) is None
-                           or not previous.results[name].same_status(view.presentation))
+            changed.update(name for name in status_names
+                           if (status_view := status_batch.view(name)) is None
+                           or not previous.results[name].same_status(status_view.presentation))
         notifications_changed = self.notifications_changed_since(earlier)
         remaining = {name: view for name, view in readable.items() if name not in changed
                      and (notifications_changed

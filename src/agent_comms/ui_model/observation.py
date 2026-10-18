@@ -994,7 +994,8 @@ class ThreadsObserved(Observed):
     activity: Mapping[str, ObservedActivity]
 
     def revision_inputs(self) -> tuple[dict[str, ThreadPresentation], set[str]]:
-        readable, retry = {}, set()
+        readable: dict[str, ThreadPresentation] = {}
+        retry: set[str] = set()
         for name, result in self.results.items():
             result.collect_revision_inputs(name, readable, retry)
         return readable, retry
