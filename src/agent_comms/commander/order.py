@@ -43,27 +43,11 @@ COMMS = Comms(CONFIG.root)  # the bus whose Todo store owns problems, orders, de
 RTS = str(CONFIG.state)
 BOARD = str(CONFIG.board)
 NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain words
-# Words that hide what happened. A strike must say what the unit did in words the user uses.
-JARGON = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
-
-
-def jargon_in(text: str) -> list[str]:
-    """Jargon in plain prose: quoted text, `code`, indented quote lines and paths are someone else's words, not the sentence."""
-    prose = re.sub(r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b', ' ', text)
-    return sorted({m.group(0).lower() for m in JARGON.finditer(prose)})
 B = str(CONFIG.root)
 CLI = str(CONFIG.cli)
 
-# Phrases that hand the decision back to the unit or ask permission instead of ordering.
-SOFT = re.compile(r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|when you get a chance|"
-                  r"feel free|if you (think|agree|want)|thoughts\??|what do you think|thanks|thank you|sorry|"
-                  r"no rush|optional(ly)?|up to you|might want|suggest)\b", re.I)
-
-
 def post(recipients, body):
     """Send one message from the commander; judge reads it back from the bus history."""
-    if found := jargon_in(body):
-        sys.exit(f'REFUSED, nothing sent: your own message uses jargon {found}. Say what happened in plain words.')
     refuse_dogma(re.sub(r'(?m)`[^`\n]*`|"[^"\n]*"|^ {4}.*$', ' ', body))  # quoting the dogma to correct it is allowed
     command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
     for unit in recipients:
@@ -272,10 +256,6 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
     # Blunt at all times; the only exception is no witnessed incompetence.
     if not clean and not BLUNT.search(body):
         problems.append('not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was')
-    # Quoted text is a citation (e.g. naming the banned words), not my own wording.
-    unquoted = re.sub(r'"[^"\n]*"|“[^”\n]*”', '', body)
-    if soft := sorted({m.group(0).lower() for m in SOFT.finditer(unquoted)}):
-        problems.append(f'soft wording {soft}: state the edit, do not ask')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -330,10 +310,13 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
     if not mechanical and (fired := [pid for pid in group if pid in listed and struck(listed[pid], unit) >= 2]):
         sys.exit(f'Refused: {unit} has 2 strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
     at = time.time()
-    order = PendingProblemOrder(
-        id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
-        check=OrderCheck(check[1], check[2], CountCheckResult(int(check[3]))), edits=edits, banned=banned,
-        report=report[1], at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
+    try:
+        order = PendingProblemOrder(
+            id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
+            check=OrderCheck(check[1], check[2], CountCheckResult(int(check[3]))), edits=edits, banned=banned,
+            report=report[1], at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
+    except ValueError as refused:  # Core owns what an order may say
+        sys.exit(f'Refused order: {refused}')
     goal = COMMS.registry.require(unit).goal
     common = dict(order=order, goal_id=goal.id if goal else uuid4().hex, deadline=deadline(due), commander=ME)
     if new:
@@ -416,10 +399,6 @@ def strike(unit, why, caught=f'{ME} at review'):
     Core records the strike on the task's Todo; the strike is written to the narrative file and posted to
     #comms in the same step, so no failure stays private and none is described in words that hide what happened.
     """
-    if len(why.split()) < 10:
-        sys.exit('Refused: say what the unit actually did, plainly, in a full sentence (10+ words).')
-    if jargon := jargon_in(why):
-        sys.exit(f'Refused: jargon {jargon} hides what happened. Say it the way you would tell the user.')
     # What matters is how a mistake happened, how often, and how and when it was caught.
     if not any(stage in caught for stage in STAGES):
         sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{ME} at review".')

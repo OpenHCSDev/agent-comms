@@ -7,6 +7,7 @@ collaboration edges and thread goals remain separate authorities.
 
 from __future__ import annotations
 
+import re
 import sqlite3
 import time
 import asyncio
@@ -128,6 +129,45 @@ class NotifiedFirstCallEvent(FirstCallEvent):
         return current.notify()
 
 
+class OrderWords(str):
+    """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
+
+    CITED: ClassVar[re.Pattern] = re.compile(
+        r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b')
+    REFUSED: ClassVar[re.Pattern]
+    refusal: ClassVar[str]
+
+    def __new__(cls, text: str):
+        if found := cls.found(text):
+            raise ValueError(cls.refusal.format(found))
+        return super().__new__(cls, text)
+
+    @classmethod
+    def found(cls, text: str) -> list[str]:
+        return sorted({m.group(0).lower() for m in cls.REFUSED.finditer(cls.CITED.sub(' ', text))})
+
+
+class PlainText(OrderWords):
+    """What a unit did, in the words the user uses: ten or more words and no word that hides what happened."""
+
+    REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
+    refusal = "Jargon {} hides what happened; say it the way you would tell the user."
+
+    def __new__(cls, text: str):
+        if len(text.split()) < 10:
+            raise ValueError("Say what the unit actually did, plainly, in a full sentence (10+ words).")
+        return super().__new__(cls, text)
+
+
+class OrderText(OrderWords):
+    """An order states the edit; it never hands the decision back or asks permission."""
+
+    REFUSED = re.compile(r"\b(please|could you|would you|can you|if possible|consider|maybe|perhaps|when you get a chance|"
+                         r"feel free|if you (think|agree|want)|thoughts\??|what do you think|thanks|thank you|sorry|"
+                         r"no rush|optional(ly)?|up to you|might want|suggest)\b", re.I)
+    refusal = "Soft wording {}: state the edit, do not ask."
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """One checked order lives on its Todo, independently of the unit's Goal."""
@@ -147,6 +187,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
             raise ValueError("An order requires edits and banned actions.")
         if any(not text.strip() for text in (self.id, self.report, *self.edits, *self.banned)):
             raise ValueError("Order text cannot be empty.")
+        for text in (self.report, *self.edits):
+            OrderText(text)
         self.at.require_recorded("An order")
         self.first_call_deadline.require_deadline()
 
@@ -402,6 +444,7 @@ class StrikeTodo(TodoOperation):
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
+        PlainText(self.reason)
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 

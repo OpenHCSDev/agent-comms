@@ -21,6 +21,7 @@ the commander to that unit. Nothing here judges code; it only refuses to let an 
 """
 import hashlib, json, os, re, sys, time
 
+from ..todos import PlainText
 from . import order
 from .config import CommanderConfig
 
@@ -164,8 +165,10 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
         if slop is None:
             sys.exit(order.Slop.USAGE)
         order.refuse_dogma(' '.join((why, roast_text, fix, *lines)))
-        if jargon := order.jargon_in(why + ' ' + roast_text):
-            sys.exit(f'Refused: --why is the strike text and contains jargon {jargon}; say it plainly')
+        try:
+            PlainText(why + ' ' + roast_text)
+        except ValueError as refused:
+            sys.exit(f'Refused: {refused}')
         tasks = {}
         for thread in {edits[i]['thread'] for i in ids}:
             if msg not in {m['id'] for m in my_messages(thread)}:

@@ -1,0 +1,26 @@
+"""Core owns what an order and a strike may say, for every caller."""
+import pytest
+
+from agent_comms.todos import OrderText, PlainText
+
+TEN = "the unit pushed a commit that deleted the store test file"
+
+
+@pytest.mark.parametrize(("family", "text", "accepted"), [
+    (PlainText, TEN, True),
+    (PlainText, "too short to say anything", False),
+    (PlainText, TEN + " and broke the custody of the bus", False),
+    (PlainText, TEN + ' and quoted "custody" from the old order', True),
+    (PlainText, TEN + " and named `lifecycle.py` in backticks", True),
+    (PlainText, TEN + " in src/agent_comms/lifecycle/owner.py", True),
+    (OrderText, "Delete the second store and its writes", True),
+    (OrderText, "Please delete the second store", False),
+    (OrderText, "Maybe consider deleting the store", False),
+    (OrderText, 'Delete the line that says "if possible"', True),
+])
+def test_value_types_refuse_their_declared_words(family, text, accepted):
+    if accepted:
+        assert family(text) == text
+    else:
+        with pytest.raises(ValueError):
+            family(text)
