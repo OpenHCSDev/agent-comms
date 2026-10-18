@@ -1,5 +1,6 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
 from agent_comms.native_package import pinned_native_package
+from agent_comms.native_arguments import SelectedModel
 
 import asyncio
 import json
@@ -181,7 +182,7 @@ async def test_exhausted_provider_retries_become_typed_provider_failure():
     }))
 
     with pytest.raises(native_pi.NativePiTerminalFailure) as caught:
-        turn.output.raise_if_failed(None, "provider", "model")
+        turn.output.raise_if_failed(None, SelectedModel("provider", "model"))
     assert reason in str(caught.value)
     assert caught.value.failure == ModelRequestFailed(reason)
 

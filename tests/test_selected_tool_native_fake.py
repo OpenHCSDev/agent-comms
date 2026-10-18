@@ -20,7 +20,6 @@ from agent_comms.selected_tool_broker import (
 from agent_comms.tracked_turn import TrackedTurnSession
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_session import SelectedSession
-from agent_comms.native_arguments import ModelArgument, ProviderArgument
 
 INPUT_ID = "a" * 32
 
@@ -29,7 +28,7 @@ INPUT_ID = "a" * 32
 @pytest.mark.asyncio
 @pytest.mark.parametrize("variant", ["success", "tamper", "denied", "badproof", "forged_terminal"])
 async def test_fake_rpc_tool_event_and_terminal_gate(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, native_launch_settings
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, selected_model
 ) -> None:
     fake = tmp_path / "fake_selected_rpc.py"
     (tmp_path / "dist").mkdir()
@@ -115,8 +114,7 @@ send({'type':'agent_settled'})
         pi_session=PersistentPiSession(),
         selected_tool_mode=SelectedToolMode(owner_action),
         model_wait_timeout=15,
-        provider=native_launch_settings.value(ProviderArgument),
-        model=native_launch_settings.value(ModelArgument),
+        model=selected_model,
     )
     if variant == "success":
         result = await operation

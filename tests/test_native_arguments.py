@@ -13,10 +13,38 @@ from agent_comms.native_arguments import (
     NativeArguments,
     OneShotArgument,
     OptionArgument,
+    SelectedModel,
     ValueArgument,
 )
 from test_backend_native_lifecycle import native_backend as native_backend
 from agent_comms.pi_vocabulary import OffThinkingLevel
+
+
+@pytest.mark.parametrize("selection", [None, "", "model"])
+def test_selected_model_requires_a_qualified_configuration(selection):
+    from agent_comms.coordination_errors import IdentityConflict
+
+    with pytest.raises(IdentityConflict, match="^Selected owner has no configured provider/model$"):
+        SelectedModel.decode(selection)
+
+
+@pytest.mark.parametrize("selection", ["/model", "provider/"])
+def test_selected_model_refuses_an_incomplete_configuration(selection):
+    from agent_comms.coordination_errors import IdentityConflict
+
+    with pytest.raises(IdentityConflict, match="^Selected owner's configured provider/model is incomplete$"):
+        SelectedModel.decode(selection)
+
+
+def test_selected_model_owns_qualification_and_native_arguments():
+    from dataclasses import FrozenInstanceError
+
+    model = SelectedModel.decode("provider/organization/model")
+    assert model == SelectedModel("provider", "organization/model")
+    assert model.qualified == "provider/organization/model"
+    assert model.argv == ("--provider", "provider", "--model", "organization/model")
+    with pytest.raises(FrozenInstanceError):
+        model.provider = "different"
 
 
 def test_unconfigured_launch_has_no_provider_or_model_policy():

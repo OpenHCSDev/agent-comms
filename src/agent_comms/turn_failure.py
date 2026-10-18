@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
 from .diagnostics import FailureReason
+from .native_arguments import SelectedModel
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -38,7 +39,7 @@ class TurnFailure(DeclaredFamily):
     def after_provider_retry_exhausted(self) -> TurnFailure:
         return self
 
-    def raise_native(self, proof, provider: str, model: str) -> None:
+    def raise_native(self, proof, model: SelectedModel) -> None:
         """A runtime failure does not prove a completed provider request."""
         from .native_pi import NativePiUnavailable
 
@@ -129,10 +130,10 @@ class ModelRequestFailed(TurnFailure):
     def after_provider_retry_exhausted(self) -> TurnFailure:
         return ProviderRetryExhausted(self.text)
 
-    def raise_native(self, proof, provider: str, model: str) -> None:
+    def raise_native(self, proof, model: SelectedModel) -> None:
         from .native_pi import NativePiTerminalFailure
 
-        raise NativePiTerminalFailure(self.text, proof, provider, model, self)
+        raise NativePiTerminalFailure(self.text, proof, model, self)
 
     code = FailureReason.MODEL_REQUEST_FAILED
     precedence = 45

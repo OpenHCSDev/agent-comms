@@ -135,7 +135,7 @@ def wired(comms: Comms) -> Comms:
 
 
 @pytest.fixture
-def native_launch_settings(monkeypatch, tmp_path):
+def selected_model(monkeypatch, tmp_path):
     """Declare a source-test runtime; native validation and package checks stay real.
 
     Its CLI helpers must consume this Core, not an older installed console script.
@@ -145,7 +145,7 @@ def native_launch_settings(monkeypatch, tmp_path):
     import sys
 
     from agent_comms import native_pi
-    from agent_comms.native_arguments import NativeArguments
+    from agent_comms.native_arguments import NativeArguments, SelectedModel
     from native_backend_fixture import NativeBackendFixture
 
     runtime = LaunchRuntime(tmp_path / "native-runtime/bin/python")
@@ -167,7 +167,7 @@ def native_launch_settings(monkeypatch, tmp_path):
     settings = NativeArguments.parse(NativeBackendFixture.native_arguments())
     monkeypatch.setenv(NativeArguments.binary_key, NativeArguments.owner_launcher(runtime))
     monkeypatch.setenv(NativeArguments.arguments_key, shlex.join(settings.argv))
-    return settings
+    return SelectedModel.decode(settings.model)
 
 
 @pytest.fixture

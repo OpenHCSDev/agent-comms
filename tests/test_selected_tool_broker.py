@@ -19,6 +19,7 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import DuplicateToolCallIdentity, SelectedToolDenied
+from agent_comms.selected_session import SelectedSession
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
 
@@ -112,12 +113,14 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
 
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool storage requires POSIX dirfd")
 def test_default_off_and_packaged_extension_selection(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selected_model
 ) -> None:
     tmp_path.chmod(0o700)
     sessions = tmp_path / "sessions"
     monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
-    default = native_pi.NativePiRpcLaunch.tracked(tmp_path, worktree=tmp_path, session_dir=sessions)
+    default = native_pi.NativePiRpcLaunch.tracked(
+        tmp_path, worktree=tmp_path, session=SelectedSession(sessions), model=selected_model
+    )
     assert "--no-tools" in default.argv and "--no-builtin-tools" not in default.argv
     assert "-e" not in default.argv
     mode = broker.SelectedToolMode(lambda _: None)
@@ -125,7 +128,8 @@ def test_default_off_and_packaged_extension_selection(
     packaged = tmp_path / "dist/selected_claimed_write.mjs"
     packaged.write_bytes(Path(broker.__file__).with_name("selected_claimed_write.mjs").read_bytes())
     selected = native_pi.NativePiRpcLaunch.tracked(
-        tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode
+        tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+        model=selected_model, selected_tool_mode=mode
     )
     assert "--no-tools" not in selected.argv
     assert "--no-builtin-tools" in selected.argv
@@ -136,13 +140,15 @@ def test_default_off_and_packaged_extension_selection(
     extension.write_text("evil changed extension", encoding="utf-8")
     with pytest.raises(SelectedToolDenied, match="reviewed"):
         native_pi.NativePiRpcLaunch.tracked(
-            tmp_path, worktree=tmp_path, session_dir=sessions, selected_tool_mode=mode
+            tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+            model=selected_model, selected_tool_mode=mode
         )
     with pytest.raises(native_pi.NativePiUnavailable, match="nominal"):
         native_pi.NativePiRpcLaunch.tracked(
             tmp_path,
             worktree=tmp_path,
-            session_dir=sessions,
+            session=SelectedSession(sessions),
+            model=selected_model,
             selected_tool_mode=object(),  # type: ignore[arg-type]
         )
 
