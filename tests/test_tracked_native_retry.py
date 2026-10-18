@@ -1,5 +1,5 @@
 import pytest
-from agent_comms.goals import InactiveGoalPermission
+from agent_comms.goals import NoGoal
 
 from agent_comms.native_arguments import SelectedModel
 
@@ -72,7 +72,7 @@ def test_failed_native_retry_end_requires_final_error_at_decode():
 
 
 def following(kind):
-    values = dict(keys=(), accepted_id="fresh-following", goal_permission=InactiveGoalPermission())
+    values = dict(keys=(), accepted_id="fresh-following", goal_permission=NoGoal())
     return kind(**values, origins=()) if kind is DeliveredFollowingInput else kind(**values)
 
 

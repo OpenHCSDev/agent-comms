@@ -10,9 +10,10 @@ from typing import TYPE_CHECKING, ClassVar
 from acp import RequestError
 
 from .agent_backend import WhenBusy
+from .goal_attempts import GoalAttemptError, NoGoalPermit
 from .channel_input_batch import InputBatch, SingleInputBatch
 from .goals import (
-    InactiveGoalPermission,
+    NoGoal,
     OwnerGoalPermission,
     TurnGoalPermission,
 )
@@ -133,8 +134,31 @@ class OriginalTurnInput(TurnInputSource):
         return turn.thread.goal.active().prepare_turn(turn, permits)
 
     @classmethod
+    def reserve_goal(cls, turn, goal):
+        try:
+            return turn.runner.comms.goals.reserve_turn(goal, owner=turn.thread)
+        except GoalAttemptError as error:
+            return cls.reservation_failed(error)
+
+    @classmethod
+    def reservation_failed(cls, error):
+        raise RequestError.invalid_params({
+            "reason": "goal_attempt_unavailable",
+            "details": "The goal has no launchable attempt. Inspect its state and use "
+                       "Retry for a failed attempt; no prompt was sent to Pi.",
+        }) from error
+
+    @classmethod
+    def prepare_without_goal(cls):
+        return True
+
+    @classmethod
+    def original_display(cls, initial, task):
+        return initial or task
+
+    @classmethod
     def permission(cls, turn):
-        return turn.thread.goal.active().turn_permission()
+        return turn.thread.goal.active()
 
     @property
     def keys(self) -> tuple[str, ...]:
@@ -211,7 +235,7 @@ class RoutedInput(TurnInputSource):
         return wait.allows_routed_input()
 
     def allows_goal_input(self, goal: GoalDeclaration) -> bool:
-        return not self.keys or InactiveGoalPermission().allows(goal)
+        return not self.keys or NoGoal().allows(goal)
 
 
 class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
@@ -225,7 +249,7 @@ class SelectedOriginalInput(RoutedOriginalInput):
     def answering(cls, prompt: str) -> SelectedOriginalInput:
         return cls(
             accepted_id=None,
-            goal_permission=InactiveGoalPermission(),
+            goal_permission=NoGoal(),
             prompt=prompt,
             original_display=None,
             origins=(),
@@ -246,6 +270,20 @@ class ScheduledOriginalInput(DependencyOriginalInput):
     Captured goal permission and an applicable launch permit authorize this input;
     having a durable input key cannot turn it into an unsolicited routed message.
     """
+
+
+class AutonomousOriginalInput(DependencyOriginalInput):
+    @classmethod
+    def reservation_failed(cls, error):
+        return NoGoalPermit()
+
+    @classmethod
+    def prepare_without_goal(cls):
+        return False
+
+    @classmethod
+    def original_display(cls, initial, task):
+        return None
 
 
 @dataclass(frozen=True, kw_only=True)

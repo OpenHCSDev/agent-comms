@@ -11,8 +11,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
-from .goal_attempts import Generation, GoalAttemptError, GoalAttemptStore, NoGoalPermit, StaleAttemptError, UnresolvedAttemptError
-from acp import RequestError
+from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
@@ -69,24 +68,15 @@ class Goals:
             self.goal_store = GoalAttemptStore.initialize(private)
         return self.goal_store
 
-    def reserve_turn(self, goal, *, owner, autonomous):
-        try:
-            store = self.open_goal_store()
-            claim_scope = self.registry.snapshot().claimed_generations[owner.name]
-            with _store_lock(self._wire_lock_path):
-                generation = store.require_generation(goal.id)
-                generation.lifecycle.require_ready()
-                grant = self.ready_goal_grant_locked(owner, claim_scope, generation)
-                reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
-                return store.claim_launch(reservation)
-        except GoalAttemptError as error:
-            if autonomous:
-                return NoGoalPermit()
-            raise RequestError.invalid_params({
-                "reason": "goal_attempt_unavailable",
-                "details": "The goal has no launchable attempt. Inspect its state and use "
-                           "Retry for a failed attempt; no prompt was sent to Pi.",
-            }) from error
+    def reserve_turn(self, goal, *, owner):
+        store = self.open_goal_store()
+        claim_scope = self.registry.snapshot().claimed_generations[owner.name]
+        with _store_lock(self._wire_lock_path):
+            generation = store.require_generation(goal.id)
+            generation.lifecycle.require_ready()
+            grant = self.ready_goal_grant_locked(owner, claim_scope, generation)
+            reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
+            return store.claim_launch(reservation)
 
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation

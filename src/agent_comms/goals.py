@@ -19,7 +19,6 @@ from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_relations import GoalDerivedContact
 from .text_digest import TextDigest
-from .ui_model.goal import NoGoal as NoGoalDisplay, ShowingGoal
 
 from .field_codec import FieldCodec, WireValue
 from .errors import RelationViolationError
@@ -343,7 +342,12 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
-class GoalDeclaration(WireValue):
+class TurnGoalPermission(ABC):
+    @abstractmethod
+    def allows(self, current: GoalDeclaration) -> bool: ...
+
+
+class GoalDeclaration(WireValue, TurnGoalPermission):
     """A thread's goal declaration; null is only its external representation."""
 
     accepts_null = True
@@ -418,8 +422,8 @@ class GoalDeclaration(WireValue):
     def owes_project_resume(self, thread) -> bool:
         return thread.project_resume_due and not thread.executing
 
-    def active_goals(self) -> tuple[Goal, ...]:
-        return ()
+    def prepend_context(self, context, capture):
+        return context
 
     def permits_continuation(self, goal_id: str) -> bool:
         return self.active().continues(goal_id)
@@ -427,8 +431,8 @@ class GoalDeclaration(WireValue):
     def continues(self, goal_id: str) -> bool:
         return False
 
-    def permits_inactive_input(self) -> bool:
-        return True
+    def allows(self, current: GoalDeclaration) -> bool:
+        return current.permits_accepted(None)
 
     def permits_accepted(self, goal_id: str | None) -> bool:
         return goal_id is None
@@ -439,17 +443,14 @@ class GoalDeclaration(WireValue):
     def defers_following_from(self, original: GoalDeclaration) -> bool:
         return False
 
-    def display(self):
-        return NoGoalDisplay()
+    def presented_by(self, presentation):
+        return presentation.without_goal()
 
     def task_scope(self, owner):
         return TurnTaskScope(project=owner.worktree)
 
-    def turn_permission(self):
-        return InactiveGoalPermission()
-
     def prepare_turn(self, turn, permits) -> bool:
-        return not turn.autonomous_goal
+        return turn.input_type.prepare_without_goal()
 
     def filter_scheduled(self, pending):
         return pending
@@ -577,14 +578,14 @@ class Goal(GoalDeclaration):
     def owes_project_resume(self, thread) -> bool:
         return False
 
-    def active_goals(self) -> tuple[Goal, ...]:
-        return (self,)
+    def prepend_context(self, context, capture):
+        return context.prepend(capture(self))
 
     def continues(self, goal_id: str) -> bool:
         return self.id == goal_id
 
-    def permits_inactive_input(self) -> bool:
-        return False
+    def allows(self, current: GoalDeclaration) -> bool:
+        return current.permits_continuation(self.id)
 
     def permits_accepted(self, goal_id: str | None) -> bool:
         return self.active().accepted_goal_id() == goal_id
@@ -616,19 +617,14 @@ class Goal(GoalDeclaration):
                        "input before explicit Retry. No input was replayed.",
         ))
 
-    def display(self):
-        return ShowingGoal(self)
+    def presented_by(self, presentation):
+        return presentation.with_goal(self)
 
     def task_scope(self, owner):
         return GoalTaskScope(project=owner.worktree, goal=self.checkpoint)
 
-    def turn_permission(self):
-        return ContinuationGoalPermission(self)
-
     def prepare_turn(self, turn, permits) -> bool:
-        turn.goal_permit = turn.runner.comms.goals.reserve_turn(
-            self, owner=turn.thread, autonomous=turn.autonomous_goal,
-        )
+        turn.goal_permit = turn.input_type.reserve_goal(turn, self)
         return turn.goal_permit.start(permits, turn.runner.comms.goals.open_goal_store())
 
     def filter_scheduled(self, pending):
@@ -880,31 +876,12 @@ class TurnTaskScope(TaskScope):
         previous.require_same_turn(correction, registry)
 
 
-class TurnGoalPermission(ABC):
-
-    @abstractmethod
-    def allows(self, current: GoalDeclaration) -> bool: ...
-
-
 @dataclass(frozen=True)
 class OwnerGoalPermission(TurnGoalPermission):
     goal: GoalDeclaration
 
     def allows(self, current: GoalDeclaration) -> bool:
         return current == self.goal
-
-
-@dataclass(frozen=True)
-class ContinuationGoalPermission(TurnGoalPermission):
-    goal: Goal
-
-    def allows(self, current: GoalDeclaration) -> bool:
-        return current.permits_continuation(self.goal.id)
-
-
-class InactiveGoalPermission(TurnGoalPermission):
-    def allows(self, current: GoalDeclaration) -> bool:
-        return current.active().permits_inactive_input()
 
 
 @dataclass(frozen=True)

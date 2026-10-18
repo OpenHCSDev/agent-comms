@@ -1066,10 +1066,9 @@ class TurnContext:
         return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
 
     def with_goal(self, owner: Thread, goals) -> TurnContext:
-        context = self
-        for goal in owner.goal.active().active_goals():
-            context = context.prepend(GoalSegment.capture(owner, goal, goals))
-        return context
+        return owner.goal.active().prepend_context(
+            self, lambda goal: GoalSegment.capture(owner, goal, goals),
+        )
 
     def with_awareness(
         self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False

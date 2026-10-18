@@ -17,7 +17,7 @@ from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .goal_attempts import GoalPermit, NoGoalPermit
 from .goals import (
-    InactiveGoalPermission,
+    NoGoal,
     OwnerGoalPermission,
     TurnGoalPermission,
 )
@@ -83,9 +83,8 @@ class OwnedTurn:
         images: tuple[Any, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
-        autonomous_goal: bool = False,
         input_type: type[OriginalTurnInput] = ScheduledOriginalInput,
-        original_goal_permission: TurnGoalPermission = InactiveGoalPermission(),
+        original_goal_permission: TurnGoalPermission = NoGoal(),
         accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
@@ -97,16 +96,13 @@ class OwnedTurn:
         self.images = images
         self.original_keys = original_keys
         self.initial_display_text = initial_display_text
-        self.autonomous_goal = autonomous_goal
         self.input_type = input_type
         self.original_goal_permission = original_goal_permission
         self.accepted_input_id = accepted_input_id
         self.dependency_wait_id = dependency_wait_id
 
     def authorize(self):
-        self.original_display = (
-            None if self.autonomous_goal else (self.initial_display_text or self.task)
-        )
+        self.original_display = self.input_type.original_display(self.initial_display_text, self.task)
         self.registry_owner = RegistryOwner.capture_local(
             self.runner.comms.registry.snapshot(), self.thread_name
         )

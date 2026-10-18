@@ -156,8 +156,8 @@ class TurnGoalAccount:
     def done(self, event: events.Done) -> None:
         self.current_active_goal().check_turn_result(self, event)
 
-    def settle_original(self, terminal: events.Done | None) -> None:
-        self.permit.settle_original(self, terminal)
+    def finish(self, terminal: events.Done | None) -> None:
+        self.permit.finish(self, terminal)
 
     def settle_claimed(self, permit: LaunchPermit, terminal: events.Done | None) -> None:
         if terminal is None:
@@ -194,7 +194,7 @@ class TurnGoalAccount:
 
     def finish(self, terminal: events.Done | None) -> None:
         """Settle all original grants once from the actual producer terminal event."""
-        self.settle_original(terminal)
+        self.finish(terminal)
         for goal_id, permit in self.originated.items():
             current = self.comms.registry.require(self.thread_name).goal.matching(goal_id)
             store = self.comms.goals.open_goal_store()

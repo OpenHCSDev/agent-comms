@@ -29,7 +29,7 @@ from .goal_actions import (
     PausedGoalAction,
 )
 from .goal_scheduler import GoalScheduler
-from .goals import InactiveGoalPermission, TurnGoalPermission
+from .goals import NoGoal, TurnGoalPermission
 from .messages import Message
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import NativeArguments
@@ -442,9 +442,8 @@ class TurnRunner:
         images: tuple[Any, ...] = (),
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
-        autonomous_goal: bool = False,
         input_type: type[OriginalTurnInput] = ScheduledOriginalInput,
-        original_goal_permission: TurnGoalPermission = InactiveGoalPermission(),
+        original_goal_permission: TurnGoalPermission = NoGoal(),
         accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
@@ -459,7 +458,6 @@ class TurnRunner:
             images=images,
             original_keys=original_keys,
             initial_display_text=initial_display_text,
-            autonomous_goal=autonomous_goal,
             input_type=input_type,
             original_goal_permission=original_goal_permission,
             accepted_input_id=accepted_input_id,

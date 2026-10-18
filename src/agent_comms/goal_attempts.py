@@ -359,7 +359,7 @@ class GoalPermit:
     def current_goal(self, account):
         return NoGoal()
 
-    def settle_original(self, account, terminal) -> None:
+    def finish(self, account, terminal) -> None:
         pass
 
     def record_verified_progress(self, store, witness) -> None:
@@ -403,7 +403,7 @@ class LaunchPermit(GoalPermit):
     def current_goal(self, account):
         return account.comms.registry.require(account.thread_name).continuation_goal(account.owner)
 
-    def settle_original(self, account, terminal) -> None:
+    def finish(self, account, terminal) -> None:
         account.originated.pop(self.reservation.goal_id)
         account.settle_claimed(self, terminal)
 
