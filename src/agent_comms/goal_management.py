@@ -68,13 +68,6 @@ class Goals:
             self.goal_store = GoalAttemptStore.initialize(private)
         return self.goal_store
 
-    def retire_goal_attempt(self, goal_id: str) -> None:
-        attempts = self.open_goal_store()
-        generation = attempts.snapshot(goal_id)
-        if generation is not None and not generation.lifecycle.terminal:
-            attempts.retire_goal(goal_id, expected_generation=generation.number,
-                                 attempt_id=generation.attempt_id)
-
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
     ) -> str:
@@ -225,7 +218,7 @@ class Goals:
             if owner is None or self.agents.is_working(owner.incarnation, snapshot):
                 return ()
             rows = self.waits.read()
-            wait = owner.goal.wait(rows).for_current(owner.goal, owner.incarnation.require_recorded())
+            wait = owner.goal.current_wait(rows, owner.incarnation.require_recorded())
             return wait.release_closed(self, owner, snapshot, rows)
 
     def release_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
@@ -314,7 +307,7 @@ class Goals:
             owner.require_registry(self.registry)
             current = self.registry.require(owner.thread.name)
             goal = current.continuation_goal(owner.thread)
-            wait = goal.wait(self.waits.read()).for_current(goal, current.incarnation.require_recorded())
+            wait = goal.current_wait(self.waits.read(), current.incarnation.require_recorded())
             return wait.consume_owned_reply(self, current, reference)
 
     def update_goal(

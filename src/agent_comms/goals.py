@@ -507,6 +507,9 @@ class GoalDeclaration(WireValue):
     def wait(self, rows):
         return self.active().recorded_wait(rows)
 
+    def current_wait(self, rows, owner):
+        return self.wait(rows).for_current(self, owner)
+
     def recorded_wait(self, rows):
         from .goal_waits import NoGoalWait
         return NoGoalWait()
@@ -700,7 +703,11 @@ class Goal(GoalDeclaration):
         return waits.clear(self.id, wait_id=wait_id)
 
     def retire_attempt(self, goals):
-        goals.retire_goal_attempt(self.id)
+        attempts = goals.open_goal_store()
+        generation = attempts.snapshot(self.id)
+        if generation is not None and not generation.lifecycle.terminal:
+            attempts.retire_goal(self.id, expected_generation=generation.number,
+                                 attempt_id=generation.attempt_id)
 
     def recorded_wait(self, rows):
         from .goal_waits import NoGoalWait
