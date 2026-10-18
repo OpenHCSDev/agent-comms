@@ -17,15 +17,13 @@ from collections.abc import Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Literal
+from typing import Annotated, Literal
 
 from .bus_publication import unique_wire_object
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, PathText
+from .private_nk_entrypoint import PrivateNkLaunch
 from .wire_metadata import WireRootIdText
-
-if TYPE_CHECKING:
-    from .private_nk_entrypoint import PrivateNkLaunch
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,8 +64,6 @@ class LocalRoute(CommsRoute):
     """Explicit/environment roots and the unconfigured historical default."""
 
     def launch(self) -> PrivateNkLaunch | None:
-        from .private_nk_entrypoint import PrivateNkLaunch
-
         return PrivateNkLaunch.from_environment(self.root, os.environ)
 
 
@@ -120,8 +116,6 @@ class ActiveRoute(CommsRoute):
         return super(ActiveRoute, self).observe_root()
 
     def launch(self) -> PrivateNkLaunch:
-        from .private_nk_entrypoint import PrivateNkLaunch
-
         return PrivateNkLaunch(self.root, self.wire_root_id, self.native_package)
 
 
@@ -295,8 +289,6 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     uses the same no-replace hardlink pattern as the private store initializer;
     a reader fails closed during the brief two-link staging window.
     """
-    from .private_nk_entrypoint import PrivateNkLaunch
-
     path = active_route_path() if path is None else path
     if path.name != "active-route.json" or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
@@ -319,8 +311,6 @@ def _publish_active_route_locked(
     expected: ActiveRoute | None = None,
 ) -> None:
     """Publish through a checked directory FD already held with route EX."""
-    from .private_nk_entrypoint import PrivateNkLaunch
-
     temporary: str | None = None
     try:
         info = os.fstat(directory)

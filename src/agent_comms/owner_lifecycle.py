@@ -386,6 +386,13 @@ class OwnerLifecycle:
 
         RecoveryMonitorCapability.settle_stopped_owner(self.root, thread)
 
+    def require_private_launch(self) -> PrivateNkLaunch:
+        """The launch authority of a root that must be private."""
+        launch = self.launch_authority
+        if launch is None:
+            raise PublicationActivationBlocked("requires a private bus root")
+        return launch
+
     def require_launch_authority(self) -> PrivateNkLaunch | None:
         """Check this lifecycle's launch authority without reserving a process.
 

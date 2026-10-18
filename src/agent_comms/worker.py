@@ -101,8 +101,7 @@ def main() -> int:
     name = RestartEnvironment.calling_thread()
 
     comms = wire()
-    if comms.owners.launch_authority is None:
-        raise ValueError("Headless execution requires a private bus root")
+    comms.owners.require_private_launch()  # Headless execution needs a private bus root.
     thread = comms.registry.require(name)
     if thread.process_identity is not None and thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")

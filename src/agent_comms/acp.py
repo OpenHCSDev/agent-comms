@@ -78,7 +78,6 @@ from .turn_effects import TurnEffects
 from .turn_runner import TurnRunner
 
 if TYPE_CHECKING:
-    from .private_nk_entrypoint import PrivateNkLaunch
     from .selected_tool_broker import SelectedToolIntent
 
 from .turn_runner import RELAY_PREFIX
@@ -110,7 +109,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
             if type(private_selected_tool_intent) is not SelectedToolIntent:
                 raise TypeError("private selected tool needs a nominal owner intent")
-            self._private_launch()
+            self._comms.owners.require_private_launch()
         self._private_selected_tool_intent = private_selected_tool_intent
         # A worker's startup check already verified its package; reuse it.
         self._verified_native_launcher = None
@@ -118,7 +117,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             from .native_pi import NativePiRpcLaunch
 
             self._verified_native_launcher = NativePiRpcLaunch.verified_launcher(
-                self._private_launch().native_package, private_nk_verified_cli
+                self._comms.owners.require_private_launch().native_package, private_nk_verified_cli
             )
         self.use_unstable_protocol = use_unstable_protocol
         # Enabled for verified native owners by default. Explicit construction
@@ -321,13 +320,6 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
     # ─── Helpers ─────────────────────────────────────────────────────────────
 
-    def _private_launch(self) -> PrivateNkLaunch:
-        """This root's launch authority, owned by its owner lifecycle."""
-        launch = self._comms.owners.launch_authority
-        if launch is None:
-            raise PublicationActivationBlocked("private N/K ACP session requires a private bus root")
-        return launch
-
     @property
     def private_nk_native_package(self) -> Path | None:
         launch = self._comms.owners.launch_authority
@@ -336,7 +328,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
     @property
     def configured_root_id(self) -> str:
         """The bus root ID the launch pinned; the bus reader checks it against the marker."""
-        return self._private_launch().wire_root_id
+        return self._comms.owners.require_private_launch().wire_root_id
 
     def _private_nk_marker(self) -> str:
         """Require the configured, certified root before any selected request."""
@@ -358,7 +350,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
 
         if self._verified_native_launcher is None:
             self._verified_native_launcher = NativePiRpcLaunch.acquire_tracked(
-                self._private_launch().native_package
+                self._comms.owners.require_private_launch().native_package
             )
         return self._verified_native_launcher
 
@@ -374,7 +366,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         from .selected_write_authority import AcpSelectedWriteAuthority
         from .selected_write_plan import SelectedWritePlans
 
-        launch = self._private_launch()
+        launch = self._comms.owners.require_private_launch()
         package = launch.native_package
         if launch.wire_root_id != wire_root_id:
             raise PublicationActivationBlocked("private N/K ACP root does not match its launch")
@@ -539,8 +531,7 @@ def main() -> int:
         # private launch is checked before it can request an owner; the worker
         # independently repeats the same preflight.
         comms = wire()
-        if (launch := comms.owners.launch_authority) is not None:
-            launch.validate()
+        comms.owners.require_launch_authority()
 
         async def run() -> None:
             if os.environ.get("AGENT_COMMS_DEBUG_LOG"):
