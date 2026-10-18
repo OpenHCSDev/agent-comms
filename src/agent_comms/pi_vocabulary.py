@@ -203,19 +203,19 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def native_arguments(cls):
-        return (ThinkingArgument(FieldCodec.encode(cls)),)
+    def native_arguments(cls) -> tuple[ThinkingArgument, ...]:
+        return (ThinkingArgument(FieldCodec.decode(str, cls.declared_name)),)
 
     @classmethod
-    def launch_arguments(cls):
+    def launch_arguments(cls) -> tuple[str, ...]:
         return tuple(token for argument in cls.native_arguments() for token in argument.argv)
 
     @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
 
@@ -223,15 +223,15 @@ class NoThinkingOverride(ThinkingLevel):
     declared_name = None
 
     @classmethod
-    def native_arguments(cls):
+    def native_arguments(cls) -> tuple[ThinkingArgument, ...]:
         return ()
 
     @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return current
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return level
 
 
@@ -239,15 +239,18 @@ class ThinkingLevelValue(FieldRepresentation):
     accepts_null = True
 
     @classmethod
-    def decode(cls, value):
-        return NoThinkingOverride if value is None else ThinkingLevel.decode(FieldCodec.decode(str, value))
+    def decode(cls, value: object) -> type[ThinkingLevel]:
+        return (NoThinkingOverride if value is None
+                else ThinkingLevel.decode(FieldCodec.decode(str, value)))
 
     @classmethod
-    def encode(cls, value):
-        return FieldCodec.encode(value)
+    def encode(cls, value: object) -> str | None:
+        if not isinstance(value, type) or not issubclass(value, ThinkingLevel):
+            raise TypeError("Expected a declared thinking level")
+        return value.declared_name
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type[ThinkingLevel] | None)
 
 

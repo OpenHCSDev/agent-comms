@@ -86,7 +86,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     the existing registry acquires those declarations on decode or schema reads.
     """
 
-    declared_name: ClassVar[str]
+    declared_name: ClassVar[str | None]
     family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]

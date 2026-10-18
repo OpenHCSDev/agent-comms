@@ -153,6 +153,9 @@ class ModelWait(TurnWait):
             yield event
 
 
+MODEL_WAIT = ModelWait()
+
+
 class UnchargedWait:
     """Polling and unbounded operations do not consume a progress budget."""
 

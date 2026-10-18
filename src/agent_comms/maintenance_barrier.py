@@ -192,13 +192,16 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
 
 class MaintenanceIngress(ABC):
     @abstractmethod
-    def ingress_async(self): ...
+    def ingress_async(self) -> AbstractAsyncContextManager[MaintenanceStatus]: ...
 
 
 class UncoordinatedIngress(MaintenanceIngress):
     @asynccontextmanager
-    async def ingress_async(self):
+    async def ingress_async(self) -> AsyncIterator[MaintenanceStatus]:
         yield MaintenanceStatus()
+
+
+UNCOORDINATED_INGRESS = UncoordinatedIngress()
 
 
 class MaintenanceBarrier(MaintenanceIngress):

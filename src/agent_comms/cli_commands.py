@@ -62,7 +62,7 @@ from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersio
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
-from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField
+from .pi_vocabulary import ServiceTier, ThinkingLevelField, ThinkingLevelValue
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
@@ -825,7 +825,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
-        level = FieldCodec.decode(ThinkingLevelField, self.thinking)
+        level = ThinkingLevelValue.decode(self.thinking)
         candidate = thread.with_model_configuration(
             model=self.model,
             thinking_level=level,
@@ -841,7 +841,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         return {
             "configured": updated.name,
             "model": updated.model,
-            "thinking_level": FieldCodec.encode(updated.thinking_level),
+            "thinking_level": ThinkingLevelValue.encode(updated.thinking_level),
             "service_tier": updated.service_tier.value,
         }
 

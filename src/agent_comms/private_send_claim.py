@@ -33,7 +33,7 @@ from .pi_vocabulary import ThinkingLevel
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
-from .tracked_turn import NativeObserver, NoObserver, TrackedTurnSession
+from .tracked_turn import NO_OBSERVER, NativeObserver, TrackedTurnSession
 from .native_tool_call import NativeToolMode, NoNativeTools
 from .turn_context import RenderedInput
 
@@ -140,7 +140,7 @@ class PrivateSendClaim(PromptBoundary):
         *,
         model: SelectedModel,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
-        observe_event: NativeObserver = NoObserver(),
+        observe_event: NativeObserver = NO_OBSERVER,
         following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
@@ -257,7 +257,7 @@ class PrivateSendClaim(PromptBoundary):
             # records. No payload byte is
             # eligible until all of that retirement has returned successfully.
 
-    async def send_prompt(self, turn) -> None:
+    async def send_prompt(self, turn: TrackedTurnSession) -> None:
         with turn.startup.measurements.operation("prompt_writer_join"):
             await send_fenced_prompt(
                 turn.native.proc.stdin, turn.native.reader.encode(turn.command),
@@ -265,7 +265,7 @@ class PrivateSendClaim(PromptBoundary):
             )
 
     @contextmanager
-    def prompt_boundary(self, turn):
+    def prompt_boundary(self, turn: TrackedTurnSession) -> Iterator[None]:
         with self(turn.native.attestation.identity):
             turn.grant_prompt()
             yield

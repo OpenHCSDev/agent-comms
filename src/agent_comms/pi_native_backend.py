@@ -240,6 +240,7 @@ class PiNativeBackend(
             self.agent_bin,
             self.arguments(thread),
             worktree=thread.worktree,
+            root=self.comms.root,
             environment=environment,
             session_file=thread.runtime.read_key,
             observe=partial(self.observe, thread),

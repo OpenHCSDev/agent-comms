@@ -8,7 +8,7 @@ from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
 from typing import TYPE_CHECKING, ClassVar, Type
 
-from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
+from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelValue
 from .cli_commands import (
     ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
     PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
@@ -274,7 +274,7 @@ class CommsModelTool(NativeOwnerCommand, ToolRequest):
                 f"{thread_name} is running; change its settings through its own session"
             )
         model = self.model.strip()
-        thinking_level = FieldCodec.decode(ThinkingLevelField, self.thinking_level.strip() or None)
+        thinking_level = ThinkingLevelValue.decode(self.thinking_level.strip() or None)
         thread = comms.threads.set_thread_configuration(
             original,
             model=model or None,

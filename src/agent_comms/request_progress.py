@@ -54,3 +54,6 @@ RequestObserver = Callable[[RequestProgress, ProcessIdentity], None]
 class NoRequestObserver:
     def __call__(self, progress: RequestProgress, process: ProcessIdentity) -> None:
         pass
+
+
+NO_REQUEST_OBSERVER = NoRequestObserver()

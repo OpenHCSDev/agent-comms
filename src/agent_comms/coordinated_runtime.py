@@ -40,11 +40,11 @@ class NativeExecution(ABC):
     pi_session: PersistentPiSession = field(default_factory=PersistentPiSession, compare=False)
 
     @abstractmethod
-    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch: ...
+    def tracked_launch(self, package: Path, **options: object) -> NativePiRpcLaunch: ...
 
 
 class IndependentExecution(NativeExecution):
-    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
+    def tracked_launch(self, package: Path, **options: object) -> NativePiRpcLaunch:
         return NativePiRpcLaunch.tracked(package, **options)
 
 

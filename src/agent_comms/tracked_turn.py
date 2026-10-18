@@ -20,9 +20,9 @@ from . import pi_events as pi
 from .agent_events import AgentEvent, InputRefused
 from .following_inputs import FollowingInputs
 from .backend import TurnSession
-from .turn_watchdog import ModelWait, TurnWait
+from .turn_watchdog import MODEL_WAIT, TurnWait
 from .errors import RelationViolationError
-from .maintenance_barrier import MaintenanceIngress, UncoordinatedIngress
+from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_pi import (
@@ -33,12 +33,11 @@ from .native_pi import (
     NativeTurnResult,
     _verify_context,
 )
-from .native_prompt_send import PromptBoundary, PromptSendFailure, UnguardedPrompt
+from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_entries import NativeEntry
 from .native_startup import NativeStartup
-from .child_process import ProcessIdentity
 from .coordinator import Coordination
-from .request_progress import NoRequestObserver, RequestObserver
+from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied, ToolTransport
 from .pi_payloads import TextDelta
 from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
@@ -62,6 +61,7 @@ class NoObserver:
         pass
 
 
+NO_OBSERVER = NoObserver()
 T = TypeVar("T")
 
 
@@ -248,13 +248,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         model: SelectedModel,
         thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         environment: Mapping[str, str] = MappingProxyType({}),
-        model_wait: TurnWait = ModelWait(),
-        prompt_send_boundary: PromptBoundary = UnguardedPrompt(),
-        ingress: MaintenanceIngress = UncoordinatedIngress(),
+        model_wait: TurnWait = MODEL_WAIT,
+        prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,
+        ingress: MaintenanceIngress = UNCOORDINATED_INGRESS,
         startup: NativeStartup,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
-        observe_event: NativeObserver = NoObserver(),
-        request_observer: RequestObserver = NoRequestObserver(),
+        observe_event: NativeObserver = NO_OBSERVER,
+        request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         execution: NativeExecution,
         following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:

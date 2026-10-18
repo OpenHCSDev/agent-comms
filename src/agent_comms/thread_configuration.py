@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
+from .pi_vocabulary import ThinkingLevelValue
 import os
 from pathlib import Path
 
@@ -30,7 +30,7 @@ class ThreadConfiguration:
             os.getpid(),
             thread.worktree,
             self.threads.resolve_thread_model(thread.name),
-            FieldCodec.encode(thread.thinking_level),
+            ThinkingLevelValue.encode(thread.thinking_level),
             thread.display_title,
             info.context_reading(),
         )

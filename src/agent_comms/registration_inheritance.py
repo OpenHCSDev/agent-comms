@@ -1,40 +1,39 @@
 """Declaration-owned inheritance of omitted registration metadata."""
 
 from abc import ABC, abstractmethod
-from typing import TypeVar
 
-T = TypeVar("T")
+from .pi_vocabulary import ThinkingLevel
 
 
-class RegistrationInheritance(ABC):
+class RegistrationInheritance[T](ABC):
     @classmethod
     def choose(cls, incoming: T, previous: T) -> T:
         return previous if cls.inherits(incoming) else incoming
 
     @classmethod
     @abstractmethod
-    def inherits(cls, incoming) -> bool: ...
+    def inherits(cls, incoming: T) -> bool: ...
 
 
-class InheritMissing(RegistrationInheritance):
+class InheritMissing[T](RegistrationInheritance[T]):
     @classmethod
-    def inherits(cls, incoming) -> bool:
+    def inherits(cls, incoming: T) -> bool:
         return incoming is None
 
 
-class InheritEmpty(RegistrationInheritance):
+class InheritEmpty[T](RegistrationInheritance[T]):
     @classmethod
-    def inherits(cls, incoming) -> bool:
+    def inherits(cls, incoming: T) -> bool:
         return not incoming
 
 
-class InheritPrevious(RegistrationInheritance):
+class InheritPrevious[T](RegistrationInheritance[T]):
     @classmethod
-    def inherits(cls, incoming) -> bool:
+    def inherits(cls, incoming: T) -> bool:
         return True
 
 
-class InheritThinkingLevel(RegistrationInheritance):
+class InheritThinkingLevel(RegistrationInheritance[type[ThinkingLevel]]):
     @classmethod
-    def choose(cls, incoming, previous):
+    def choose(cls, incoming: type[ThinkingLevel], previous: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return incoming.applied(previous)
