@@ -503,9 +503,8 @@ class BusPresentation:
         The index reads the captured complete-line cut; read and write errors propagate.
         """
         semantics = DisplayMetricScope(selection.scopes, selection.viewer_names, selection.seen)
-        metrics = self.display_index(selection.require_viewer()).snapshot(source, semantics).metrics
-        return ({name: ChannelActivity(*clocks) for name, clocks in metrics[0].items()},
-                dict(metrics[1]))
+        snapshot = self.display_index(selection.require_viewer()).snapshot(source, semantics)
+        return snapshot.activity, snapshot.counts
 
 
 

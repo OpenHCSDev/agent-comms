@@ -151,7 +151,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
     # Prepare both actual index owners before taking a cold observer's cut.
     wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
     captured = wired if same_owner else wire(wired.root)
-    with captured.views.presentation.snapshot(viewer=viewer) as (basis, source):
+    with captured.views.presentation.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         appended = wired.messaging.send_message("fixer", "#base", "later activity")
         # B advances both index owners; A keeps the prefix read with its source.
         wired.views.viewer_snapshot("/isolated-checkpoint-viewer")
@@ -164,7 +164,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
 
         monkeypatch.setattr(Message, "from_wire", measured)
         activity, unread = captured.views.presentation.display_view_metrics(source, basis)
-        clocks = captured.bus.activity_clocks(source)
+        clocks = captured.bus.activity_index.snapshot(source)
         assert clocks.sent["PR111"] == first.timestamp
         assert clocks.sent.get("fixer", 0) < appended.timestamp
         assert activity["#base"].last_message == first.timestamp
@@ -180,7 +180,7 @@ def test_open_view_cut_keeps_its_append_checkpoints(wired, monkeypatch, same_own
 def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
     first = wired.messaging.send_message("PR111", "#base", "first exact-cut row")
     viewer = wired.messaging.user_identity("/same-cut-viewer").name
-    with wired.views.presentation.snapshot(viewer=viewer) as (basis, source):
+    with wired.views.presentation.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         parsed = []
         original = Message.from_wire
 
@@ -190,11 +190,11 @@ def test_computed_checkpoint_stays_with_the_same_opened_cut(wired, monkeypatch):
 
         monkeypatch.setattr(Message, "from_wire", measured)
         first_metrics = wired.views.presentation.display_view_metrics(source, basis)
-        first_clocks = wired.bus.activity_clocks(source)
+        first_clocks = wired.bus.activity_index.snapshot(source)
         assert first.seq in parsed
         parsed.clear()
         assert wired.views.presentation.display_view_metrics(source, basis) == first_metrics
-        assert wired.bus.activity_clocks(source) == first_clocks
+        assert wired.bus.activity_index.snapshot(source) == first_clocks
         assert parsed == []
 
 
@@ -284,7 +284,7 @@ def test_mounted_activity_rebuilds_damaged_checkpoint_and_refuses_bus_replacemen
     wired.messaging.send("fixer", "#base", "second")
     assert set(wired.views.viewer_snapshot(str(wired.root)).last_sent) == {"PR111", "fixer"}
 
-    checkpoint = wired.root / "bus_activity_latest.json"
+    checkpoint = wired.bus.activity_index.path
     checkpoint.write_text("{damaged")
     assert set(wire(wired.root).views.viewer_snapshot(str(wired.root)).last_sent) == {"PR111", "fixer"}
 
