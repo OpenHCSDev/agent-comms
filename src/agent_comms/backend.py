@@ -284,7 +284,7 @@ class TurnSession:
             if matched:
                 self.started_during_abort.append(identity)
 
-    async def admit_user_message(self, message, event):
+    async def accept_user_message(self, message, event):
         """Own the original/follow-up input effect across all decoded user messages."""
         if self.prompt_state.awaiting_start and self.matches_original_input(message):
             if not self.notify_input_started(None, self.original_input_id, self.task):

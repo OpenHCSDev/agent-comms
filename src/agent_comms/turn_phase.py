@@ -156,7 +156,7 @@ class CancellingPhase(LabeledActivity, TurnPhase):
         return self
 
 class ShutdownPhase(LabeledActivity, TurnPhase):
-    """Native shutdown cannot admit follow-ups or resume model activity."""
+    """Native shutdown cannot allow follow-ups or resume model activity."""
 
     accepts_followup = False
     can_cancel = False

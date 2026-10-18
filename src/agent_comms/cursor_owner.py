@@ -115,7 +115,7 @@ class CursorOwner(RegistryOwner):
         ):
             raise IdentityConflict("current cursor proof differs from journal")
 
-    def admits(
+    def allows(
         self,
         db: sqlite3.Connection,
         proof: HistoricalNativeInput | None,

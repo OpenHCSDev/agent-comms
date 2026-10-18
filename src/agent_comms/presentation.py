@@ -36,7 +36,7 @@ from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, Nam
 from .read_ledger import ReadLedger
 from .runtime_info import RuntimeInfo
 from .store_files import _store_lock
-from .wire_log import OpenedWireSnapshot, WireLog
+from .wire_log import WireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
 from .thread_presentation import (
@@ -433,8 +433,8 @@ class BusPresentation:
         return index
 
     @contextmanager
-    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
-        """Admit the display index before borrowing the bus-owned source cut."""
+    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, WireSnapshot]]:
+        """Check the display index before borrowing the bus-owned source cut."""
         self.display_index(viewer.name)
         with self.bus.snapshot(viewer) as selected:
             yield selected
@@ -493,7 +493,7 @@ class BusPresentation:
 
     def display_view_metrics(
         self,
-        source: OpenedWireSnapshot,
+        source: WireSnapshot,
         selection: DisplaySelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
@@ -774,7 +774,7 @@ class WireRevision:
         if self.through_seq > earlier.through_seq:
             snapshot = comms.registry.snapshot()
             with comms.bus.log._opened_wire_snapshot() as source:
-                if (source.revision,) != self.bus_log:
+                if source.changed_since(self.bus_log[0]):
                     raise StaleRevision("Wire source changed before route attribution")
                 with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
                     actors = routes.participants_between(earlier.through_seq, self.through_seq)

@@ -359,7 +359,7 @@ async def test_selected_handoff_keeps_images_controller_and_future_input_receipt
         request = object()
         assert await kwargs["ui_request"](request) is request
         assert kwargs["images"][0].data == "eA=="
-        original_key = agent.inputs.original_sources["beta"].notice_keys[0]
+        original_key = agent.inputs.first_sources["beta"].notice_keys[0]
         first_id = original_key.removeprefix("acp:")
         with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
             assert isinstance(allowed, GrantedSend)

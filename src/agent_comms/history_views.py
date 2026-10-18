@@ -156,7 +156,7 @@ class HistoryViews:
         )
 
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
-        """Attach preserved history without admitting any historical execution."""
+        """Attach preserved history without allowing any historical execution."""
         source = self.bus.history.attach(Path(source_root), source_read=source_read)
         catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
