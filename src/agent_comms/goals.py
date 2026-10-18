@@ -326,12 +326,25 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def defers_following_to(self, current: GoalDeclaration) -> bool:
         return current.accepts_following_handoff()
 
-    def detail_contents(self) -> tuple[str, str]:
-        return "", ""
-
     @property
     def snapshot(self) -> GoalDeclaration:
         return self
+
+    @property
+    @abstractmethod
+    def shows_document(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def shows_progress(self) -> bool: ...
+
+    @property
+    @abstractmethod
+    def objective(self) -> str: ...
+
+    @property
+    @abstractmethod
+    def progress(self) -> str: ...
 
     def unavailable_heading(self) -> str:
         return "Goal state unavailable"
@@ -429,6 +442,22 @@ class NoGoal(NullMember, GoalDeclaration):
     def visible(self) -> bool:
         return False
 
+    @property
+    def shows_document(self) -> bool:
+        return False
+
+    @property
+    def shows_progress(self) -> bool:
+        return False
+
+    @property
+    def objective(self) -> str:
+        return ""
+
+    @property
+    def progress(self) -> str:
+        return ""
+
     def standby(self, execution: ThreadGoalExecution) -> bool:
         return False
 
@@ -469,8 +498,23 @@ class Goal(RecordMember, GoalDeclaration):
     def defers_following_to(self, current: GoalDeclaration) -> bool:
         return not self.state.active and super().defers_following_to(current)
 
-    def detail_contents(self) -> tuple[str, str]:
-        return self.text, self.progress
+    @property
+    def shows_document(self) -> bool:
+        return True
+
+    @property
+    def shows_progress(self) -> bool:
+        return self.progress != Goal.progress
+
+    @property
+    def objective(self) -> str:
+        return self.text
+
+    def details_heading(self, execution: ThreadGoalExecution) -> str:
+        heading = self.heading(execution)
+        if self.standby(execution):
+            return f"{heading} · {execution.state.view.standby_detail(execution)}"
+        return heading
 
     @property
     def can_control(self) -> bool:

@@ -28,8 +28,7 @@ class GoalDisplay(ABC):
     def heading(self, execution: ThreadGoalExecution) -> str: ...
 
     def details_heading(self, execution: ThreadGoalExecution) -> str:
-        heading = self.heading(execution)
-        return execution.details_heading(heading) if self.standby(execution) else heading
+        return self.heading(execution)
 
     @abstractmethod
     def standby(self, execution: ThreadGoalExecution) -> bool: ...
