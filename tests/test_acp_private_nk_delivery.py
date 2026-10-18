@@ -4,8 +4,9 @@ Only model responses are faked; this does not prove provider delivery or
 activate private processing for existing public sessions.
 """
 
-from conftest import responder
 from __future__ import annotations
+
+from conftest import responder
 from agent_comms.tool_caller import NoThreadCaller
 
 import asyncio

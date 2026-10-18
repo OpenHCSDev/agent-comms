@@ -1,7 +1,8 @@
 """Default-OFF public ACP operator preplan; selected file bytes are not model tools."""
 
-from conftest import responder
 from __future__ import annotations
+
+from conftest import responder
 
 import json
 import os

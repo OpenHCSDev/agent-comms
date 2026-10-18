@@ -62,7 +62,7 @@ from agent_comms.private_sidecar import native_request_digest
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.context_segments.optional_awareness import OmittedAwareness
-from agent_comms.publisher import Publisher
+from agent_comms.publisher import ResponseWrites
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -1258,7 +1258,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, _calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    append = Publisher._publish_keyed_response_unlocked
+    append = ResponseWrites._publish_keyed_response_unlocked
     started, stopped = threading.Event(), threading.Event()
     workers: list[threading.Thread] = []
 
@@ -1275,7 +1275,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
         return append(self, intent, conversation=conversation, registry_snapshot=registry_snapshot)
 
-    monkeypatch.setattr(Publisher, "_publish_keyed_response_unlocked", blocking_append)
+    monkeypatch.setattr(ResponseWrites, "_publish_keyed_response_unlocked", blocking_append)
     try:
         with pytest.raises(StaleFence, match="stopped or changed"):
             await SelectedExecution(
