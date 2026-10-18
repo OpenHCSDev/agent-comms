@@ -103,6 +103,9 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
         host = await backend.open(thread, environment=dict(os.environ))
         try:
             interrupted = await host.request(Inspect())
+            # The observer reads from an active event loop; this must not nest a Runner.
+            with location.history_source(tmp_path, thread.incarnation).reading() as reader:
+                assert reader.cut().offset >= 260
             def read():
                 source = location.history_source(tmp_path, thread.incarnation)
                 with source.reading() as reader:
@@ -125,4 +128,5 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
             assert await host.request(Inspect()) == interrupted
         finally:
             await host.shutdown()
+            location.transcript.worker.close()
     asyncio.run(journey())

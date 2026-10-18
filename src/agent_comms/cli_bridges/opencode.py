@@ -77,9 +77,11 @@ class Attach(Watch):
     def start(self, bridge: OpenCodeBridge, tasks: asyncio.TaskGroup) -> None:
         from agent_comms.comms import wire
         from agent_comms.cli_commands import RegisterCliCommand
+        from agent_comms.thread_execution import ExternalThreadExecution
 
         RegisterCliCommand(name=bridge.binding.bus, worktree=str(bridge.options.directory),
-                           process=ProcessIdentity.capture(self.pid)).apply(wire(bridge.binding.root))
+                           process=ProcessIdentity.capture(self.pid),
+                           execution=ExternalThreadExecution).apply(wire(bridge.binding.root))
         super().start(bridge, tasks)
 
 

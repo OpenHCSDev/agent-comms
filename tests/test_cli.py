@@ -46,7 +46,7 @@ class TestCliSuccess:
         assert code == 0
         assert "service_tier" not in out
         assert "comms_archive" in {tool["name"] for tool in out["tools"]}
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--execution", "native")
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path))
         comms = Comms(tmp_path)
         for tier in ServiceTier:
             comms.threads.set_thread_configuration(comms.registry.require("a"), service_tier=tier)
@@ -65,15 +65,19 @@ class TestCliSuccess:
         assert code == 0 and out["threads"][0]["name"] == "a"
 
     def test_register_and_threads(self, cli, tmp_path):
-        code, out = cli(tmp_path, "register", "--name", "a", "--worktree", "/wt", "--tags", "x,y")
+        code, out = cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--tags", "x,y")
         assert code == 0 and out == {"registered": "a"}
         code, out = cli(tmp_path, "threads")
         assert code == 0 and out["threads"][0]["name"] == "a"
         assert out["threads"][0]["tags"] == ["x", "y"]
+        from agent_comms.comms import Comms
+        from agent_comms.threads import Thread
+
+        assert Comms(tmp_path).registry.require("a").execution is Thread.default_execution()
 
     def test_send_and_inbox_and_ack(self, cli, tmp_path):
-        cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        cli(tmp_path, "register", "--name", "b", "--worktree", "/wt")
+        cli(tmp_path, "register", "--name", "a", "--worktree", str(tmp_path), "--execution", "external")
+        cli(tmp_path, "register", "--name", "b", "--worktree", str(tmp_path), "--execution", "external")
         code, out = cli(
             tmp_path, "send", "--from", "a", "--to", "b", "--body", "hi", "--type", "alert"
         )

@@ -99,6 +99,7 @@ class Thread(ThreadProvenance):
     role: type[ThreadRole] = AgentThreadRole
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
+
     backend: type[AgentBackend] = field(
         default_factory=AgentBackend.for_new_threads, kw_only=True,
         metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
@@ -107,6 +108,10 @@ class Thread(ThreadProvenance):
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
+
+    @classmethod
+    def default_execution(cls) -> type[ThreadExecution]:
+        return next(declared.default for declared in fields(cls) if declared.name == "execution")
 
     def inherited_history(self, registry, visited):
         if self.name in visited:

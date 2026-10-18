@@ -40,7 +40,7 @@ The Core version must not repeat these:
    unit's open orders and transfers or releases each with the same stated reason; nobody does
    it by hand order by order.
 4. **Owners include agents outside Toad.** A Claude Code agent (claude-p60, claude-ui, ...)
-   takes orders by registering a thread (`agent-comms register --name NAME`), which has the
+   takes orders by registering a thread (`agent-comms register --name NAME --execution external`), which has the
    ordinary agent role, so it can hold a Goal. No second owner kind is added.
 5. **One order may carry several problems.** Orders batch related problems for one owner;
    `ProblemGoalOrder` groups every Todo assignment of a unit under its one Goal.

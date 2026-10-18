@@ -76,7 +76,6 @@ from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .shared_ledger import LedgerDocument
 from .thread_execution import (
     ArchiveOwnerControl,
-    ExternalThreadExecution,
     NativeOwnerCommand,
     OwnerLifecycleControl,
     StartOwnerControl,
@@ -1410,8 +1409,9 @@ class RegisterCliCommand(CliCommand):
     task: str | None = option("--task", default=None)
     process: ProcessState = option("--pid", default_factory=NoProcess,
         parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
-    execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
-                                            parser_default=FieldCodec.encode(ExternalThreadExecution))
+    execution: type[ThreadExecution] = option(
+        "--execution", default_factory=Thread.default_execution, editor=ChoiceTargetField,
+    )
 
     def apply(self, ctx: Comms) -> CliResult:
 
