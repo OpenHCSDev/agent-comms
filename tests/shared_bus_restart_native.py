@@ -597,7 +597,7 @@ async def retained_owner():
                          'result':'original_completed'}), flush=True)
         return value
     NativeSourceCursor._advance_proven = observe_advance
-    launch = PrivateNkLaunch.from_environment(Path(os.environ['AGENT_COMMS_ROOT']), os.environ)
+    launch = PrivateNkLaunch.derive(Path(os.environ['AGENT_COMMS_ROOT']))
     launch.validate()
     service = Comms(launch.validated_root)
     name = os.environ['AGENT_COMMS_THREAD']
