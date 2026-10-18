@@ -346,10 +346,10 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
         snapshot = await Coordination.run_worker(partial(
             ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
         ))
-        return GoalSnapshotReply(snapshot.goal, snapshot.execution, UpdateMetadata.of(TurnChangedUpdate(
-            await Coordination.run_worker(partial(
-                ctx.server.agent.turns.turn_state, ctx.session_id,
-            )))))
+        turn = await Coordination.run_worker(partial(
+            ctx.server.agent.turns.turn_state, ctx.session_id,
+        ))
+        return GoalSnapshotReply.from_snapshot(snapshot, UpdateMetadata.of(TurnChangedUpdate(turn)))
 
 
 @dataclass(frozen=True, kw_only=True)

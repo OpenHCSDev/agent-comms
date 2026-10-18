@@ -654,8 +654,7 @@ class CommsGoalTool(ThreadToolRequest):
             expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
-        snapshot = comms.goals.goal_snapshot(name)
-        return GoalProgress(snapshot.goal, snapshot.execution)
+        return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
 
 
 @dataclass(frozen=True, kw_only=True)

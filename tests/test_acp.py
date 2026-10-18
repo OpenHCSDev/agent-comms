@@ -1879,7 +1879,7 @@ class TestLiveConfigSync:
             info = [update for update in sent if isinstance(update, SessionInfoUpdate)]
             assert len(info) == 1
             assert facts(info[0].field_meta, GoalChangedUpdate) == (
-                GoalChangedUpdate(snapshot.goal, snapshot.execution),
+                GoalChangedUpdate.from_snapshot(snapshot),
             )
             assert "title" not in info[0].model_fields_set
             sent.clear()
