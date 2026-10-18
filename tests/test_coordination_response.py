@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from conftest import publish_initial
+from conftest import publish_initial, responder
 import os
 import selectors
 import sqlite3
@@ -40,6 +40,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.execution_states import CompletedExecution
 from agent_comms.message_bus import MessageBus
+from agent_comms.publisher import Publisher
 from agent_comms.obligation_states import PendingResponse, PublishedResponse, PublishingResponse
 from agent_comms.owner_fence import prepare_fence_token
 from agent_comms.registration import Registration
@@ -72,7 +73,7 @@ class Fixture:
 
 
 def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ...] = ()) -> Fixture:
-    comms = Comms(tmp_path / "wire", private_initial_writes=True)
+    comms = Comms(tmp_path / "wire")
     for name in ("sender", "owner"):
         comms.registry.declare(
             comms.registry.new_thread(name, frozenset({'team'}), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -85,7 +86,7 @@ def _ready(tmp_path: Path, *, direct: bool = False, extra_targets: tuple[str, ..
     original_record = comms.bus.log.read_delivery_cohort(root_id, original.seq)
     assert len(original_record.audience.recipients) == 1
     recipient = original_record.audience.recipients[0]
-    bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+    bus = responder(comms.root, comms.registry)
     store = Coordination(str(comms.root / "coordination.sqlite3"), clock_ms=lambda: 1_000)
     install_private_cohort_schema(store)
     install_private_response_schema(store)
@@ -269,7 +270,7 @@ def test_real_bus_sql_tx1_exact_reply_tx2_and_lost_ack_replay(tmp_path: Path, di
 def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_path: Path) -> None:
     case = _ready(tmp_path)
     try:
-        disabled = MessageBus(case.comms.root / "bus.jsonl", case.comms.registry)
+        disabled = MessageBus(case.comms.root / "bus.jsonl", case.comms.registry, Publisher)
         with pytest.raises(PublicationActivationBlocked):
             prepare_fenced_response(
                 case.store, disabled, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
@@ -282,9 +283,7 @@ def test_response_requires_explicit_writer_and_exact_same_root_coordinator(tmp_p
                 wrong_database, case.bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness
             )
         alien_registry = Registration(tmp_path / "foreign" / "registry.json")
-        alien_bus = MessageBus(
-            case.comms.root / "bus.jsonl", alien_registry, private_response_writes=True
-        )
+        alien_bus = responder(case.comms.root, alien_registry)
         with pytest.raises(IdentityConflict, match="different trusted roots"):
             prepare_fenced_response(
                 case.store, alien_bus, case.fence, "not allowed", exact_target=case.reply_target, owner_witness=case.witness

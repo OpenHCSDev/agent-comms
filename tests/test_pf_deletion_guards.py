@@ -10,7 +10,7 @@ import pytest
 from agent_comms import selected_claim, coordination_response
 from agent_comms.envelope_claim_transitions import FileClaimPath
 from agent_comms.messaging import Messaging
-from agent_comms.publisher import Publisher
+from agent_comms.publisher import ClaimWrites
 
 pytestmark = pytest.mark.refactor_guard
 
@@ -64,7 +64,7 @@ def test_claim_claim_uses_nominal_paths_without_raw_coercion():
         .annotation
         == "FileClaimPath"
     )
-    for operation in (Messaging.send, Messaging.send_message, Publisher.publish_claim_envelope):
+    for operation in (Messaging.send, Messaging.send_message, ClaimWrites.publish_claim_envelope):
         assert (
             inspect.signature(operation).parameters["claims"].annotation
             == "Sequence[FileClaimPath]"

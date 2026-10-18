@@ -67,7 +67,7 @@ def tmp_path(tmp_path_factory):
 def _root(tmp_path: Path):
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='math answers', model='openai-codex/gpt-6-sol'),

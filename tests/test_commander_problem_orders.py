@@ -1,5 +1,6 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
+import os
 import subprocess
 
 import pytest
@@ -15,7 +16,8 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
-from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt,
+from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+    RecordedCommitDelivery,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     RecordHuntTodo, StrikeTodo, Todo)
@@ -160,11 +162,60 @@ def test_commit_delivery_records_the_actual_clean_commit_time(commander):
     git('add', 'source.txt')
     git('commit', '-qm', 'Delivered fixture')
     commit = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', commit)
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit, delivered_commit=commit)).apply(comms, caller)
     delivery = comms.goals.todos.get('P1').order.delivery
-    assert delivery.commit == commit
+    assert delivery.commit == delivery.delivered == commit
     assert delivery.at == RecordedEventTime(float(git('show', '-s', '--format=%ct', 'HEAD')))
+
+
+def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, commander_script):
+    comms, caller = commander
+    script, _ = commander_script
+
+    def git(*args, at=None):
+        env = {**os.environ, 'GIT_AUTHOR_DATE': f'@{at} +0000', 'GIT_COMMITTER_DATE': f'@{at} +0000'} if at else None
+        return subprocess.check_output(('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t',
+                                        *args), env=env, stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'base', at=500)
+    git('checkout', '-q', '-b', 'work')
+    git('commit', '-q', '--allow-empty', '-m', 'delivered before the deadline', at=1000)
+    delivered = git('rev-parse', 'HEAD')
+    git('checkout', '-q', 'main')
+    git('merge', '-q', '--no-ff', '-m', 'merged after the deadline', 'work', at=5000)
+    merge = git('rev-parse', 'HEAD')
+    create(commander, 'P1', deadline=2000)
+    create(commander, 'P2', deadline=2000)
+    with pytest.raises(ValueError, match='no origin branch'):
+        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=delivered)).apply(comms, caller)
+    git('update-ref', 'refs/remotes/origin/work', delivered)
+    script.done('P1', merge, delivered)
+    met = comms.goals.todos.get('P1')
+    assert (met.order.delivery.delivered, met.order.delivery.at) == (delivered, RecordedEventTime(1000))
+    assert script.struck(met, 'worker') == 0
+
+    git('checkout', '-q', '-b', 'side', delivered)
+    git('commit', '-q', '--allow-empty', '-m', 'never merged', at=1500)
+    side = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/side', side)
+    git('checkout', '-q', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'delivered after the deadline', at=3000)
+    late = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', late)
+    with pytest.raises(ValueError, match='not in the checked commit'):
+        CommsOrderDoneTool(problem='P2', delivery=CommitDelivery(commit=late, delivered_commit=side)).apply(comms, caller)
+    script.done('P2', late, late)
+    struck = comms.goals.todos.get('P2')
+    assert script.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
+
+
+def test_a_done_record_from_before_the_split_reads_its_one_commit_as_both():
+    old = {'kind': 'commit', 'commit': 'd012d23b4', 'at': FieldCodec.encode(RecordedEventTime(1000))}
+    recorded = FieldCodec.decode(OrderDelivery, old)
+    assert type(recorded) is RecordedCommitDelivery and recorded.delivered == recorded.commit == 'd012d23b4'
+    assert FieldCodec.encode(recorded) == old
 
 
 def test_delivery_time_has_its_own_named_requirement():
@@ -201,7 +252,8 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
 
     (repo / 'count.txt').write_text('1\n')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'fix')
-    script.done('P1', git('rev-parse', 'HEAD'))
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    script.done('P1', git('rev-parse', 'HEAD'), git('rev-parse', 'HEAD'))
     assert not comms.goals.todos.get('P1').pending
 
     artifact = repo.parent / 'seen.png'

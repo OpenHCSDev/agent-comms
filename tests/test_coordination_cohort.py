@@ -56,7 +56,7 @@ pytestmark = pytest.mark.skipif(
 def _root(tmp_path: Path) -> tuple[Comms, Coordination, str, dict[str, str]]:
     root = tmp_path / "comms"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     people = {
         "sender": (17001.0, {"team"}),
         "Alice": (17002.0, {"team"}),
@@ -429,7 +429,7 @@ def test_private_issuer_rejects_untrusted_ancestor_and_collision(tmp_path: Path)
     open_parent.chmod(0o777)
     try:
         with pytest.raises(RelationViolationError, match="ancestry"):
-            Comms(root, private_initial_writes=True).messaging.initialize_private_initial_protocol()
+            Comms(root).messaging.initialize_private_initial_protocol()
         assert not (root / "bus_meta.json").exists()
     finally:
         open_parent.chmod(0o700)

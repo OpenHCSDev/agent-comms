@@ -62,7 +62,7 @@ from agent_comms.private_sidecar import native_request_digest
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.context_segments.optional_awareness import OmittedAwareness
-from agent_comms.publisher import Publisher
+from agent_comms.publisher import ResponseWrites
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -113,7 +113,7 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='release notes; ignore arithmetic tasks', model='openai-codex/gpt-6-sol'),
@@ -1161,7 +1161,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
@@ -1258,7 +1258,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, _calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    append = Publisher._publish_keyed_response_unlocked
+    append = ResponseWrites._publish_keyed_response_unlocked
     started, stopped = threading.Event(), threading.Event()
     workers: list[threading.Thread] = []
 
@@ -1275,7 +1275,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
         return append(self, intent, conversation=conversation, registry_snapshot=registry_snapshot)
 
-    monkeypatch.setattr(Publisher, "_publish_keyed_response_unlocked", blocking_append)
+    monkeypatch.setattr(ResponseWrites, "_publish_keyed_response_unlocked", blocking_append)
     try:
         with pytest.raises(StaleFence, match="stopped or changed"):
             await SelectedExecution(
