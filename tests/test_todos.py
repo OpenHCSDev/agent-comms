@@ -11,6 +11,9 @@ from pathlib import Path
 
 import pytest
 
+from cutover.carry_todo_open_indexes import TodoOpenIndexes
+from agent_comms.coordination_database import CoordinationStore
+
 from agent_comms.change_report import FileLine
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
@@ -81,8 +84,6 @@ def test_create_is_idempotent_and_goal_reference_is_historical(tmp_path: Path) -
 
 
 def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
-    from agent_comms.coordination_database import CoordinationStore
-    from cutover.carry_todo_open_indexes import TodoOpenIndexes
 
     store = TodoStore(tmp_path)
     lead = thread("lead", tmp_path, 1.0)
@@ -122,8 +123,14 @@ def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
     assert store.holds_pending(lead.incarnation)
     assert decoded == ["P1", "P2"]
     decoded.clear()
-    assert store.held_for_commander(lead.incarnation, "lead") == (first, second)
+    assert store.held_for_commander(lead.incarnation) == (first, second)
     assert decoded == ["P1", "P2"]
+    decoded.clear()
+    assert store.held_by(lead.incarnation, "lead") == (first, second)
+    assert decoded == ["P1", "P2"]
+    decoded.clear()
+    assert store.held_by(lead.incarnation, "another-unit") == ()
+    assert decoded == []
     with store.snapshot() as db:
         states = TodoState.open_names()
         placeholders = ','.join('?' for state in states)

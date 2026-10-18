@@ -1433,15 +1433,14 @@ class TodoStore(TypedStore):
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._open("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
 
-    def held_for_commander(
-        self, commander: ThreadIncarnation, unit: str | None = None,
-    ) -> tuple[Todo, ...]:
-        where = "creator=? AND creator_created=? AND assignment IS NOT NULL"
-        parameters: tuple = (commander.name, commander.wire_birth)
-        if unit is not None:
-            where += " AND json_extract(assignment,'$.owner')=?"
-            parameters += (unit,)
-        return self._open(where, parameters)
+    def held_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
+        return self._open("creator=? AND creator_created=? AND assignment IS NOT NULL",
+            (commander.name, commander.wire_birth))
+
+    def held_by(self, commander: ThreadIncarnation, unit: str) -> tuple[Todo, ...]:
+        return self._open(
+            "creator=? AND creator_created=? AND json_extract(assignment,'$.owner')=?",
+            (commander.name, commander.wire_birth, unit))
 
     def history_for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
         return self._select("creator=? AND creator_created=?", (commander.name, commander.wire_birth))
