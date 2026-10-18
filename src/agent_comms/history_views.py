@@ -16,7 +16,8 @@ from .registration import Registration
 from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
-    from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
+    from .historical_views import HistoricalThread, HistoryCursor, HistorySource
+    from .read_basis import HistoricalDisplay
     from .registry_document import RegistrySnapshot
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity

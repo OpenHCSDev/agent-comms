@@ -74,8 +74,6 @@ class NamedViewer(DisplayViewer):
         return type(self)(snapshot.canonical_name(self.name))
 
     def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay:
-        from .historical_views import HistoricalDisplay
-
         source = page.messages[0].source
         source.validate()
         snapshot = presentation.registry.snapshot()
@@ -151,6 +149,37 @@ class HistoricalSelection(SelectedDisplay):
     """The original viewer and attached-source revision select an archive page."""
 
 
+@dataclass(frozen=True, slots=True)
+class HistoricalDisplay:
+    source: HistorySource
+    displayed: DisplayBasis
+
+    def selection(self, history_revision: FileRevision | None) -> HistoricalSelection:
+        return HistoricalSelection(
+            viewer=self.displayed.viewer_identity, history_revision=history_revision,
+        )
+
+    @property
+    def viewer(self) -> str:
+        return self.displayed.viewer
+
+    @property
+    def viewer_created_at(self) -> float:
+        return self.displayed.viewer_created_at
+
+    def select(self, sequences) -> HistoricalDisplay:
+        return HistoricalDisplay(self.source, self.displayed.select(sequences))
+
+    def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
+        """Acknowledge exactly painted historical membership in its own ledger."""
+        viewer = registry.require(self.viewer)
+        if viewer.incarnation != self.displayed.viewer_identity or viewer.role.executable:
+            raise ValueError("Historical viewer changed; refresh history")
+        if self.source not in archive.sources():
+            raise ValueError("Historical source detached; refresh history")
+        self.source.acknowledge(self.displayed)
+
+
 class LineOutput:
     """Flush once per event-loop pass."""
 
@@ -197,7 +226,7 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
-    from .historical_views import HistoricalDisplay
+    from .historical_views import HistoryArchive, HistorySource
     from .presentation import BusPresentation
     from .bus_page_index import BusPageRow
     from .channels import Channel
