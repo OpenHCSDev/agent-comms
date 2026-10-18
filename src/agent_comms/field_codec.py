@@ -10,7 +10,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import lru_cache
+from functools import cached_property, lru_cache
 from pathlib import Path
 from typing_extensions import TypeAliasType
 from typing import (
@@ -49,6 +49,10 @@ class FieldPlan:
     def keys(self):
         return (self.key,)
 
+    @property
+    def required_wire_keys(self):
+        return self.keys
+
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
@@ -65,9 +69,13 @@ class FieldPlan:
 
 
 class InlineFieldPlan(FieldPlan):
-    @property
+    @cached_property
     def keys(self):
         return tuple(self.value.representation.schema()["properties"])
+
+    @cached_property
+    def required_wire_keys(self):
+        return tuple(self.value.representation.schema().get("required", ()))
 
     def encoded(self, value, *, key=None):
         return value
@@ -302,7 +310,7 @@ class FieldCodec(Sealed):
     @staticmethod
     @lru_cache(maxsize=_declaration_cache_capacity)
     def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
-        """The codec's record declarations and wire keys, in wire order."""
+        """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
         declared = [
@@ -313,10 +321,6 @@ class FieldCodec(Sealed):
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")
-        if len(set(keys)) != len(keys) or (
-            issubclass(cls, DeclaredFamily) and cls.family_discriminator in keys
-        ):
-            raise TypeError("Conflicting wire field names.")
         return tuple(
             item
             for _, item in sorted(
@@ -557,12 +561,18 @@ class FieldCodec(Sealed):
             )
             for field, key in declared
         )
+        wire_keys = [key for entry in entries for key in entry.keys]
+        if len(set(wire_keys)) != len(wire_keys) or (
+            issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
+        ):
+            raise TypeError("Conflicting wire field names.")
         return cls._RecordPlan(
             fields=entries,
-            required_keys=tuple(entry.key for entry in entries if entry.required),
+            required_keys=tuple(key for entry in entries if entry.required for key in entry.required_wire_keys),
             init_required_keys=tuple(
-                entry.key for entry, (field, _) in zip(entries, declared)
+                key for entry, (field, _) in zip(entries, declared)
                 if field.default is MISSING and field.default_factory is MISSING
+                for key in entry.required_wire_keys
             ),
             reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
             accepted_keys=frozenset(key for entry in entries for key in entry.keys) | computed,
