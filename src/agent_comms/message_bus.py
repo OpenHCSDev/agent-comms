@@ -69,7 +69,7 @@ class MessageBus:
         self.history = HistoryArchive(bus_path)
         self._registry = registry
         self._channels = ChannelCatalog.at(bus_path.parent)
-        self._activity = self.log.register_append_index(BusActivityIndex(bus_path))
+        self.activity_index = self.log.register_append_index(BusActivityIndex(bus_path))
         self.publisher = Publisher(
             self.log,
             registry,
@@ -79,29 +79,13 @@ class MessageBus:
             private_claim_writes=private_claim_writes,
         )
 
-    def activity_clocks(self, source: WireSnapshot) -> ActivityClocks:
-        """Read clocks from the caller's already opened bus cut."""
-        return self._activity.snapshot(source, self._bus_activity_fields)
-
     @contextmanager
     def opened_activity(self) -> Iterator[ActivityClocks]:
         """Own a fresh bus cut for callers without an existing snapshot."""
         with self.log._opened_wire_snapshot(
             opening=CurrentSnapshotOpening(), prepared_indexes=self.log.prepare_append_indexes(),
         ) as source:
-            yield self.activity_clocks(source)
-
-    @staticmethod
-    def _bus_activity_fields(record: Mapping[str, object]):
-        from .wire_record import WireRecord
-        for message in WireRecord.public_from_wire(record).messages():
-            yield (
-                message.sender,
-                message.target,
-                message.timestamp,
-                not message.sender_role.executable,
-                message.role.counts_as_conversation(),
-            )
+            yield self.activity_index.snapshot(source)
 
     @contextmanager
     def snapshot(
