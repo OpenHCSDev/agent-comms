@@ -15,12 +15,9 @@ from pydantic import JsonValue
 from .agent_backend import (
     AgentBackend,
     CompactionOutcome,
-    InputContent,
     InputId,
     RuntimeLocation,
     Steers,
-    TurnDelivery,
-    TurnInbox,
     TurnInboxItem,
     WhenBusy,
 )
@@ -34,7 +31,6 @@ from .agent_events import (
 )
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
-from .diagnostics import record_request_progress
 from .external_transcript import ExternalCut
 from .image_inputs import ImageInput
 from .launch_runtime import RestartEnvironment
@@ -44,13 +40,13 @@ from .native_entries import StoredEntry
 from .native_pi import (
     DurableContextProof,
     NativeContextRecord,
-    NativePiUnavailable,
     NativeTurnResult,
 )
 from .native_session_files import SessionFiles
 from .native_session_reopen import NativeSessionIdentity
 from .native_tool_call import ToolTransport
 from .native_transcript import StoredRecord
+from .pi_capabilities import PiCapabilities
 from .pi_commands import (
     Abort,
     Compact,
@@ -59,11 +55,9 @@ from .pi_commands import (
     SetModel,
 )
 from .pi_events import AutoRetryEnd, DurablePiEvent, ModelRequestProgress, RetryEnd
-from .pi_capabilities import PiCapabilities
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .selected_session import SelectedSession
-from .send_outcome import GrantedSend
 from .transcript_sources import TranscriptSource
 from .turn_inputs import TurnInboxReceiver
 from .unstarted_runtime import UnstartedRuntime
@@ -347,11 +341,6 @@ class DurableProofData:
     evidence_entry_id: str
 
 
-class NoSelectedAnswer:
-    def require(self):
-        raise NativePiUnavailable('Durable selected turn ended without a final answer')
-
-
 @dataclass(frozen=True, kw_only=True)
 class DurableDone(Done):
     proof: DurableProofData
@@ -494,55 +483,19 @@ class PiDurableBackend(PiCapabilities, AgentBackend, Steers):
     def compaction_request(self, instructions):
         return CompactDurable(custom_instructions=instructions)
 
-    @classmethod
-    async def run_selected(cls, claim, execution, *, model, selected_tool_mode,
-                           observe_event, following):
-        backend = execution.pi_session
-        thread = replace(claim.owner.thread, session_file=str(claim.session.path), model=model.qualified)
-        registry = await Coordination.run_worker(claim.bus._registry.snapshot)
-        environment, _ = claim.session.launch_environment(claim.session.directory,
-            thread.native_environment(claim.bus.log.path.parent, registry, thread.worktree))
-        child = await backend.open(thread, environment=environment)
-
-        @contextmanager
-        def boundary(public_id, native_id, text):
-            if public_id is not None or native_id != claim.input_id or text != claim.prompt.text:
-                raise IdentityConflict('Durable selected write differs from its original claim')
-            yield GrantedSend()
-
-        delivery = TurnDelivery(worktree=thread.worktree, environment=environment, inbox=TurnInbox(),
-            finish_event=asyncio.Event(), send_boundary=boundary, interrupt_boundary=boundary,
-            input_started=lambda public_id, native_id, text: native_id == claim.input_id and text == claim.prompt.text,
-            request_progress=partial(record_request_progress, claim.bus.log.path.parent,
-                                     claim.owner.thread.require_turn_lease()), ui_request=None)
-        result = NoSelectedAnswer()
-        async with AsyncExitStack() as resources:
-            turn = DurableTurn(child, delivery, backend.barrier, claim.input_id,
-                               ToolTransport(), claim.session.directory)
-            turn.tool_socket = await selected_tool_mode.open_transport(turn, resources)
-            turn.tool_socket.bind_process(child.proc.pid)
-            await child.request(ConfigureTools(selected_tool_mode.tool_names, turn.tool_socket.host_bindings()))
-            identity = await child.request(GetIdentity())
-            await Coordination.run_worker(partial(claim._start_once,
-                NativeSessionIdentity(identity.session_id, str(child.location.session))))
-            async for event in backend._stream_turn(thread, InputContent(text=claim.prompt.text,
-                    contributions=claim.prompt.contributions), turn):
-                await observe_event(event)
-                result = event.selected_result(child.location.session, result)
-            turn.tool_socket.assert_complete()
-        return result.require()
-
     async def run_turn(self, thread, content, delivery):
         session = thread.runtime.select_session(self.comms.root / 'native-sessions' / thread.name, None)
         environment, _ = session.launch_environment(session.directory, delivery.environment)
         child = await self.open(thread, environment=environment)
         async with AsyncExitStack() as resources:
-            turn = DurableTurn(child, delivery, self.barrier, uuid4().hex,
+            turn = DurableTurn(child, delivery, self.barrier, delivery.request_id(),
                                ToolTransport(), child.location.session.parent)
             mode = delivery.selected_tool_mode
             turn.tool_socket = await mode.open_transport(turn, resources)
             turn.tool_socket.bind_process(child.proc.pid)
             await child.request(ConfigureTools(mode.tool_names, turn.tool_socket.host_bindings()))
+            identity = await child.request(GetIdentity())
+            await delivery.prepare_identity(NativeSessionIdentity(identity.session_id, str(child.location.session)))
             async for event in self._stream_turn(thread, content, turn):
                 yield event
             turn.tool_socket.assert_complete()

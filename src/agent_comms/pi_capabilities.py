@@ -1,4 +1,5 @@
 """Pi operations shared by RPC and Durable; each transport owns its queries."""
+
 from abc import abstractmethod
 
 from .agent_backend import Compacts, ConfiguresModel, ContextUsage, FailedCompaction, ReportsContext
@@ -25,8 +26,11 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
         from .pi_commands import GetSessionStats
 
         usage = (await self.inspect(thread, GetSessionStats())).context_usage
-        return (ContextUsage(None, None) if usage is None else
-                ContextUsage(usage.tokens, usage.context_window))
+        return (
+            ContextUsage(None, None)
+            if usage is None
+            else ContextUsage(usage.tokens, usage.context_window)
+        )
 
     async def discover_models(self, thread):
         from .pi_commands import GetAvailableModels
@@ -35,9 +39,11 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
 
     async def models(self, thread):
         data = await self.discover_models(thread)
-        return tuple(dict.fromkeys(
-            model.display_name for model in data.models if model.provider and model.id
-        ))
+        return tuple(
+            dict.fromkeys(
+                model.display_name for model in data.models if model.provider and model.id
+            )
+        )
 
     async def apply_settings(self, thread, commands):
         from .pi_commands import GetState

@@ -301,6 +301,17 @@ class TurnDelivery:
     ui_request: Callable[..., Awaitable[Any]] | None
     selected_tool_mode: NativeToolMode = field(default_factory=NoNativeTools)
 
+    def native_events(self, backend, thread, content):
+        return backend.stream_native_turn(thread, content, self)
+
+    def request_id(self):
+        from uuid import uuid4
+
+        return uuid4().hex
+
+    async def prepare_identity(self, identity):
+        pass
+
 
 class RunsTurns(ABC):
     """Runs one input to settlement and reports what happened as AgentEvents.
@@ -432,12 +443,6 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         validate_backends(dict(AgentBackend.__registry__).values())
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
-
-    @classmethod
-    @abstractmethod
-    async def run_selected(cls, claim, execution, *, model, selected_tool_mode,
-                           observe_event, following):
-        """Run selected input through this backend's transport and proof owner."""
 
     def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
         raise BackendDeclarationError(f"{type(self).__name__} does not run turns")

@@ -151,8 +151,10 @@ class PrivateSendClaim(PromptBoundary):
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer keeps the single-use send token after the input is recorded.
         """
+        from .selected_turn_delivery import SelectedTurnDelivery
+
         try:
-            result = await self.owner.thread.backend.run_selected(
+            result = await SelectedTurnDelivery.execute(
                 self, execution, model=model, selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event, following=following,
             )
