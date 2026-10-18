@@ -54,10 +54,16 @@ class MessageInfo(TaggedWire, ABC):
     @abstractmethod
     def present(self, part: Part) -> tuple[TranscriptUpdate, ...]: ...
 
+    def finished(self, part: Part) -> bool:
+        return part.finished(self)
+
 
 class UserMessage(MessageInfo):
     wire_tag = 'user'
     role: Literal['user']
+
+    def finished(self, part: Part) -> bool:
+        return True  # A prompt is complete once saved; it has no completion time.
 
     def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
         # Wire history owns incoming bus messages; the live view never echoes them as CLI output.
@@ -296,4 +302,6 @@ class SavedMessage(WireModel):
     parts: list[Part.declared_union()]
 
     def publications(self) -> tuple[TranscriptUpdate, ...]:
-        return tuple(update for part in self.parts for update in self.info.present(part))
+        """Its finished parts. An unfinished part is published from its own deltas, from its
+        start, never from a snapshot that overlaps them; to history it adds nothing."""
+        return tuple(update for part in self.parts if self.info.finished(part) for update in self.info.present(part))

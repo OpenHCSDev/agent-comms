@@ -9,11 +9,10 @@ from typing import AsyncIterator, BinaryIO, Self
 
 from agent_comms.cli_protocol import WireModel
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.harness_install import ClaudeCodeHarness
 from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
-from .history import JsonLinesFile, OnlineHistory
+from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
 from .shared import (
     Binding, LineMonitorBridge, Options, SessionFacts, TranscriptUpdate,
     run_bridge,
@@ -24,21 +23,11 @@ class SubagentMeta(WireModel):
     description: str
 
 
-class ClaudeTranscript(JsonLinesFile):
-    """Claude Code writes one transcript file per session (`<id>.jsonl`) and per subagent
-    (`<id>/subagents/agent-<id>.jsonl`), under ~/.claude/projects."""
+class ClaudeJsonLines(JsonLinesFile):
+    """How a Claude Code transcript file decodes, whether stored or still being written."""
 
-    harness = ClaudeCodeHarness
-    suffixes = frozenset({'.jsonl'})
-
-    def decode_line(self, raw: bytes) -> ClaudeRecord:
-        return CLAUDE_RECORD.validate_json(raw)
-
-    def begins_history(self, record: ClaudeRecord) -> bool:
-        return record.begins_history()
-
-    def start_state(self) -> ClaudeSession:
-        return ClaudeSession()
+    records = CLAUDE_RECORD
+    state = ClaudeSession
 
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
                        raw: bytes) -> Iterator[TranscriptUpdate]:
@@ -47,17 +36,22 @@ class ClaudeTranscript(JsonLinesFile):
             yield from update.during(state.phase)
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
-        """A subagent's task description is beside its transcript, not in it."""
+        """The file is named by its session; a subagent's task description is beside it, not in it."""
         meta = self.source.with_suffix('.meta.json')
         title = SubagentMeta.model_validate_json(meta.read_bytes()).description if meta.is_file() else ''
         yield SessionFacts(source_id=self.source.stem, title=title)
 
-    def __init__(self, source: Path) -> None:
-        self.source = source
 
-    @classmethod
-    def opened(cls, source: Path, session_id: str | None) -> Self:
-        return cls(source)
+class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
+    """Claude Code writes one transcript file per session (`<id>.jsonl`) and per subagent
+    (`<id>/subagents/agent-<id>.jsonl`), under ~/.claude/projects."""
+
+    suffixes = frozenset({'.jsonl'})
+
+    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
+        if self.session_id not in (None, self.source.stem):
+            raise ValueError('The transcript belongs to a different Claude session.')
+        return super().facts(stream, boundary)
 
     @staticmethod
     def subagents(session: Path) -> tuple[Path, ...]:
@@ -66,7 +60,7 @@ class ClaudeTranscript(JsonLinesFile):
                             key=lambda path: path.stat().st_mtime))
 
 
-class RunningClaude(ClaudeTranscript, OnlineHistory):
+class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
     """A session Claude Code is writing, found by its session id. Claude has no server to ask,
     so the running session is read from the same file as a stored one."""
 
@@ -88,6 +82,7 @@ class RunningClaude(ClaudeTranscript, OnlineHistory):
 class ClaudeBridge(RunningClaude, LineMonitorBridge):
     """Follow this Claude session's file without submitting an input."""
 
+    declared_name = None  # Follows a session; not one more way to read it.
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024

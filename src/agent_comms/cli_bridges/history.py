@@ -3,20 +3,28 @@
 Every harness has two ways to reach a session's past: an offline reader of the files the harness
 stores, and an online reader that asks the running harness. Both decode into the transcript
 updates the live bridges publish, so an import and a bridge read a session through one decoder.
-A bridge is its harness's online reader plus delivery and following.
+Each harness declares itself once, on its parent (ClaudeHistory, CodexHistory, OpenCodeHistory);
+a reader inherits its harness parent and its path (OfflineHistory, OnlineHistory), and is found by
+that crossing. A bridge is its harness's online reader plus delivery and following; it declares
+itself outside the family, because it follows a session rather than reading one more way.
 """
 from __future__ import annotations
 
 import json
-from abc import abstractmethod
-from collections.abc import AsyncIterator, Iterator
+from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator, Iterable, Iterator
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Self
+from typing import TYPE_CHECKING, BinaryIO, ClassVar, Self
+
+from pydantic import TypeAdapter
 
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.harness_install import Harness
+from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness
 
-from .shared import EarlierRequest, HistoryNotice, TranscriptUpdate
+from .shared import EarlierRequest, HistoryNotice, SessionFacts, TranscriptUpdate
+
+if TYPE_CHECKING:
+    from .opencode_parts import SavedMessage
 
 
 class History(DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
@@ -29,24 +37,38 @@ class History(DeclaredFamily, affix="History", discovery_package="agent_comms.cl
 
     @classmethod
     def readers(cls, harness: type[Harness]) -> tuple[type[Self], ...]:
-        """This harness's readers of this kind; a bridge specializes a reader and is not one more."""
-        members = tuple(member for member in cls.members_with(cls) if member.harness is harness)
-        return tuple(member for member in members
-                     if not any(other is not member and issubclass(member, other) for other in members))
+        """This path's readers for one harness: the members under both parents."""
+        parent, = (parent for parent in HarnessHistory.__subclasses__() if parent.harness is harness)
+        return cls.members_with(parent)
 
 
-class OfflineHistory(History):
-    """Reads the files a harness stores; the harness need not be running."""
+class HarnessHistory(History):
+    """Its direct subclasses each declare one harness; every reader inherits one of them."""
 
-    suffixes: ClassVar[frozenset[str]]
 
-    @classmethod
-    def reads(cls, source: Path) -> bool:
-        return source.suffix in cls.suffixes
+class ClaudeHistory(HarnessHistory):
+    harness = ClaudeCodeHarness
 
-    @classmethod
-    @abstractmethod
-    def opened(cls, source: Path, session_id: str | None) -> Self: ...
+
+class CodexHistory(HarnessHistory):
+    harness = CodexHarness
+
+
+class OpenCodeHistory(HarnessHistory):
+    """OpenCode's store and its server hold the same saved messages; they differ only in how
+    they load a session and its messages."""
+
+    harness = OpenCodeHarness
+
+    @staticmethod
+    def saved(facts: SessionFacts, messages: Iterable[SavedMessage]) -> Iterator[TranscriptUpdate]:
+        yield facts
+        for saved in messages:
+            yield from saved.publications()
+
+
+class ReadAtOnce(ABC):
+    """A past read in one pass from what exists when reading starts."""
 
     @abstractmethod
     def read(self) -> Iterator[TranscriptUpdate]: ...
@@ -55,12 +77,27 @@ class OfflineHistory(History):
         for update in self.read():
             yield update
 
+
+class OfflineHistory(ReadAtOnce, History):
+    """Reads the files a harness stores; the harness need not be running. `session_id`, when
+    given, is the session the file must hold."""
+
+    suffixes: ClassVar[frozenset[str]]
+
+    def __init__(self, source: Path, session_id: str | None = None) -> None:
+        self.source = source
+        self.session_id = session_id
+
+    @classmethod
+    def reads(cls, source: Path) -> bool:
+        return source.suffix in cls.suffixes
+
     @classmethod
     def of(cls, harness: type[Harness], source: Path, session_id: str | None) -> OfflineHistory:
         readers = tuple(reader for reader in cls.readers(harness) if reader.reads(source))
         if len(readers) != 1:
             raise ValueError(f'No single {harness.declared_name} reader for {source}')
-        return readers[0].opened(source, session_id)
+        return readers[0](source, session_id)
 
 
 class OnlineHistory(History):
@@ -86,17 +123,16 @@ class JsonLines:
     """
 
     REVERSE_BLOCK: ClassVar[int] = 64 * 1024
+    # Each record answers `begins_history()` (everything before it was replaced) and `request()`.
+    records: ClassVar[TypeAdapter]
+    # What decoding remembers between records (open tool calls, the current turn).
+    state: ClassVar[type]
 
-    @abstractmethod
-    def decode_line(self, raw: bytes): ...
+    def decode_line(self, raw: bytes):
+        return self.records.validate_json(raw)
 
-    @abstractmethod
-    def begins_history(self, record) -> bool:
-        """Whether everything before this record was replaced by it."""
-
-    @abstractmethod
     def start_state(self):
-        """What decoding remembers between records (open tool calls, the current turn)."""
+        return self.state()
 
     @abstractmethod
     def record_updates(self, record, state, offset: int, raw: bytes) -> Iterator[TranscriptUpdate]: ...
@@ -135,7 +171,7 @@ class JsonLines:
                 record = self.decode_line(raw)
             except ValueError:
                 continue  # Decoded again, with its notice or failure, when read forward.
-            if self.begins_history(record):
+            if record.begins_history():
                 return offset
         return 0
 
@@ -168,8 +204,8 @@ class JsonLines:
                 yield offset, raw[:-1]
 
 
-class JsonLinesFile(JsonLines, OfflineHistory):
-    """A stored JSONL session read once, including a final record its harness never finished."""
+class JsonLinesFile(JsonLines, ReadAtOnce):
+    """A JSONL session file read once, including a final record its harness never finished."""
 
     source: Path
 

@@ -10,17 +10,14 @@ from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass
 from itertools import takewhile
-from pathlib import Path
-from typing import Self
 
 from pydantic import Field
 
 from agent_comms.cli_protocol import WireModel
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.harness_install import OpenCodeHarness
 from agent_comms.typed_table import SQLiteSchemaObject, TypedRow
 
-from .history import OfflineHistory
+from .history import OfflineHistory, OpenCodeHistory
 from .opencode_parts import SavedMessage
 from .shared import SessionFacts, TranscriptUpdate
 
@@ -41,25 +38,14 @@ class StoredSession(WireModel):
     revert: Revert = Field(default_factory=Revert)
 
 
-class OpenCodeStore(OfflineHistory):
-    harness = OpenCodeHarness
-
-    def __init__(self, source: Path, session_id: str | None) -> None:
-        self.source = source
-        self.session_id = session_id
-
-    @classmethod
-    def opened(cls, source: Path, session_id: str | None) -> Self:
-        return cls(source, session_id)
-
+class OpenCodeStore(OpenCodeHistory, OfflineHistory):
     @abstractmethod
     def load(self) -> tuple[StoredSession, Iterator[SavedMessage]]: ...
 
     def read(self) -> Iterator[TranscriptUpdate]:
         session, messages = self.load()
-        yield SessionFacts(source_id=session.id, project=session.directory, title=session.title)
-        for saved in session.revert.kept(messages):
-            yield from saved.publications()
+        return self.saved(SessionFacts(source_id=session.id, project=session.directory, title=session.title),
+                          session.revert.kept(messages))
 
 
 class ExportFile(WireModel):

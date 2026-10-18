@@ -13,10 +13,9 @@ from uuid import uuid4
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.harness_install import CodexHarness
 from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
-from .history import OnlineHistory
+from .history import CodexHistory, OnlineHistory
 from .shared import Binding, IncomingFrame, SessionFacts, TranscriptBridge, Options, TranscriptUpdate, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
@@ -82,10 +81,9 @@ class CodexOptions(Options):
     socket: str
 
 
-class CodexAppServer(OnlineHistory):
+class CodexAppServer(CodexHistory, OnlineHistory):
     """A thread the running Codex app-server can resume, read through its item list."""
 
-    harness = CodexHarness
     SOCKET = Path.home() / '.codex/app-server-control/app-server-control.sock'
 
     def __init__(self, thread: str, socket: str) -> None:
@@ -125,6 +123,8 @@ class CodexAppServer(OnlineHistory):
 
 
 class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
+    declared_name = None  # Follows a thread; not one more way to read it.
+
     def __init__(self, options: CodexOptions, binding: Binding, db: CoordinationStore) -> None:
         TranscriptBridge.__init__(self, options, binding, db)
         CodexAppServer.__init__(self, binding.thread, options.socket)

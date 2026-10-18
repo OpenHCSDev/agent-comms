@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from metaclass_registry import RegistryConfig
@@ -218,12 +219,12 @@ class OpenCodeStream:
         self.messages: dict[str, MessageInfo] = {}
 
     def snapshot(self, saved: SavedMessage) -> tuple[TranscriptUpdate, ...]:
-        self.messages[saved.info.id] = saved.info
-        updates: list[TranscriptUpdate] = []
-        for part in saved.parts:
-            if part.finished(saved.info):
-                updates.extend(saved.info.present(part))
-        return tuple(updates)
+        self.know((saved,))
+        return saved.publications()
+
+    def know(self, saved: Iterable[SavedMessage]) -> None:
+        """Parts that arrive later name only their message."""
+        self.messages.update((message.info.id, message.info) for message in saved)
 
     async def part(self, part: Part) -> tuple[TranscriptUpdate, ...]:
         if part.messageID not in self.messages:

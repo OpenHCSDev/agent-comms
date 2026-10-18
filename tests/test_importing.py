@@ -10,11 +10,11 @@ import pytest
 
 from agent_comms import ImportLimits
 from agent_comms.cli import main
-from agent_comms.cli_bridges.claude import ClaudeTranscript, RunningClaude
-from agent_comms.cli_bridges.codex import CodexAppServer
+from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
+from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge
 from agent_comms.cli_bridges.codex_rollout import ROLLOUT_RECORD, ForeignItem, ForeignRecord
-from agent_comms.cli_bridges.history import OfflineHistory, OnlineHistory
-from agent_comms.cli_bridges.opencode import OpenCodeServer
+from agent_comms.cli_bridges.history import History, OfflineHistory, OnlineHistory
+from agent_comms.cli_bridges.opencode import OpenCodeBridge, OpenCodeServer
 from agent_comms.cli_bridges.opencode_parts import SavedMessage
 from agent_comms.cli_bridges.opencode_protocol import Session
 from agent_comms.cli_bridges.opencode_store import OpenCodeDatabase, OpenCodeExport
@@ -63,8 +63,9 @@ def test_thread_display_title_is_inherited_without_copying_the_name(tmp_path, ti
 
 
 def test_every_harness_has_one_offline_family_and_one_online_reader():
-    # Readers are found by crossing the harness with offline/online; a bridge specializes
-    # its harness's online reader and is not a second one.
+    # Readers are found by crossing the harness parent with offline/online; a bridge is
+    # its harness's online reader plus following, declared outside the family.
+    assert not {ClaudeBridge, CodexBridge, OpenCodeBridge} & set(History.members_with(History))
     assert OfflineHistory.readers(ClaudeCodeHarness) == (ClaudeTranscript,)
     assert OfflineHistory.readers(CodexHarness)[0].__name__ == "CodexRollout"
     assert set(OfflineHistory.readers(OpenCodeHarness)) == {OpenCodeExport, OpenCodeDatabase}
@@ -542,8 +543,11 @@ def test_codex_app_server_reads_every_page_oldest_first_and_keeps_bus_inputs():
 
 
 def opencode_message(message_id, role, parts, **info):
-    return {"info": {"id": message_id, "sessionID": "ses_test", "role": role, "time": {"created": 1, "completed": 2},
-                     **({"parentID": "user"} if role == "assistant" else {}), **info},
+    # As OpenCode saves them: only an assistant message records its completion.
+    assistant = role == "assistant"
+    return {"info": {"id": message_id, "sessionID": "ses_test", "role": role,
+                     "time": {"created": 1, **({"completed": 2} if assistant else {})},
+                     **({"parentID": "user"} if assistant else {}), **info},
             "parts": [{"id": f"{message_id}-{index}", "sessionID": "ses_test", "messageID": message_id, **part}
                       for index, part in enumerate(parts)]}
 

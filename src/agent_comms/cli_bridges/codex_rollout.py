@@ -10,18 +10,16 @@ import json
 from abc import ABC
 from collections.abc import Iterator
 from dataclasses import dataclass, field
-from pathlib import Path
-from typing import BinaryIO, ClassVar, Self
+from typing import BinaryIO, ClassVar
 
 from metaclass_registry import RegistryConfig
 from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
 
 from agent_comms.cli_protocol import OpenWire, WireHeader, WireModel
-from agent_comms.harness_install import CodexHarness
 from agent_comms.transcript_events import AssistantTranscript, ToolEndTranscript, ToolStartTranscript, UserTranscript
 from agent_comms.turn_context import CodexRolloutProvenance
 
-from .history import JsonLinesFile
+from .history import CodexHistory, JsonLinesFile, OfflineHistory
 from .shared import FinishedItem, HistoryNotice, SessionFacts, Summarized, TranscriptUpdate
 
 
@@ -262,28 +260,13 @@ class HistoricalInstruction(TranscriptUpdate):
         history.instructions.add(self.source)
 
 
-class CodexRollout(JsonLinesFile):
+class CodexRollout(JsonLinesFile, CodexHistory, OfflineHistory):
     """`~/.codex/sessions/.../rollout-*.jsonl`: Codex's stored session, which it appends to while it runs."""
 
-    harness = CodexHarness
     suffixes = frozenset({'.jsonl'})
 
-    def __init__(self, source: Path, session_id: str | None) -> None:
-        self.source = source
-        self.session_id = session_id
-
-    @classmethod
-    def opened(cls, source: Path, session_id: str | None) -> Self:
-        return cls(source, session_id)
-
-    def decode_line(self, raw: bytes) -> RolloutRecord:
-        return ROLLOUT_RECORD.validate_json(raw)
-
-    def begins_history(self, record: RolloutRecord) -> bool:
-        return record.begins_history()
-
-    def start_state(self) -> RolloutState:
-        return RolloutState()
+    records = ROLLOUT_RECORD
+    state = RolloutState
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
         """The first record names the session; the selected history may start long after it."""

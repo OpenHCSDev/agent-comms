@@ -12,11 +12,10 @@ from urllib.parse import quote
 
 import aiohttp
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.harness_install import OpenCodeHarness
 from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
-from .history import OnlineHistory
+from .history import OnlineHistory, OpenCodeHistory
 from .shared import (
     IncomingFrame, SessionFacts, TranscriptBridge, TranscriptUpdate, Options, run_bridge,
     Watch, Binding,
@@ -159,10 +158,9 @@ class OpenCodeConnection:
             await response.read()
 
 
-class OpenCodeServer(OnlineHistory):
+class OpenCodeServer(OpenCodeHistory, OnlineHistory):
     """A session the running OpenCode server holds, read through its message list."""
 
-    harness = OpenCodeHarness
     query: ClassVar[dict[str, str]] = {}
 
     def __init__(self, session: str, server: str, directory: Path) -> None:
@@ -185,15 +183,16 @@ class OpenCodeServer(OnlineHistory):
                 yield update
 
     async def seen(self, connection: OpenCodeConnection, stream: OpenCodeStream) -> AsyncIterator[TranscriptUpdate]:
-        yield SessionFacts(source_id=connection.session, project=connection.info.directory,
-                           title=connection.info.title or '')
-        for saved in await connection.messages(self.query):
-            for update in stream.snapshot(saved):
-                yield update
+        messages = await connection.messages(self.query)
+        stream.know(messages)
+        for update in self.saved(SessionFacts(source_id=connection.session, project=connection.info.directory,
+                                              title=connection.info.title or ''), messages):
+            yield update
         yield await connection.status()
 
 
 class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions]):
+    declared_name = None  # Follows a session; not one more way to read it.
     operations = (*TranscriptBridge.operations, Attach)
     query = {'limit': '20'}  # A restarted bridge publishes again only the newest messages.
 
