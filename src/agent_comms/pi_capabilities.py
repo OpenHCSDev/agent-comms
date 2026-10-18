@@ -92,8 +92,8 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
         if not commands:
             raise ValueError("A configuration change names a model or a thinking level")
         state = await self.apply_settings(thread, commands)
-        if model is not None:
-            state.model.require_selection(model)
+        for command in commands:
+            command.require_applied(state)
         selected, level = state.model.display_name, state.thinking_level.wire_value()
         if selected is None or level is None:
             raise NativePiUnavailable("Pi configuration did not report model and thinking level")

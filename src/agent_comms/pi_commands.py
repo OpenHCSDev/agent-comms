@@ -330,6 +330,9 @@ class InterruptSteering(PiCommand):
 class SettingCommand(CatalogQuery):
     response_payload = EmptyData
 
+    def require_applied(self, state: StateData) -> None:
+        """The command owns any postcondition its response must satisfy."""
+
     @property
     @abstractmethod
     def result_type(self) -> type[events.SettingChangeResult]: ...
@@ -376,6 +379,13 @@ class SetModel(SettingCommand):
             return cls()
         provider, model_id = model.split('/', 1)
         return cls(provider=provider, model_id=model_id)
+
+    def require_applied(self, state: StateData) -> None:
+        from .native_pi import NativePiUnavailable
+
+        if self.provider is None or self.model_id is None:
+            raise NativePiUnavailable("Model selection has no requested identity")
+        state.model.require_selection(f"{self.provider}/{self.model_id}")
 
     result_type = events.ModelChanged
     error_message = "Model change failed"
