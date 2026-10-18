@@ -19,7 +19,7 @@ def launcher(tmp_path, monkeypatch, route):
     # arbitrary executable with a privileged-looking basename.
     monkeypatch.setattr(native_pi.sys, "executable", str(executable.with_name("python")))
     monkeypatch.setenv("PATH", str(executable.parent))
-    monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
+    monkeypatch.setattr(PrivateNkLaunch, "derive", classmethod(lambda cls, root=None: route))
     monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     return executable
 
@@ -65,12 +65,8 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
 
     package = pinned_native_package()
     comms = Comms(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
-    environment = {}
-    PrivateNkLaunch(comms.root, root_id, package).apply_environment(environment)
-    for name, value in environment.items():
-        monkeypatch.setenv(name, value)
+    comms.messaging.initialize_private_initial_protocol()
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
     selected = tmp_path / "selected-core"
     venv.EnvBuilder(with_pip=False, symlinks=True).create(selected)
     (selected / "bin/pi-comms-native").symlink_to(LaunchRuntime.running().native_entrypoint)

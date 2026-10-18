@@ -2,13 +2,15 @@
 
 This uv project installs agent-comms editable from the main checkout alongside
 Toad, Textual and ui-theme from their `main` branches. It requires Python 3.14.
-`pyproject.toml` owns source selection; `uv.lock` records the exact resolved
-commits for reproducible installation. Development belongs in isolated worktrees,
+`pyproject.toml` owns source selection. The lock is not committed: each install
+resolves the latest mains, and only PyPI releases and stock Pi
+(`pi-native.sha256`) are pinned. Development belongs in isolated worktrees,
 never in the live installation.
 
 From the repository root:
 
 ```sh
+uv lock --project stack --upgrade --python 3.14
 uv sync --project stack --locked --python 3.14
 uv run --project stack --locked agent-comms --help
 uv run --project stack --locked toad
@@ -78,19 +80,9 @@ in [native proof cutover](native-proof-cutover.md). There is no runtime legacy
 reader. The native session JSONL metadata index remains a separate startup cost;
 indexed proof recovery does not claim to remove that history read.
 
-When updating the live stack, pull Core main and refresh the UI packages from
-their current mains rather than preserving old local revision overrides:
-
-```sh
-git pull --ff-only
-uv lock --project stack --upgrade-package batrachian-toad --upgrade-package textual --upgrade-package ui-theme
-uv sync --project stack --locked
-```
-
-Commit the refreshed lockfile from an isolated development checkout. The stack's
-source overrides select editable Core and the UI mains even when Toad's own
-manifest pins an older dependency. `uv sync --locked` alone intentionally reuses
-the lockfile; it does not fetch newer branch heads. Preserve active sessions and
+A retained bus is upgraded with `tools/upgrade_bus.py`, which relocks the same
+way. The stack's source overrides select editable Core and the UI mains even when
+Toad's own manifest pins an older dependency. Preserve active sessions and
 uncertain inputs; new Toad launches load the updated packages without restarting
 running agents.
 

@@ -102,8 +102,9 @@ def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkey
     _, root, root_id = route_fixture(tmp_path, monkeypatch)
     service = wire()
     assert service.root == root
-    assert service.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path)
-    assert wire(root).owners._private_nk_launch is None
+    # The default and an explicit selection of the same root derive one launch.
+    assert service.owners.launch_authority == PrivateNkLaunch(root, root_id, tmp_path)
+    assert wire(root).owners.launch_authority == service.owners.launch_authority
 
 
 def test_route_record_retains_the_external_format_and_private_marker(tmp_path):

@@ -5,7 +5,6 @@ from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import os
-import json
 import shlex
 import sys
 import time
@@ -25,14 +24,11 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import ActiveTurn
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
-def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> None:
+def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path, monkeypatch) -> None:
     comms = Comms(tmp_path)
-    package = pinned_native_package()
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, package))
+    comms.messaging.initialize_private_initial_protocol()
     declared = comms.registry.new_thread('worker', frozenset(), str(tmp_path), task='retained task')
     comms.registry.declare(declared)
     first = comms.owners.start(
@@ -51,11 +47,15 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         from agent_comms.native_pi import NativePiUnavailable
         from agent_comms.owner_cutover import StoppedOwnerInstallation
 
-        mismatched = Comms(tmp_path)
-        mismatched.owners.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, tmp_path / "other-package"))
-        before = comms.registry.snapshot()
-        with pytest.raises(NativePiUnavailable, match="Canonical native Pi package layout"):
-            mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
+        # A fresh lifecycle derives its package from the pin; the reviewed layout refuses another.
+        from agent_comms import private_nk_entrypoint
+
+        with monkeypatch.context() as patch:
+            patch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: tmp_path / "other-package")
+            mismatched = Comms(tmp_path)
+            before = comms.registry.snapshot()
+            with pytest.raises(NativePiUnavailable, match="Canonical native Pi package layout"):
+                mismatched.owners.restart_owners(["worker"], agent_bin="pi", agent_args=[])
         assert owner.process_alive
         assert comms.registry.snapshot() == before
         assert isinstance(comms.owners.releases.get("worker"), NoRelease)
@@ -70,7 +70,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
         assert replacement.task == declared.task
 
         class BindInstalledLaunch(StoppedOwnerInstallation):
-            """The target pin belongs to the completed installation."""
+            """A fresh lifecycle derives the installed launch itself."""
 
             def require_selection(self, snapshot, owners):
                 assert [thread.name for thread in owners] == ["worker"]
@@ -78,10 +78,7 @@ def test_real_owner_start_restart_and_stop_preserve_thread(tmp_path: Path) -> No
             def after_stopped(self, lifecycle):
                 assert not replacement.process_alive
 
-            def bind_target_launch(self, lifecycle):
-                lifecycle.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, package))
-
-        (installed,) = unpinned.owners.restart_owners(
+        (installed,) = Comms(tmp_path).owners.restart_owners(
             ["worker"], agent_bin="pi", agent_args=[], cutover=BindInstalledLaunch()
         )
         assert installed.previous_pid == replacement.pid
@@ -163,8 +160,6 @@ def test_wait_graph_uses_exact_birth_for_real_active_peer(tmp_path: Path) -> Non
 
 def test_failed_real_worker_startup_retains_private_trace(tmp_path: Path, monkeypatch) -> None:
     """The production detached launch retains a failure before socket creation."""
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", "invalid")
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", "/missing/native")
     comms = Comms(tmp_path)
     comms.registry.declare(comms.registry.new_thread('failed-start', frozenset(), str(tmp_path)))
     result = comms.owners.start("failed-start")
@@ -201,8 +196,7 @@ def test_real_batch_retains_each_launch_and_busy_refuses_every_stop(tmp_path, mo
     monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", model)
     comms = Comms(tmp_path)
     package = pinned_native_package()
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(tmp_path, root_id, package))
+    comms.messaging.initialize_private_initial_protocol()
 
     async def thinking_options():
         async with AsyncExitStack() as lifetime:

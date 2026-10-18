@@ -1,4 +1,3 @@
-from agent_comms.native_package import pinned_native_package
 import asyncio
 import sys
 
@@ -7,7 +6,6 @@ import pytest
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX owner process fixture")
@@ -18,8 +16,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     session = tmp_path / "session.jsonl"
     session.write_text("")
     comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, pinned_native_package()))
+    comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(session)))
     comms.agents.observe_runtime_info("worker", ContextUsageObservation(context_used=23))
     comms.agents.observe_runtime_info(

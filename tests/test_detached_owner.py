@@ -14,7 +14,6 @@ from agent_comms.acp_extension import CoordinationChangedUpdate, TurnChangedUpda
 from agent_comms.child_process import ParentedProcess
 from agent_comms.comms import wire
 from compaction_loopback import LoopbackProvider
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX detached owner")
@@ -73,8 +72,7 @@ async def test_new_thread_survives_client_loss_and_reattaches_without_duplicate(
 
     monkeypatch.setattr(ParentedProcess, "launch", logged_launch)
     comms = wire(tmp_path / "wire")
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
+    comms.messaging.initialize_private_initial_protocol()
     options = dict(
         agent_bin=str(package / "dist/cli.js"),
         agent_args=["--provider", "openrouter", "--model", "fake-compact"],

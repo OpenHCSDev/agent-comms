@@ -1,5 +1,4 @@
 """Actual fork worker held before its socket, with the pinned native model on loopback."""
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
@@ -14,7 +13,6 @@ from agent_comms.comms import Comms
 from agent_comms.runtime import socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 
@@ -26,7 +24,6 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
     await fixture.persistent.close()
     fixture.provider.text = "Cold fork first reply received."
     comms = Comms(fixture.root)
-    package = pinned_native_package()
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     arguments = [
         "--provider",
@@ -43,9 +40,6 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         "--no-tools",
     ]
     monkeypatch.setenv("AGENT_COMMS_AGENT_ARGS", shlex.join(arguments))
-    with comms.bus.log.locked():
-        root_id = comms.bus.log.read_metadata_unlocked().root_id
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(fixture.root, root_id, package))
     comms.registry.declare(
         comms.registry.new_thread('parent', frozenset(), str(fixture.project), session_file=str(fixture.session), model='response-local/fixture', thinking_level='off')
     )
@@ -60,7 +54,6 @@ async def test_actual_fork_attachment_survives_cold_owner_before_socket(
         return child
 
     monkeypatch.setattr(ParentedProcess, "launch", hold_worker)
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
     client = CommsClient(
         comms,
         agent_bin=launcher,

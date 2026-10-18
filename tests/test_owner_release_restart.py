@@ -48,9 +48,6 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     name = names.pop()
     async with native_backend_fixture(tmp_path) as native, AsyncExitStack() as resources:
         comms = Comms(native.root)
-        comms.owners.pin_private_nk_launch(PrivateNkLaunch(native.root,
-            os.environ['AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID'],
-            pinned_native_package()))
 
         async def retire_owned_worker():
             selected = comms.registry.snapshot().threads.get(name)
@@ -74,11 +71,7 @@ from agent_comms.threads import Thread
 from agent_comms.goal_actions import SetGoalAction, BlockedGoalAction
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import RestartEnvironment
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 service = Comms(Path(os.environ['AGENT_COMMS_ROOT']))
-with service.bus.log.locked(): root_id = service.bus.log._private_marker_unlocked().root_id
-service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id,
-    Path(sys.argv[4])))
 name, project, session = sys.argv[1:4]
 service.registry.declare(service.registry.new_thread(name, frozenset(), project, session_file=session,
     model='response-local/fixture'))

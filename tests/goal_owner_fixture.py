@@ -1,9 +1,7 @@
 """Canonical bus setup for owner lifecycle tests with no automatic model work."""
-from agent_comms.native_package import pinned_native_package
 
 
 from agent_comms.comms import Comms
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def canonical_goal_wire(root):
@@ -20,7 +18,6 @@ def activate_empty_source(agent):
     issuer = Comms(root, private_initial_writes=True)
     with issuer.bus.log.locked():
         metadata = issuer.bus.log.read_metadata_unlocked()
-    root_id = (metadata.root_id if metadata.private
-               else issuer.messaging.initialize_private_initial_protocol())
-    agent._comms.owners.pin_private_nk_launch(PrivateNkLaunch(root, root_id, pinned_native_package()))
+    if not metadata.private:
+        issuer.messaging.initialize_private_initial_protocol()
     agent.inputs.auto_wake = False

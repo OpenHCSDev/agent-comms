@@ -68,10 +68,4 @@ class Comms:
 
 def wire(root: CommsRoute | Path | str | None = None) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
-    route = resolve_comms_route(root)
-    launch = route.launch()  # A bad handoff refuses before the root is created.
-    comms = Comms(route)
-    if launch is not None:
-        # Service binding retains the bus-locked durable verification.
-        comms.owners.pin_private_nk_launch(launch)
-    return comms
+    return Comms(resolve_comms_route(root))

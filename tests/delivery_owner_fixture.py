@@ -1,10 +1,8 @@
 """Canonical ACP owners sharing the production bus, SQL stores and owner socket."""
-from agent_comms.native_package import pinned_native_package
 
 from contextlib import asynccontextmanager
 
 from agent_comms.acp import CommsAgent
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 def native_model(*, decision="FULL", fail_on=None):
@@ -20,7 +18,6 @@ async def canonical_delivery_owner(root, *, direct=False):
     from test_coordinated_runtime import _root
 
     _path, root_id, comms, initial, people = _root(root, direct=direct)
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, root))
     owner = CommsAgent(
         comms,
         runtime_enabled=True,
@@ -40,12 +37,8 @@ def canonical_agent(comms, **options):
     """Configure the existing owner against its real canonical root marker."""
     with comms.bus.log.locked():
         metadata = comms.bus.log.read_metadata_unlocked()
-    root_id = (
-        metadata.root_id if metadata.private
-        else comms.messaging.initialize_private_initial_protocol()
-    )
-    package = pinned_native_package()
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, package))
+    if not metadata.private:
+        comms.messaging.initialize_private_initial_protocol()
     return CommsAgent(
         comms,
         **options,

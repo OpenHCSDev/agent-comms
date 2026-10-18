@@ -32,7 +32,6 @@ from agent_comms.threads import Thread
 
 from native_context_budget_installed_journey import ReceiptSubscriber
 from stored_inputs import stored_inputs
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 REASON = "Controlled provider usage limit has been reached; original input not retried"
@@ -121,8 +120,7 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}},
     }))
     comms = Comms(root)
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(root, root_id, package))
+    comms.messaging.initialize_private_initial_protocol()
     fresh = create_fresh_private_session(evidence / "sessions", worktree=project)
     comms.registry.declare(comms.registry.new_thread('error-native', frozenset(), str(project), session_file=str(fresh.path), model='error-local/error-fixture', thinking_level='off'))
     environment = {key: value for key, value in os.environ.items()
@@ -132,7 +130,6 @@ async def journey(package: Path, evidence: Path, installed: Path, *, repeat_load
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), AGENT_COMMS_AGENT_BIN="pi",
         AGENT_COMMS_AGENT_ARGS="--offline --no-extensions --no-skills --no-context-files --no-tools",
         AGENT_COMMS_AGENT_MODELS="error-local/error-fixture", AGENT_COMMS_ROOT=str(root),
-        AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
         XDG_CONFIG_HOME=str(evidence / "config"), XDG_DATA_HOME=str(evidence / "data"),
         XDG_STATE_HOME=str(evidence / "state"),
     )

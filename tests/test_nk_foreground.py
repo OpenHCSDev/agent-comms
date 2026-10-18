@@ -9,7 +9,6 @@ import asyncio
 import multiprocessing
 import os
 import sys
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -56,22 +55,14 @@ def configured_foreground(monkeypatch):
 
 
 @pytest.fixture
-def tmp_path():
-    # Private N/K publication deliberately rejects /tmp, even when pytest's
-    # default basetemp is there. Keep the real durability fixture on /var/tmp.
-    with tempfile.TemporaryDirectory(prefix="ac-nk-foreground-", dir="/var/tmp") as directory:
-        yield Path(directory)
-
-
-def _private_root(tmp_path: Path):
-    root = tmp_path / "private"
-    root.mkdir(mode=0o700)
-    (root / "work").mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
-    comms.registry.declare(
-        comms.registry.new_thread('sender', frozenset(), str(root / 'work'), process_identity=ProcessIdentity.capture(os.getpid()))
+def sender(private_comms) -> Path:
+    """The publishing participant and the shared worktree under the private root."""
+    work = private_comms.root / "work"
+    work.mkdir(mode=0o700)
+    private_comms.registry.declare(
+        private_comms.registry.new_thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    return root, comms, comms.messaging.initialize_private_initial_protocol()
+    return work
 
 
 def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL") -> None:
@@ -129,8 +120,9 @@ def _accept(root: Path, root_id: str, comms: Comms, message) -> None:
         assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count == 2
 
 
-def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) -> None:
-    root, comms, root_id = _private_root(tmp_path)
+def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(private_comms, sender) -> None:
+    comms, root = private_comms, private_comms.root
+    root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
     ctx = multiprocessing.get_context("fork")
     alpha_parent, alpha_child = ctx.Pipe()
     beta_parent, beta_child = ctx.Pipe()
@@ -202,8 +194,9 @@ def test_actual_foreground_pid_n2_k1_and_duplicate_owner_denied(tmp_path: Path) 
             duplicate_parent.close()
 
 
-def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_path: Path) -> None:
-    root, comms, root_id = _private_root(tmp_path)
+def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(private_comms, sender) -> None:
+    comms, root = private_comms, private_comms.root
+    root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
     with (
         patch("agent_comms.nk_foreground._trusted_package", side_effect=_fake_package),
         patch("agent_comms.native_pi._trusted_package", side_effect=_fake_package),
@@ -253,9 +246,10 @@ def test_uncertain_model_attempt_is_never_replayed_by_new_foreground_owner(tmp_p
 
 
 def test_cli_main_ready_then_single_go_offline_model_boundary(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    private_comms, sender, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, comms, root_id = _private_root(tmp_path)
+    comms, root = private_comms, private_comms.root
+    root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
     comms.registry.declare(
         comms.registry.new_thread('alpha', frozenset({'team'}), str(root / 'work'), process_identity=ProcessIdentity.capture(os.getpid()))
     )
@@ -306,9 +300,10 @@ def test_cli_main_ready_then_single_go_offline_model_boundary(
 
 
 def test_explicit_stop_is_not_falsely_reported_as_registry_stopped(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    private_comms, sender, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    root, comms, root_id = _private_root(tmp_path)
+    comms, root = private_comms, private_comms.root
+    root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
     monkeypatch.setattr(foreground, "_trusted_package", _fake_package)
     monkeypatch.setattr(foreground, "_read_go_command", lambda _timeout: "STOP")
     events: list[dict[str, object]] = []
@@ -357,8 +352,9 @@ def test_partial_go_frame_times_out_without_provider(monkeypatch: pytest.MonkeyP
         os.close(write_fd)
 
 
-def test_private_root_marker_and_no_owner_replacement(tmp_path: Path) -> None:
-    root, comms, root_id = _private_root(tmp_path)
+def test_private_root_marker_and_no_owner_replacement(private_comms, sender) -> None:
+    comms, root = private_comms, private_comms.root
+    root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
     with patch("agent_comms.nk_foreground._trusted_package", side_effect=_fake_package):
         with pytest.raises(PublicationActivationBlocked):
             reserve_foreground_owner(

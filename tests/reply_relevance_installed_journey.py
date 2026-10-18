@@ -23,7 +23,6 @@ from agent_comms.owner_launch import RetainedOwnerLaunch
 from agent_comms.selected_triage import FullSelectedTriage
 from agent_comms.threads import Thread
 from shared_bus_restart_native import attach
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 async def run(stage, package):
@@ -64,11 +63,8 @@ async def run(stage, package):
     )
     assert Path(fork.session_file).is_relative_to(stage)
     root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, package))
     binary = Path(sys.executable).with_name('pi-comms-native')
     environment.update(AGENT_COMMS_ROOT=str(service.root),
-        AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id,
-        AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
         AGENT_COMMS_AGENT_BIN=str(binary),
         AGENT_COMMS_RUNTIME_ROOT=str(binary.parent),
         PATH=str(binary.parent) + os.pathsep + environment.get('PATH', ''),

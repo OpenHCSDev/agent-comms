@@ -29,7 +29,6 @@ from delivery_owner_fixture import canonical_agent
 from goal_owner_fixture import activate_empty_source, canonical_goal_wire
 from agent_comms.goal_waits import NoGoalWait
 from agent_comms.goal_waits import RecordedGoalWait
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
@@ -484,9 +483,6 @@ async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
 
 async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path, monkeypatch):
     comms = canonical_goal_wire(tmp_path / "wire")
-    with comms.bus.log.certified_read() as source:
-        root_id = source.marker.root_id
-    comms.owners.pin_private_nk_launch(PrivateNkLaunch(comms.root, root_id, tmp_path))
     agent = CommsAgent(
         comms,
         agent_bin="pi",

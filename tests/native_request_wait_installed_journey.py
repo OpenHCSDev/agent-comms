@@ -26,7 +26,6 @@ from l0a_native_installed_pilot import until, response_painted
 from runtime_fixture import stop_test_children, stop_test_owners
 from saved_state_user_journey_pilot import submit_editor
 from stored_inputs import stored_inputs
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
 
 
 class ObservedApp(ToadApp):
@@ -97,10 +96,8 @@ async def run(arguments):
     (config / "settings.json").write_text(json.dumps({"compaction": {"enabled": False},
         "retry": {"enabled": False, "maxRetries": 0, "provider": {"maxRetries": 0}}}))
     service = Comms(stage / "wire", private_initial_writes=True)
-    root_id = service.messaging.initialize_private_initial_protocol()
-    service.owners.pin_private_nk_launch(PrivateNkLaunch(service.root, root_id, package))
+    service.messaging.initialize_private_initial_protocol()
     environment = dict(os.environ, AGENT_COMMS_ROOT=str(service.root),
-        AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=root_id, AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=str(package),
         AGENT_COMMS_NATIVE_CONFIG_DIR=str(config), PI_CODING_AGENT_DIR=str(config),
         AGENT_COMMS_AGENT_MODELS="wait-local/fixture", AGENT_COMMS_AGENT_BIN="pi",
         AGENT_COMMS_AGENT_ARGS="--provider wait-local --model fixture --no-extensions --no-skills --no-context-files",
