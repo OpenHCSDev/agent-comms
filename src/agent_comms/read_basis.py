@@ -11,7 +11,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from bisect import bisect_left
 from collections.abc import Callable, Collection, Iterable
-from dataclasses import InitVar, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
@@ -26,9 +26,11 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 class DisplayViewer(ABC):
     """The reader owns read evidence, aliases and cursor selection."""
 
-    @property
     @abstractmethod
-    def history_name(self) -> str | None: ...
+    def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
+
+    @abstractmethod
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay | None: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document) -> ReadCursor: ...
@@ -45,8 +47,10 @@ class DisplayViewer(ABC):
 
 @dataclass(frozen=True, slots=True)
 class AnonymousViewer(DisplayViewer):
-    @property
-    def history_name(self) -> None:
+    def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
+        return self
+
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> None:
         return None
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
@@ -65,14 +69,22 @@ class AnonymousViewer(DisplayViewer):
 @dataclass(frozen=True, slots=True)
 class NamedViewer(DisplayViewer):
     name: str
-    namespace: InitVar[RegistryProvenance]
 
-    def __post_init__(self, namespace) -> None:
-        object.__setattr__(self, "name", namespace.canonical_name(self.name))
+    def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
+        return type(self)(snapshot.canonical_name(self.name))
 
-    @property
-    def history_name(self) -> str:
-        return self.name
+    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay:
+        source = page.messages[0].source
+        source.validate()
+        snapshot = presentation.registry.snapshot()
+        return HistoricalDisplay(
+            source,
+            presentation.bus.reads.capture(
+                self.resolve(snapshot).name, page.messages, snapshot,
+                Path(source.root) / "bus.jsonl",
+                conversation_snapshot=source.provenance,
+            ),
+        )
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
         return reads.cursor(self.name, snapshot, document=document)
@@ -137,6 +149,29 @@ class HistoricalSelection(SelectedDisplay):
     """The original viewer and attached-source revision select an archive page."""
 
 
+@dataclass(frozen=True, slots=True)
+class HistoricalDisplay:
+    source: HistorySource
+    displayed: DisplayBasis
+
+    def selection(self, history_revision: FileRevision | None) -> HistoricalSelection:
+        return HistoricalSelection(
+            viewer=self.displayed.viewer_identity, history_revision=history_revision,
+        )
+
+    def select(self, sequences) -> HistoricalDisplay:
+        return HistoricalDisplay(self.source, self.displayed.select(sequences))
+
+    def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
+        """Acknowledge exactly painted historical membership in its own ledger."""
+        viewer = registry.require(self.displayed.viewer)
+        if viewer.incarnation != self.displayed.viewer_identity or viewer.role.executable:
+            raise ValueError("Historical viewer changed; refresh history")
+        if self.source not in archive.sources():
+            raise ValueError("Historical source detached; refresh history")
+        self.source.acknowledge(self.displayed)
+
+
 class LineOutput:
     """Flush once per event-loop pass."""
 
@@ -183,6 +218,8 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 
 if TYPE_CHECKING:
+    from .historical_views import HistoryArchive, HistorySource
+    from .presentation import BusPresentation
     from .bus_page_index import BusPageRow
     from .channels import Channel
     from .message_bus import MessageBus

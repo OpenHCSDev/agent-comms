@@ -16,7 +16,8 @@ from .registration import Registration
 from .thread_identity import ThreadIncarnation
 
 if TYPE_CHECKING:
-    from .historical_views import HistoricalDisplay, HistoricalThread, HistoryCursor, HistorySource
+    from .historical_views import HistoricalThread, HistoryCursor, HistorySource
+    from .read_basis import HistoricalDisplay
     from .registry_document import RegistrySnapshot
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
@@ -188,6 +189,10 @@ class HistoryViews:
             max_bytes=max_bytes,
         )
 
+    def display_viewer(self, worktree: str) -> NamedViewer:
+        """Select the human reader; page capture resolves it in its own snapshot."""
+        return NamedViewer(self.messaging.user_identity(worktree).name)
+
     def channel_display_page(
         self,
         target: str,
@@ -354,8 +359,7 @@ class HistoryViews:
         self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
     ) -> CoordinationSnapshot:
         """Local presentation scope, independent of agent delivery cursors."""
-        viewer = self.messaging.user_identity(worktree).name
-        with self.presentation.snapshot(viewer=NamedViewer(viewer, self.registry.snapshot())) as (basis, source):
+        with self.presentation.snapshot(viewer=self.display_viewer(worktree)) as (basis, source):
             captured_viewer = basis.require_viewer()
             display_activity, display_unread = self.presentation.display_view_metrics(source, basis)
             clocks = self.bus.activity_clocks(source)

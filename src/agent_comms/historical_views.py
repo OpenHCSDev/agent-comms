@@ -27,9 +27,10 @@ from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
     AnonymousViewer, ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection, DisplayViewer,
-    DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope,
+    DMDisplayScope, DMSelection, HistoricalSelection, MessageDisplayScope, NamedViewer,
 )
 from .registration import Registration
+from .read_ledger import ReadLedger
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
@@ -47,7 +48,7 @@ if TYPE_CHECKING:
 class HistoryView(ABC):
     """A requested view binds its predicate once to each original registry."""
 
-    viewer: str | None = None
+    viewer: DisplayViewer = AnonymousViewer()
 
     @abstractmethod
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
@@ -55,23 +56,6 @@ class HistoryView(ABC):
 
     def page(self, presentation: BusPresentation, **paging) -> MessagePage:
         return presentation.bus.history.integrated_page(self, presentation, **paging)
-
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation):
-        """Paint evidence belongs to the selected view, never executor delivery."""
-        if self.viewer is None:
-            return None
-        source = page.messages[0].source
-        source.validate()
-        return HistoricalDisplay(
-            source,
-            presentation.bus.reads.capture(
-                self.viewer,
-                page.messages,
-                presentation.registry.snapshot(),
-                Path(source.root) / "bus.jsonl",
-                conversation_snapshot=source.provenance,
-            ),
-        )
 
     @abstractmethod
     def capture(self, snapshot: RegistryProvenance) -> MessageDisplayScope:
@@ -142,11 +126,7 @@ class ChannelHistory(HistoryView):
 @dataclass(frozen=True, slots=True)
 class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     channel: Channel
-    reader: DisplayViewer = AnonymousViewer()
-
-    @property
-    def viewer(self) -> str | None:
-        return self.reader.history_name
+    viewer: DisplayViewer = AnonymousViewer()
 
     @classmethod
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
@@ -160,7 +140,7 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
         )
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
-        return presentation.channel_page(self.channel.name, viewer=self.reader, **paging)
+        return presentation.channel_page(self.channel.name, viewer=self.viewer, **paging)
 
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return ChannelDisplayScope.capture(self.channel, snapshot)
@@ -200,8 +180,8 @@ class DMDisplayHistory(ConversationHistoryView, DMHistory):
         )
 
     @property
-    def viewer(self) -> str:
-        return self.first
+    def viewer(self) -> NamedViewer:
+        return NamedViewer(self.first)
 
     def live_page(self, presentation: BusPresentation, **paging) -> MessagePage:
         from .read_basis import DMDisplayBasis
@@ -250,6 +230,11 @@ class HistorySource:
             or FileRevision.capture(root / "registry.json") != self.snapshot_registry_revision
         ):
             raise ValueError("Historical snapshot changed; restore it before browsing")
+
+    def acknowledge(self, displayed: DisplayBasis) -> None:
+        """Validate this archived source before updating its own read ledger."""
+        self.validate()
+        ReadLedger.at(self.root).mark_displayed(displayed.viewer, displayed)
 
     def require_original(self, root: Path) -> None:
         """Admit an original typed acquisition before destination publication."""
@@ -360,43 +345,6 @@ class HistoricalMessage(Message):
 class HistoricalThread:
     source: HistorySource
     thread: ThreadProvenance
-
-
-@dataclass(frozen=True, slots=True)
-class HistoricalDisplay:
-    source: HistorySource
-    displayed: DisplayBasis
-
-    def selection(self, history_revision: FileRevision | None) -> HistoricalSelection:
-        return HistoricalSelection(
-            viewer=self.displayed.viewer_identity, history_revision=history_revision,
-        )
-
-    @property
-    def viewer(self) -> str:
-        return self.displayed.viewer
-
-    @property
-    def viewer_created_at(self) -> float:
-        return self.displayed.viewer_created_at
-
-    def select(self, sequences) -> HistoricalDisplay:
-        return HistoricalDisplay(self.source, self.displayed.select(sequences))
-
-    def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
-        """Acknowledge exactly painted retained membership in its own ledger."""
-        from .read_ledger import ReadLedger
-
-        viewer = registry.require(self.viewer)
-        if viewer.incarnation != self.displayed.viewer_identity or viewer.role.executable:
-            raise ValueError("Historical viewer changed; refresh history")
-        if self.source not in archive.sources():
-            raise ValueError("Historical source detached; refresh history")
-        self.source.validate()
-        ReadLedger.at(self.source.root).mark_displayed(
-            self.viewer,
-            self.displayed,
-        )
 
 
 class HistoryArchive(RootFile):
@@ -615,7 +563,7 @@ class HistoryArchive(RootFile):
             max_bytes=max_bytes,
         )
         if history.messages:
-            display = view.display_evidence(history, presentation)
+            display = view.viewer.display_evidence(history, presentation)
             latest = view.live_page(presentation, limit=1)
             return replace(
                 history,

@@ -199,5 +199,5 @@ def test_concurrent_ordinary_publication_keeps_maintenance_alive(monkeypatch, tm
                       recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup,
                       after_seq=0, required_through_seq=messages[-1].seq, limit=32)
     assert len(page.entries) == 32 and page.has_more
-    with comms.bus.snapshot(viewer=NamedViewer("beta", comms.registry.snapshot())) as (basis, source):
+    with comms.bus.snapshot(viewer=NamedViewer("beta")) as (basis, source):
         assert comms.bus.pending_counts_opened(source, basis) == {"sender": len(messages)}

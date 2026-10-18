@@ -19,7 +19,8 @@ from .read_basis import (
 from .wire_log import OpenedWireSnapshot
 
 if TYPE_CHECKING:
-    from .historical_views import HistoricalDisplay, HistoryCursor
+    from .historical_views import HistoryCursor
+    from .read_basis import HistoricalDisplay
     from .bus_page_index import BusPageRow
 
 

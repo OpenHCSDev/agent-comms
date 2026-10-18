@@ -319,6 +319,7 @@ class DisplaySelection:
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
         reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
     ) -> DisplaySelection:
+        viewer = viewer.resolve(snapshot)
         return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
 
     @classmethod
@@ -368,7 +369,7 @@ class ChannelReadMark(ABC):
     def apply(self, presentation: BusPresentation, target: str, viewer: str) -> None:
         with _store_lock(presentation._wire_lock_path, shared=True):
             with self.reading(presentation, target, viewer) as displayed:
-                presentation.bus.reads.mark_displayed(viewer, displayed)
+                presentation.bus.reads.mark_displayed(displayed.viewer, displayed)
 
     @abstractmethod
     def reading(self, presentation: BusPresentation, target: str, viewer: str): ...
@@ -381,13 +382,13 @@ class ReadAll(ChannelReadMark):
         with presentation.bus.log._opened_wire_snapshot() as source:
             with DisplaySelection.reading(
                 presentation.registry, presentation.catalog, presentation.bus.reads,
-                NamedViewer(viewer, presentation.registry.snapshot()),
+                NamedViewer(viewer),
             ) as basis:
                 scope = basis.scope(target)
             # Page preparation takes the bus lock, so release registry first.
             page = MessagePageRequest.every(scope).read_opened(source)
             yield presentation.bus.reads.capture(
-                viewer, page.messages, basis.registry, presentation.bus.log.path,
+                basis.require_viewer(), page.messages, basis.registry, presentation.bus.log.path,
             )
 
 
@@ -400,13 +401,13 @@ class ReadThrough(ChannelReadMark):
     def reading(self, presentation, target, viewer):
         with DisplaySelection.reading(
             presentation.registry, presentation.catalog, presentation.bus.reads,
-            NamedViewer(viewer, presentation.registry.snapshot()),
+            NamedViewer(viewer),
         ) as basis:
             displayed = self.expected_scope.require_displayed()
             if basis.scope(target) != self.expected_scope:
                 raise ValueError("Channel display changed; refresh the displayed page.")
             displayed.validate(
-                viewer, basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
+                basis.require_viewer(), basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
             )
             yield displayed.through(self.through)
 
@@ -443,7 +444,7 @@ class BusPresentation:
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
         with DisplaySelection.reading(
-            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer, self.registry.snapshot())
+            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer)
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
@@ -479,7 +480,7 @@ class BusPresentation:
             page = ConversationMessagePageRequest.capture(
                 scope, before=before, after=after, limit=limit, max_bytes=max_bytes
             ).read_opened(source)
-            return replace(page, display_scope=viewer.displayed_scope(scope, page, basis, self))
+            return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self))
 
     def mark_channel_read(
         self,

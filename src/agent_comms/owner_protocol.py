@@ -3,14 +3,14 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 
 from acp import RequestError
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
+from ._native.core_stamp import STAMP
 
-CORE_COMMIT = (Path(__file__).with_name("_native") / "core-commit").read_text(encoding="utf-8").strip()
+CORE_COMMIT = STAMP.commit()
 
 
 @dataclass(frozen=True)
