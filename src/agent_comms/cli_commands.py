@@ -695,7 +695,6 @@ class DeclaredOptions(Command):
     A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
     the member."""
     help: ClassVar[str]
-    declared_name: ClassVar[str]
     __dataclass_fields__: ClassVar[dict[str, Field[object]]]
 
     @classmethod
@@ -754,7 +753,7 @@ class DeclaredOptions(Command):
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload = {"kind": cls.declared_name}
+        payload = {"kind": FieldCodec.encode(cls)}
         hints = get_type_hints(cls)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)
