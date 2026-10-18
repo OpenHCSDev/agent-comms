@@ -14,11 +14,14 @@ from .catalog_store import ChannelCatalog
 from .goal_waits import GoalWaits
 from .registration import Registration
 from .thread_identity import ThreadIncarnation
+from .thread_execution import ConversationPreparation
+from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
     from .historical_views import HistoricalThread, HistoryCursor, HistorySource
     from .read_basis import HistoricalDisplay
     from .registry_document import RegistrySnapshot
+    from .threads import Thread
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
@@ -57,6 +60,33 @@ from .threads import current_thread
 from .transcripts import TranscriptCursor, Transcripts
 
 _LOG = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class ThreadViewRead(ConversationPreparation):
+    views: HistoryViews
+    thread: Thread
+    viewer: Thread
+    through: TranscriptCursor
+
+    def native(self):
+        if self.through.session_file != self.thread.runtime.read_key:
+            raise ValueError("Transcript changed; refresh before marking it read.")
+        for key in self.thread.runtime.read_keys():
+            self.views.transcript_reads.mark_read(self.viewer.name, key, self.through.offset)
+
+    def external(self):
+        self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
+        page = DMDisplayBasis.fetch_page(
+            self.views.bus, self.views.registry, self.views.root, self.viewer.name,
+            self.thread.name, worktree=self.viewer.worktree,
+            before=self.through.wire.sequence + 1,
+        )
+        if page.messages:
+            self.views.mark_dm_view_read(
+                self.thread.name, worktree=self.viewer.worktree,
+                through=page.messages[-1].seq, expected_display_basis=page.display_basis,
+            )
 
 
 @dataclass(frozen=True)
@@ -378,13 +408,11 @@ class HistoryViews:
         return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
-        """Acknowledge only the native transcript boundary actually displayed."""
-        viewer = self.messaging.user_identity(worktree).name
+        """Acknowledge the displayed position through the thread's receiving contract."""
         thread = self.registry.require(name)
-        if through.session_file != thread.runtime.read_key:
-            raise ValueError("Transcript changed; refresh before marking it read.")
-        for key in thread.runtime.read_keys():
-            self.transcript_reads.mark_read(viewer, key, through.offset)
+        thread.execution.prepare_conversation(ThreadViewRead(
+            self, thread, self.messaging.user_identity(worktree), through,
+        ))
 
     def mark_channel_view_read(
         self,
