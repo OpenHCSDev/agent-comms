@@ -5,7 +5,6 @@ from agent_comms.registration import Registration
 
 import os
 import stat
-import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -13,7 +12,8 @@ import pytest
 
 from agent_comms import locked_store
 from agent_comms.comms import wire
-from agent_comms.read_basis import DMDisplayBasis
+from agent_comms.read_basis import DMDisplayBasis, EmptyDMDisplayBasis
+from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
 from agent_comms.message_page import PageBounds
@@ -24,7 +24,7 @@ def _thread(root: Path, name: str) -> Thread:
     return thread_registration.new_thread(name, frozenset({'talk'}), str(root), process_identity=ProcessIdentity.capture(os.getpid()))
 
 
-def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_path: Path):
+def test_dm_page_marks_covered_range_preserving_omitted_older_unread(tmp_path: Path):
     comms = wire(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
@@ -32,26 +32,15 @@ def test_dm_page_requires_deliberate_baseline_before_omitted_older_unread(tmp_pa
         comms.messaging.send("peer", viewer, f"old {index}")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
     assert len(page.messages) == 5 and page.has_older
-    assert page.display_basis is not None and page.display_basis.older_unread
-    before = (
-        (tmp_path / "read_ledger.json").read_bytes()
-        if (tmp_path / "read_ledger.json").exists()
-        else None
+    assert page.display_basis is not None
+    comms.views.mark_dm_view_read(
+        "peer", worktree=str(tmp_path), through=page.newest_seq,
+        expected_display_basis=page.display_basis,
     )
-    with pytest.raises(ValueError, match="contiguous"):
-        comms.views.mark_dm_view_read(
-            "peer",
-            worktree=str(tmp_path),
-            through=page.newest_seq,
-            expected_display_basis=page.display_basis,
-        )
-    after = (
-        (tmp_path / "read_ledger.json").read_bytes()
-        if (tmp_path / "read_ledger.json").exists()
-        else None
-    )
-    assert before == after
-    assert comms.bus.pending_count(viewer, "peer") == 50
+    assert comms.bus.pending_count(viewer, "peer") == 45
+    assert [message.body for message in comms.bus.inbox(viewer, "peer")] == [
+        f"old {index}" for index in range(45)
+    ]
 
 
 def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_path: Path):
@@ -66,7 +55,7 @@ def test_deliberate_baseline_and_painted_page_ack_only_peer_through_bound(tmp_pa
     comms.messaging.send("peer", viewer, "painted")
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=5))
     proof = page.display_basis
-    assert isinstance(proof, DMDisplayBasis) and not proof.older_unread
+    assert isinstance(proof, DMDisplayBasis)
     painted = page.newest_seq
     assert painted is not None
     comms.messaging.send("other", viewer, "other unread")
@@ -112,7 +101,7 @@ def test_peer_delete_same_name_rebind_rejects_stale_page_without_read_ack(tmp_pa
     marker_path = tmp_path / "read_ledger.json"
     markers_before = marker_path.read_bytes() if marker_path.exists() else None
     assert before == 3
-    with pytest.raises(ValueError, match="registry changed|incarnation changed"):
+    with pytest.raises(DMScopeChanged, match="registry changed|incarnation changed"):
         comms.views.mark_dm_view_read(
             "peer",
             worktree=str(tmp_path),
@@ -133,14 +122,14 @@ def test_foreign_root_wrong_peer_and_unbounded_or_bool_through_rejected(tmp_path
         comms.messaging.send("peer", viewer, "painted")
     page = first.views.dm_display_page("peer", worktree=str(first.root))
     assert page.display_basis is not None and page.newest_seq is not None
-    for comms, target, through in (
-        (second, "peer", page.newest_seq),
-        (first, "other", page.newest_seq),
-        (first, "peer", page.newest_seq + 1),
-        (first, "peer", True),
-        (first, "peer", -1),
+    for comms, target, through, error in (
+        (second, "peer", page.newest_seq, DMScopeChanged),
+        (first, "other", page.newest_seq, DMScopeChanged),
+        (first, "peer", page.newest_seq + 1, DMPaintedBoundChanged),
+        (first, "peer", True, ValueError),
+        (first, "peer", -1, ValueError),
     ):
-        with pytest.raises(ValueError):
+        with pytest.raises(error):
             comms.views.mark_dm_view_read(
                 target,
                 worktree=str(comms.root),
@@ -167,10 +156,20 @@ def test_independent_read_is_idempotent_and_never_retargets_page(tmp_path: Path)
     assert comms.bus.pending_count(viewer, "peer") == 1
 
 
+def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
+    comms = wire(tmp_path)
+    comms.registry.declare(_thread(tmp_path, "peer"))
+    page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
+    assert isinstance(page.display_basis, EmptyDMDisplayBasis)
+    comms.views.mark_dm_view_read(
+        "peer", worktree=str(tmp_path), through=0, expected_display_basis=page.display_basis,
+    )
+    assert not (tmp_path / "read_ledger.json").exists()
+
+
 @pytest.fixture
-def durable_root():
-    with tempfile.TemporaryDirectory(dir="/var/tmp") as directory:
-        yield Path(directory)
+def durable_root(tmp_path):
+    yield tmp_path
 
 
 @pytest.mark.skipif(os.name != "posix", reason="POSIX directory fsync")

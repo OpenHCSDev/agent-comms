@@ -62,7 +62,7 @@ class TranscriptChanged(StaleRevision):  # noqa: N818 - nominal outcome name
         super().__init__("Transcript changed; reload the latest page.")
 
 
-class DMPaintedBoundChanged(StaleRevision):
+class DMPaintedBoundChanged(TranscriptChanged):
     """The painted bound advanced beyond its fetched DM references."""
 
 

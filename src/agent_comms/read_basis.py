@@ -331,7 +331,7 @@ class DisplayBasis:
             or bus_identity != self.bus_identity
             or any(not item.conversation.current(snapshot) for item in self.conversations)
         ):
-            raise ValueError("Display incarnation changed; refresh the displayed page.")
+            raise DMScopeChanged("Display incarnation changed; refresh the displayed page.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -509,10 +509,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.")
         if bus_identity != self.bus_identity:
             raise DMScopeChanged("DM bus was replaced; refresh the page.")
-        try:
-            self.displayed.validate(self.viewer, snapshot, bus_identity)
-        except ValueError as error:
-            raise DMScopeChanged(str(error)) from error
+        self.displayed.validate(self.viewer, snapshot, bus_identity)
 
 
 class CoveredDMDisplayBasis(DMDisplayBasis):
@@ -521,7 +518,7 @@ class CoveredDMDisplayBasis(DMDisplayBasis):
     def validate_tail(self, through: int) -> None:
         newest = max(sequence for item in self.displayed.conversations for sequence in item.sequences)
         if through > newest:
-            raise DMPaintedBoundChanged("Painted DM bound exceeds the fetched page; reload it.")
+            raise DMPaintedBoundChanged()
 
     def mark(self, reads: ReadLedger, through: int) -> None:
         reads.mark_displayed(self.viewer, self.displayed.through(through))
