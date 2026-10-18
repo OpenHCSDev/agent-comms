@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from agent_comms import native_package
+import agent_comms.native_package as native_package
 from agent_comms.native_package import (
     NativePackageError,
     package_tree_digest,

@@ -9,8 +9,8 @@ from native_proof_cases import child_writer_imports, read_proof_rows, write_proo
 
 import pytest
 
-from agent_comms import native_pi as native
-from agent_comms import selected_tool_broker as broker
+import agent_comms.native_pi as native
+import agent_comms.selected_tool_broker as broker
 from agent_comms.child_process import AttachedChild
 from agent_comms.selected_tool_broker import (
     SelectedToolMode,

@@ -5,7 +5,7 @@ import os
 
 import pytest
 
-from agent_comms import agent_events as ae
+import agent_comms.agent_events as ae
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire

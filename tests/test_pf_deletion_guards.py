@@ -7,7 +7,8 @@ from typing import get_type_hints
 
 import pytest
 
-from agent_comms import selected_claim, coordination_response
+import agent_comms.selected_claim as selected_claim
+import agent_comms.coordination_response as coordination_response
 from agent_comms.envelope_claim_transitions import FileClaimPath
 from agent_comms.messaging import Messaging
 from agent_comms.publisher import ClaimWrites

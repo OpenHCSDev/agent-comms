@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 
 from agent_comms.tracked_turn import TrackedTurnSession
-from agent_comms import acp, native_pi, private_nk_entrypoint, worker
+import agent_comms.acp as acp
+import agent_comms.native_pi as native_pi
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
+import agent_comms.worker as worker
 from agent_comms.input_drain import InputDrain
 from test_coordinated_runtime import _fake_model
 

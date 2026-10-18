@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import field_codec
+import agent_comms.field_codec as field_codec
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import (
     GoalInputDecision,

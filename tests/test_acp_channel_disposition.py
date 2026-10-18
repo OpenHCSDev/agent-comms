@@ -9,7 +9,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms import private_nk_entrypoint
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.native_input_record import FullNativeExecution, TriageNativeExecution
