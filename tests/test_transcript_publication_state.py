@@ -9,7 +9,7 @@ def test_published_identity_refresh_reads_only_the_draft(tmp_path, monkeypatch):
     read = comms.transcripts.capture_page_read("reader")
     snapshot = NotPublished().result(read)
     assert snapshot.identity == read.identity
-    expected = TranscriptDraftUpdate(read.identity, read.current_draft())
+    expected = TranscriptDraftUpdate(read.identity, read.current_draft().external_row())
 
     def no_page_read(self):
         raise AssertionError("An unchanged published page must not be read again")

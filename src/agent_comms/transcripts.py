@@ -22,7 +22,7 @@ from .messages import Message
 from .message_reference import MessageReference
 from .messaging import Messaging
 from .native_runtime_input import PublishedReplyRevision
-from .external_transcript import ExternalDraftRow, ExternalTranscript
+from .external_transcript import ExternalTranscript
 from .native_transcript import RecordsCut
 from .private_path import FileRevision
 from .bus_publication import CommittedDelivery
@@ -35,7 +35,7 @@ from .transcript_events import NoticeTranscript, TranscriptEvent, UserTranscript
 from .transcript_routes import TranscriptRoutes, TranscriptRouteRevision
 from .transcript_sources import (
     AssignedSourceCursor, AssignedTranscriptSource, EarlierTranscript, NoWireFrontier,
-    LaterTranscript, LiveAssignedTranscriptSource, TranscriptSource, WireFrontier,
+    LaterTranscript, LiveAssignedTranscriptSource, TranscriptDraft, TranscriptSource, WireFrontier,
 )
 from .coordination_errors import CoordinationReadUnavailable, StaleRevision, TranscriptChanged
 from .coordination_database import CoordinationStore
@@ -322,7 +322,7 @@ class TranscriptRead:
     def current_identity(self) -> TranscriptReadIdentity:
         return self.identity.recapture(self.owner)
 
-    def _read_page(self) -> tuple[TranscriptPage, ExternalDraftRow | None]:
+    def _read_page(self) -> tuple[TranscriptPage, TranscriptDraft]:
         identity = self.identity
         return self.owner._thread_transcript_page(
             self.source,
@@ -339,13 +339,13 @@ class TranscriptRead:
             raise StaleRevision("Transcript read inputs changed during preparation")
         return page
 
-    def read_snapshot(self) -> tuple[TranscriptPage, ExternalDraftRow | None]:
+    def read_snapshot(self) -> tuple[TranscriptPage, TranscriptDraft]:
         """Read the page and external draft from one retained source lifecycle."""
         page, draft = self._read_page()
         self.identity.require_draft_snapshot(self.current_identity())
         return page, draft
 
-    def current_draft(self) -> ExternalDraftRow | None:
+    def current_draft(self) -> TranscriptDraft:
         """Read current text beside this page, before its finished cut changes."""
         with self.source.records.reading() as records:
             draft = records.current_draft()
@@ -555,7 +555,7 @@ class Transcripts:
         max_messages: int,
         max_bytes: int,
         through: TranscriptCursor | None,
-    ) -> tuple[TranscriptPage, ExternalDraftRow | None]:
+    ) -> tuple[TranscriptPage, TranscriptDraft]:
         """Read page and draft while their record owner retains one source lifecycle."""
         self.page_reads += 1
         thread, runtime = page.thread, page.runtime
