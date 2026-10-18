@@ -24,6 +24,7 @@ from functools import partial
 from pathlib import Path
 from typing import Literal, Type
 
+from .field_codec import MalformedRecord
 from agent_comms.cohort_schema import assert_cohort_schema
 from agent_comms.coordination_errors import (
     IdentityConflict,
@@ -269,7 +270,7 @@ def _assert_response_schema(db: sqlite3.Connection) -> None:
                 tables,
             )
         )
-    except (sqlite3.Error, ValueError, TypeError) as error:
+    except (sqlite3.Error, MalformedRecord) as error:
         raise PublicationActivationBlocked("private response schema is not installed") from error
     if meta != ResponseSchemaMeta(1, 3, _response_digest(schema)):
         raise PublicationActivationBlocked("private response schema version is unsupported")

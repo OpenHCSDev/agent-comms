@@ -15,8 +15,9 @@ from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .historical_views import HistoryArchive
 from .message_page import (
-    NEWEST_PAGE, MessagePage, MessagePageRequest, NewerTraversal, PageBounds,
+    NEWEST_PAGE, MessagePage, MessagePageRequest, PageBounds,
 )
+from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (

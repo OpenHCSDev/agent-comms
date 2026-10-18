@@ -7,7 +7,8 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms, wire
-from agent_comms.message_page import MessagePageRequest, OlderTraversal, PageBounds
+from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.page_traversal import OlderTraversal
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.read_basis import Conversation, ConversationCursor, NamedViewer, ReadCursor

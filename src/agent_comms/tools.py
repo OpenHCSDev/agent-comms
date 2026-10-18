@@ -29,7 +29,7 @@ from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
@@ -316,8 +316,8 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             raise ValueError("Unknown tool argument: tool")
         try:
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
-        except (TypeError, ValueError) as error:
-            raise ValueError(f"Invalid {cls.declared_name} arguments: {error}") from error
+        except MalformedRecord as error:
+            raise MalformedRecord(f"Invalid {cls.declared_name} arguments: {error}") from error
         return FieldCodec.encode(caller.invoke(request, comms))
 
     @abstractmethod

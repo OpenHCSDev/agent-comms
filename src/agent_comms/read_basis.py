@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import CommandTarget
-from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
+from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
@@ -167,11 +167,11 @@ class HistoricalDisplay:
     def acknowledge(self, archive: HistoryArchive, registry: Registration) -> None:
         """Acknowledge exactly painted historical membership in its own ledger."""
         viewer = registry.require(self.displayed.viewer)
-        viewer.role.require_user(ValueError("Historical viewer changed; refresh history"))
+        viewer.role.require_user(DMScopeChanged("Historical viewer changed; refresh history"))
         if viewer.incarnation != self.displayed.viewer_identity:
-            raise ValueError("Historical viewer changed; refresh history")
+            raise DMScopeChanged("Historical viewer changed; refresh history")
         if self.source not in archive.sources():
-            raise ValueError("Historical source detached; refresh history")
+            raise HistoricalSourceChanged("Historical source detached; refresh history")
         self.source.acknowledge(self.displayed)
 
 
@@ -541,7 +541,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             viewer = snapshot.threads[self.viewer]
             target = snapshot.participant(self.requested_peer)
             scope = DMDisplayScope.capture_human(self.viewer, self.requested_peer, snapshot)
-        except (KeyError, StopIteration, ValueError, UnregisteredThreadError) as error:
+        except (KeyError, StopIteration, UnregisteredThreadError) as error:
             raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.") from error
         if (
             selected.incarnation != self.viewer_identity
@@ -618,10 +618,10 @@ class DMDisplayScope(MessageDisplayScope):
             first = snapshot.threads[snapshot.canonical_name(viewer)]
             second = snapshot.participant(peer)
         except (KeyError, UnregisteredThreadError) as error:
-            raise ValueError("DM display identity changed; refresh the page.") from error
-        first.role.require_user(ValueError("DM display identity changed; refresh the page."))
+            raise DMScopeChanged("DM display identity changed; refresh the page.") from error
+        first.role.require_user(DMScopeChanged("DM display identity changed; refresh the page."))
         if first.incarnation == second.incarnation:
-            raise ValueError("DM display identity changed; refresh the page.")
+            raise DMScopeChanged("DM display identity changed; refresh the page.")
         return cls.capture(first.name, second.name, snapshot)
 
     @property
@@ -718,7 +718,7 @@ class ChannelDisplayScope(MessageDisplayScope):
 
     def require_displayed(self) -> DisplayBasis:
         if self.displayed is None:
-            raise ValueError("Channel display scope missing; refresh the displayed page.")
+            raise DMPaintedBoundChanged()
         return self.displayed
 
     def includes(self, message: Message) -> bool:

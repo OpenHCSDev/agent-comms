@@ -13,15 +13,13 @@ import os
 import re
 import shlex
 import time
-import types
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
-from enum import Enum
 from itertools import dropwhile, takewhile
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_type_hints
 
 from acp.schema import SessionConfigSelectOption
 from acp.exceptions import RequestError
@@ -58,7 +56,8 @@ from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportLimits, ImportedSessionMetadata, ThreadImported
-from .message_page import HistoryCursor, PageBounds, PageTraversal
+from .message_page import PageBounds
+from .page_traversal import OlderTraversal, PageCursor
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .shared_ledger import LedgerDocument
 from .tool_caller import ToolCaller
@@ -559,7 +558,7 @@ class ActiveStatusResult(CliResult):
 @dataclass(frozen=True)
 class HistoryPageResult(CliResult):
     messages: tuple[Message, ...]
-    before: int | HistoryCursor | None
+    before: PageCursor | None
     has_older: bool
 
     def encoded(self) -> object:
@@ -710,24 +709,8 @@ class DeclaredOptions(Command):
                 if group not in groups:
                     groups[group] = parser.add_mutually_exclusive_group(required=True)
                 owner = groups[group]
-            options = dict(metadata["parser_options"])
-            annotation = hints[declared.name]
-            scalar = (
-                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
-            )
-            if scalar is bool:
-                options.setdefault("action", "store_true")
-            elif scalar in (int, float):
-                options.setdefault("type", scalar)
-            elif isinstance(scalar, type) and issubclass(scalar, Enum):
-                options["choices"] = [kind.value for kind in scalar]
-            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options.setdefault("choices", scalar.names())
-            elif (
-                get_origin(scalar) is type and get_args(scalar)
-                and issubclass(get_args(scalar)[0], DeclaredFamily)
-            ):
-                options.setdefault("choices", get_args(scalar)[0].names())
+            decoder = compile_decoder(hints[declared.name])
+            options = {**decoder.argument_options(), **metadata["parser_options"]}
             if metadata["parser_default"] is not MISSING:
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
@@ -738,13 +721,8 @@ class DeclaredOptions(Command):
                 options["default"] = declared.default_factory()
             else:
                 options["required"] = True
-            if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = options["default"].declared_name
-            elif (
-                isinstance(options.get("default"), type)
-                and issubclass(options["default"], DeclaredFamily)
-            ):
-                options["default"] = options["default"].declared_name
+            if "default" in options:
+                options["default"] = decoder.argument_text(FieldCodec.encode(options["default"]))
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
@@ -753,19 +731,14 @@ class DeclaredOptions(Command):
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload = {"kind": FieldCodec.encode(cls)}
+        payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
         hints = get_type_hints(cls)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
             normalize = declared.metadata["normalize"]
-            if normalize is not None:
-                value = normalize(value)
-            elif isinstance(hints[declared.name], type) and issubclass(
-                hints[declared.name], DeclaredFamily
-            ):
-                value = {"kind": value}
-            payload[key] = value
+            payload[key] = (normalize(value) if normalize is not None
+                            else compile_decoder(hints[declared.name]).argument_payload(value))
         return cls.from_payload(payload)
 
 
@@ -1266,12 +1239,13 @@ class HistoryCliCommand(CliCommand):
     everything: bool = option("--everything", help="Every message scope (the default)", default=False)
     me: str | None = option("--as", help="DM participant; required with --with", default=None)
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
-    before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
+    before: PageCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
         if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
             raise ValueError("history takes at most one of --with, --channel, --everything")
-        bounds = PageBounds(PageTraversal.capture(self.before, None), self.limit)
+        traversal = self.before.older() if self.before is not None else OlderTraversal()
+        bounds = PageBounds(traversal, self.limit)
         if self.with_thread:
             page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)
         elif self.channel:

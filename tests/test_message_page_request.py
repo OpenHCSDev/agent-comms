@@ -4,9 +4,8 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.message_page import (
-    MessagePageRequest, NewerTraversal, OlderTraversal, PageBounds, PageTraversal,
-)
+from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
 from agent_comms.read_basis import MessageDisplayScope
 from agent_comms.threads import Thread
 
@@ -20,8 +19,12 @@ class ReviewScope(MessageDisplayScope):
         return message.body.startswith(self.prefix)
 
 
-@pytest.mark.parametrize("direction", [{"after": 0}, {"before": 10}])
-def test_new_scope_preserves_indexed_progress_and_edges(tmp_path, direction):
+@pytest.mark.parametrize("traversal,first,has_older,has_newer", [
+    (NewerTraversal(), 1, False, True), (OlderTraversal(10), 4, True, False),
+])
+def test_new_scope_preserves_indexed_progress_and_edges(
+    tmp_path, traversal, first, has_older, has_newer,
+):
     comms = wire(tmp_path)
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'review'}), str(tmp_path)))
@@ -31,16 +34,15 @@ def test_new_scope_preserves_indexed_progress_and_edges(tmp_path, direction):
                      "noise", "review last")
     ]
     # No consumer edit/roster entry: one declared scope is sufficient.
-    request = MessagePageRequest(ReviewScope("review"), PageBounds(PageTraversal.capture(**direction), max_bytes=1))
+    request = MessagePageRequest(ReviewScope("review"), PageBounds(traversal, max_bytes=1))
     indexed = request.read(comms.bus.log)
     assert len(indexed.messages) == 1
-    assert indexed.messages[0] == messages[1 if "after" in direction else 4]
-    assert indexed.has_newer == ("after" in direction)
-    assert indexed.has_older == ("before" in direction)
-    cursor = indexed.newest_seq if "after" in direction else indexed.oldest_seq
-    continuation = {"after" if "after" in direction else "before": cursor}
+    assert indexed.messages[0] == messages[first]
+    assert indexed.has_newer == has_newer
+    assert indexed.has_older == has_older
+    continuation = type(traversal)(indexed.messages[0].seq)
     next_page = MessagePageRequest(
-        request.scope, PageBounds(PageTraversal.capture(**continuation), max_bytes=1)
+        request.scope, PageBounds(continuation, max_bytes=1)
     ).read(comms.bus.log)
     assert next_page.messages == (messages[2],)
     assert next_page.has_older and next_page.has_newer

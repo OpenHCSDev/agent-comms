@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from abc import abstractmethod
+from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
+from .field_codec import MalformedRecord
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .private_path import FileRevision
@@ -165,7 +166,7 @@ class NativeRecord:
 
     def publication_producer(self) -> NativeEntry | None:
         if not self.complete or self.entry is None:
-            raise ValueError("Native publication has incomplete evidence")
+            raise MalformedRecord("Native publication has incomplete evidence")
         if self.entry.final_reply:
             self.entry.require_entry_id()
             return self.entry
@@ -273,12 +274,12 @@ class NativeTranscript(TranscriptSource):
         with self.path.open("rb") as stream:
             header = NativeEntry.read(stream.readline())
         if not isinstance(header, SessionEntry):
-            raise ValueError("Native publication has no original session header")
+            raise MalformedRecord("Native publication has no original session header")
         header.require_header()
         with NativeContextJournal.open_evidence(self.path.absolute()) as db:
             proof = NativeContextJournal.for_input(db, user.input_id)
             if proof is None:
-                raise ValueError("Native publication has no committed context inclusion")
+                raise MalformedRecord("Native publication has no committed context inclusion")
             return proof.corroborate(self.path.absolute(), header, {user.input_id: user})
 
     def inputs_for(self, records) -> tuple:

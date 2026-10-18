@@ -9,8 +9,8 @@ from contextlib import closing
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_page_index import BusPageIndex
 from .messages import Message
+from .page_traversal import NewerTraversal, OlderTraversal, PageCursor, PageTraversal
 from .private_path import FileRevision
 from .read_basis import (
     ChannelDisplayScope, DisplaySelection, DMDisplayBasis,
@@ -51,11 +51,11 @@ class MessagePage:
         return NoDisplaySelection()
 
     @property
-    def oldest_cursor(self) -> int | HistoryCursor | None:
+    def oldest_cursor(self) -> PageCursor | None:
         return self.messages[0].view_cursor if self.messages else None
 
     @property
-    def newest_cursor(self) -> int | HistoryCursor | None:
+    def newest_cursor(self) -> PageCursor | None:
         return self.messages[-1].view_cursor if self.messages else None
 
     def __post_init__(self) -> None:
@@ -78,108 +78,6 @@ class MessagePageRow:
     size: int
 
 
-@dataclass(frozen=True, slots=True)
-class HistoryCursor:
-    source: str
-    sequence: int
-
-
-class PageTraversal(ABC):
-    """Exclusive cursor, traversal order and edge meaning belong together.
-
-    A cursor taken from an attached history source names that source; the
-    live log's cursors name none.
-    """
-
-    cursor: int | None
-    source: str | None
-
-    @staticmethod
-    def capture(
-        before: int | HistoryCursor | None = None, after: int | HistoryCursor | None = None
-    ) -> PageTraversal:
-        if before is not None and after is not None:
-            raise ValueError("History pages accept either before or after, not both.")
-        if isinstance(after, HistoryCursor):
-            return NewerTraversal(after.sequence, after.source)
-        if after is not None:
-            return NewerTraversal(after)
-        if isinstance(before, HistoryCursor):
-            return OlderTraversal(before.sequence, before.source)
-        return OlderTraversal(before)
-
-    @property
-    def historical(self) -> bool:
-        return self.source is not None
-
-    def __post_init__(self) -> None:
-        if self.cursor is not None and self.cursor < 0:
-            raise ValueError("History cursors cannot be negative.")
-
-    @abstractmethod
-    def source_indexes(self, start: int, count: int) -> range: ...
-
-    def for_source(self, current: bool) -> PageTraversal:
-        return self if current else type(self)()
-
-    @abstractmethod
-    def offsets(self, index: BusPageIndex, scope, boundary): ...
-
-    @abstractmethod
-    def opposite_offsets(self, index: BusPageIndex, scope, boundary): ...
-
-    @staticmethod
-    @abstractmethod
-    def append(rows: deque[MessagePageRow], row: MessagePageRow) -> None: ...
-
-    @abstractmethod
-    def result(self, window: PageWindow, more: bool, opposite: bool) -> MessagePage: ...
-
-
-@dataclass(frozen=True, slots=True)
-class OlderTraversal(PageTraversal):
-    cursor: int | None = None
-    source: str | None = None
-
-    def source_indexes(self, start, count):
-        return range(start, -1, -1)
-
-    def offsets(self, index, scope, boundary):
-        return scope.offsets(index, lower=None, upper=self.cursor, descending=True,
-                             before_offset=boundary)
-
-    def opposite_offsets(self, index, scope, boundary):
-        if self.cursor is not None:
-            yield from scope.offsets(index, lower=self.cursor - 1, upper=None,
-                                     descending=True, before_offset=boundary)
-
-    append = staticmethod(deque.appendleft)
-
-    def result(self, window, more, opposite):
-        return MessagePage(window.messages, more, opposite)
-
-
-@dataclass(frozen=True, slots=True)
-class NewerTraversal(PageTraversal):
-    cursor: int = 0
-    source: str | None = None
-
-    def source_indexes(self, start, count):
-        return range(start, count)
-
-    def offsets(self, index, scope, boundary):
-        return scope.offsets(index, lower=self.cursor, upper=None, descending=False,
-                             before_offset=boundary)
-
-    def opposite_offsets(self, index, scope, boundary):
-        return OlderTraversal(self.cursor + 1).offsets(index, scope, boundary)
-
-    append = staticmethod(deque.append)
-
-    def result(self, window, more, opposite):
-        return MessagePage(window.messages, opposite, more)
-
-
 @dataclass(slots=True)
 class PageWindow:
     """One budget authority; a single oversized row always makes progress."""
@@ -192,6 +90,9 @@ class PageWindow:
     @property
     def messages(self) -> tuple[Message, ...]:
         return tuple(row.message for row in self.rows)
+
+    def page(self, has_older: bool, has_newer: bool) -> MessagePage:
+        return MessagePage(self.messages, has_older, has_newer)
 
     def take(self, traversal: PageTraversal, row: MessagePageRow) -> bool:
         if len(self.rows) >= self.limit or (self.rows and self.bytes + row.size > self.max_bytes):
