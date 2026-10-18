@@ -122,7 +122,7 @@ class AgentActivity:
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
         return self._observed(participant, owner,
-            self.activity.current(participant.name, active=participant.executing))
+            self.activity.current(participant.name, active=participant.active_turn.executing))
 
     def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         if not incarnation.current(snapshot):
@@ -142,7 +142,7 @@ class AgentActivity:
             return {}
         events = self.activity.current_for(
             requested,
-            active=frozenset(name for name, thread in requested.items() if thread.executing),
+            active=frozenset(name for name, thread in requested.items() if thread.active_turn.executing),
         )
         return {
             name: self._observed(thread, snapshot.owner_identity(name), events[name])
@@ -238,7 +238,7 @@ class AgentActivity:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
-        if diagnostic is None or diagnostic.recorded_at >= thread.active_turn.started_at:
+        if diagnostic is None or not thread.active_turn.started_after(diagnostic.recorded_at):
             return False
         return self._recover_drain(thread.name, owner, diagnostic)
 
@@ -267,13 +267,13 @@ class AgentActivity:
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = self.registry.transition_turn(lease, phase)
-            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            self._record_turn_activity(lease.identity.incarnation.name, (state.active.phase for state in effects))
             return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = self.registry.observe_native_phase(lease, phase)
-            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            self._record_turn_activity(lease.identity.incarnation.name, (state.active.phase for state in effects))
             return effects
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:

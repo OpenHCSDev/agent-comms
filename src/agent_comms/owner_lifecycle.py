@@ -32,6 +32,7 @@ from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .turn_lease import NoTurn
 from .typed_table import Column, TypedStore, TypedTable
 
 _LOG = logging.getLogger(__name__)
@@ -242,7 +243,7 @@ class OwnerLifecycle:
                 raise RelationViolationError("A human participant cannot become an executor.")
             if thread.process_alive:
                 return thread
-            owned = replace(thread, process_identity=identity, active_turn=None)
+            owned = replace(thread, process_identity=identity, active_turn=NoTurn())
             self.registry.register(owned, new_owner=True)
             return owned
 
@@ -469,7 +470,7 @@ class OwnerLifecycle:
 
         def reserve(identity: ProcessIdentity) -> None:
             nonlocal owned
-            owned = replace(thread, process_identity=identity, active_turn=None)
+            owned = replace(thread, process_identity=identity, active_turn=NoTurn())
             self.registry.register(owned, new_owner=True)
 
         with owner_process_output(self.root, thread) as output:

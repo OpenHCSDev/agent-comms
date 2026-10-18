@@ -199,7 +199,7 @@ class FullTick:
                 await observation.effects.turns.goals.schedule_goal(session_id)
                 current = await Coordination.run_worker(partial(observation.comms.registry.require, thread))
                 if (
-                    current.executing
+                    current.active_turn.executing
                     or session_id in observation.effects.turns.turn_tasks
                     or session_id in observation.backend_inboxes
                 ):
@@ -510,7 +510,7 @@ class InputDrain(InputObservation):
     def owns_execution(self, session_id: str, owner: Thread) -> bool:
         """An attached turn can take follow-ups; a predecessor cannot."""
         return (
-            owner.turn_state.busy
+            owner.active_turn.phase.busy
             or session_id in self.backend_inboxes
             or session_id in self.effects.turns.turn_tasks
         )

@@ -188,8 +188,9 @@ class SelectedWritePlans:
             if marker.root_id != self.root_id or not marker.claims:
                 raise IdentityConflict("Selected write requires matching private claim root")
             owner, claimed_generation = self.comms.registry.live_owner_with_claim(owner_name)
-            if owner.pid != os.getpid() or owner.active_turn is not None:
+            if owner.pid != os.getpid():
                 raise IdentityConflict("Selected write owner is not idle in this process")
+            owner.active_turn.require_idle(IdentityConflict("Selected write owner is not idle in this process"))
             initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
             if initial.message.message_id != source_message_id:
                 raise IdentityConflict("Selected write source identity changed")
