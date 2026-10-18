@@ -338,7 +338,6 @@ class StoredTurnReference(TurnRecord):
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLeaseFence | None:
         self.read()
-        return None
 
 
 @dataclass(frozen=True)
@@ -363,17 +362,6 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference):
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
-
-    @classmethod
-    def from_wire(cls, data: object) -> StoredTurnRecord:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
 
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
