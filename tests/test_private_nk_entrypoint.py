@@ -415,7 +415,7 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     if entrypoint == "acp":
         monkeypatch.setattr(acp.asyncio, "run", stop)
     else:
-        monkeypatch.setattr(worker.RestartEnvironment, "calling_thread", stop)
+        monkeypatch.setattr(worker.ThreadLaunch, "current", stop)
     with pytest.raises(StopBeforeOwnerAttachmentError):
         if entrypoint == "acp":
             acp.main()
