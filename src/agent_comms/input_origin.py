@@ -11,7 +11,7 @@ from .errors import RelationViolationError
 from .goals import GoalCheckpoint
 from .message_reference import MessageReference
 from .thread_identity import ClaimedIdentity
-from .wire_metadata import WireRootIdText
+from .field_codec import Id128Text
 from .turn_context import Provenance
 
 if TYPE_CHECKING:
@@ -78,7 +78,7 @@ class UnattributedInputOrigin(InputOrigin):
 
 @dataclass(frozen=True)
 class WireInputOrigin(InputOrigin):
-    root_id: Annotated[str, WireRootIdText]
+    root_id: Annotated[str, Id128Text]
     reference: MessageReference
 
     def delivery_reference(self, root_id: str) -> MessageReference | None:
@@ -96,7 +96,7 @@ class HumanInputOrigin(InputOrigin):
     declaration supplies authorship, not executable or tool authority.
     """
 
-    root_id: Annotated[str, WireRootIdText]
+    root_id: Annotated[str, Id128Text]
     author: HumanOrigin
     claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
     project: str
@@ -113,7 +113,7 @@ class HumanInputOrigin(InputOrigin):
             if snapshot.claimed_identity(owner.name) != claim_scope:
                 raise RelationViolationError("User input attachment changed before capture")
             root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
-            root_id = WireRootIdText.decode(root_id)
+            root_id = Id128Text.decode(root_id)
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
             return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
                        claim_scope, owner.worktree, owner.goal_checkpoint)

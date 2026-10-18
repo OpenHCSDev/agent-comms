@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
+import agent_comms.coordinated_runtime as runtime
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage

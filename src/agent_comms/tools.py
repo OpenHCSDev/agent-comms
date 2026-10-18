@@ -334,10 +334,15 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ConnectorReadable:
-    """A read tool the claude.ai connector lists and calls; a tool without it is not exposed."""
+class ReadTool:
+    """A tool whose apply changes nothing on the bus; the claude.ai connector lists only these."""
 
     __slots__ = ()
+
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadReadTool(ReadTool, ToolRequest):
+    thread: str = tool_field("Thread to read; omit to read your own", default="")
 
 
 class ThreadToolRequest(ToolRequest[ThreadCaller]):
@@ -506,7 +511,7 @@ class CommsThreadTagsTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChannelsTool(ToolRequest):
+class CommsChannelsTool(ReadTool, ToolRequest):
     label = "List channels"
     description = "List named tag views and their current member threads; #any includes everyone."
 
@@ -621,7 +626,7 @@ class CommsGoalTool(ThreadToolRequest):
         "The goal remains active, but only a direct message from a named dependency or "
         "a user follow-up starts its next turn. Do not repeatedly announce waiting or "
         "return empty output. If existing dependency replies block standby, inspect "
-        "comms_inbox with this goal_id and wait_for. Read standby_review.messages and "
+        "comms_inbox with standby {goal_id, wait_for}. Read standby_review.messages and "
         "copy only standby_review.reviewed_inputs into reviewed_inputs; this records "
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
@@ -714,14 +719,14 @@ class CommsEditGoalTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsGoalHistoryTool(ThreadToolRequest):
+class CommsGoalHistoryTool(ThreadReadTool):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
     goal_id: str = tool_field("Optional goal ID; omit for this thread's full history", default="")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalHistory:
+    def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
         requested = self.goal_id.strip()
-        entries = comms.goals.goal_history(caller.name, goal_id=requested or None)
+        entries = comms.goals.goal_history(caller.subject(self.thread), goal_id=requested or None)
         return GoalHistory(tuple(entry.recorded() for entry in entries))
 
 
@@ -738,12 +743,12 @@ class CommsTodoTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTodoListTool(ThreadToolRequest):
+class CommsTodoListTool(ThreadReadTool):
     label = "Read problems"
     description = "Read the commander's canonical Todo orders, deadlines, strikes and hunts."
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
-        actor = comms.registry.require(caller.name).incarnation
+    def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
+        actor = comms.registry.require(caller.subject(self.thread)).incarnation
         return TodoList(tuple(comms.goals.todos.for_commander(actor)))
 
 
@@ -820,18 +825,17 @@ class CommsProblemCloseTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTurnsTool(ToolRequest):
+class CommsTurnsTool(ThreadReadTool):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
-    thread: str = tool_field("Thread whose own saved turn records to read")
     last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(self.thread, last=self.last)
+        return comms.transcripts.turns(caller.subject(self.thread), last=self.last)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadsTool(ConnectorReadable, ToolRequest):
+class CommsThreadsTool(ReadTool, ToolRequest):
     label = "Comms Threads"
     description = (
         "List agent threads with status and pending counts, plus this caller's "
@@ -845,7 +849,7 @@ class CommsThreadsTool(ConnectorReadable, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsWorkBranchesTool(ToolRequest):
+class CommsWorkBranchesTool(ReadTool, ToolRequest):
     label = "Work branches"
     description = (
         "Branches with commits not on main, newest first, each with its open PR or linked "
@@ -880,15 +884,15 @@ class CommsCollaborationTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCollaborationsTool(ThreadToolRequest):
+class CommsCollaborationsTool(ThreadReadTool):
     label = "List collaborations"
     description = (
         "Read explicit contacts and goal-derived awareness with provenance, without "
         "changing delivery, work acceptance or owners."
     )
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> CollaborationList:
-        contacts = comms.relationships.contacts(caller.name)
+    def apply(self, comms: Comms, caller: ToolCaller) -> CollaborationList:
+        contacts = comms.relationships.contacts(caller.subject(self.thread))
         visible = tuple(
             VisibleCollaborator(entry.target, entry.available, entry.sources, entry.detail,
                                 entry.goal_contacts)
@@ -1016,6 +1020,12 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
         return self.text
 
 
+@dataclass(frozen=True)
+class StandbyRequest:
+    goal_id: str = tool_field("Current goal for scoped standby review")
+    wait_for: tuple[str, ...] = tool_field("Declared dependencies for standby review")
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
@@ -1024,17 +1034,14 @@ class CommsInboxTool(ToolRequest):
         "Optional target limits the conversation. ACK marks exactly the returned "
         "message references; unresolved_inputs remain UNKNOWN. Oversized results return "
         "complete=false, counts, and a complete result_file; ACK is deferred. Read that "
-        "file selectively, never dump it into context. For standby, supply goal_id and "
-        "wait_for to get standby_review: exact eligible keys and messages, already "
-        "reviewed entries, and excluded owner/other-dependency inputs."
+        "file selectively, never dump it into context. For standby, supply standby "
+        "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
+        "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
     target: str | None = tool_field("Optional channel or peer conversation", default=None)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
-    goal_id: str | None = tool_field("Current goal for scoped standby review", default=None)
-    wait_for: list[str] | None = tool_field(
-        "Declared dependencies for standby review", default=None
-    )
+    standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxRead:
         thread = self.thread
@@ -1043,13 +1050,10 @@ class CommsInboxTool(ToolRequest):
             target = target.strip()
             if not target:
                 raise ValueError("An inbox target cannot be empty.")
-        goal_id = self.goal_id
-        wait_for = self.wait_for
-        if bool(goal_id) != bool(wait_for):
-            raise ValueError("Provide goal_id and wait_for together for standby review.")
+        standby = self.standby
         review = (
-            comms.goals.goal_input_review(thread, goal_id, wait_for)
-            if goal_id and wait_for
+            comms.goals.goal_input_review(thread, standby.goal_id, standby.wait_for)
+            if standby is not None
             else None
         )
         messages = tuple(comms.bus.inbox(thread, target))
@@ -1138,7 +1142,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRestartQueueTool(ToolRequest):
+class CommsRestartQueueTool(ReadTool, ToolRequest):
     label = "Restart Queue Status"
     description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
     name: str = tool_field("Agent thread")

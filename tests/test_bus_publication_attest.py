@@ -1,0 +1,52 @@
+"""A committed bus row is attested once, where the private bus row store indexes it."""
+
+import json
+
+import pytest
+
+from agent_comms.bus_publication import PRIVATE_WIRE_FIELD, CommittedDelivery
+from agent_comms.field_codec import MalformedRecord
+from agent_comms.private_bus_checkpoint import DeliverySources
+from conftest import publish_initial
+from test_private_bus_checkpoint import _root
+
+
+def _read_bus(comms):
+    """Every committed delivery, through the row store's own pointers."""
+    with comms.bus.log.certified_read() as source:
+        captured = source.capture_sources(tuple(DeliverySources.select(source.connection)))
+    return list(captured)
+
+
+@pytest.fixture
+def attested(monkeypatch):
+    """The sequence of each row attest proves, in call order."""
+    seqs = []
+    attest = CommittedDelivery.attest.__func__
+
+    def counted(cls, message, record, wire_root_id):
+        seqs.append(message.seq)
+        return attest(cls, message, record, wire_root_id)
+
+    monkeypatch.setattr(CommittedDelivery, "attest", classmethod(counted))
+    return seqs
+
+
+def test_a_committed_row_is_attested_once(tmp_path, attested):
+    comms, _ = _root(tmp_path)
+    publish_initial(comms, "sender", "#team", "first")
+    first = _read_bus(comms)
+    attested.clear()
+    assert _read_bus(comms) == first and attested == []
+    appended = publish_initial(comms, "sender", "#team", "second")
+    assert _read_bus(comms)[:-1] == first and attested == [appended.seq]
+
+
+def test_a_tampered_row_is_refused_on_its_first_read(tmp_path):
+    comms, _ = _root(tmp_path)
+    publish_initial(comms, "sender", "#team", "first")
+    row = json.loads(comms.bus.log.path.read_bytes().splitlines()[-1])
+    row[PRIVATE_WIRE_FIELD]["initial"]["decisions_digest"] = "0" * 64
+    with comms.bus.log.locked(), pytest.raises(MalformedRecord, match="decisions do not match"):
+        comms.bus.log.append_private_unlocked(comms.bus.log.read_metadata_unlocked(required=True), row)
+    assert [d.message.body for d in _read_bus(comms)] == ["first"]

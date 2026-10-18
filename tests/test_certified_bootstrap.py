@@ -71,7 +71,7 @@ def test_truncated_coverage_cannot_hide_an_unproven_source(tmp_path):
 
 
 def test_failed_checkpoint_bootstrap_never_commits_registry_guard(tmp_path, monkeypatch):
-    from agent_comms import wire_log
+    import agent_comms.wire_log as wire_log
 
     comms = Comms(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path)))

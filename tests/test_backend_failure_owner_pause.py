@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from agent_comms import agent_events as ae
+import agent_comms.agent_events as ae
 from agent_comms.goal_actions import (
     ActiveGoalAction,
     GoalPrecondition,

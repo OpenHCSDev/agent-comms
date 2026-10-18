@@ -3,8 +3,8 @@ import json
 
 import pytest
 
-from agent_comms import agent_events as ae
-from agent_comms import invoke_tool
+import agent_comms.agent_events as ae
+from agent_comms.tools import invoke_tool
 from agent_comms.acp_extension import QueuePromptRequest, encode_request
 from agent_comms.input_origin import HumanInputOrigin
 from delivery_owner_fixture import canonical_agent

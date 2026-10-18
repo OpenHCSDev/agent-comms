@@ -316,7 +316,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     from agent_comms.acp import CommsAgent
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
-    from agent_comms import private_nk_entrypoint
+    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
     from agent_comms.coordination_errors import PublicationActivationBlocked
     from agent_comms.native_package import NativePackageError
     from agent_comms.threads import Thread

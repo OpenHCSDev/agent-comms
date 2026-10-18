@@ -3,7 +3,8 @@
 import ast
 import inspect
 
-from agent_comms import restart_queue, launch_runtime
+import agent_comms.restart_queue as restart_queue
+import agent_comms.launch_runtime as launch_runtime
 from agent_comms.restart_refusals import RestartRefusal, WaitForIdle
 
 

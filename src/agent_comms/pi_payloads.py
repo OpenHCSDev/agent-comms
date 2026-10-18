@@ -14,7 +14,7 @@ from functools import singledispatch
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
 from .tool_declaration import ToolDeclaration
@@ -404,7 +404,7 @@ class ProviderDiagnosticError(PiPayload):
         return f"{name} (code {self.code})" if self.code is not None else name
 
 
-class TransportStageText(TextRepresentation):
+class TransportStageText(TextRepresentation[ProviderTransportStage]):
     """The native provider's scalar spelling, not a second record decoder."""
 
     @classmethod
@@ -1331,8 +1331,7 @@ class McpLiveAcknowledgement:
         return acknowledgement if acknowledgement.input_id == input_id else None
 
     def __post_init__(self):
-        if re.fullmatch(r"[a-f0-9]{32}", self.input_id) is None:
-            raise ValueError("Invalid external MCP input identity")
+        Id128Text.from_text(self.input_id)
         if len(self.servers) > 32 or len({server.id for server in self.servers}) != len(
             self.servers
         ):

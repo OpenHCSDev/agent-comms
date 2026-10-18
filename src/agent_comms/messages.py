@@ -320,6 +320,10 @@ class Message:
     )
 
     @property
+    def text_size(self) -> int:
+        return len(self.body)
+
+    @property
     def publication_snapshot(self) -> Message:
         """Frozen publication content before independently owned delivery enrichment.
 

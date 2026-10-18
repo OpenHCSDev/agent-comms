@@ -13,12 +13,12 @@ from .goals import Goal
 from .declared_family import DeclaredFamily
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import LockedStore, RootFile
-from .registry_document import RegistrySnapshot
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
     from .agent_activity import AgentActivity
     from .threads import Thread
 

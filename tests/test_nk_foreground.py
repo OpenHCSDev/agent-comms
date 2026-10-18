@@ -15,7 +15,7 @@ from unittest.mock import patch
 
 import pytest
 
-from agent_comms import nk_foreground as foreground
+import agent_comms.nk_foreground as foreground
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
@@ -68,8 +68,8 @@ def sender(private_comms) -> Path:
 
 def _recipient(pipe, root: Path, root_id: str, name: str, decision: str = "FULL") -> None:
     """Actual OS recipient: own PID registers, waits GO, executes one claim."""
-    from agent_comms import coordinated_runtime as runtime
-    from agent_comms import nk_foreground as foreground
+    import agent_comms.coordinated_runtime as runtime
+    import agent_comms.nk_foreground as foreground
 
     model, calls = _fake_model(decision=decision)
     with (

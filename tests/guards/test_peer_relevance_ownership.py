@@ -6,7 +6,8 @@ from pathlib import Path
 import pytest
 
 import agent_comms
-from agent_comms import peer_relevance, relationships
+import agent_comms.peer_relevance as peer_relevance
+import agent_comms.relationships as relationships
 from agent_comms.peer_relevance import PeerRelevance, RelevanceCapability
 from agent_comms.relationships import MutualThreadRelation
 
