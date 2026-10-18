@@ -14,7 +14,6 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .pi_vocabulary import CompactionReason, UnknownCompactionReason
 from .request_progress import RequestProgress
-from .turn_phase import ModelWaitPhase
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
@@ -327,6 +326,8 @@ class RetryAttemptEvent(NativePiEvent):
         pass
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        from .turn_phase import ModelWaitPhase
+
         elapsed_ms = round(
             (session.watchdog.now - session.watchdog.last_model_progress) * 1000
         )
@@ -384,6 +385,8 @@ class CompactionEnd(ReasonedCompaction):
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        from .turn_phase import ModelWaitPhase
+
         session.watchdog.progress()
         completed = self.aborted is False and self.result is not None
         if completed:
@@ -824,6 +827,8 @@ class SummarizationRetryFinished(NativePiEvent):
     success: bool | None = field(default=None, metadata={"wire_name": "success"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        from .turn_phase import ModelWaitPhase
+
         session.watchdog.progress()
         if self.success or self.result:
             yield session.watchdog.state(
