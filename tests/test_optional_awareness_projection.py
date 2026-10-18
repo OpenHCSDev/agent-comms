@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import coordinated_runtime as runtime
-from agent_comms import coordination_cohort as cohort
+import agent_comms.coordinated_runtime as runtime
+import agent_comms.coordination_cohort as cohort
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.child_process import ProcessIdentity

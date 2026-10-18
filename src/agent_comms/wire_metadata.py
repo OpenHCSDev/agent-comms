@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
@@ -11,7 +10,7 @@ from .audience_manifest import MAX_WIRE_SEQ
 from .checkpoint_seals import CheckpointSeal
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import SpelledText
+from .field_codec import Id128Text
 
 if TYPE_CHECKING:
     import sqlite3
@@ -21,16 +20,6 @@ if TYPE_CHECKING:
     from .private_bus_checkpoint import PrefixWitness
     from .store_files import LockMode
     from .wire_log import WireLog
-
-
-class WireRootIdText(SpelledText):
-    """The private bus declaration owns its external root identity spelling."""
-
-    spelling = re.compile("[0-9a-f]{32}")
-
-    @classmethod
-    def encode(cls, value: object) -> object:
-        return cls.decode(value)
 
 
 class WireAccess(DeclaredFamily, affix="Access"):
@@ -111,7 +100,7 @@ class WireMetadata:
         if self.private != (self.wire_root_id is not None):
             raise ValueError("Private bus protocol needs its root identity")
         if self.wire_root_id is not None:
-            WireRootIdText.from_text(self.wire_root_id)
+            Id128Text.from_text(self.wire_root_id)
         if self.claims and not self.private:
             raise ValueError("Claim marker requires private protocol")
         if (self.checkpoint_version is not None) != (self.checkpoint_seal is not None):

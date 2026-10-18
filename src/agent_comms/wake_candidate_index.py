@@ -20,12 +20,11 @@ from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
 from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .private_path import FileIdentity, FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake_policy import WakePolicy
 from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireSnapshot, WireLog
-from .wire_metadata import WireRootIdText
 from .wire_record import WireRecord
 
 
@@ -139,7 +138,7 @@ class CandidatePage:
 class CommittedAppendHint:
     """Untrusted scheduling hint, never a sealed claim or native input acknowledgement."""
 
-    root_id: Annotated[str, WireRootIdText]
+    root_id: Annotated[str, Id128Text]
     through_bytes: int
 
     def __post_init__(self) -> None:

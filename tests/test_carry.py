@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import private_nk_entrypoint
+import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 from agent_comms.comms import Comms
 from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadLedger
@@ -159,13 +159,13 @@ def test_a_deleted_step_name_is_never_reused(tmp_path):
 
 def record_source(version: int, fields: str) -> str:
     return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
-            "from agent_comms.wire_metadata import WireRootIdText\n\n"
-            "class RootId(WireRootIdText):\n    \"\"\"Another representation of the same spelling.\"\"\"\n\n"
+            "from agent_comms.field_codec import Id128Text\n\n"
+            "class RootId(Id128Text):\n    \"\"\"Another representation of the same spelling.\"\"\"\n\n"
             f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
 
 
 PLAIN = "    root: str\n"
-SPELLED = "    root: Annotated[str, WireRootIdText]\n"
+SPELLED = "    root: Annotated[str, Id128Text]\n"
 
 
 @pytest.mark.refactor_guard

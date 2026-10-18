@@ -21,9 +21,8 @@ from pathlib import Path
 from typing import Annotated, ClassVar
 
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, PathText
+from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
 from .private_nk_entrypoint import PrivateNkLaunch
-from .wire_metadata import WireRootIdText
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,7 +82,7 @@ class AbsoluteRoutePathText(PathText):
 class ActiveRoute(CommsRoute):
     """The default private root; each installation launches its own pinned native package."""
     root: Annotated[Path, AbsoluteRoutePathText]
-    wire_root_id: Annotated[str, WireRootIdText]
+    wire_root_id: Annotated[str, Id128Text]
     # The file format: the writer stamps it and the reader refuses any other before decoding.
     version: ClassVar[int] = 2
     # The CLI command that replaces a file this reader refuses; it registers under this name.

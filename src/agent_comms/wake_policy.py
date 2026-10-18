@@ -44,6 +44,14 @@ class RecipientDecision(ABC):
     @abstractmethod
     def to_wire(self) -> dict[str, str]: ...
 
+    marker: ClassVar[str]  # the key only this decision's wire row carries
+
+    @classmethod
+    def from_wire(cls, row: dict[str, str]) -> RecipientDecision:
+        """A committed row's decision, whose digest its first read proved."""
+        member, = (member for member in cls.__subclasses__() if member.marker in row)
+        return member.from_wire(row)
+
     def initial_notification(self, recipient, sender_lookup, *, observation):
         return self.wake_policy().initial_state()().notification(
             recipient, sender_lookup, observation=observation)
@@ -64,8 +72,17 @@ class NoWakeDecision(RecipientDecision):
     def candidate_wake_mode(self) -> type[WakePolicy] | None:
         return None
 
+    marker = "no_wake"
+
     def to_wire(self) -> dict[str, str]:
         return {"recipient_lookup": self.recipient, "no_wake": self.reason.value}
+
+    @classmethod
+    def from_wire(cls, row: dict[str, str]) -> NoWakeDecision:
+        match row:
+            case {"recipient_lookup": lookup, "no_wake": reason}:
+                return cls(lookup, NoWakeReason(reason))
+        raise IntegrityViolationError("A no-wake decision row is incomplete.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,9 +99,18 @@ class WakeDecision(RecipientDecision):
     def candidate_wake_mode(self) -> type[WakePolicy]:
         return type(self.wake_mode)
 
+    marker = "wake_mode"
+
     def to_wire(self) -> dict[str, str]:
         return {"recipient_lookup": self.recipient, "audience": self.audience.value,
                 "wake_mode": self.wake_mode.declared_name}
+
+    @classmethod
+    def from_wire(cls, row: dict[str, str]) -> WakeDecision:
+        match row:
+            case {"recipient_lookup": lookup, "audience": audience, "wake_mode": mode}:
+                return cls(lookup, MessageAudience(audience), WakePolicy.decode(mode)())
+        raise IntegrityViolationError("A wake decision row is incomplete.")
 
 
 @dataclass(frozen=True)

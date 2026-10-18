@@ -9,7 +9,7 @@ import sys
 
 import pytest
 
-from agent_comms import private_sidecar as sidecar
+import agent_comms.private_sidecar as sidecar
 from agent_comms.native_input_record import TriageNativeExecution, FullNativeExecution
 from agent_comms.selected_triage import IgnoreSelectedTriage
 from agent_comms.coordination_errors import IdentityConflict
@@ -269,7 +269,7 @@ def test_install_sync_failure_leaves_explicit_unknown_not_repaired(path, monkeyp
 _WORKER = r"""
 import os, signal, sys
 from pathlib import Path
-from agent_comms import private_sidecar as s
+import agent_comms.private_sidecar as s
 from agent_comms.native_input_record import TriageNativeExecution
 from agent_comms.native_prompt_binding import PromptBinding
 p = Path(sys.argv[1])

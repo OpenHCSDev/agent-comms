@@ -10,8 +10,8 @@ import pytest
 from acp import RequestError
 from acp.schema import ImageContentBlock
 
-from agent_comms import agent_events as ae
-from agent_comms import backend
+import agent_comms.agent_events as ae
+import agent_comms.backend as backend
 from agent_comms.acp_extension import (
     InputDeliveryChangedUpdate,
     QueueChangedUpdate,

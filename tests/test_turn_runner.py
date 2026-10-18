@@ -6,8 +6,8 @@ import pytest
 from acp import RequestError
 from acp.agent.router import build_agent_router
 
-from agent_comms import agent_events as events
-from agent_comms import backend
+import agent_comms.agent_events as events
+import agent_comms.backend as backend
 from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates

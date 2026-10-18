@@ -2,7 +2,7 @@
 
 import pytest
 
-from agent_comms import Registration
+from agent_comms.registration import Registration
 from agent_comms.channel_targets import BuiltinChannel
 from agent_comms.comms import wire
 from agent_comms.errors import UnregisteredThreadError

@@ -36,7 +36,8 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     from agent_comms.routing import ScheduledTurn
     from agent_comms.schedule_rules import SelectedWakeCheck, WakeScheduleCheck
     from test_acp_private_nk_delivery import _session
-    from agent_comms import native_pi, private_nk_entrypoint
+    import agent_comms.native_pi as native_pi
+    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 
     comms, agent, _root_id = _session(tmp_path)
     monkeypatch.setattr(private_nk_entrypoint, '_trusted_package', lambda _: None)
@@ -98,7 +99,8 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
 
 @pytest.mark.parametrize('abort', [False, True])
 async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monkeypatch, abort: bool) -> None:
-    from agent_comms import native_pi, private_nk_entrypoint
+    import agent_comms.native_pi as native_pi
+    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
     from agent_comms.tracked_turn import TrackedTurnSession
     from test_coordinated_runtime import _fake_model
     from agent_comms.coordination_cohort import next_sealed_assignment

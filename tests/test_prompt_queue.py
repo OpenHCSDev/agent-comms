@@ -1,7 +1,7 @@
 import asyncio
 
-from agent_comms import agent_events as ae
-from agent_comms import backend
+import agent_comms.agent_events as ae
+import agent_comms.backend as backend
 from agent_comms.acp_extension import (
     InputStartedUpdate,
     QueueChangedUpdate,

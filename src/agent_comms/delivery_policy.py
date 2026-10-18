@@ -9,7 +9,7 @@ from typing import Literal
 from .audience_manifest import FrozenAudience
 from .coordination_tables.publications import canonical_publication_key
 from .declared_family import DeclaredFamily
-from .field_codec import MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord
 from .wake import ControlClassification, resolve_wake_cohort
 from .wake_policy import MessageAudience, WakeDecision
 
@@ -57,11 +57,20 @@ class DeliveryPolicy(DeclaredFamily, affix="DeliveryPolicy"):
     version: Literal[1]
     initial: DeliveryManifest
 
+    @classmethod
+    def from_sideband(cls, value: object) -> DeliveryPolicy:
+        """The declared policy a committed row's private sideband names."""
+        return FieldCodec.decode(cls, value)
+
     @staticmethod
     @abstractmethod
     def resolve(message, audience, control): ...
 
     def require_acknowledgement(self, root_id, message) -> KeyedResponseAcknowledgement | None:
+        return None
+
+    @property
+    def acknowledgement(self) -> KeyedResponseAcknowledgement | None:
         return None
 
 
@@ -77,6 +86,10 @@ class ResponseDeliveryPolicy(DeliveryPolicy):
 
     def require_acknowledgement(self, root_id, message) -> KeyedResponseAcknowledgement:
         return self.response.require(root_id, message)
+
+    @property
+    def acknowledgement(self) -> KeyedResponseAcknowledgement:
+        return self.response
 
     @staticmethod
     def resolve(message, audience, control):

@@ -10,7 +10,7 @@ import json
 import pytest
 from acp import RequestError
 
-from agent_comms import agent_events as ae
+import agent_comms.agent_events as ae
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.queued_input import InputHandoffRefused
 from agent_comms.comms import wire
