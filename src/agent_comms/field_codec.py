@@ -44,7 +44,7 @@ class FieldPlan:
     required: bool
     reject_null: bool
     choices: object
-    value: ValueDecoder[Any]
+    value: ValueDecoder[object]
     annotation: object
     declared: Field
 
@@ -603,8 +603,8 @@ class ValueDecoder[T](ABC):
     """One annotation owns its wire decoding, draft projection and choice domain."""
 
     __slots__ = ()
-    _by_origin: ClassVar[dict[object, type[ValueDecoder[Any]]]] = {}
-    _by_annotation: ClassVar[dict[object, type[ValueDecoder[Any]]]] = {}
+    _by_origin: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
+    _by_annotation: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
 
     def __init_subclass__(cls):
         super().__init_subclass__()
@@ -621,7 +621,7 @@ class ValueDecoder[T](ABC):
     def for_members[M](cls, members: tuple[type[M], ...]) -> UnionDecoder[M]:
         return UnionDecoder(
             reduce(or_, members),
-            tuple(cast(ValueDecoder[M], compile_decoder(member)) for member in members),
+            tuple(compile_decoder(member) for member in members),
         )
 
     @abstractmethod
@@ -666,7 +666,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
     """A declared representation capability; null without one decodes structurally."""
 
     representation: type[FieldRepresentation]
-    structural: ValueDecoder[Any]
+    structural: ValueDecoder[object]
     def decode(self, data):
         representation = self.representation
         if data is None and not representation.accepts_null:
@@ -778,7 +778,7 @@ class UnionDecoder[T](ValueDecoder[T]):
 
 @dataclass(frozen=True, slots=True)
 class _ArrayDecoder(ValueDecoder[Any]):
-    items: tuple[ValueDecoder[Any], ...]
+    items: tuple[ValueDecoder[object], ...]
 
     @classmethod
     def from_annotation(cls, target, args):
@@ -821,8 +821,8 @@ class _FixedTupleDecoder(_TupleDecoder):
 
 @dataclass(frozen=True, slots=True)
 class _DictDecoder(ValueDecoder[Any]):
-    key: ValueDecoder[Any]
-    value: ValueDecoder[Any]
+    key: ValueDecoder[object]
+    value: ValueDecoder[object]
     entries: Callable[[object], Iterable[tuple[object, object]]]
     origins = (dict,)
 
@@ -899,8 +899,12 @@ class _EnumDecoder(ValueDecoder[Any]):
     def decode(self, data):
         return self.target(data)
 
+@overload
+def compile_decoder[T](annotation: type[T]) -> ValueDecoder[T]: ...
+@overload
+def compile_decoder(annotation: object) -> ValueDecoder[object]: ...
 @lru_cache(maxsize=None)
-def compile_decoder(annotation: object) -> ValueDecoder[Any]:
+def compile_decoder(annotation: object) -> ValueDecoder[object]:
     """Compile one annotation's decoder. Declarations are finite and
     immutable for this process, so every decoder is built once."""
     target, representation = FieldCodec._representation(annotation)
@@ -909,7 +913,7 @@ def compile_decoder(annotation: object) -> ValueDecoder[Any]:
         return structural
     return _RepresentedDecoder(representation, structural)
 
-def _structural_decoder(target: object) -> ValueDecoder[Any]:
+def _structural_decoder(target: object) -> ValueDecoder[object]:
     decoder = ValueDecoder._by_annotation.get(target) or ValueDecoder._by_origin.get(get_origin(target))
     if decoder is not None:
         return decoder.from_annotation(target, get_args(target))
@@ -918,7 +922,7 @@ def _structural_decoder(target: object) -> ValueDecoder[Any]:
     return _member_decoder(target)
 
 @lru_cache(maxsize=None)
-def _member_decoder(target: object) -> ValueDecoder[Any]:
+def _member_decoder(target: object) -> ValueDecoder[object]:
     """A concrete record, enum or scalar, after any family tag is removed."""
     if isinstance(target, type) and is_dataclass(target):
         return _RecordDecoder(target)
