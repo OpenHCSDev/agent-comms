@@ -147,13 +147,16 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
     comms, _, module = standing
     origin, checkout = tmp_path / "growth.git", tmp_path / "growth"
     subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
-    subprocess.run(["git", "clone", "-q", str(origin), str(checkout)], check=True, capture_output=True)
+    checkout.mkdir()
 
     def git(*args):
-        return subprocess.run(["git", "-C", str(checkout), "-c", "user.name=t", "-c", "user.email=t@t", *args],
-                              check=True, capture_output=True, text=True).stdout.strip()
+        identity = ("-c", "user.name=t", "-c", "user.email=t@t")
+        command = ["git", "-C", str(checkout), *identity, *args]
+        run = subprocess.run(command, check=True, capture_output=True, text=True)
+        return run.stdout.strip()
 
-    git("checkout", "-q", "-b", "main")
+    git("init", "-q", "-b", "main")
+    git("remote", "add", "origin", str(origin))
     git("commit", "-q", "--allow-empty", "-m", "base")
     for branch, grown in (("big", 41), ("small", 40)):
         git("checkout", "-q", "-b", branch, "main")

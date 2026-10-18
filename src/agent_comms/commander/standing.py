@@ -84,20 +84,32 @@ class MergeGrowth(StandingRule):
 
     @staticmethod
     def git(checkout: Path, *args: str) -> str:
-        return subprocess.run(["git", "-C", str(checkout), *args], capture_output=True, text=True).stdout
+        return subprocess.run(
+            ["git", "-C", str(checkout), *args], capture_output=True, text=True
+        ).stdout
 
     @classmethod
     def numstat(cls, checkout: Path, sha: str, path: str) -> tuple[int, int]:
         diff = cls.git(checkout, "diff", "--numstat", f"{sha}^1", sha, "--", path)
-        counted = [(int(a), int(d)) for a, d, _ in (row.split("\t", 2) for row in diff.splitlines()) if a != "-"]
+        counted = [
+            (int(a), int(d))
+            for a, d, _ in (row.split("\t", 2) for row in diff.splitlines())
+            if a != "-"
+        ]
         return sum(a for a, _ in counted), sum(d for _, d in counted)
 
     @classmethod
     def merges(cls, repo: Repo) -> Iterator[MergeGrowth]:
         """Each first-parent commit on the repository's main inside the window, newest first."""
         cls.git(repo.checkout, "fetch", "-q", "origin", "main")
-        log = cls.git(repo.checkout, "log", "--first-parent", f"--since={cls.window}", "--format=%H %ct %s",
-                      "origin/main")
+        log = cls.git(
+            repo.checkout,
+            "log",
+            "--first-parent",
+            f"--since={cls.window}",
+            "--format=%H %ct %s",
+            "origin/main",
+        )
         for sha, at, subject in (line.split(" ", 2) for line in log.splitlines()):
             src, tests = (cls.numstat(repo.checkout, sha, path) for path in (repo.source, "tests"))
             yield cls(repo.github, sha, subject, float(at), src, tests)
@@ -116,5 +128,7 @@ class MergeGrowth(StandingRule):
 
     def line(self) -> str:
         (a, d), (ta, td) = self.src, self.tests
-        return (f"GROWTH {self.repo} {self.sha[:9]} src +{a}/-{d} (net {a - d:+}) tests +{ta}/-{td}: "
-                f"{self.subject[:90]} -> justify or send back the owner with a deletion order")
+        return (
+            f"GROWTH {self.repo} {self.sha[:9]} src +{a}/-{d} (net {a - d:+}) tests +{ta}/-{td}: "
+            f"{self.subject[:90]} -> justify or send back the owner with a deletion order"
+        )
