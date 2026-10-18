@@ -25,6 +25,7 @@ from .shared import EarlierRequest, HistoryNotice, SessionFacts, TranscriptUpdat
 
 if TYPE_CHECKING:
     from .opencode_parts import SavedMessage
+    from .opencode_protocol import Session
 
 
 class History(DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
@@ -61,9 +62,9 @@ class OpenCodeHistory(HarnessHistory):
     harness = OpenCodeHarness
 
     @staticmethod
-    def saved(facts: SessionFacts, messages: Iterable[SavedMessage]) -> Iterator[TranscriptUpdate]:
-        yield facts
-        for saved in messages:
+    def saved(session: Session, messages: Iterable[SavedMessage]) -> Iterator[TranscriptUpdate]:
+        yield SessionFacts(source_id=session.id, project=session.directory, title=session.title or '')
+        for saved in session.revert.kept(messages):
             yield from saved.publications()
 
 

@@ -9,7 +9,6 @@ from abc import abstractmethod
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass
-from itertools import takewhile
 
 from pydantic import Field
 
@@ -19,37 +18,20 @@ from agent_comms.typed_table import SQLiteSchemaObject, TypedRow
 
 from .history import OfflineHistory, OpenCodeHistory
 from .opencode_parts import SavedMessage
-from .shared import SessionFacts, TranscriptUpdate
-
-
-class Revert(WireModel):
-    """The message a user reverted to; it and everything after it were undone. A session
-    nobody reverted undid nothing."""
-    messageID: str = ''
-
-    def kept(self, messages: Iterator[SavedMessage]) -> Iterator[SavedMessage]:
-        return takewhile(lambda saved: saved.info.id != self.messageID, messages)
-
-
-class StoredSession(WireModel):
-    id: str
-    directory: str
-    title: str = ''
-    revert: Revert = Field(default_factory=Revert)
+from .opencode_protocol import Revert, Session
+from .shared import TranscriptUpdate
 
 
 class OpenCodeStore(OpenCodeHistory, OfflineHistory):
     @abstractmethod
-    def load(self) -> tuple[StoredSession, Iterator[SavedMessage]]: ...
+    def load(self) -> tuple[Session, Iterator[SavedMessage]]: ...
 
     def read(self) -> Iterator[TranscriptUpdate]:
-        session, messages = self.load()
-        return self.saved(SessionFacts(source_id=session.id, project=session.directory, title=session.title),
-                          session.revert.kept(messages))
+        return self.saved(*self.load())
 
 
 class ExportFile(WireModel):
-    info: StoredSession
+    info: Session
     messages: list[SavedMessage] = Field(default_factory=list)
 
 
@@ -58,7 +40,7 @@ class OpenCodeExport(OpenCodeStore):
 
     suffixes = frozenset({'.json'})
 
-    def load(self) -> tuple[StoredSession, Iterator[SavedMessage]]:
+    def load(self) -> tuple[Session, Iterator[SavedMessage]]:
         export = ExportFile.model_validate_json(self.source.read_bytes())
         if self.session_id not in (None, export.info.id):
             raise ValueError('The export belongs to a different OpenCode session.')
@@ -90,7 +72,7 @@ class OpenCodeDatabase(OpenCodeStore):
 
     suffixes = frozenset({'.db', '.sqlite', '.sqlite3'})
 
-    def load(self) -> tuple[StoredSession, Iterator[SavedMessage]]:
+    def load(self) -> tuple[Session, Iterator[SavedMessage]]:
         if not self.session_id:
             raise ValueError('OpenCode database imports require --session-id.')
         with closing(CoordinationStore.read_snapshot(self.source)) as db:
@@ -105,8 +87,8 @@ class OpenCodeDatabase(OpenCodeStore):
                     'SELECT EXISTS(SELECT 1 FROM session_message WHERE session_id=?) AS present',
                     (self.session_id,))) == [LinkedHistory(True)]:
                 raise ValueError('This OpenCode database uses linked history; import an opencode export JSON instead.')
-            session = StoredSession(id=row.id, directory=row.directory, title=row.title,
-                                    revert=Revert.model_validate_json(row.revert or '{}'))
+            session = Session(id=row.id, directory=row.directory, title=row.title,
+                              revert=Revert.model_validate_json(row.revert or '{}'))
             return session, iter(tuple(self.messages(db)))
 
     def messages(self, db) -> Iterator[SavedMessage]:

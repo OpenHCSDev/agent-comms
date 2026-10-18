@@ -675,6 +675,25 @@ def test_opencode_server_reads_all_messages_including_the_users():
         OnlineHistory.of(OpenCodeHarness, "ses_test", None, Path("/work"))
 
 
+def test_opencode_server_leaves_out_what_the_user_reverted():
+    from agent_comms.cli_bridges.opencode_protocol import OpenCodeStream
+
+    connection = FakeOpenCode([
+        opencode_message("user", "user", [{"type": "text", "text": "Kept prompt"}]),
+        opencode_message("assistant", "assistant", [{"type": "text", "text": "Undone answer"}]),
+    ])
+    connection.info = Session(id="ses_test", directory="/work/opencode", revert={"messageID": "assistant"})
+
+    async def collect():
+        buffer = ImportBuffer(ImportLimits())
+        async for update in OpenCodeServer("ses_test", "http://unused", Path("/work")).seen(
+                connection, OpenCodeStream(connection)):
+            update.add_to(buffer)
+        return buffer.snapshot(OpenCodeHarness)
+
+    assert bodies(asyncio.run(collect())) == ["Kept prompt"]
+
+
 def test_import_cli_and_invalid_sources(tmp_path, capsys, comms):
     source = opencode_export(tmp_path / "export.json", tmp_path)
     assert main(["--root", str(comms.root), "import-thread", "--harness", "opencode",

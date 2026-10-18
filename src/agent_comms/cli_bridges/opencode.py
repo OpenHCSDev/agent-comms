@@ -17,7 +17,7 @@ from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .history import OnlineHistory, OpenCodeHistory
 from .shared import (
-    IncomingFrame, SessionFacts, TranscriptBridge, TranscriptUpdate, Options, run_bridge,
+    IncomingFrame, TranscriptBridge, TranscriptUpdate, Options, run_bridge,
     Watch, Binding,
 )
 from .opencode_protocol import (
@@ -185,8 +185,7 @@ class OpenCodeServer(OpenCodeHistory, OnlineHistory):
     async def seen(self, connection: OpenCodeConnection, stream: OpenCodeStream) -> AsyncIterator[TranscriptUpdate]:
         messages = await connection.messages(self.query)
         stream.know(messages)
-        for update in self.saved(SessionFacts(source_id=connection.session, project=connection.info.directory,
-                                              title=connection.info.title or ''), messages):
+        for update in self.saved(connection.info, messages):
             yield update
         yield await connection.status()
 
