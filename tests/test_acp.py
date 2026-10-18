@@ -5,6 +5,7 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 """
 
 from agent_comms.messages import NoticeRole
+from agent_comms.turn_input_source import AutonomousOriginalInput
 from unittest.mock import AsyncMock
 
 import asyncio
@@ -1277,7 +1278,7 @@ class TestAgentTurn:
             monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden_backend)
             await agent.turns.goals.schedule_goal(name)
             assert not agent.inputs.pending_turns.get(name)
-            await agent.turns.run_agent_turn(name, name, "continue", autonomous_goal=True)
+            await agent.turns.run_agent_turn(name, name, "continue", input_type=AutonomousOriginalInput)
             assert GoalAttemptStore(private).snapshot(goal.id).attempt_id == reservation.attempt_id
             await agent.shutdown()
 

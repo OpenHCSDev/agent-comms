@@ -594,7 +594,7 @@ class Goal(GoalDeclaration):
         return self.id
 
     def defers_following_from(self, original: GoalDeclaration) -> bool:
-        return original.permits_inactive_input()
+        return NoGoal().allows(original)
 
     def recorded_wait(self, rows):
         return rows.get(self.id, NoGoalWait())

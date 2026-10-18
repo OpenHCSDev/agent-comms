@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from agent_comms.coordinator import Coordination
+from agent_comms.turn_input_source import AutonomousOriginalInput
 from agent_comms.goal_actions import ActiveGoalAction, GoalPrecondition, OwnerInvocable, SetGoalAction
 from agent_comms.goal_generation import ReadyGeneration
 
@@ -42,7 +43,7 @@ async def test_native_settlement_selects_only_original_goal(native_backend, repl
         try:
             async with asyncio.timeout(30):
                 await agent.turns.run_agent_turn(
-                    session, session, "One distinct original goal input", autonomous_goal=True,
+                    session, session, "One distinct original goal input", input_type=AutonomousOriginalInput,
                 )
         finally:
             native.provider.response_gate = None

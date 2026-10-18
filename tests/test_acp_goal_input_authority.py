@@ -7,6 +7,7 @@ The callbacks, private goal ledger, ACP prompt queue, and transcript replay are 
 import json
 import logging
 from contextlib import nullcontext
+from agent_comms.turn_input_source import AutonomousOriginalInput
 
 import pytest
 from acp import RequestError
@@ -208,7 +209,7 @@ async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_p
     try:
         with nullcontext() if change is None else pytest.raises(RequestError, match="Internal error"):
             await agent.turns.run_agent_turn(
-                "project", "project", "Continue working toward the active goal.", autonomous_goal=True
+                "project", "project", "Continue working toward the active goal.", input_type=AutonomousOriginalInput
             )
         key = "acp:" + observed["public_id"]
         row = stored_inputs(comms.root).lookup(key)
