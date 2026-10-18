@@ -7,7 +7,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import CheckoutsOver, DiskLow, PlanIdle, StandingRule
+from agent_comms.standing_rules import DiskLow, PlanIdle, StandingRule
+from agent_comms.storage_rules import UnitStorage
 from agent_comms.todos import Todo
 from agent_comms.tools import CommsOrderServeTool, CommsTodoCreateTool
 
@@ -59,7 +60,7 @@ def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_pa
         return {type(rule) for rule in found} - {PlanIdle}
 
     assert kinds(broken(cleanup_gib=0, floor_gib=0, max_checkouts=1)) == set()
-    over, = [rule for rule in broken(cleanup_gib=0, floor_gib=0, max_checkouts=0) if type(rule) is CheckoutsOver]
+    over, = [rule for rule in broken(cleanup_gib=0, floor_gib=0, max_checkouts=0) if type(rule) is UnitStorage]
     assert over.storage.checkouts == (home.resolve(), extra.resolve())
     assert over.line() == ('VIOLATION storage quota: worker holds 1 checkouts besides home, limit 0'
                            ' -> order the cleanup')

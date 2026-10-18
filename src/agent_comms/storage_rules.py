@@ -11,12 +11,16 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
-from typing import Annotated, ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .field_codec import FieldCodec, PathText
 from .native_tool_call import SelectedToolDenied
+from .standing_rules import StandingRule
+
 if TYPE_CHECKING:
+    from .registration import Registration
     from .threads import Thread
+    from .todos import Todo
 
 StoragePath = Annotated[Path, PathText]
 
@@ -126,18 +130,22 @@ class StorageRule:
 
     def order_text(self, unit: str, pythons: Sequence[str]) -> str:
         """The rule as an order states it to ``unit``."""
-        return (f'Storage (enforced, automatic strike): your checkouts are {self.checkout_base}/{unit}--P<n>, '
-                f'at most {self.max_checkouts} besides your home checkout {self.checkout_base}/{unit}, removed '
-                f'with git worktree remove in the same order that created them; your only scratch dir is '
-                f'{self.scratch_base}/{unit}/, capped at {self.scratch_cap_gib:g} GB together with your checkouts. '
-                f'Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
-                'never create a venv, never uv sync, never write .artifacts, never git clone. '
-                f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install or recording.')
+        home = self.checkout_base / unit
+        return (
+            f'Storage (enforced, automatic strike): your checkouts are {home}--P<n>, at most '
+            f'{self.max_checkouts} besides your home checkout {home}, removed with git worktree '
+            'remove in the same order that created them; your only scratch dir is '
+            f'{self.scratch_base / unit}/, capped at {self.scratch_cap_gib:g} GB together with '
+            f'your checkouts. Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
+            'never create a venv, never uv sync, never write .artifacts, never git clone. '
+            f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
+            'or recording.'
+        )
 
 
 @dataclass(frozen=True)
-class UnitStorage:
-    """One unit's checkouts, derived on read from its registered worktrees; its StorageRule judges them."""
+class UnitStorage(StandingRule):
+    """One unit's checkouts, derived on read from its registered worktrees; its rule judges them."""
 
     rule: StorageRule
     unit: str
@@ -147,9 +155,19 @@ class UnitStorage:
     def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
         return cls(rule, thread.name, tuple(dict.fromkeys((*rule.checkouts_of(thread), *proposed))))
 
+    @classmethod
+    def violations(cls, todos: Sequence[Todo], registry: Registration) -> tuple[UnitStorage, ...]:
+        units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
+        read = (cls.read(registry.storage_rule, registry.require(unit)) for unit in units)
+        return tuple(storage for storage in read if storage.over_checkouts)
+
     @property
     def over_checkouts(self) -> bool:
         return len(self.checkouts) > self.rule.max_checkouts + 1
+
+    def line(self) -> str:
+        return (f'VIOLATION storage quota: {self.unit} holds {len(self.checkouts) - 1} checkouts besides home, '
+                f'limit {self.rule.max_checkouts} -> order the cleanup')
 
 
 class ShellProgram:
