@@ -24,7 +24,12 @@ class ContinuationGoalPermission(TurnGoalPermission):
     goal: Goal
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return current.active().matching(self.goal.id).is_set()
+        try:
+            current.captured.require_identity(self.goal.id)
+            current.require_active()
+        except ValueError:
+            return False
+        return True
 
 
 class InactiveGoalPermission(TurnGoalPermission):

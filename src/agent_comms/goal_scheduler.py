@@ -88,8 +88,9 @@ class GoalScheduler:
                     thread.turn_record.read().require_idle()
                 except RelationViolationError:
                     return
-                goal = thread.goal.active()
-                if not goal.is_set():
+                try:
+                    goal = thread.goal.require_active()
+                except ValueError:
                     return
                 if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
                     return

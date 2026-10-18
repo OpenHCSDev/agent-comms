@@ -251,8 +251,9 @@ class GoalHistoryStore:
                 self._set_state(row.sequence, "uncertain")
         committed = [row for row in self._rows(owner_created_at) if row.state == "committed"]
         if not committed:
-            if current.is_set():
-                self._insert(owner_created_at, "baseline", "committed", NoGoal(), current)
+            initial = NoGoal()
+            if current != initial:
+                self._insert(owner_created_at, "baseline", "committed", initial, current)
             return
         last = committed[-1].after
         if last != current:

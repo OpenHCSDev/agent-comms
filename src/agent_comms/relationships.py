@@ -722,8 +722,9 @@ class ThreadRelationships:
             for thread in registry.threads.values()
             for executor in thread.role.executor(thread)
         ):
-            goal = owner.goal.active()
-            if not goal.is_set():
+            try:
+                goal = owner.goal.require_active()
+            except ValueError:
                 continue
             source = goal.mention_source
             # Missing historical evidence grants no contact or current-name binding.

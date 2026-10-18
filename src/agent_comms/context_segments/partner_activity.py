@@ -33,8 +33,9 @@ class PartnerGoalChange:
         if not history:
             return None
         entry = history[-1]
-        goal = entry.after
-        if not goal.is_set():
+        try:
+            goal = entry.after.require()
+        except ValueError:
             return cls(peer, entry.observed_at, None, None, "")
         return cls(peer, entry.observed_at, goal.checkpoint, type(goal.state), goal.progress)
 

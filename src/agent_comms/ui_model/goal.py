@@ -4,10 +4,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeGuard
 
 if TYPE_CHECKING:
-    from agent_comms.goal_presentation import ThreadGoalExecution
+    from agent_comms.goal_presentation import GoalExecution, ThreadGoalExecution
     from agent_comms.goals import GoalDeclaration
 
 
@@ -31,7 +31,7 @@ class GoalDisplay(ABC):
         return self.heading(execution)
 
     @abstractmethod
-    def standby(self, execution: ThreadGoalExecution) -> bool: ...
+    def standby(self, execution: ThreadGoalExecution) -> TypeGuard[GoalExecution]: ...
 
     @abstractmethod
     def action_failure(self, error: Exception) -> str: ...
@@ -53,7 +53,7 @@ class GoalUnavailable(GoalDisplay):
     def visible(self) -> bool:
         return True
 
-    def standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: ThreadGoalExecution) -> TypeGuard[GoalExecution]:
         return False
 
     def action_failure(self, error: Exception) -> str:

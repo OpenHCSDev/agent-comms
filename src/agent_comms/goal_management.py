@@ -217,8 +217,9 @@ class Goals:
             owner = snapshot.threads.get(canonical)
             if owner is None or self.agents.is_working(owner.incarnation, snapshot):
                 return ()
-            goal = owner.goal.active()
-            if not goal.is_set():
+            try:
+                goal = owner.goal.require_active()
+            except ValueError:
                 return ()
             waits = self.waits
             rows = waits.read()
@@ -288,10 +289,12 @@ class Goals:
                 owner = snapshot.threads.get(snapshot.canonical_name(wait.owner.name))
                 if owner is None:
                     continue
-                goal = owner.goal.active()
+                try:
+                    goal = owner.goal.require_active()
+                except ValueError:
+                    continue
                 if (
-                    not goal.is_set()
-                    or goal.id != goal_id
+                    goal.id != goal_id
                     or not wait.current_for(goal, owner.incarnation.require_recorded())
                     or any(
                         self.agents.is_working(target.incarnation, snapshot)
@@ -347,10 +350,11 @@ class Goals:
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""
-        goal = self.registry.require(name).goal.active()
-        return bool(
-            goal.is_set() and self.waits.clear(goal.id, wait_id=wait_id)
-        )
+        try:
+            goal = self.registry.require(name).goal.require_active()
+        except ValueError:
+            return False
+        return goal.clear_wait(self.waits, wait_id=wait_id)
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
         """A completed native input consumes only its original dependency wait.
@@ -362,9 +366,7 @@ class Goals:
             owner.require_registry(self.registry)
             current = self.registry.require(owner.thread.name)
             goal = current.continuation_goal(owner.thread)
-            if not goal.is_set():
-                return False
-            wait = self.waits.for_goal(goal, self.waits.read())
+            wait = goal.wait(self.waits)
             if not wait.owner_matches(current.incarnation.require_recorded()):
                 return False
             with self.bus.log.certified_read() as source:
@@ -373,7 +375,7 @@ class Goals:
                     raise ValueError("Dependency reply source reference changed.")
                 if not wait.matches(original, current.incarnation.require_recorded()):
                     return False
-            return wait.consume_reply(self.waits, goal.id)
+            return wait.consume_reply(self.waits)
 
     def update_goal(
         self,
@@ -401,11 +403,16 @@ class Goals:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            current = thread.goal.matching(started_goal.id)
-            if thread.worktree != expected_worktree or not current.is_set():
-                return thread.goal
-            blocked = current.after_failed_turn(diagnostic)
-            if blocked is current:
+            current = thread.goal
+            if thread.worktree != expected_worktree:
+                return current
+            try:
+                current.captured.require_identity(started_goal.id)
+            except ValueError:
+                return current
+            actual = current.require()
+            blocked = actual.after_failed_turn(diagnostic)
+            if blocked is actual:
                 return current
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked
@@ -422,10 +429,10 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             current = thread.goal
-            if thread.worktree != expected_worktree or not current.is_set() or current != expected_goal:
+            if thread.worktree != expected_worktree or current != expected_goal:
                 return current
-            blocked = current.after_unverified_completion(diagnostic)
-            if blocked is current:
+            blocked = expected_goal.after_unverified_completion(diagnostic)
+            if blocked is expected_goal:
                 return current
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
             return blocked

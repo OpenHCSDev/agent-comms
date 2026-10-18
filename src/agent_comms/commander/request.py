@@ -22,10 +22,10 @@ from .order import COMMS, ME, CommanderVerb, RuledVerb, hhmm
 def open_request() -> tuple[Goal, tuple[Todo, ...]] | None:
     """The commander's active Goal when it is an owner request, with the orders serving it."""
     thread = COMMS.registry.require(ME)
-    selected = thread.goal.active()
-    if not selected.is_set():
+    try:
+        goal = thread.goal.require_active()
+    except ValueError:
         return None
-    goal = selected.require()
     served = goal.order.serving(goal, COMMS.goals, thread.incarnation)
     return None if served is None else (goal, served)
 

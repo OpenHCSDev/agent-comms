@@ -6,7 +6,7 @@ import re
 from abc import abstractmethod
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal, TypeGuard
 
 from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
@@ -18,7 +18,7 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
-    from .goal_presentation import ThreadGoalExecution
+    from .goal_presentation import GoalExecution, ThreadGoalExecution
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -189,11 +189,17 @@ class GoalCheckpoint(DeclaredFamily, affix="GoalCheckpoint"):
     """Captured goal identity, not a goal record or execution permission."""
 
     @abstractmethod
+    def require_revision(self) -> GoalRevision: ...
+
+    @abstractmethod
     def require_identity(self, goal_id: str) -> None: ...
 
 
 @dataclass(frozen=True)
 class AbsentGoalCheckpoint(GoalCheckpoint, declared_name="absent"):
+    def require_revision(self) -> GoalRevision:
+        raise RelationViolationError("No goal is set for this thread.")
+
     def require_identity(self, goal_id: str) -> None:
         raise ValueError("Goal execution identity does not match its declaration")
 
@@ -201,6 +207,9 @@ class AbsentGoalCheckpoint(GoalCheckpoint, declared_name="absent"):
 @dataclass(frozen=True)
 class PresentGoalCheckpoint(GoalCheckpoint, declared_name="present"):
     revision: GoalRevision
+
+    def require_revision(self) -> GoalRevision:
+        return self.revision
 
     def require_identity(self, goal_id: str) -> None:
         if self.revision.id != goal_id:
@@ -350,9 +359,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return previous
 
-    def is_set(self) -> bool:
-        return False
-
     def check_expected(self, current: GoalDeclaration) -> None:
         pass
 
@@ -389,6 +395,9 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         from .task_sources import TurnTaskScope
         return TurnTaskScope(project=project)
 
+    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> str:
+        return ""
+
     def context_segments(self, thread, goals):
         return ()
 
@@ -402,9 +411,6 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         return self
 
     def require_replacement(self, goals, owner) -> None:
-        pass
-
-    def require_order_slot(self, goal_id: str) -> None:
         pass
 
     def require(self) -> Goal:
@@ -423,7 +429,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def wait(self, waits): ...
 
     @abstractmethod
-    def clear_wait(self, waits) -> bool: ...
+    def clear_wait(self, waits, *, wait_id: str | None = None) -> bool: ...
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -467,7 +473,7 @@ class NoGoal(NullMember, GoalDeclaration):
         from .goal_waits import NoGoalWait
         return NoGoalWait()
 
-    def clear_wait(self, waits) -> bool:
+    def clear_wait(self, waits, *, wait_id: str | None = None) -> bool:
         return False
 
     @property
@@ -494,7 +500,7 @@ class NoGoal(NullMember, GoalDeclaration):
     def progress(self) -> str:
         return ""
 
-    def standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: ThreadGoalExecution) -> TypeGuard[GoalExecution]:
         return False
 
     def heading(self, execution: ThreadGoalExecution) -> str:
@@ -520,9 +526,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
         return self
-
-    def is_set(self) -> bool:
-        return True
 
     def check_expected(self, current: GoalDeclaration) -> None:
         if self != current:
@@ -560,7 +563,7 @@ class Goal(RecordMember, GoalDeclaration):
     def visible(self) -> bool:
         return True
 
-    def standby(self, execution: ThreadGoalExecution) -> bool:
+    def standby(self, execution: ThreadGoalExecution) -> TypeGuard[GoalExecution]:
         return execution.waiting_for(self)
 
     def heading(self, execution: ThreadGoalExecution) -> str:
@@ -577,6 +580,9 @@ class Goal(RecordMember, GoalDeclaration):
         from .task_sources import GoalTaskScope
         return GoalTaskScope(project=project, goal=self.checkpoint)
 
+    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> str:
+        return self.instructions(self.order.todos(goals, owner, self.id))
+
     def context_segments(self, thread, goals):
         from .turn_context import GoalSegment
         return (GoalSegment.capture(thread, self, goals),)
@@ -590,10 +596,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return current.matching(self.id)
-
-    def require_order_slot(self, goal_id: str) -> None:
-        if self.id != goal_id:
-            self.state.require_order_slot()
 
     def require(self) -> Goal:
         return self
@@ -613,8 +615,8 @@ class Goal(RecordMember, GoalDeclaration):
     def wait(self, waits):
         return waits.for_goal(self, waits.read())
 
-    def clear_wait(self, waits) -> bool:
-        return waits.clear(self.id)
+    def clear_wait(self, waits, *, wait_id: str | None = None) -> bool:
+        return waits.clear(self.id, wait_id=wait_id)
 
     def matching(self, goal_id: str) -> GoalDeclaration:
         return self if self.id == goal_id else NoGoal()

@@ -91,8 +91,11 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     continue
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
-                goal = owner.goal.active()
-                if goal.is_set():
+                try:
+                    goal = owner.goal.require_active()
+                except ValueError:
+                    pass
+                else:
                     pending = [turn for turn in pending if turn.goal_id == goal.id]
                 if not pending:
                     continue
@@ -110,8 +113,10 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
                 except RequestError as error:
-                    if not goal.is_set():
-                        raise
+                    try:
+                        goal = owner.goal.require_active()
+                    except ValueError:
+                        raise error
                     pending[0].require_dependency_wake(error)
                     await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
                         owner.name,

@@ -32,6 +32,9 @@ if TYPE_CHECKING:
 class ExecutionPresentation(ABC):
     waiting = False
 
+    def standby_detail(self, execution: GoalExecution) -> str:
+        raise ValueError("This execution is not waiting.")
+
     @abstractmethod
     def render(self, execution: GoalExecution) -> tuple[str, str]: ...
 

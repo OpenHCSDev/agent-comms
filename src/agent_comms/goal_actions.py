@@ -381,19 +381,16 @@ class PausedGoalAction(
 @dataclass(frozen=True, kw_only=True)
 class ReplacementGoalAction(GoalAction):
     def before_publish(self, goal: GoalDeclaration, ctx: GoalActionContext) -> None:
-        goal = ctx.thread.goal
-        if goal.is_set():
-            # Revoke a protected goal before removing or replacing its
-            # registry identity. If the registry write then fails, the
-            # remaining visible goal is safely unlaunchable.
-            attempts = ctx.goals.open_goal_store()
-            generation = attempts.snapshot(goal.id)
-            if generation is not None and not generation.lifecycle.terminal:
-                attempts.retire_goal(
-                    goal.id,
-                    expected_generation=generation.number,
-                    attempt_id=generation.attempt_id,
-                )
+        try:
+            current = ctx.thread.goal.require()
+        except ValueError:
+            return
+        # Retire before registry publication, so failed publication stays unlaunchable.
+        attempts = ctx.goals.open_goal_store()
+        generation = attempts.snapshot(current.id)
+        if generation is not None and not generation.lifecycle.terminal:
+            attempts.retire_goal(current.id, expected_generation=generation.number,
+                                 attempt_id=generation.attempt_id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -410,12 +407,16 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        current = ctx.thread.goal.matching(self.goal_id)
-        if current.is_set():
-            if (current.text, current.order) != (self.text.strip(), self.order):
+        current = ctx.thread.goal
+        try:
+            current.captured.require_identity(self.goal_id)
+        except ValueError:
+            current.require_replacement(ctx.goals, ctx.thread.incarnation)
+        else:
+            existing = current.require()
+            if (existing.text, existing.order) != (self.text.strip(), self.order):
                 raise ValueError("Goal identity already has different instructions.")
-            return ctx.thread.goal.require()
-        ctx.thread.goal.require_replacement(ctx.goals, ctx.thread.incarnation)
+            return existing
         goal = Goal(
             text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
             published_seq=ctx.goals.bus.log.latest_sequence(),
@@ -450,10 +451,14 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
         self.order.check.require_directory()
         request = GoalRef(commander.name, commander.created_at, self.request)
         current = ctx.thread.goal
-        if current.is_set() and not current.require().state.terminal:
+        try:
             goal = current.require()
-            self.reserve(ctx, goal.id, request)
-            return replace(goal, order=ProblemGoalOrder(), revision=goal.revision + 1)
+        except ValueError:
+            pass
+        else:
+            if not goal.state.terminal:
+                self.reserve(ctx, goal.id, request)
+                return replace(goal, order=ProblemGoalOrder(), revision=goal.revision + 1)
         fresh = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder())
         self.reserve(ctx, fresh.goal_id, request)
         return fresh.change(ctx)

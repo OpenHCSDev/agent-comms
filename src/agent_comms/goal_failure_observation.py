@@ -249,8 +249,11 @@ def read_failed_turn_projection(
     def unavailable(reason: str) -> FailedTurnProjection:
         return FailedTurnProjection("unavailable", reason)
 
-    goal = owner.goal
-    if not goal.is_set() or not owner.process_identity.allows_goal_observation(owner_status):
+    if not owner.process_identity.allows_goal_observation(owner_status):
+        return unavailable("owner_or_goal_changed")
+    try:
+        goal = owner.goal.require()
+    except ValueError:
         return unavailable("owner_or_goal_changed")
     try:
         # Resolve lifecycle eligibility before reading the ledger; active goals

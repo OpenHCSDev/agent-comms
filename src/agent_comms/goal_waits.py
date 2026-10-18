@@ -52,7 +52,7 @@ class GoalWait(ABC):
     def consume_dependency(self, comms, canonical: str) -> bool:
         return True
 
-    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
+    def consume_reply(self, waits: GoalWaits) -> bool:
         return False
 
     def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
@@ -114,8 +114,8 @@ class RecordedGoalWait(GoalWait):
     def consume_dependency(self, comms, canonical: str) -> bool:
         return comms.goals.consume_goal_wait(canonical, self.wait_id)
 
-    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
-        return waits.clear(goal_id, wait_id=self.wait_id)
+    def consume_reply(self, waits: GoalWaits) -> bool:
+        return waits.clear(self.goal_id, wait_id=self.wait_id)
 
     def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         targets = tuple(
@@ -315,9 +315,11 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""
-        if not goal.is_set():
+        try:
+            current = goal.require()
+        except ValueError:
             return IdleGoalExecution()
-        return cls.for_goal(goal, rows).project(goal, snapshot, agents)
+        return cls.for_goal(current, rows).project(current, snapshot, agents)
 
     @staticmethod
     def closed_wait_group(
@@ -342,13 +344,14 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            goal = thread.goal.active()
-            wait = rows.get(goal.id) if goal.is_set() else None
-            if wait is not None and (
-                not goal.is_set()
-                or not wait.current_for(goal, thread.incarnation.require_recorded())
-            ):
+            try:
+                goal = thread.goal.require_active()
+            except ValueError:
                 wait = None
+            else:
+                wait = rows.get(goal.id)
+                if wait is not None and not wait.current_for(goal, thread.incarnation.require_recorded()):
+                    wait = None
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
@@ -358,17 +361,14 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_goal = peer.goal.active()
-                peer_wait = (
-                    rows.get(peer_goal.id)
-                    if peer_goal.is_set()
-                    else None
-                )
-                if peer_wait is not None and (
-                    not peer_goal.is_set()
-                    or not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded())
-                ):
+                try:
+                    peer_goal = peer.goal.require_active()
+                except ValueError:
                     peer_wait = None
+                else:
+                    peer_wait = rows.get(peer_goal.id)
+                    if peer_wait is not None and not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded()):
+                        peer_wait = None
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before

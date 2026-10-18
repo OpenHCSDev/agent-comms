@@ -906,7 +906,7 @@ class PeerState:
             view.thread.name,
             relation.relevance,
             relation.note,
-            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal.is_set() else None,
+            goal.instructions_for(goals, view.thread.incarnation),
         )
 
 

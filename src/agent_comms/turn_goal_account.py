@@ -148,8 +148,11 @@ class TurnGoalAccount:
             return
         with _store_lock(self.comms._wire_lock_path):
             owner = self.comms.registry.snapshot().require(self.owner.name)
-            goal = owner.goal
-            if not goal.is_set() or goal.id in self.originated:
+            try:
+                goal = owner.goal.require()
+            except ValueError:
+                return
+            if goal.id in self.originated:
                 return
             store = self.comms.goals.open_goal_store()
             self.originated[goal.id] = None
@@ -176,14 +179,13 @@ class TurnGoalAccount:
             diagnostic=diagnostic,
         )
 
-    def current_active_goal(self) -> GoalDeclaration:
-        if self.permit is None:
-            return None
-        owner = self.comms.registry.require(self.thread_name)
-        return owner.continuation_goal(self.owner)
-
     def done(self, event: events.Done) -> None:
-        if self.current_active_goal() is None:
+        if self.permit is None:
+            return
+        owner = self.comms.registry.require(self.thread_name)
+        try:
+            owner.continuation_goal(self.owner).require_active()
+        except ValueError:
             return
         if not event.ok:
             self.block_current("Backend turn failed; inspect local diagnostics before resuming.")
@@ -196,14 +198,18 @@ class TurnGoalAccount:
     def settle_original(self, terminal: events.Done | None) -> None:
         if self.permit is None:
             return
-        if terminal is None and self.current_active_goal() is not None:
+        if terminal is None:
             self.block_current("Backend turn ended without a result; inspect local diagnostics.")
         store = self.comms.goals.open_goal_store()
         current = self.comms.registry.require(self.thread_name).goal.matching(self.owner.goal.id)
         if terminal is not None and terminal.ok:
-            if current.is_set():
-                result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
-                result.dispatch_sync(current.state)
+            try:
+                goal = current.require()
+            except ValueError:
+                pass
+            else:
+                result = VerifiedGoalSettlement(store, self.permit, goal, self.turn)
+                result.dispatch_sync(goal.state)
         if self.permit.has_verified_progress(store):
             return
         snapshot = self.comms.registry.snapshot()
@@ -226,8 +232,7 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        if current.is_set():
-            self.block_current("Goal turn ended without verified terminal progress.")
+        self.block_current("Goal turn ended without verified terminal progress.")
 
     def finish(self, terminal: events.Done | None) -> None:
         """Settle all original grants once from the actual producer terminal event."""
@@ -236,9 +241,13 @@ class TurnGoalAccount:
             current = self.comms.registry.require(self.thread_name).goal.matching(goal_id)
             store = self.comms.goals.open_goal_store()
             if terminal is not None and terminal.ok:
-                if current.is_set():
-                    result = OriginGoalSettlement(store, permit, current, self.turn)
-                    result.dispatch_sync(current.state)
+                try:
+                    goal = current.require()
+                except ValueError:
+                    pass
+                else:
+                    result = OriginGoalSettlement(store, permit, goal, self.turn)
+                    result.dispatch_sync(goal.state)
             if permit is None or not permit.has_verified_progress(store):
                 if permit is not None:
                     with suppress(StaleAttemptError):
@@ -253,9 +262,11 @@ class TurnGoalAccount:
                             expected_generation=generation.number,
                             attempt_id=generation.attempt_id,
                         )
-                if current.is_set():
-                    FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync(
-                        current.state
-                    )
+                try:
+                    goal = current.require()
+                except ValueError:
+                    pass
+                else:
+                    FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(goal.state)
             if self.pending_origins.get(self.thread_name) == goal_id:
                 self.pending_origins.pop(self.thread_name, None)
