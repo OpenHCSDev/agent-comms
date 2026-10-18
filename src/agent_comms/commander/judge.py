@@ -28,7 +28,6 @@ CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
 RTS = str(CONFIG.state)
 EDITS, VERDICTS = f'{RTS}/edits.jsonl', f'{RTS}/verdicts.jsonl'
-SENT = f'{RTS}/sent.jsonl'  # written by order post()
 BUS = f'{CONFIG.root}/bus.jsonl'
 
 
@@ -45,12 +44,9 @@ def unjudged():
 
 
 def my_messages(thread):
-    """The commander's messages to thread, newest first, from the log order writes at every send.
-
-    Rescanning 300 MB of the bus per verdict scaled with bus size; the send site is the one
-    place every order passes through, so its own record cannot miss one.
-    """
-    return [dict(id=m['id'], text=m['text']) for m in rows(SENT) if thread in m['to']][::-1]
+    """The commander's messages to thread, newest first: one bounded page of the bus's DM history."""
+    page = order.COMMS.views.dm_history_page(ME, thread)
+    return [dict(id=m.message_id, text=m.body) for m in reversed(page.messages) if m.sender == ME]
 
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')

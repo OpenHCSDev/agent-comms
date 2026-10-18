@@ -21,8 +21,7 @@ def broken_rules(owed):
     idle = sorted(u for u in seen if u and not owed.get(u) and u not in CONFIG.parked | {CONFIG.commander})
     if idle:
         lines.append(f"IDLE UNITS with no order: {', '.join(idle)} -> give each the top unowned row now")
-    hunts = [json.loads(l) for l in open(f'{ROOT}/hunts.jsonl')] if os.path.exists(f'{ROOT}/hunts.jsonl') else []
-    if not hunts or time.time() - hunts[-1]['at'] > 900:
+    if time.time() - order.last_hunt() > 900:
         lines.append('HUNT DUE: read a hot path and order the fix this wake')
     if why := capacity.short():
         lines.append(f'FORK NOW: {why}')

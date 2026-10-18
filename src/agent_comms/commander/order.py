@@ -32,7 +32,8 @@ from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
 from ..tools import CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoTool
 from ..todos import (CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent, OperationDelivery,
-                     PendingProblemOrder, RecordFirstCallTodo, StrikeTodo)
+                     CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
+                     RecordHuntTodo, StrikeTodo)
 from . import storage
 from .config import CommanderConfig, Repo
 
@@ -40,7 +41,6 @@ CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
 COMMS = Comms(CONFIG.root)  # the bus whose Todo store owns problems, orders, deadlines and strikes
 RTS = str(CONFIG.state)
-SENT = f'{RTS}/sent.jsonl'  # every message the commander sends to units, written where it is sent
 BOARD = str(CONFIG.board)
 NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain words
 # Words that hide what happened. A strike must say what the unit did in words the user uses.
@@ -61,7 +61,7 @@ SOFT = re.compile(r"\b(please|could you|would you|can you|if possible|consider|m
 
 
 def post(recipients, body):
-    """Send one message from the commander and record it in SENT; judge reads orders from there."""
+    """Send one message from the commander; judge reads it back from the bus history."""
     if found := jargon_in(body):
         sys.exit(f'REFUSED, nothing sent: your own message uses jargon {found}. Say what happened in plain words.')
     refuse_dogma(re.sub(r'(?m)`[^`\n]*`|"[^"\n]*"|^ {4}.*$', ' ', body))  # quoting the dogma to correct it is allowed
@@ -71,10 +71,7 @@ def post(recipients, body):
     out = subprocess.run(command + ['--type', 'info', '--body', body], capture_output=True, text=True)
     if '"id"' not in out.stdout:
         sys.exit(f'Send failed: {out.stdout}{out.stderr}')
-    sent = json.loads(out.stdout)['id']
-    with open(SENT, 'a') as f:
-        f.write(json.dumps(dict(id=sent, to=list(recipients), text=body, at=time.time())) + '\n')
-    return sent
+    return json.loads(out.stdout)['id']
 
 
 def call(tool):
@@ -500,7 +497,6 @@ def first_calls():
     return missing
 
 
-HUNTS = f'{RTS}/hunts.jsonl'
 HUNT_ROOTS = [(str(repo.checkout), repo.source) for repo in CONFIG.repos]
 
 
@@ -511,19 +507,33 @@ def hunt(where, why, sent=None):
         sys.exit(f'Refused: {where} is not a real file:line')
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
-    if sent and sent not in {t.order.id for t in open_todos()}:
-        sys.exit(f'Refused: {sent} is not an open tracked order; send it first or mark the hunt --clean')
-    with open(HUNTS, 'a') as f:
-        f.write(json.dumps(dict(where=os.path.realpath(path) + ':' + line, why=why, sent=sent, at=time.time())) + '\n')
+    if sent:
+        todo = next((t for t in open_todos() if t.order.id == sent), None) or sys.exit(
+            f'Refused: {sent} is not an open tracked order; send it first or mark the hunt --clean')
+    else:
+        named = set(re.findall(r'\bP\d+\b', why))
+        todo = next((t for t in open_todos() if t.id in named), None) or sys.exit(
+            'Refused: a clean hunt is recorded on its open problem; name the P-number in --why')
+    ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
+    call(CommsTodoTool(id=todo.id, operation=RecordHuntTodo(
+        todo.revision, COMMS.registry.require(ME).incarnation,
+        OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))))
     print(f'hunt recorded: {where} -> {sent or "clean"}')
+
+
+def hunts():
+    return [h for t in todos() for h in t.hunts]
+
+
+def last_hunt():
+    return max((h.at.at for h in hunts()), default=0)
 
 
 def next_hunt():
     """Least-recently hunted file among the most-churned production files on origin/main."""
     hunted = {}
-    for h in (json.loads(l) for l in open(HUNTS)) if os.path.exists(HUNTS) else ():
-        f = h['where'].rpartition(':')[0]
-        hunted[f] = max(hunted.get(f, 0), h['at'])
+    for h in hunts():
+        hunted[h.where.file] = max(hunted.get(h.where.file, 0), h.at.at)
     candidates = []
     for repo, root in HUNT_ROOTS:
         log = subprocess.run(['git', '-C', repo, 'log', 'origin/main', '--since=7.days', '--name-only', '--format=', '--', root],
@@ -595,8 +605,7 @@ def overdue():
                         idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        hunts = [json.loads(l) for l in open(HUNTS)] if os.path.exists(HUNTS) else []
-        if not hunts or time.time() - hunts[-1]['at'] > 900:
+        if time.time() - last_hunt() > 900:
             print(f'HUNT DUE (none in 15 min): read {next_hunt()} for per-event or per-history work or slop, '
                   'then order hunt FILE:LINE --why "..." [--sent ORDER] (or --clean)', flush=True)
         time.sleep(60)
