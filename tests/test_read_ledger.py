@@ -123,7 +123,7 @@ def test_agent_sent_dm_includes_independent_human_read(tmp_path):
         "reader", (message,), snapshot, comms.bus.log.path
     )
     comms.bus.reads.mark_displayed("reader", displayed)
-    sender_view = comms.views.thread_presentation("alice")
+    sender_view = comms.views.thread_presentations(("alice",)).require("alice")
     assert sender_view is not None
     outcome = next(
         item for item in sender_view.sent_notifications

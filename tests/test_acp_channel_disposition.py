@@ -223,7 +223,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             assert len(notices) == 1
             assert notices[0].state == "Sent"
             assert notices[0].detail == "" and notices[0].busy
-            assert comms.views.thread_presentation("beta").notifications == (
+            assert comms.views.thread_presentations(("beta",)).require("beta").notifications == (
                 replace(notices[0], message=message),
             )
             assert calls == []  # Projection never launches or resends an input.
@@ -271,7 +271,7 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             paused = comms.views.message_notifications_for_references((message.reference,))[key]
             assert paused[0].state == "Sent"
             assert paused[0].detail == "" and not paused[0].busy
-            assert replace(paused[0], message=message) in comms.views.thread_presentation("beta").notifications
+            assert replace(paused[0], message=message) in comms.views.thread_presentations(("beta",)).require("beta").notifications
             assert calls == []
         finally:
             turn.cancel()

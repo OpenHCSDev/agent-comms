@@ -59,7 +59,7 @@ class ThreadCaller(ToolCaller):
         return request.apply(comms, self)
 
     def listing(self, comms: Comms, result: dict[str, object]) -> dict[str, object]:
-        presentation = comms.views.require_thread_presentation(self.name)
+        presentation = comms.views.thread_presentations((self.name,)).require(self.name)
         return {**result, "sent_notifications": list(presentation.sent_notifications)}
 
     def subject(self, named: str) -> str:

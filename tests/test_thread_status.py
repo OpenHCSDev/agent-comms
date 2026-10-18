@@ -11,7 +11,7 @@ import pytest
 from agent_comms.activity import Activity, ActivityState
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.errors import RelationViolationError
+from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.presentation import ThreadView
 from agent_comms.registration import Registration
@@ -68,7 +68,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
     comms.agents.activity.emit(activity)
     visible = comms.views.thread_views()
-    individual = comms.views.thread_presentation("owner")
+    individual = comms.views.thread_presentations(("owner",)).read("owner")
     if visible:
         # Opening the individual acquires a transcript reader; the roster owns
         # none. Its original identity must bind this owner, while presentation
@@ -77,7 +77,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
         assert replace(individual, read_identity=None) == visible[0].presentation
     else:
         assert individual is None
-    assert comms.views.thread_presentation("missing") is None
+    assert comms.views.thread_presentations(("missing",)).read("missing") is None
 
 
 @pytest.mark.parametrize("status", [RunningThreadStatus(), IdleThreadStatus()])
@@ -159,4 +159,13 @@ def test_batch_source_rename_keeps_the_original_registry_fence(comms):
         batch.read("alpha")
     current = comms.views.thread_presentations(("alpha",))
     assert set(current.views) == {"renamed"}
-    assert current.read("alpha").read_identity.thread.incarnation == comms.registry.require("renamed").incarnation
+    assert current.require("alpha").read_identity.thread.incarnation == comms.registry.require("renamed").incarnation
+
+
+def test_required_presentation_rejects_an_unavailable_name(comms):
+    batch = comms.views.thread_presentations(("missing",))
+    assert batch.read("missing") is None
+    with pytest.raises(UnregisteredThreadError, match="Thread presentation unavailable: missing"):
+        batch.require("missing")
+    assert not hasattr(comms.views, "thread_presentation")
+    assert not hasattr(comms.views, "require_thread_presentation")
