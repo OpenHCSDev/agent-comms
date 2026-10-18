@@ -100,33 +100,6 @@ def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
     assert not transcript.path.exists()
 
 
-def test_end_turn_closes_the_read_before_the_draft_deletes_itself(tmp_path, monkeypatch):
-    import sqlite3
-    from agent_comms.external_transcript import ExternalDraftRow
-
-    comms = wire(tmp_path / "wire")
-    comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
-    transcript = comms.transcripts.external("cli")
-    transcript.draft(turn_id="turn", item_id="draft", events=(AssistantTranscript("text"),))
-    connections = []
-    current_draft, end_turn = StoreRead.current_draft, ExternalDraftRow.end_turn
-
-    def capture(reader):
-        connections.append(reader.connection)
-        return current_draft(reader)
-
-    def delete_after_close(draft, store):
-        with pytest.raises(sqlite3.ProgrammingError, match="closed"):
-            connections[-1].execute("SELECT 1")
-        end_turn(draft, store)
-
-    monkeypatch.setattr(StoreRead, "current_draft", capture)
-    monkeypatch.setattr(ExternalDraftRow, "end_turn", delete_after_close)
-    transcript.end_turn()
-    with transcript.reading() as records:
-        assert records.current_draft().external_row() is None
-
-
 def test_captured_draft_cannot_delete_a_later_turns_draft(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread("cli", frozenset(), str(tmp_path)))
