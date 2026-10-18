@@ -183,9 +183,10 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
     assert page.messages == (messages["peer"],)
     assert page.display_basis is not None and not page.display_basis.older_unread
     _mark(comms, "peer", tmp_path, page)
-    assert comms.bus.reads.seen_sequences(viewer, comms.registry.snapshot()) == frozenset(
-        (messages["peer"].seq, messages[marked_sender].seq)
-    )
+    cursor = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+    expected = {messages["peer"].seq, messages[marked_sender].seq}
+    assert len(cursor) == len(expected)
+    assert all(sequence in cursor for sequence in expected)
 
 
 def test_read_progress_after_older_check_keeps_conservative_page(tmp_path: Path, monkeypatch):
