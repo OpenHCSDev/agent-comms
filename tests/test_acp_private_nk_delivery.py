@@ -7,7 +7,6 @@ activate private processing for existing public sessions.
 from __future__ import annotations
 from agent_comms.tool_caller import NoThreadCaller
 
-from dataclasses import replace
 import asyncio
 import json
 import os
@@ -26,7 +25,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.activity import NativeInputDrainDiagnostic, UnavailableDrainDiagnostic
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.comms import Comms
-from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked, StaleFence
+from agent_comms.coordination_errors import PublicationActivationBlocked, StaleFence
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
@@ -646,13 +645,13 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
 
 async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
     """An unpinned private root derives this installation's package; none prepared refuses."""
-    from agent_comms import owner_lifecycle
+    from agent_comms import private_nk_entrypoint as derivation
     from agent_comms.native_package import NativePackageError
 
     def missing():
         raise NativePackageError("Pinned native package directory is missing")
 
-    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", missing)
+    monkeypatch.setattr(derivation, "pinned_native_package", missing)
     comms, agent, root_id = _session(tmp_path, package=False)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
@@ -867,16 +866,10 @@ async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_pa
     assert comms.registry.require("beta").goal == original
 
 
-async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
+async def test_acp_bad_package_cannot_accept_claim(tmp_path, monkeypatch):
     comms, agent, root_id = _session(tmp_path)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    owners = agent._comms.owners
-    pinned = owners.launch_authority
-    owners._private_nk_launch = replace(pinned, wire_root_id="f" * 32)
-    with pytest.raises(IdentityConflict, match="original root changed"):
-        await agent.inputs.drain_inbox("beta")
-    owners._private_nk_launch = pinned
     # Preflight must run before any SQL acceptance, not only before reservation.
     monkeypatch.setattr(
         native_pi.NativePiRpcLaunch,

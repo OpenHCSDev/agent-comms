@@ -3,6 +3,7 @@ from agent_comms.native_package import pinned_native_package
 
 from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -45,6 +46,22 @@ def _deferred_candidate_scheduler_is_explicit(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(
         "agent_comms.candidate_maintenance.schedule_candidate_catchup", lambda *_: None
     )
+
+
+@pytest.fixture
+def private_comms():
+    """One throwaway private bus, built as production builds one.
+
+    The owner-only root sits on physical /var/tmp because private N/K
+    publication refuses /tmp. Its launch derives like any private root's:
+    the marker installed here gives the root ID, this installation the package.
+    """
+    with tempfile.TemporaryDirectory(prefix="ac-private-", dir="/var/tmp") as directory:
+        root = Path(directory) / "wire"
+        root.mkdir(mode=0o700)
+        comms = Comms(root, private_initial_writes=True)
+        comms.messaging.initialize_private_initial_protocol()
+        yield comms
 
 
 @pytest.fixture
