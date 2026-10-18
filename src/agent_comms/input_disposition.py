@@ -202,8 +202,6 @@ class InputDispositions(TypedStore):
             connection, where=where, parameters=parameters)})
 
     def _select(self, where: str, parameters: tuple = ()) -> InputDocument:
-        if not self.path.exists():
-            return InputDocument({})  # nothing was ever recorded; a read creates nothing
         with self.snapshot() as connection:
             return self._document(connection, where, parameters)
 

@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.external_transcript import NoStoreRead, StoreRead
+from agent_comms.external_transcript import StoreRead
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript
@@ -89,7 +89,8 @@ def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
     comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external('cli')
     with transcript.reading() as read:
-        assert isinstance(read, NoStoreRead)
+        assert not read.has_records(0)
+        assert read.valid_offset(0, 0) and not read.valid_offset(-1, 0)
         assert read.start == 0 and read.cut().offset == 0
         assert not read.has_older(0) and not read.request_earlier(0)
         assert list(read.reverse(0)) == list(read.forward(0, 0)) == []
