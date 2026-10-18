@@ -128,7 +128,7 @@ def _schema_context():
 
 
 def coordinator_schema():
-    from agent_comms import coordination_tables  # noqa: F401 - load declared table family
+    import agent_comms.coordination_tables as coordination_tables
 
     tables = "\n".join(
         statement + ";"

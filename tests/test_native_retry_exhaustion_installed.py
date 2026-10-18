@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 from acp import RequestError
 
-from agent_comms import native_pi
+import agent_comms.native_pi as native_pi
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates
 from agent_comms.acp_failure import (
     NativeMessageFailureSource,

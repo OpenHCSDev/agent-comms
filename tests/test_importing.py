@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import ImportLimits
+from agent_comms.importing import ImportLimits
 from agent_comms.cli import main
 from agent_comms.cli_bridges.claude import ClaudeBridge, ClaudeTranscript, RunningClaude
 from agent_comms.cli_bridges.codex import CodexAppServer, CodexBridge

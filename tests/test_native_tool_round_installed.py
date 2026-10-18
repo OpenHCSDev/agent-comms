@@ -137,7 +137,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
 ])
 async def test_actual_native_requested_answer_and_following_input(native_backend, monkeypatch, following):
     from acp.schema import TextContentBlock
-    from agent_comms import pi_commands
+    import agent_comms.pi_commands as pi_commands
     from agent_comms.native_pi import NativePiUnavailable
     from agent_comms.wire_record import WireRecord
 

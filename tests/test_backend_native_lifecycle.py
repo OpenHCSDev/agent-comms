@@ -9,8 +9,8 @@ from native_proof_cases import read_proof_rows, write_proof_rows
 
 import pytest
 
-from agent_comms import agent_events as events
-from agent_comms import backend
+import agent_comms.agent_events as events
+import agent_comms.backend as backend
 from agent_comms.acp_extension import InputDeliveryChangedUpdate, QueuePromptRequest, decode_updates, encode_request
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms

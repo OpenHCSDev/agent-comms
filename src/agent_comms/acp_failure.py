@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 from .declared_family import DeclaredFamily
 from .delivery_presentation import DeliveryPresentation
 from .input_attempt import InputAttempt
-from .pi_payloads import AssistantMessage, PiDiagnostic
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
 
 
@@ -572,3 +571,9 @@ class PublishedErrorValue(ErrorValue):
 
     def to_wire(self):
         return self.reported_failure.error_data()
+
+
+# Payload conversions import Core observations, which refer to these failure
+# declarations. Both sides are eager; complete the declarations before binding
+# the payload types used by their annotations and conversion methods.
+from .pi_payloads import AssistantMessage, PiDiagnostic  # noqa: E402

@@ -10,8 +10,8 @@ from types import SimpleNamespace
 import pytest
 from acp.schema import PromptResponse
 
-from agent_comms import agent_events as ae
-from agent_comms import pi_events as pi
+import agent_comms.agent_events as ae
+import agent_comms.pi_events as pi
 from agent_comms.acp_extension import (
     McpClientAcknowledgementUpdate,
     decode_updates,

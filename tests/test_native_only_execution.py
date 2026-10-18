@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import agent_events as events
+import agent_comms.agent_events as events
 from agent_comms.child_process import BoundedRun
 from agent_comms.native_pi import NativePiRpcLaunch, NativePiUnavailable
 from agent_comms.private_nk_entrypoint import PrivateNkLaunch
@@ -30,7 +30,8 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
 
 
 def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
-    from agent_comms import native_pi, private_nk_entrypoint
+    import agent_comms.native_pi as native_pi
+    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 
     package = tmp_path / "package"
     verified = []
@@ -95,7 +96,7 @@ async def test_native_early_exit_retains_failure_without_raw_stdout(tmp_path):
 
 
 async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, monkeypatch):
-    from agent_comms import private_nk_entrypoint
+    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
     from agent_comms.pi_commands import GetState
     from agent_comms.pi_events import Response
     from agent_comms.pi_rpc import PiRpcChannel
