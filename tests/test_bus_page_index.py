@@ -63,6 +63,13 @@ def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_pat
     path.unlink()
     sqlite3.connect(path).close()
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
+    path.unlink()
+    with sqlite3.connect(path) as db:  # an earlier declaration of the offsets table
+        db.execute(f'CREATE TABLE "{BusPageRow.declared_name}" ("seq" INTEGER NOT NULL, '
+                   '"offset" INTEGER NOT NULL, PRIMARY KEY ("seq")) STRICT')
+    assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
+    with sqlite3.connect(path) as db:
+        BusPageIndex._schema(db)
 
     archive = retained_source(tmp_path / 'archive', 9)
     assert [message.seq for message in archive.incoming_page('b', after=6).messages] == [9]
