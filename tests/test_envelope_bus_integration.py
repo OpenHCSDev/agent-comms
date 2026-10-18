@@ -665,7 +665,7 @@ def test_claim_bearing_json_valid_no_newline_never_exposed(tmp_path: Path) -> No
     )
     for read in denied:
         with pytest.raises(
-            RelationViolationError, match="Private bus checkpoint root/inode/size changed"
+            RelationViolationError, match="Private bus checkpoint root/size changed"
         ):
             read()
 
