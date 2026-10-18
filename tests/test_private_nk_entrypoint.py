@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from conftest import publish_initial
 import json
 import fcntl
@@ -47,12 +48,11 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     )
     route_file.chmod(0o600)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     for name in ("AGENT_COMMS_ROOT",):
         monkeypatch.delenv(name, raising=False)
     routed = wire()
     assert routed.root == root
-    pinned = PrivateNkLaunch(root, root_id, declared_native_package)
+    pinned = PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(declared_native_package))
     assert routed.owners.launch_authority == pinned
     assert PrivateNkLaunch.derive() == pinned
     legacy = tmp_path / "explicit-legacy"
@@ -61,13 +61,13 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     assert PrivateNkLaunch.derive() is None
 
 
-def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, monkeypatch):
+def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, monkeypatch, native_runtime_package):
     """No route and no handoff: the marker owns the root ID, the installation owns the package."""
     from agent_comms.native_package import NativePackageError
     from agent_comms.native_pi import NativePiUnavailable
 
     root, root_id, _, _, _ = _root(tmp_path)
-    package = tmp_path / "installed-package"
+    package = native_runtime_package.path
     monkeypatch.setattr(active_route, "active_route_path", lambda: tmp_path / "absent" / "active-route.json")
     monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: package)
     for name in ("AGENT_COMMS_ROOT",):
@@ -75,7 +75,7 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     assert wire(tmp_path / "public").owners.launch_authority is None
 
     comms = wire(root)
-    assert comms.owners.launch_authority == PrivateNkLaunch(root, root_id, package)
+    assert comms.owners.launch_authority == PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(package))
     saved = tmp_path / "saved-session.jsonl"
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
@@ -86,9 +86,10 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     def rejected(_package):
         raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork")
 
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", rejected)
-    with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
-        wire(root).owners.start("headless")
+    with monkeypatch.context() as package_patch:
+        package_patch.setattr(VerifiedNativePackage, "acquire", classmethod(lambda cls, path: rejected(path)))
+        with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
+            wire(root).owners.start("headless")
 
     def missing():
         raise NativePackageError("Pinned native package directory is missing")
@@ -99,7 +100,6 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     assert comms.registry.require("headless").process_identity is None
 
     monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: package)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     launched: list[ParentedProcess] = []
     captured: list[dict[str, str]] = []
     launch = ParentedProcess.launch
@@ -116,7 +116,7 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
         assert result.pid == launched[0].pid
         assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
         # The child derives from its root exactly what the parent derived.
-        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == PrivateNkLaunch(root, root_id, package)
+        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(package))
     finally:
         for child in launched:
             child.stop_sync()
@@ -126,7 +126,6 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     root, root_id, _, _, _ = _root(tmp_path)
     route_file = tmp_path / "route-state" / "active-route.json"
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     active_route.publish_active_route(active_route.ActiveRoute(root, root_id))
     comms = wire()
@@ -165,7 +164,6 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     directory.mkdir(mode=0o755)
     route_file = directory / "active-route.json"
     route = active_route.ActiveRoute(root, root_id)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     for name in ("AGENT_COMMS_ROOT",):
         monkeypatch.delenv(name, raising=False)
@@ -189,7 +187,6 @@ def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monk
     directory.mkdir(mode=0o700)
     route_file = directory / "active-route.json"
     route = active_route.ActiveRoute(root, root_id)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     rival = b'{"rival":"preserve these bytes"}\n'
     original_link = os.link
 
@@ -214,7 +211,6 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     route = active_route.ActiveRoute(root, root_id)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     exclusive_requested = threading.Event()
     original_flock = active_route.fcntl.flock
 
@@ -286,7 +282,6 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
     entered_send = threading.Event()
     release_send = threading.Event()
@@ -398,8 +393,12 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     monkeypatch.setattr(sys, "argv", ["agent_comms.acp"])
     seen = []
 
-    def trust_and_switch(_package):
+    acquire = VerifiedNativePackage.acquire
+
+    def trust_and_switch(path):
+        package = acquire(path)
         monkeypatch.chdir(other)
+        return package
 
     class StopBeforeOwnerAttachmentError(Exception):
         pass
@@ -412,7 +411,7 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     def stop(*_args, **_kwargs):
         raise StopBeforeOwnerAttachmentError
 
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", trust_and_switch)
+    monkeypatch.setattr(VerifiedNativePackage, "acquire", classmethod(lambda cls, path: trust_and_switch(path)))
     selected = acp if entrypoint == "acp" else worker
     monkeypatch.setattr(selected, "wire", capture_wire)
     if entrypoint == "acp":
@@ -463,7 +462,6 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 
 def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
     root, root_id, comms, _, _ = _root(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     comms.registry.declare(comms.registry.new_thread('late-owner', frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
     lookup = RecordedThreadIncarnation("fixture", late.created_at).lookup
@@ -502,7 +500,6 @@ def test_an_old_version_route_is_refused_by_its_version_and_replaced_only_by_the
     directory.mkdir(mode=0o700)
     route_file = directory / "active-route.json"
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     old = json.dumps({"version": 1, "root": str(root), "wire_root_id": root_id,
                       "native_package": str(tmp_path)}).encode()
     route_file.write_bytes(old)

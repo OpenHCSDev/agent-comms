@@ -31,14 +31,15 @@ def git(checkout, *args):
 
 @pytest.fixture
 def checkout(commander, tmp_path):
-    """worker's checkout of P1, its one commit already on origin's default branch."""
+    """worker's checkout of P1 on branch fix/p1, its one commit already on origin's default branch."""
     origin, unit = tmp_path / 'origin.git', tmp_path / 'wt' / 'worker--P1'
     subprocess.run(['git', 'init', '-q', '--bare', str(origin)], check=True)
     unit.mkdir(parents=True)
     for command in (('init', '-q', '-b', 'main'), ('remote', 'add', 'origin', str(origin)),
                     ('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'base'),
                     ('push', '-q', 'origin', 'main'), ('fetch', '-q', 'origin'),
-                    ('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main')):
+                    ('symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/main'),
+                    ('switch', '-q', '-c', 'fix/p1')):
         git(unit, *command)
     return create(commander, 'P1'), unit
 
@@ -74,24 +75,36 @@ def test_a_pushed_commit_with_no_pr_says_so(checkout):
 
 
 def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
-    pulls = Listed(open=(PullRequest(12, 'Fix (P10)', 'f' * 40), PullRequest(7, 'Fix the thing (P1)', 'a' * 40,
+    pulls = Listed(open=(PullRequest(12, 'fix/p10', 'f' * 40), PullRequest(7, 'fix/p1', 'a' * 40,
                                                                               updated_at=400.0)))
     progress = read(checkout, pulls)
     assert progress == OpenPrProgress(7, 'a' * 9, 400.0) and progress.strikes
     assert progress.line == 'PR #7 open at aaaaaaaaa'
 
 
+def test_an_order_owns_the_pr_from_its_branch_whatever_either_title_says(checkout):
+    # #7 was renamed without its P-number; #9 is titled "P1: ..." but comes from another order's branch.
+    pulls = Listed(open=(PullRequest(9, 'fix/p2', 'b' * 40, updated_at=500.0),
+                         PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0)))
+    assert read(checkout, pulls) == OpenPrProgress(7, 'a' * 9, 400.0)
+
+
+def test_a_detached_checkout_owns_no_pr(checkout):
+    git(checkout[1], 'switch', '-q', '--detach')
+    assert read(checkout, Listed(open=(PullRequest(7, 'fix/p1', 'a' * 40, updated_at=400.0),))) == NoCommitProgress()
+
+
 def test_an_open_pr_untouched_since_the_order_belongs_to_an_earlier_one(checkout):
-    assert read(checkout, Listed(open=(PullRequest(5, 'P1: old', 'e' * 40, updated_at=99.0),))) == NoCommitProgress()
+    assert read(checkout, Listed(open=(PullRequest(5, 'fix/p1', 'e' * 40, updated_at=99.0),))) == NoCommitProgress()
 
 
 def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
-    pulls = Listed(merged=(PullRequest(3, 'P1: earlier order', 'b' * 40, 'c' * 40, 99.0, 600.0),))
+    pulls = Listed(merged=(PullRequest(3, 'fix/p1', 'b' * 40, 'c' * 40, 99.0, 600.0),))
     assert read(checkout, pulls) == NoCommitProgress()
 
 
 def test_a_merged_order_records_done_and_draws_no_strike(checkout):
-    progress = read(checkout, Listed(merged=(PullRequest(8, 'P1: fix', 'b' * 40, 'd' * 40, 500.0, 500.0),)))
+    progress = read(checkout, Listed(merged=(PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0),)))
     assert progress == MergedProgress('d' * 9) and not progress.strikes
     assert progress.line == 'merged as ddddddddd, record done'
 
@@ -105,10 +118,15 @@ def test_unread_github_is_said_and_still_draws_a_strike(checkout):
 
 def test_board_and_overdue_print_a_merged_order_as_done_not_late(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
+    # worker's P1 checkout, on the branch its merged PR came from.
+    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    unit = tmp_path / 'wt' / 'worker--P1'
+    unit.mkdir(parents=True)
+    git(unit, 'init', '-q', '-b', 'fix/p1')
     create(commander, 'P1', deadline=1)
-    merged = (PullRequest(8, 'P1: fix', 'b' * 40, 'd' * 40, 500.0, 500.0),)
+    merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state: merged if state == 'merged' else ())
-    assert script.deadline_lines(script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation)) == [
+    assert deadline_lines(script) == [
         f'DUE PASSED P1 worker (due {script.hhmm(script.COMMS.goals.todos.get("P1").deadline)}): '
         'merged as ddddddddd, record done']
     script.board()
@@ -140,10 +158,16 @@ def test_work_that_stops_moving_stalls(progress, now, stalled):
     assert progress.stalled(100.0, now) is stalled
 
 
+def deadline_lines(script, since=0.0):
+    """One watch tick's deadline lines: the pending orders and their progress, read once."""
+    pending = [t for t in script.held_orders() if t.pending]
+    return script.deadline_lines(pending, script.progress(), since)
+
+
 def test_a_stalled_order_prints_stall_with_its_progress(commander, commander_script):
     script, _ = commander_script
     create(commander, 'P1', deadline=time.time() + 3600)
-    assert script.deadline_lines(script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation)) == [
+    assert deadline_lines(script) == [
         'STALL P1 worker: no commit since the order -> push it now or reassign']
 
 
@@ -153,9 +177,9 @@ def test_overdue_is_announced_once_per_crossing(commander, commander_script):
     create(commander, 'P1')  # ordered at 100 and due at 1000; it stalled at 700, before the watch
     polls, since = [], 800.0
     for _ in range(3):
-        polls, since = polls + script.deadline_lines(script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation), since), time.time()
+        polls, since = polls + deadline_lines(script, since), time.time()
     assert len(polls) == 1 and polls[0].startswith('OVERDUE: worker (due ')
     comms.messaging.send_message('worker', 'lead', 'on it', InfoKind)
-    replied = script.deadline_lines(script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation), since)
+    replied = deadline_lines(script, since)
     assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
-    assert script.deadline_lines(script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation), time.time()) == []
+    assert deadline_lines(script, time.time()) == []

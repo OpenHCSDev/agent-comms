@@ -23,15 +23,12 @@ async def test_terminal_auth_is_only_advertised_when_supported(tmp_path):
     assert method.args == ["--login"]
 
 
-async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_model(tmp_path, monkeypatch, *, thread_registration):
+async def test_empty_native_catalogue_advertises_setup_without_accepting_unset_model(tmp_path, monkeypatch, configured_catalog, *, thread_registration):
     async def discover(self, thread):
         return []
 
     monkeypatch.setattr(ModelConfigOption, "discover", discover)
-    option = ModelConfigOption(
-        "pi", NativeArguments.parse(()),
-        RestartEnvironment(native_config=tmp_path, agent_directory=tmp_path),
-    )
+    option = configured_catalog.catalog_for(ModelConfigOption)
     thread = thread_registration.new_thread(name='setup', tags=frozenset(), worktree=str(tmp_path))
     advertised = await option.describe(thread)
     assert advertised.current_value == ""

@@ -17,7 +17,7 @@ from agent_comms.selected_triage import FullSelectedTriage, IgnoreSelectedTriage
 from agent_comms.coordinator import Coordination
 from agent_comms.coordination_errors import StaleFence
 from agent_comms.native_pi import NativePiUnavailable
-from agent_comms.notification_progress import SentProgress
+from agent_comms.notification_progress import AnsweredProgress, IgnoredProgress, QueuedProgress, SentProgress
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.goal_actions import SetGoalAction
 from agent_comms.historical_native_inputs import read_historical_native_inputs
@@ -38,8 +38,6 @@ tmp_path = private_root_fixture
 
 
 async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_path, monkeypatch):
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, first, root_id):
         alpha, alpha_calls = native_model(decision="IGNORE")
         monkeypatch.setattr(TrackedTurnSession, "execute", alpha)
@@ -104,15 +102,14 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         assert (len(alpha_calls), len(beta_calls)) == before
         outcomes = comms.views.message_notifications_for_references((first.reference,))[(first.seq, first.message_id)]
         by_recipient = {row.recipient: row for row in outcomes}
-        assert by_recipient["alpha"].state.startswith("Read ")
-        assert by_recipient["beta"].state.startswith("Answered ")
+        assert isinstance(by_recipient["alpha"].state, IgnoredProgress)
+        assert by_recipient["alpha"].state.read
+        assert isinstance(by_recipient["beta"].state, AnsweredProgress)
         assert by_recipient["beta"].answered_at_ms is not None
-        assert all(row.detail == "" and not row.busy for row in outcomes)
+        assert all(row.state.detail == "" and not row.state.working for row in outcomes)
 
 
 async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_path, monkeypatch):
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model(fail_on=1)
     monkeypatch.setattr(TrackedTurnSession, "execute", model)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, message, root_id):
@@ -152,8 +149,6 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
 async def test_selected_owner_revocation_before_send_never_creates_receipt(
     tmp_path, monkeypatch, revocation
 ):
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model()
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -202,8 +197,6 @@ async def test_selected_owner_revocation_before_send_never_creates_receipt(
 
 
 async def test_notification_busy_requires_matching_live_process_identity(tmp_path, monkeypatch):
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     model, calls = native_model()
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -221,8 +214,8 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             key = message.seq, message.message_id
             notices = comms.views.message_notifications_for_references((message.reference,))[key]
             assert len(notices) == 1
-            assert notices[0].state == "Sent"
-            assert notices[0].detail == "" and notices[0].busy
+            assert isinstance(notices[0].state, SentProgress)
+            assert notices[0].state.detail == "" and notices[0].state.working
             assert comms.views.thread_presentations(("beta",)).require("beta").notifications == (
                 replace(notices[0], message=message),
             )
@@ -243,8 +236,8 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             # Output is not a competing read authority. Until the native
             # context acknowledgement exists, even output evidence remains not-read.
             working = comms.views.message_notifications_for_references((message.reference,))[key]
-            assert working[0].state == "Sent"
-            assert working[0].detail == "" and working[0].busy
+            assert isinstance(working[0].state, SentProgress)
+            assert working[0].state.detail == "" and working[0].state.working
 
             held = comms.messaging.send_message(
                 "sender", "beta", "wait behind the recipient's unresolved turn"
@@ -255,22 +248,22 @@ async def test_notification_busy_requires_matching_live_process_identity(tmp_pat
             queued, = comms.views.message_notifications_for_references((held.reference,))[
                 held.seq, held.message_id
             ]
-            assert queued.state.startswith("Queued ")
-            assert queued.detail == "" and not queued.busy
+            assert isinstance(queued.state, QueuedProgress)
+            assert queued.state.detail == "" and not queued.state.working
 
             # Same PID, different process incarnation: even a retained active turn
             # cannot supply liveness. Persist through the real typed registry.
             with comms.registry.store.editing() as edit:
                 current = edit.document.threads["beta"]
                 identity = current.process_identity
-                assert identity is not None and current.active_turn.executing
+                assert identity is not None and current.executing
                 edit.document.threads["beta"] = replace(
                     current, process_identity=replace(identity, start_time=identity.start_time + 1)
                 )
                 edit.commit()
             paused = comms.views.message_notifications_for_references((message.reference,))[key]
-            assert paused[0].state == "Sent"
-            assert paused[0].detail == "" and not paused[0].busy
+            assert isinstance(paused[0].state, SentProgress)
+            assert paused[0].state.detail == "" and not paused[0].state.working
             assert replace(paused[0], message=message) in comms.views.thread_presentations(("beta",)).require("beta").notifications
             assert calls == []
         finally:

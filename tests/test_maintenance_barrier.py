@@ -40,8 +40,6 @@ async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, 
     import agent_comms.private_nk_entrypoint as private_nk_entrypoint
 
     comms, agent, _root_id = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, '_trusted_package', lambda _: None)
-    monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
     control = comms.owners.maintenance
     # A post pending when the drain begins; the drain refuses new publication.
     # Use the actual scratch bus, not a constructed message pretending to be a post.
@@ -108,8 +106,6 @@ async def test_cutover_clear_delivers_pending_channel_post(tmp_path: Path, monke
     from test_acp_private_nk_delivery import _session
 
     comms, agent, _root_id = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, '_trusted_package', lambda _: None)
-    monkeypatch.setattr(native_pi, '_trusted_package', lambda _: None)
     gate = comms.owners.maintenance
     post = comms.messaging.send_message('sender', '#team', 'while draining')
     hold = gate.begin(FieldCodec.decode(MaintenanceOperatorField, 'scratch-cutover'))

@@ -21,7 +21,6 @@ async def test_route_installer_names_and_waits_for_every_reader(tmp_path: Path, 
     path = tmp_path / 'route-state' / 'active-route.json'
     path.parent.mkdir(mode=0o700)
     # This case exercises the real publisher and kernel locks, not SDK trust.
-    monkeypatch.setattr(private_nk_entrypoint, '_trusted_package', lambda _: None)
     monkeypatch.setattr(private_nk_entrypoint, 'pinned_native_package', lambda: tmp_path)
     script = tmp_path / 'bridge-watcher.py'
     script.write_text(
