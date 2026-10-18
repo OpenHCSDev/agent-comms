@@ -36,6 +36,7 @@ from .message_reference import MessageReference
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .messages import Message
 from .private_path import FileRevision
+from .recorded_bus import RecordedBusIdentity
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -446,7 +447,7 @@ class ReadThrough(ChannelReadMark):
             if basis.scope(target) != self.expected_scope:
                 raise DMPaintedBoundChanged()
             displayed.validate(
-                basis.require_viewer(), basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
+                basis.require_viewer(), basis.registry, RecordedBusIdentity.capture(presentation.bus.log.path),
             )
             yield displayed.through(self.through)
 

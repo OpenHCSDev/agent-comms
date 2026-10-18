@@ -12,17 +12,16 @@ import re
 import shutil
 import sqlite3
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
-from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage, pinned_native_package
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
@@ -113,10 +112,10 @@ def main() -> int:
     launch = PrivateNkLaunch.derive()
     if launch is None:
         raise NativePiUnavailable("Native owner backend requires a configured private route")
-    cli = launch.validate()
+    package = launch.validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
-        cli, tuple(sys.argv[1:]), Path.cwd(), environment,
+        package, tuple(sys.argv[1:]), Path.cwd(), environment,
         RestartEnvironment.inherit(environment),
         LaunchRuntime.running(),
     )
@@ -403,7 +402,7 @@ class NativePiRpcLaunch:
     cwd: Path
     env: dict[str, str]
     session: SelectedSession
-    package: Path
+    package: VerifiedNativePackage
 
     root: Path = field(kw_only=True)
     configuration: RestartEnvironment = field(kw_only=True)
@@ -411,7 +410,7 @@ class NativePiRpcLaunch:
 
     @classmethod
     def bootstrap(
-        cls, cli, arguments, cwd, environment, configuration: RestartEnvironment,
+        cls, package: VerifiedNativePackage, arguments, cwd, environment, configuration: RestartEnvironment,
         runtime: LaunchRuntime,
     ):
         """Encode the held launch configuration at the native process boundary."""
@@ -426,6 +425,7 @@ class NativePiRpcLaunch:
         env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
         env.update(configuration.encode_native())
+        cli = package.cli
         argv = (
             "node", "--no-global-search-paths",
             "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
@@ -435,13 +435,13 @@ class NativePiRpcLaunch:
         return argv, env
 
     @classmethod
-    def _build(cls, cli, arguments, cwd, environment, session, package, configuration, runtime, root):
-        argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration, runtime)
+    def _build(cls, package, arguments, cwd, environment, session, configuration, runtime, root):
+        argv, env = cls.bootstrap(package, arguments, cwd, environment, configuration, runtime)
         return cls(argv, cwd, env, session, package, root=root, configuration=configuration, runtime=runtime)
 
     @classmethod
     def _command_selection(
-        cls, command: str, runtime: LaunchRuntime, root: Path | str | None,
+        cls, command: str, runtime: LaunchRuntime, package: VerifiedNativePackage,
     ):
         """Decode the original launcher selection without acquiring its package.
 
@@ -449,46 +449,41 @@ class NativePiRpcLaunch:
         name this installation's entrypoint, its pinned CLI, or the source stack
         launcher; execution always uses the verified native package.
         """
-        from .private_nk_entrypoint import PrivateNkLaunch
-
         stack_launcher = MANIFEST.parent / "bin" / "pi-native"
         executable = (
             Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
         )
-        route = PrivateNkLaunch.derive(root)
-        if route is not None:
-            package = route.native_package
-        elif executable is not None and executable == stack_launcher.resolve():
-            package = pinned_native_package()
-        else:
-            raise NativePiUnavailable("Native owner requires a configured pinned package")
         allowed = (
             Path(NativeArguments.owner_launcher(runtime)).resolve(),
             stack_launcher.resolve(),
-            (package / "dist" / "cli.js").resolve(),
+            package.cli.resolve(),
         )
         if executable is not None and executable not in allowed:
             raise NativePiUnavailable("Configured command is not a validated native Pi launcher")
-        return package, route
 
     @classmethod
     def package_for_command(
         cls, command: str, runtime: LaunchRuntime, root: Path | str | None = None,
-    ) -> Path:
+    ) -> VerifiedNativePackage:
         """Acquire the original reviewed artifact before any new native execution.
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        package, route = cls._command_selection(command, runtime, root)
+        from .private_nk_entrypoint import PrivateNkLaunch
+
+        route = PrivateNkLaunch.derive(root)
         if route is not None:
-            route.validate()
+            package = route.validate()
+        elif Path(shutil.which(command) or command).resolve() == (MANIFEST.parent / "bin/pi-native").resolve():
+            package = VerifiedNativePackage.acquire(pinned_native_package())
         else:
-            _trusted_package(package)
+            raise NativePiUnavailable("Native owner requires a configured pinned package")
+        cls._command_selection(command, runtime, package)
         return package
 
     @classmethod
     def catalog(
-        cls, command: str, arguments: tuple[str, ...], *, worktree: Path,
+        cls, command: str, arguments: tuple[str, ...], *, package: VerifiedNativePackage, worktree: Path,
         root: Path | str | None = None,
     ) -> NativePiRpcLaunch:
         """Metadata-only RPC owns an in-memory session, never a saved selection.
@@ -504,7 +499,7 @@ class NativePiRpcLaunch:
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         runtime = LaunchRuntime.running()
-        package = cls.package_for_command(command, runtime, root)
+        cls._command_selection(command, runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -517,6 +512,7 @@ class NativePiRpcLaunch:
         command: str,
         arguments: tuple[str, ...],
         *,
+        package: VerifiedNativePackage,
         worktree: Path,
         root: Path,
         environment: dict[str, str] | None = None,
@@ -528,7 +524,7 @@ class NativePiRpcLaunch:
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         runtime = LaunchRuntime.running()
-        package = cls.package_for_command(command, runtime, root)
+        cls._command_selection(command, runtime, package)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
@@ -554,8 +550,7 @@ class NativePiRpcLaunch:
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))
-        cli = package / "dist" / "cli.js"
-        return cls._build(cli, arguments, cwd, env, session, package, RestartEnvironment.inherit(env), runtime, root)
+        return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
@@ -567,39 +562,22 @@ class NativePiRpcLaunch:
         launch/auth key and checking its actual saved-source revision/liveness.
         A different package or selected file needs its own fresh acquisition.
         """
-        package, _ = self._command_selection(command, self.runtime, root)
+        self._command_selection(command, self.runtime, self.package)
         saved = Path(session_file).absolute() if session_file is not None else None
-        if package != self.package or saved != self.session.path:
+        if saved != self.session.path:
             return None
         return self._managed(self.package, NativeArguments.parse(arguments).rpc(),
             worktree, environment, self.session, self.runtime, root)
 
     @classmethod
-    def acquire_tracked(cls, package: Path) -> Callable[..., NativePiRpcLaunch]:
-        """Acquire one immutable artifact's executable construction behavior.
-
-        The returned factory retains the original verified CLI for its owner's
-        lifetime. Every call still constructs a new complete source/auth launch;
-        it proves neither child readiness, permission to send input nor prior context.
-        """
-        package = Path(package).absolute()
-        return cls.verified_launcher(package, _trusted_package(package))
-
-    @classmethod
-    def verified_launcher(cls, package: Path, cli: Path) -> Callable[..., NativePiRpcLaunch]:
-        """Launcher for a package whose CLI _trusted_package already returned."""
-        return partial(cls._tracked, Path(package).absolute(), cli, LaunchRuntime.running())
-
-    @classmethod
-    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
-        """Acquire a fresh artifact for a standalone tracked execution."""
-        return cls.acquire_tracked(package)(**options)
+    def tracked(cls, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:
+        """Construct a new source/auth launch from the process's acquired artifact."""
+        return cls._tracked(package, LaunchRuntime.running(), **options)
 
     @classmethod
     def _tracked(
         cls,
-        package: Path,
-        cli: Path,
+        package: VerifiedNativePackage,
         runtime: LaunchRuntime,
         *,
         worktree: Path,
@@ -627,7 +605,7 @@ class NativePiRpcLaunch:
         # policy. This directory isolates writable resources, not policy copies.
         agent_dir = session_dir / ".native-pi-agent"
         _durable_private_session_dir(agent_dir)
-        tool_arguments = selected_tool_mode.launch_arguments(package)
+        tool_arguments = selected_tool_mode.launch_arguments(package.path)
         arguments = [
             "--mode",
             "rpc",
@@ -641,7 +619,7 @@ class NativePiRpcLaunch:
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
-        return cls._build(cli, tuple(arguments), worktree, env, session, package, configuration, runtime, root)
+        return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
 
 
 def _read_private_file(path: Path):
@@ -958,33 +936,6 @@ class PrivateEvidenceRead:
                 )
             revision = observed
         return revision
-
-
-def _trusted_package(package: Path) -> Path:
-    package = package.absolute()  # lexical: resolve() would hide a symlink component
-    if ".." in package.parts:
-        raise NativePiUnavailable("Pinned native Pi package path is not lexical")
-    if package.parts[-3:] != (
-        "node_modules",
-        "@earendil-works",
-        "pi-coding-agent",
-    ):
-        raise NativePiUnavailable("Canonical native Pi package layout is required")
-    for ancestor in (package, *package.parents):
-        info = ancestor.lstat()
-        failed = TrustedAncestorRole.violation(info)
-        if failed is not None:
-            raise NativePiUnavailable(f"Native Pi package has unsafe ancestor: {failed.declared_name}")
-    root = package.parents[2]
-    if PrivateDirectoryRole.violation(root.lstat()) is not None:
-        raise NativePiUnavailable("Disposable native Pi root must be owner-only")
-    from .native_package import NativePackageError, verify_native_package
-
-    try:
-        verify_native_package(package)
-    except (OSError, NativePackageError) as error:
-        raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork") from error
-    return package / "dist/cli.js"
 
 
 def _private_session_dir(directory: Path) -> None:

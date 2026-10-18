@@ -9,20 +9,22 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
+from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder, StrikeTodo
+from agent_comms.todos import (AcceptedVerdict, MechanicalOrderRun, OperationDelivery, PendingProblemOrder,
+    StrikeTodo)
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
-    CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderWorkTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
+    CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
-    CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool,
+    CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool, CommsVerdictTool,
     CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
 )
 from agent_comms.work_branches import WorkBranches
@@ -73,11 +75,16 @@ def scenario(comms: Comms, project, monkeypatch):
         problem="P1", order=order, request="request", deadline=RecordedEventTime(1000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P1"))}, lead
     yield CommsTodoListTool, {"thread": "lead"}, lead
+    yield CommsCorrectWordingTool, {"unit": "worker", "message_id": "m1",
+                                    "text": "The canonical ownership changed"}, lead
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
     yield CommsTodoTool, {"id": "P1", "operation": FieldCodec.encode(StrikeTodo(
         todo.revision, actor, todo.assignment, "The assigned change broke the existing resource release path during review.",
         RecordedEventTime(500)))}, lead
+    yield CommsVerdictTool, {"id": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
+        todo.revision + 1, actor, todo.assignment, "toolu_1", quote="Repair the existing owner"))}, lead
+    yield CommsOrderServeTool, {"problem": "P1", "serves": RecordPlanePhase.declared_name}, lead
     yield CommsOrderTool, {"owner": "worker", "order": FieldCodec.encode(OrderGoalAction(
         problem="P1", order=order, request="request", deadline=RecordedEventTime(3000),
         commander="lead", expected_revision=comms.goals.todos.get("P1").revision))}, lead

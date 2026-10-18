@@ -30,6 +30,7 @@ import hashlib
 import json
 import os
 import shutil
+import signal
 import stat
 import subprocess
 import sys
@@ -45,7 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cutover.carry import CarryChain, CarryLedger, Step
 
-from agent_comms.active_route import acquire_exclusive_route_lock
+from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
@@ -260,16 +261,29 @@ class Backup:
         print(f"Restored the bus; the failed one is kept at {failed}", file=sys.stderr)
 
 
-def route_readers() -> None:
-    """Toad and ACP clients hold the route directory shared; an upgrade waits for them to close.
-    Bus watches close on their own once the maintenance phase is declared."""
+def route_readers(patience: int = 120) -> None:
+    """Bus watches close on their own once maintenance is declared. Toad's observation process
+    (ui_model/observation.py:1223) and an ACP agent (acp.py:512) hold the route for their whole
+    life and never pause, so the wait gives up after ``patience`` seconds and names them."""
     directory = Path.home() / ".local/state/agent-comms"
     if not directory.exists():
         return
     descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+
+    def gave_up(signum: int, frame: object) -> None:
+        raise TimeoutError
+
+    previous = signal.signal(signal.SIGALRM, gave_up)
+    signal.alarm(patience)
     try:
         acquire_exclusive_route_lock(descriptor)
+    except TimeoutError:
+        holders = "; ".join(f"PID {holder.pid}: {holder.command}"
+                            for holder in route_lock_holders(descriptor))
+        raise UpgradeRefused(f"Clients still hold the route after {patience}s: {holders}") from None
     finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
         os.close(descriptor)
 
 
@@ -314,15 +328,17 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(root / "registry.json")
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
-    for name in running:
-        installed.cli(root, "stop", "--name", name)
     lock = checkout / "stack/uv.lock"
     try:
+        for name in running:
+            installed.cli(root, "stop", "--name", name)
         route_readers()
         backup = Backup.take(root, ROUTE)
-    except BaseException:
+    except BaseException as error:
         maintenance.clear(held)
         start(installed, root, running)
+        print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
+              f"maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
     try:
@@ -332,7 +348,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         steps = carry_all(root, pending, staged, revisions)
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
-    except BaseException:
+    except BaseException as error:
         backup.restore()
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
@@ -341,6 +357,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.prepare_native()
         maintenance.clear(held)
         start(installed, root, running)
+        print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
+              f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     maintenance.clear(held)
     start(installed, root, running)
@@ -353,6 +371,13 @@ def start(stack: Stack, root: Path, names: list[str]) -> None:
         stack.cli(root, "start", "--name", name)
 
 
+def stopped(signum: int, frame: object) -> None:
+    """A stop signal runs the same abort as a failure; a second one cannot cut that abort short."""
+    for each in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(each, signal.SIG_IGN)
+    raise SystemExit(f"upgrade-bus: stopped by {signal.Signals(signum).name}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--checkout", type=lambda value: Path(value).expanduser().resolve(), default=REPO)
@@ -361,6 +386,8 @@ def main() -> None:
     parser.add_argument("--to", default="origin/main")
     parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
     args = parser.parse_args()
+    for signum in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(signum, stopped)
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.rehearse), indent=2))
     except UpgradeRefused as error:

@@ -60,6 +60,7 @@ Every tool below is a `ToolRequest` in `src/agent_comms/tools.py`; `agent-comms 
 | `comms_todo_list` | `CommsTodoListTool`, tools.py:735 | Read the commander's canonical Todo orders, deadlines, strikes and hunts |
 | `comms_order_done` | `CommsOrderDoneTool`, tools.py:764 | Verify the order's check on its clean delivered commit before completing its Goal |
 | `comms_fire` | `CommsFireTool`, tools.py | Release every open problem the unit holds in one operation, recording one plain reason on each |
+| `comms_correct_wording` | `CommsCorrectWordingTool`, tools.py | Answer a unit's jargon with a correction naming its open orders; its strikes stay as they are |
 | `comms_order_check` | `CommsOrderCheckTool`, tools.py:782 | Replace the check of an open order, recording the old check, the new one and why |
 | `comms_problem_close` | `CommsProblemCloseTool`, tools.py:800 | Record installed application evidence and close only a problem with no open order |
 | `comms_turns` | `CommsTurnsTool`, tools.py:817 | Read a unit's recent turns with ordered original transcript facts |

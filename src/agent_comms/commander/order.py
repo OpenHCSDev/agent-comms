@@ -5,6 +5,8 @@
   Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
   Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
   Works when: <user-visible closing run, 8+ words> (unless mechanical; close requires the file)
+  Deletes: <decision family> at PATH:LINE :: <repo> :: <family-wide count>
+    (optional; done refuses unless the count is 0)
   1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
@@ -29,15 +31,18 @@ from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
+from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
+from ..standing_rules import HuntDue
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+from ..tools import (CommsFireTool, CommsOrderCheckTool,
+                     CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
+                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
-from . import capacity, rules, storage
+from . import capacity, rules
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -222,6 +227,11 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
     except ValueError as refused:
         problems.append(str(refused))
+    serves = re.search(r'(?m)^Serves:\s*(\S+)\s*$', body)
+    try:
+        phase = OrderPhase.decode(serves[1] if serves else UnplannedPhase.declared_name)
+    except ValueError as refused:
+        problems.append(f'{refused}; Serves: names one of {", ".join(OrderPhase.names())}')
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -295,7 +305,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
     if problems:
         sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + storage.RULE.replace('<you>', unit) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + COMMS.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in CONFIG.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                + '\nStart now and push as you go.')  # a unit shown a due time takes until then
     taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
@@ -311,7 +321,9 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         order = PendingProblemOrder(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
-            report=report[1], run=run,
+            report=report[1], run=run, serves=phase,
+            deletes=OrderDeletion.parse(deletes[1] if (deletes := re.search(
+                rf'(?m)^{re.escape(OrderDeletion.label)}\s*(.+)$', body)) else None),
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
@@ -568,10 +580,6 @@ def hunts():
     return [h for t in todos() for h in t.hunts]
 
 
-def last_hunt():
-    return max((h.at.at for h in hunts()), default=0)
-
-
 def next_hunt():
     """Least-recently hunted file among the most-churned production files on origin/main."""
     hunted = {}
@@ -631,20 +639,7 @@ def deadline_lines(held: list[Todo]) -> list[str]:
 
 
 def overdue():
-    checked = 0
     while True:
-        if time.time() - checked > 300:
-            checked = time.time()
-            if storage.free_gb() < storage.CLEANUP_GB:
-                print(f'DISK LOW: {CONFIG.disk} has {storage.free_gb():.1f} GB free (cleanup due under {storage.CLEANUP_GB} GB) -> put a cleanup owner on it now', flush=True)
-            heavy = []
-            for unit in sorted({t.assignment.owner for t in open_todos()}):
-                try:
-                    COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
-                except SelectedToolDenied as quota:
-                    heavy.append(f'{unit}: {quota}')
-            if heavy:
-                print('VIOLATION storage quota: ' + '; '.join(heavy) + ' -> order the cleanup', flush=True)
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
@@ -670,7 +665,7 @@ def overdue():
                         idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        if time.time() - last_hunt() > 900:
+        for _ in HuntDue.violations(COMMS, ME):
             print(HuntVerb.due(next_hunt()), flush=True)
         time.sleep(60)
 
@@ -895,6 +890,17 @@ class CheckVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         correct_check(self.pid, self.check, self.why)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServeVerb(OrderVerb, RuledVerb):
+    help = "name the plan phase an open order serves; keeps its id, deadline and strikes"
+    pid: str = option("pid")
+    phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
+
+    def run(self) -> None:
+        call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.decode(self.phase)))
+        print(f'{self.pid} serves {self.phase}')
 
 
 @dataclass(frozen=True, kw_only=True)

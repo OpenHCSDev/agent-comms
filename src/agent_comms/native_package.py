@@ -4,7 +4,7 @@ Includes dependencies, package metadata, hidden files and native resources; no
 mtime cache or caller-provided success marker. Not a sandbox against arbitrary
 same-UID code or an installer mutating code after verification. Preparation must
 publish new build directories, never edit a package used by a running process.
-This stdlib-only file is also invoked directly by the preparation/launch scripts.
+Preparation and launch scripts invoke the same package module entrypoint.
 Shared resources must be read-only. Their content commitment is unchanged when
 another deployment acquires an inode name; private mutable state is unrelated.
 """
@@ -19,6 +19,8 @@ import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
+
+from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
@@ -360,17 +362,46 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def verify_native_package(root: Path) -> None:
+@dataclass(frozen=True, slots=True)
+class VerifiedNativePackage:
+    """The immutable artifact acquired for one process; never a readiness proof."""
+
+    path: Path
+
+    def __post_init__(self):
+        pins = [
+            line[len(TREE_PREFIX) :]
+            for line in MANIFEST.read_text().splitlines()
+            if line.startswith(TREE_PREFIX)
+        ]
+        if len(pins) != 1 or not _sha256_hex(pins[0]):
+            raise NativePackageError("Pinned native package tree commitment unavailable")
+        if package_tree_digest(self.path) != pins[0]:
+            raise NativePackageError("Native package tree differs from pinned artifact")
+
+    @property
+    def cli(self) -> Path:
+        return self.path / "dist/cli.js"
+
+    @classmethod
+    def acquire(cls, root: Path) -> VerifiedNativePackage:
+        """Acquire the pinned artifact only through safe private launch ancestry."""
+        root = root.absolute()  # Do not resolve away symlink components.
+        if ".." in root.parts:
+            raise NativePackageError("Pinned native Pi package path is not lexical")
+        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
+            raise NativePackageError("Canonical native Pi package layout is required")
+        for ancestor in (root, *root.parents):
+            failed = TrustedAncestorRole.violation(ancestor.lstat())
+            if failed is not None:
+                raise NativePackageError(f"Native Pi package has unsafe ancestor: {failed.declared_name}")
+        if PrivateDirectoryRole.violation(root.parents[2].lstat()) is not None:
+            raise NativePackageError("Disposable native Pi root must be owner-only")
+        return verify_native_package(root)
+
+def verify_native_package(root: Path) -> VerifiedNativePackage:
     """Verify the entire copied package against the repository-owned commitment."""
-    pins = [
-        line[len(TREE_PREFIX) :]
-        for line in MANIFEST.read_text().splitlines()
-        if line.startswith(TREE_PREFIX)
-    ]
-    if len(pins) != 1 or not _sha256_hex(pins[0]):
-        raise NativePackageError("Pinned native package tree commitment unavailable")
-    if package_tree_digest(root) != pins[0]:
-        raise NativePackageError("Native package tree differs from pinned artifact")
+    return VerifiedNativePackage(root)
 
 
 if __name__ == "__main__":
@@ -386,7 +417,7 @@ if __name__ == "__main__":
         verify_native_package(Path(sys.argv[1]))
     else:
         raise SystemExit(
-            "Usage: native_package.py [--digest|--write-manifest] PACKAGE_DIR | "
+            "Usage: python -m agent_comms.native_package [--digest|--write-manifest] PACKAGE_DIR | "
             "--share-resources NEW_PACKAGE DEPLOYMENTS | "
             "--install-sources PACKAGE_DIR SNAPSHOT_ROOT"
         )

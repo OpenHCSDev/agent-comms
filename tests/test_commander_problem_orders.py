@@ -2,6 +2,7 @@
 import importlib
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 
@@ -20,14 +21,14 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsOrderWorkTool,
-    CommsProblemCloseTool,
-    CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
-from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+    CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
+from agent_comms.todos import (AwaitingFirstCall, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
+    AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
+    StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -205,6 +206,49 @@ def test_commit_delivery_records_the_actual_clean_commit_time(commander):
     delivery = comms.goals.todos.get('P1').order.delivery
     assert delivery.commit == delivery.delivered == commit
     assert delivery.at == RecordedEventTime(float(git('show', '-s', '--format=%ct', 'HEAD')))
+
+
+def test_delivered_order_is_not_transferred(commander, tmp_path):
+    comms, caller = commander
+
+    def git(*args):
+        return subprocess.check_output(('git', '-C', str(comms.root), '-c', 'user.name=t',
+            '-c', 'user.email=t@t', *args), stderr=subprocess.DEVNULL).decode().strip()
+
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'Delivered fix')
+    commit = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/fix', commit)
+    marker = comms.root / 'check-calls'
+    create(commander, 'P1', f"printf x >> '{marker}'; printf 1")
+    create(commander, 'P2')
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(
+        commit=commit, delivered_commit=commit)).apply(comms, caller)
+    assert marker.read_text() == 'x'
+
+    copied = Comms(shutil.copytree(comms.root, tmp_path / 'copied-root'))
+    delivered = copied.goals.todos.get('P1')
+    pending = copied.goals.todos.get('P2')
+    successor = Assignment('other', 3.0, 'lead', 1.0, 'next')
+
+    def transfer(todo):
+        return copied.goals.todos.apply(todo.id, AssignTodo(todo.revision, successor,
+            RecordedEventTime(3000), order(copied.root, 'replacement-' + todo.id), todo.goal))
+
+    with pytest.raises(ValueError, match=f'worker already has delivered commit {commit}; worker merges it'):
+        transfer(delivered)
+    assert copied.goals.todos.get('P1') == delivered
+    assert delivered.order.delivery == comms.goals.todos.get('P1').order.delivery
+    transferred = transfer(pending)
+    assert transferred.assignment.owner == 'other'
+    assert transferred.assignment.previous_owners == (pending.assignment.owner_identity,)
+    assert copied.goals.todos.get('P2') == transferred
+    released = copied.goals.todos.apply('P1', ReleaseTodo(delivered.revision,
+        copied.registry.require('lead').incarnation, delivered.assignment, StrikeReason(FIRED)))
+    with pytest.raises(ValueError, match=f'worker already has delivered commit {commit}; worker merges it'):
+        transfer(released)
+    assert copied.goals.todos.get('P1') == released
+    assert marker.read_text() == (copied.root / 'check-calls').read_text() == 'x'
 
 
 def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, commander_script):
@@ -573,8 +617,25 @@ def test_one_fire_call_releases_both_open_orders_with_its_reason(commander):
         (None, before.revision + 1, before.assignment, FIRED) for before in held]
 
 
+def test_unit_wording_gets_a_correction_not_a_strike(commander):
+    comms, caller = commander
+    held = create(commander, 'P1')
+    with pytest.raises(ValueError, match="unit's wording; send it a correction"):
+        StrikeTodo(held.revision, comms.registry.require('lead').incarnation, held.assignment,
+                   'The unit wrote "canonical" and "ownership" in its report to the commander again.'
+                   ).apply(held)
+    with pytest.raises(ValueError, match='nothing to correct'):
+        CommsCorrectWordingTool(unit='worker', message_id='m0', text='The tests pass now.').apply(comms, caller)
+    CommsCorrectWordingTool(unit='worker', message_id='m1',
+                            text='The canonical ownership changed').apply(comms, caller)
+    assert comms.bus.inbox('worker')[-1].body.startswith(
+        'Correction, no strike, on P1: message m1 used canonical, ownership.')
+    assert comms.goals.todos.get('P1') == held and held.strike_count == 0
+
+
 @pytest.mark.parametrize('step, name, column', [
-    ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released')])
+    ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released'),
+    ('carry_todo_verdicts', 'TodoVerdicts', 'verdicts')])
 def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
     """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
     import sqlite3
@@ -741,3 +802,63 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
         lines = rotate.detached(rotate.owed_orders())
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
+
+
+def test_an_accepted_verdict_quotes_the_order_it_serves(commander):
+    """An accepted verdict stays on the order only when its quote is 4+ words of that order."""
+    comms, caller = commander
+    todo = create(commander, 'P1')
+    lead = comms.registry.require('lead').incarnation
+    with pytest.raises(ValueError, match='Quote 4\\+ words'):
+        CommsVerdictTool(id='P1', operation=AcceptedVerdict(
+            todo.revision, lead, todo.assignment, 'toolu_1', quote='Delete the whole bus now')).apply(comms, caller)
+    assert comms.goals.todos.get('P1') == todo
+    accepted = AcceptedVerdict(todo.revision, lead, todo.assignment, 'toolu_1', quote='Repair  the existing owner')
+    CommsVerdictTool(id='P1', operation=accepted).apply(comms, caller)
+    judged = comms.goals.todos.get('P1')
+    assert (judged.verdicts, judged.strikes, judged.revision) == ((accepted,), (), todo.revision + 1)
+
+
+def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(commander):
+    """A send-back is one verdict and one strike on the order, and the holder's Goal says why."""
+    comms, caller = commander
+    todo = create(commander, 'P1')
+    goal = comms.registry.require('worker').goal
+    why = 'The unit wrapped the old store in a forwarding class instead of deleting it.'
+    sent_back = SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation, todo.assignment,
+                                'toolu_2', reason=StrikeReason(why))
+    CommsVerdictTool(id='P1', operation=sent_back).apply(comms, caller)
+    judged = comms.goals.todos.get('P1')
+    assert (judged.verdicts, judged.revision, judged.strike_count) == ((sent_back,), todo.revision + 1, 1)
+    assert judged.strikes[0].reason == why
+    revised = comms.registry.require('worker').goal
+    assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+
+
+def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
+    comms, caller = commander
+    copied = tmp_path / 'copied'
+    copied.mkdir()
+    (copied / 'flag.py').write_text('def is_set(value):\n    return value is not None\n')
+    callers = copied / 'callers.py'
+    callers.write_text('from flag import is_set\n\ndef read(v):\n    return 1 if is_set(v) else 0\n')
+    family = ("grep -rhoE 'is_set\\(|except ValueError' --include=*.py . | wc -l")
+    deletes = OrderDeletion.parse(f'is_set absence decision at {copied / "flag.py"}:1 :: {copied} :: {family}')
+    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+        problem='P520', order=replace(order(comms.root, 'order-P520'), deletes=deletes),
+        request='request', deadline=RecordedEventTime(1000), commander='lead',
+        repo='OpenHCSDev/agent-comms', text='Delete the is_set decision',
+    )).apply(comms, caller)
+    pending = comms.goals.todos.get('P520')
+    assert 'Deletes: is_set absence decision at' in pending.order.instructions(pending)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(pending)) == pending
+    (copied / 'flag.py').write_text('def checked(value):\n    if value is None:\n        raise ValueError\n')
+    callers.write_text('from flag import checked\n\ndef read(v):\n    try:\n        checked(v)\n'
+                       '    except ValueError:\n        return 0\n    return 1\n')
+    with pytest.raises(ValueError, match='expected last integer 0'):
+        CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+    assert comms.goals.todos.get('P520') == pending
+    (copied / 'flag.py').unlink()
+    callers.write_text('def read(v):\n    return int(v is not None)\n')
+    CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+    assert not comms.goals.todos.get('P520').pending
