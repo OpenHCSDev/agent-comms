@@ -63,3 +63,24 @@ def test_phase_write_changes_only_the_leased_turn_at_point_of_use(tmp_path, monk
     current = comms.registry.require('worker')
     assert current.turn_record.read().id == 'successor'
     assert current.turn_record.path != current_record
+
+
+def test_unclaimed_record_still_publishes(tmp_path, monkeypatch):
+    comms = wire(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(
+        'worker', frozenset(), str(tmp_path),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    record = comms.agents.begin_turn('worker', 'original').turn_lease.record
+    published = []
+    publish = StoredTurnRecord._publish_unlocked
+
+    def observed(record, active):
+        published.append(active.claimed_generation)
+        publish(record, active)
+
+    monkeypatch.setattr(StoredTurnRecord, '_publish_unlocked', observed)
+    record.without_claim()
+    record.without_claim()
+    assert published == [None, None]
+    assert record.read().claimed_generation is None
