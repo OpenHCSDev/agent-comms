@@ -109,3 +109,31 @@ def test_every_row_reader_refuses_a_bad_physical_row(tmp_path, reader, bad):
     with READERS[reader](log, metadata) as source:
         with pytest.raises(RelationViolationError):
             READS[reader](source, log, metadata)
+
+
+def _message_row(seq: int) -> bytes:
+    message = Message('sender', '#team', f'body {seq}', InfoKind, seq=seq, timestamp=1.0)
+    return json.dumps(message.to_wire()).encode() + b'\n'
+
+
+@pytest.mark.parametrize(('reader', 'expected'), [
+    ('rows to a stop between rows', 1),
+    ('rows to a stop inside the second row', 2),
+    ('records to the cut', 3),
+])
+def test_rows_leave_the_stream_at_the_last_yielded_row(tmp_path, reader, expected):
+    rows = [_message_row(seq) for seq in (1, 2, 3)]
+    metadata = WireMetadata(last_seq=3, claimed_after_seq=3, writer_protocol_version=1, wire_root_id='0' * 32)
+    path = tmp_path / 'rows.jsonl'
+    path.write_bytes(b''.join(rows))
+    path.chmod(0o600)
+    log = WireLog(path)
+    log.write_metadata_unlocked(metadata)
+    read = {
+        'rows to a stop between rows': lambda source: list(source.rows(before_offset=len(rows[0]))),
+        'rows to a stop inside the second row': lambda source: list(source.rows(before_offset=len(rows[0]) + 1)),
+        'records to the cut': lambda source: list(source.records()),
+    }[reader]
+    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+        assert len(read(source)) == expected
+        assert source.position == len(b''.join(rows[:expected]))

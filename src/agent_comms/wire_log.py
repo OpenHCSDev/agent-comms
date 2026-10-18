@@ -255,9 +255,7 @@ class OpenedWireSnapshot(WireSnapshot):
         if after_offset < 0 or stop < 0:
             raise MalformedRecord("Wire row offsets must be nonnegative")
         self.stream.seek(after_offset)
-        for offset, raw in WireRecord.rows(self.stream, self.boundary):
-            if offset >= stop:
-                return
+        for offset, raw in WireRecord.rows(self.stream, stop, self.boundary):
             if raw.strip():
                 record = FieldCodec.parse(raw)
                 if not isinstance(record, Mapping):
@@ -276,7 +274,7 @@ class OpenedWireSnapshot(WireSnapshot):
 
     def records(self) -> Iterator[WireRecord]:
         scan = WireScan(self.metadata)
-        for _, raw in WireRecord.rows(self.stream, self.boundary):
+        for _, raw in WireRecord.rows(self.stream, self.boundary, self.boundary):
             yield scan.read(raw)
 
     @property
@@ -365,7 +363,7 @@ class OpenedWireSnapshot(WireSnapshot):
             raise RelationViolationError("Wire tail does not extend the settled source")
         self.stream.seek(previous.size)
         scan = WireScan(self.metadata, previous_sequence=previous_sequence)
-        records = [scan.read(raw) for _, raw in WireRecord.rows(self.stream, self.boundary)]
+        records = [scan.read(raw) for _, raw in WireRecord.rows(self.stream, self.boundary, self.boundary)]
         if scan.previous_sequence != self.metadata.last_seq:
             raise RelationViolationError("Wire tail does not reach its marker")
         if FileRevision.from_file(self.stream) != self.revision:

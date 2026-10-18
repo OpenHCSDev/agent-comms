@@ -7,6 +7,7 @@ it creates no durable representation, codec or second proof store.
 
 from __future__ import annotations
 
+import sys
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass, field
@@ -35,12 +36,14 @@ class WireRecord(ABC):
             raise RelationViolationError(message)
 
     @classmethod
-    def rows(cls, stream: BinaryIO, stop: int | None = None) -> Iterator[tuple[int, bytes]]:
-        """Each complete physical row from the stream position to stop (end of file when None)."""
-        while stop is None or stream.tell() < stop:
-            offset = stream.tell()
-            limit = cls.max_row_bytes + 1
-            if not (raw := stream.readline(limit if stop is None else min(limit, stop - offset))):
+    def rows(cls, stream: BinaryIO, stop: int = sys.maxsize, end: int = sys.maxsize
+             ) -> Iterator[tuple[int, bytes]]:
+        """Each complete physical row starting before stop, read no further than end.
+
+        Only yielded rows are read, so the stream rests at the end of the last one.
+        """
+        while (offset := stream.tell()) < stop:
+            if not (raw := stream.readline(min(cls.max_row_bytes + 1, end - offset))):
                 return
             cls.require_row_size(raw)
             if not raw.endswith(b"\n"):
