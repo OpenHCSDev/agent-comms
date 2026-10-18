@@ -18,7 +18,7 @@ from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
-from .bus_display_index import BusDisplayIndex, DisplayMetricScope
+from .bus_display_index import BusDisplayIndex
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .display_order import ChannelSort, NameChannelSort
@@ -527,17 +527,18 @@ class BusPresentation:
     def display_view_metrics(
         self,
         source: WireSnapshot,
-        selection: DisplaySelection,
+        basis: DisplaySelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
-        The captured selection owns channel inclusion, viewer aliases and read
+        The captured basis owns channel inclusion, viewer aliases and read
         membership. None is supplied independently by the metrics caller.
         The index reads the captured complete-line cut; read and write errors propagate.
         """
-        semantics = DisplayMetricScope(selection.scopes, selection.viewer_names, selection.seen)
-        snapshot = self.display_index(selection.require_viewer()).snapshot(source, semantics)
-        return snapshot.activity, snapshot.counts
+        snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
+        unread = source.query_page_index(lambda page: page.display_unread(
+            basis.scopes, basis.viewer_names, basis.seen, source.complete_prefix.boundary))
+        return snapshot.activity, unread
 
 
 

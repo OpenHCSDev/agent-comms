@@ -378,8 +378,8 @@ def strike(unit, why, caught=f'{ME} at review'):
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
-def done(pid, sha):
-    """Core checks the delivery on its clean commit; late delivery is a strike, never a clean met."""
+def done(pid, sha, delivered=None):
+    """Core checks the delivery on its clean checked commit; a late delivered commit is a strike."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
@@ -398,13 +398,15 @@ def done(pid, sha):
         COMMS.registry.storage_rule.require_quota(thread)
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
-    call(CommsOrderDoneTool(problem=pid, delivery=OperationDelivery() if operation else CommitDelivery(commit=sha)))
-    delivered = COMMS.goals.todos.get(pid).order.delivery.at
+    delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
+    call(CommsOrderDoneTool(problem=pid, delivery=delivery))
+    at = COMMS.goals.todos.get(pid).order.delivery.at
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
-    if not operation and delivered.at > todo.deadline.at:
-        strike(unit, f'late on {pid}: order {todo.order.id} due {hhmm(todo.deadline)} delivered {hhmm(delivered)} as {sha}')
+    if not operation and at.at > todo.deadline.at:
+        strike(unit, f'late on {pid}: order {todo.order.id} due {hhmm(todo.deadline)} '
+                     f'delivered {hhmm(at)} as {delivered}')
         return
-    print(f'{unit}: order {todo.order.id} met as {sha}')
+    print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
 
 
 ACTIVITY = f'{RTS}/activity.log'
@@ -644,10 +646,12 @@ class StrikeVerb(OrderVerb, RuledVerb):
 class DoneVerb(OrderVerb, RuledVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
     pid: str = option("pid")
-    sha: str = option("--sha", help="SHA or op")
+    sha: str = option("--sha", help="the checked commit (the check runs on it) or op")
+    delivered: str | None = option("--delivered", default=None, metavar="SHA",
+                                   help="the unit's pushed ancestor of --sha; lateness reads its time")
 
     def run(self) -> None:
-        done(self.pid, self.sha)
+        done(self.pid, self.sha, self.delivered)
 
 
 @dataclass(frozen=True, kw_only=True)

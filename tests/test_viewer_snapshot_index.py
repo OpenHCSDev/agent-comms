@@ -15,7 +15,6 @@ import pytest
 
 from agent_comms.bus_display_index import BusDisplayIndex
 from agent_comms.bus_page_index import BusPageIndex
-from agent_comms.read_basis import ReadCursor
 from agent_comms.bus_route_counts import BusRouteCounts
 from agent_comms.comms import wire
 from agent_comms.coordination_database import CoordinationStore
@@ -33,20 +32,16 @@ from agent_comms.ui_model.observation import (
 from agent_comms.ui_model.unread import IndexingUnread
 
 
-def test_display_metrics_encode_one_viewer_read_set_for_all_channels(tmp_path):
-    from agent_comms.bus_display_index import DisplayMetricScope
+def test_display_metrics_store_only_append_facts(tmp_path):
+    from agent_comms.bus_display_index import DisplaySnapshot
     from agent_comms.field_codec import FieldCodec
     from agent_comms.read_basis import ChannelDisplayScope
 
     scopes = tuple(ChannelDisplayScope(f"#{n}", frozenset({f"#{n}"})) for n in range(48))
-    seen = ReadCursor(10_000, (10_003, 10_007))
-    encoded = FieldCodec.encode(DisplayMetricScope(scopes, frozenset({"viewer"}), seen))
-    assert set(encoded) == {"scopes", "viewer_names", "seen"}
-    assert FieldCodec.decode(ReadCursor, encoded["seen"]) == seen
-    assert encoded["seen"] == {"high_water": 10_000, "exceptions": [10_003, 10_007]}
-    assert all("seen" not in scope for scope in encoded["scopes"])
+    encoded = FieldCodec.encode(DisplaySnapshot.empty(scopes))
+    assert set(encoded) == {"scopes", "activity"}
     index = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer")
-    assert index.path.name.startswith(f"bus_display_{index.record_type.schema}_")
+    assert index.path.name.startswith("bus_display_6_")
 
 
 def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp_path):
@@ -356,7 +351,7 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
         comms.bus.log.path, comms.messaging.user_identity(str(tmp_path)).name
     ).path
     cached = json.loads(checkpoint.read_text())
-    cached["counts"]["#team"] = 0
+    cached["activity"]["#team"]["last_message"] = 0
     checkpoint.write_text(json.dumps(cached))
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 2
 
@@ -376,7 +371,7 @@ def test_display_index_rebuilds_after_bus_replacement(tmp_path):
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
 
 
-def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_path):
+def test_display_read_progress_preserves_append_index(tmp_path):
     """SQL applies exact sparse paint without decoding retained message bodies."""
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
@@ -392,22 +387,32 @@ def test_display_read_progress_aggregates_sparse_cursor_without_decoding(tmp_pat
         viewer, comms.bus.reads.capture(viewer, (messages[1], messages[90]),
                                        comms.registry.snapshot(), comms.bus.log.path),
     )
-    with (
-        patch.object(Message, "from_wire", wraps=Message.from_wire) as decode,
-        patch.object(BusPageIndex, "display_snapshot", autospec=True,
-                     side_effect=BusPageIndex.display_snapshot) as aggregate,
-    ):
+    saved = BusDisplayIndex(comms.bus.log.path, viewer).path
+    stored = saved.read_bytes()
+    with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 98
-        assert decode.call_count == 0  # Read changes reaggregate typed SQL rows, not bodies.
-        assert aggregate.call_count == 1
-        assert aggregate.call_args.args[1].seen == ReadCursor().add((
-            messages[1].seq, messages[90].seq,
-        ))
+        assert decode.call_count == 0
+    assert saved.read_bytes() == stored
     assert after.channels == before.channels
-    # A new row still contributes once, after the rebased old prefix.
+    # A new row still contributes once, after the unchanged old prefix.
     comms.messaging.send_message("bob", "#team", "appended")
     assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 99
+
+
+def test_display_high_water_and_sparse_reads_leave_activity_unchanged(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(comms.registry.new_thread('bob', frozenset({'team'}), str(tmp_path / 'bob')))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    messages = [comms.messaging.send_message("bob", "#team", f"message {n}") for n in range(8)]
+    comms.messaging.send_user_message("#team", "my message", worktree=str(tmp_path))
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 8
+    saved = BusDisplayIndex(comms.bus.log.path, viewer).path
+    stored = saved.read_bytes()
+    comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
+        viewer, (*messages[:4], messages[6]), comms.registry.snapshot(), comms.bus.log.path))
+    assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#team"] == 3
+    assert saved.read_bytes() == stored
 
 
 def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
@@ -435,8 +440,6 @@ def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
     with (
         patch.object(Message, "from_wire", wraps=Message.from_wire) as decode,
         patch.object(OpenedWireSnapshot, "public_records", no_full_scan),
-        patch.object(BusPageIndex, "display_snapshot", autospec=True,
-                     side_effect=BusPageIndex.display_snapshot) as aggregate,
     ):
         after = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
         assert after.channel_unread["#team"] == 9
@@ -444,8 +447,6 @@ def test_display_read_changes_rebuild_missing_index_then_aggregate(tmp_path):
         assert {call.args[0]["seq"] for call in decode.call_args_list} == {
             message.seq for message in messages
         }
-        assert aggregate.call_count == 1
-        assert aggregate.call_args.args[1].seen == ReadCursor().add((messages[3].seq,))
     assert after.channels == before.channels
     assert index_path.exists()
 
@@ -606,7 +607,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     checkpoint = BusDisplayIndex(comms.bus.log.path, viewer).path
     current = json.loads(checkpoint.read_text())
-    assert next(scope for scope in current['semantics']['scopes']
+    assert next(scope for scope in current['scopes']
                 if scope['channel'] == '#team')['any_mode'] is True
 
 
