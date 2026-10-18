@@ -22,7 +22,7 @@ from agent_comms.tools import (
     CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
-    CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
+    CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
     CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool, CommsVerdictTool,
     CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
