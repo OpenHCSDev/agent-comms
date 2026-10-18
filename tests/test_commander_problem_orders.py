@@ -380,6 +380,24 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
 
 
+def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(commander, commander_script, tmp_path,
+                                                                           monkeypatch):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1', deadline=1)
+    posted = []
+    monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
+    script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')
+    withdrawn = comms.goals.todos.get('P1')
+    assert script.open_todos() == [] and not withdrawn.pending and script.struck(withdrawn, 'worker') == 0
+    line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
+    assert (tmp_path / 'board.md').read_text().count(line) == 1
+    assert line in (tmp_path / 'narrative.md').read_text()
+    assert [recipients for recipients, _ in posted] == [['#comms'], ['worker']]
+    with pytest.raises(ValueError, match='Only an undelivered order'):
+        script.withdraw('P1', 'withdrawing the same order twice records nothing new')
+
+
 def test_todo_voids_carry_keeps_every_stored_strike(commander):
     """A store from before voids gains the empty column once; its rows, strikes and schema then read as declared."""
     import sqlite3

@@ -314,7 +314,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
 
-    def copy_as(self, kind, **evidence):
+    def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
     def instructions(self, todo):
@@ -336,16 +336,27 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return replace(self, check=correction.check,
                        check_corrections=(*self.check_corrections, correction))
 
-    def installed(self, works, artifact):
+    def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
+    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
+        raise ValueError("Only an undelivered order can be withdrawn.")
+
+    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
+        """How this order retired its problem without delivery, as the record and board say."""
+        return ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
+
+    def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
+        return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
+                            superseded_by=superseded_by)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -382,6 +393,21 @@ class InstalledProblemOrder(DeliveredProblemOrder):
 
     def require_close(self):
         pass
+
+
+@dataclass(frozen=True, kw_only=True)
+class WithdrawnProblemOrder(ProblemOrder):
+    """An order the commander sent in error and retired before delivery; it strikes no one."""
+
+    previous: Assignment
+    why: str
+    superseded_by: str | None = field(default=None, metadata={"wire_omit_default": True})
+    pending: ClassVar[bool] = False
+
+    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
+        superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
+        return (f"{todo.id}: order {self.id} withdrawn from {self.previous.owner}, "
+                f"no strike: {self.why}{superseded}",)
 
 
 @dataclass(frozen=True)
@@ -676,19 +702,43 @@ class DeliverTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class InstallTodo(TodoOperation):
+class CloseOrderTodo(TodoOperation, declared_name=None):
+    """The commander records the order's terminal state and closes its problem in one revision."""
     actor: ThreadIncarnation
-    works: str
-    artifact: str
+
+    @abstractmethod
+    def closed(self, current: Todo) -> ProblemOrder: ...
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        closed = replace(current, order=self.closed(current))
+        return DoneTodoState.decide(closed, ChangeTodoState(
+            current.revision, DoneTodoState, self.actor, current.assignment.generation))
+
+
+@dataclass(frozen=True)
+class InstallTodo(CloseOrderTodo):
+    works: str
+    artifact: str
+
+    def closed(self, current: Todo) -> ProblemOrder:
         if not Path(self.artifact).is_file():
             raise ValueError("Retain the installed application artifact before closing.")
-        installed = replace(current, order=current.order.installed(self.works, self.artifact))
-        return DoneTodoState.decide(installed, ChangeTodoState(
-            current.revision, DoneTodoState, self.actor, current.assignment.generation))
+        return current.order.installed(self.works, self.artifact)
+
+
+@dataclass(frozen=True)
+class WithdrawTodo(CloseOrderTodo):
+    """An undelivered order sent in error leaves its problem with its reason and no strike."""
+    previous: Assignment
+    why: str
+    superseded_by: str | None = None
+
+    def closed(self, current: Todo) -> ProblemOrder:
+        current.require_assignment(self.previous)
+        _text(self.why, "Withdrawal reason", 2000)
+        return current.order.withdrawn(self.previous, self.why, self.superseded_by)
 
 
 @dataclass(frozen=True)
