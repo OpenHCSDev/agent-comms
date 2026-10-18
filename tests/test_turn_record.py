@@ -1,8 +1,14 @@
 """Real registry/turn files and the public Comms phase entrypoint."""
 
+import json
 import os
-from dataclasses import replace
 
+import pytest
+from dataclasses import replace
+from shutil import copytree
+
+from agent_comms.errors import RelationViolationError
+from agent_comms.registry_store import RegistryStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
@@ -63,6 +69,33 @@ def test_phase_write_changes_only_the_leased_turn_at_point_of_use(tmp_path, monk
     current = comms.registry.require('worker')
     assert current.turn_record.read().id == 'successor'
     assert current.turn_record.path != current_record
+
+
+def test_copied_registry_resolves_turn_from_its_new_location(tmp_path):
+    source = tmp_path / 'source'
+    copied = tmp_path / 'copied'
+    comms = wire(source)
+    comms.registry.declare(comms.registry.new_thread(
+        'worker', frozenset(), str(source),
+        process_identity=ProcessIdentity.capture(os.getpid()),
+    ))
+    original = comms.agents.begin_turn('worker', 'preserved').turn_lease.record
+    raw = json.loads((source / 'registry.json').read_text())
+    reference = raw['threads']['worker']['turn_record']
+    assert set(reference) == {'lookup', 'generation'}
+    copytree(source, copied)
+
+    moved = RegistryStore(copied / 'registry.json')
+    entry = moved.read_entry('worker').entry.thread
+    assert entry.turn_record.read().id == 'preserved'
+    assert entry.turn_record.path == copied / 'turns' / original.path.name
+    assert moved.read().threads['worker'].turn_record.path == entry.turn_record.path
+    assert moved.read().threads['worker'].turn_record.registry_path == copied / 'registry.json'
+
+    forged = json.loads((copied / 'registry.json').read_text())
+    forged['threads']['worker']['turn_record']['lookup'] = 'wrong-identity'
+    with pytest.raises(RelationViolationError, match='identity differs'):
+        moved._decode(forged)
 
 
 def test_unclaimed_record_still_publishes(tmp_path, monkeypatch):

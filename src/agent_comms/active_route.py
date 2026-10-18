@@ -11,13 +11,14 @@ import json
 import os
 import stat
 import sys
+import time
 import uuid
 from abc import ABC
 from collections.abc import Iterator
 from contextlib import contextmanager, suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, ClassVar
 
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, PathText
@@ -82,14 +83,30 @@ class ActiveRoute(CommsRoute):
     """The default private root; each installation launches its own pinned native package."""
     root: Annotated[Path, AbsoluteRoutePathText]
     wire_root_id: Annotated[str, Id128Text]
-    version: Literal[2] = field(default=2, kw_only=True, metadata={"wire_required": True})
+    # The file format: the writer stamps it and the reader refuses any other before decoding.
+    version: ClassVar[int] = 2
+    # The CLI command that replaces a file this reader refuses; it registers under this name.
+    repair_command: ClassVar[str] = "replace-route"
+
+    def to_record(self) -> dict[str, object]:
+        return {"version": self.version, **FieldCodec.encode(self)}
 
     @classmethod
-    def from_record(cls, value: object) -> ActiveRoute:
+    def from_record(cls, value: object, path: Path) -> ActiveRoute:
+        match value:
+            case {"version": int(found), **record} if found == cls.version:
+                pass
+            case _:
+                stamped = value.get("version") if isinstance(value, dict) else None
+                raise MalformedRecord(
+                    f"active comms route {path} is version {stamped!r}; "
+                    f"this installation reads version {cls.version}. "
+                    "Replace it with the bus it should select: "
+                    f"agent-comms --root ROOT {cls.repair_command}")
         try:
-            route = FieldCodec.decode(cls, value)
+            route = FieldCodec.decode(cls, record)
         except MalformedRecord as error:
-            raise MalformedRecord(f"active comms route is invalid: {error}") from error
+            raise MalformedRecord(f"active comms route {path} is invalid: {error}") from error
         if not route.root.is_dir():
             raise ValueError("active comms route root is missing")
         return route
@@ -181,7 +198,7 @@ def read_active_route(path: Path | None = None) -> ActiveRoute | None:
         value = FieldCodec.parse(raw)
     except MalformedRecord as error:
         raise MalformedRecord("active comms route is invalid JSON") from error
-    return ActiveRoute.from_record(value)
+    return ActiveRoute.from_record(value, path)
 
 
 @contextmanager
@@ -279,6 +296,31 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     uses the same no-replace hardlink pattern as the private store initializer;
     a reader fails closed during the brief two-link staging window.
     """
+    with _route_directory(route, path) as (path, directory):
+        _publish_active_route_locked(route, path, directory)
+
+
+def replace_unreadable_active_route(route: ActiveRoute, path: Path | None = None) -> Path:
+    """The owner's explicit repair of an old-version or unreadable route file.
+
+    The old file is kept beside the new one under a backup name; a readable or
+    absent route is refused, so a live route is still only ever installed once.
+    """
+    with _route_directory(route, path) as (path, directory):
+        try:
+            current = read_active_route(path)
+        except (ValueError, OSError):
+            backup = path.with_name(f"active-route.{time.strftime('%Y%m%dT%H%M%S')}.bak.json")
+            _publish_active_route_locked(route, path, directory, backup=backup)
+            return backup
+        raise ValueError(
+            f"active comms route {path} is readable and selects {current.root}; it is not replaced"
+            if current is not None else f"active comms route {path} is absent; nothing to replace")
+
+
+@contextmanager
+def _route_directory(route: ActiveRoute, path: Path | None) -> Iterator[tuple[Path, int]]:
+    """The checked route path and its directory FD, held with route EX."""
     path = active_route_path() if path is None else path
     if path.name != "active-route.json" or not path.is_absolute():
         raise ValueError("active comms route requires its absolute route path")
@@ -288,7 +330,7 @@ def publish_active_route(route: ActiveRoute, path: Path | None = None) -> None:
     directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
         acquire_exclusive_route_lock(directory)
-        _publish_active_route_locked(route, path, directory)
+        yield path, directory
     finally:
         os.close(directory)
 
@@ -298,9 +340,10 @@ def _publish_active_route_locked(
     path: Path,
     directory: int,
     *,
-    expected: ActiveRoute | None = None,
+    backup: Path | None = None,
 ) -> None:
-    """Publish through a checked directory FD already held with route EX."""
+    """Publish through a checked directory FD already held with route EX: link a first route,
+    or move an unreadable one to ``backup`` and replace it."""
     temporary: str | None = None
     try:
         info = os.fstat(directory)
@@ -313,17 +356,9 @@ def _publish_active_route_locked(
         ):
             raise ValueError("active comms route directory changed or is not owned")
         os.fchmod(directory, 0o700)
-        current = read_active_route(path)
-        if current != expected:
-            raise ValueError(
-                "active comms route is already installed"
-                if expected is None
-                else "active comms route is not the expected private root"
-            )
-        payload = (
-            json.dumps(FieldCodec.encode(route), sort_keys=True)
-            + "\n"
-        ).encode()
+        if backup is None and read_active_route(path) is not None:
+            raise ValueError("active comms route is already installed")
+        payload = (json.dumps(route.to_record(), sort_keys=True) + "\n").encode()
         temporary = f".active-route-{uuid.uuid4().hex}.tmp"
         fd = os.open(
             temporary,
@@ -342,7 +377,7 @@ def _publish_active_route_locked(
         parent = path.parent.lstat()
         if (parent.st_dev, parent.st_ino) != (info.st_dev, info.st_ino):
             raise ValueError("active comms route directory changed before publication")
-        if expected is None:
+        if backup is None:
             try:
                 os.link(
                     temporary,
@@ -362,8 +397,8 @@ def _publish_active_route_locked(
                     "active comms route publication outcome UNKNOWN after link"
                 ) from error
         else:
-            if read_active_route(path) != expected:
-                raise ValueError("active comms route changed before replacement")
+            os.link(path.name, backup.name, src_dir_fd=directory, dst_dir_fd=directory,
+                    follow_symlinks=False)
             try:
                 os.replace(temporary, path.name, src_dir_fd=directory, dst_dir_fd=directory)
                 temporary = None

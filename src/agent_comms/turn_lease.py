@@ -7,11 +7,11 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar, Self
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, PathText, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SubclassUnion
 from .locked_store import JsonDocument
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -278,6 +278,9 @@ class TurnRecord(SubclassUnion):
     """A stored turn reference or the declared absence of one; never a phase cache."""
 
     @abstractmethod
+    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> TurnRecord: ...
+
+    @abstractmethod
     def read(self) -> TurnDeclaration: ...
 
     @property
@@ -294,6 +297,9 @@ class TurnRecord(SubclassUnion):
 
 @dataclass(frozen=True)
 class NoTurnRecord(NullMember, TurnRecord):
+    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> NoTurnRecord:
+        return self
+
     def read(self) -> NoTurn:
         return NoTurn()
 
@@ -306,11 +312,56 @@ class NoTurnRecord(NullMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
-    path: Annotated[Path, PathText]
-    registry_path: Annotated[Path, PathText]
+class StoredTurnReference(TurnRecord):
+    """Wire identity only; a registry binds it before any turn file can be read."""
+
+    lookup: str
+    generation: int
+
+    @classmethod
+    def from_wire(cls, data: object) -> StoredTurnReference:
+        return FieldCodec.decode_record(cls, data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.record_schema(cls)
+
+    def to_wire(self) -> dict[str, object]:
+        return FieldCodec.encode_record(self)
+
+    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
+        record = StoredTurnRecord.for_identity(registry_path, identity)
+        if (self.lookup, self.generation) != (record.lookup, record.generation):
+            raise RelationViolationError("Turn record identity differs from its registry owner")
+        return record
+
+    def read(self) -> TurnDeclaration:
+        raise RelationViolationError("Turn reference must be bound by its registry")
+
+    def without_claim(self) -> None:
+        self.read()
+
+    def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
+              generation: int) -> TurnLeaseFence | None:
+        self.read()
+        return None
+
+
+@dataclass(frozen=True)
+class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference):
+    """Turn file bound to the registry that decoded its wire reference."""
+
+    registry_path: Path = field(repr=False, compare=False, metadata={"wire_transient": True})
 
     record_type = ActiveTurn
+
+    @property
+    def path(self) -> Path:  # type: ignore[override]  # Derived from its registry.
+        return self.registry_path.parent / "turns" / f"{self.lookup}-{self.generation}.json"
+
+    def bound_to(self, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
+        record = super().bound_to(registry_path, identity)
+        return self if self.registry_path == record.registry_path else record
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
@@ -328,9 +379,8 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
 
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:
-        name = f"{identity.incarnation.require_recorded().lookup}-{identity.generation}.json"
-        registry_path = registry_path.resolve()
-        return cls(registry_path.parent / "turns" / name, registry_path)
+        return cls(identity.incarnation.require_recorded().lookup, identity.generation,
+                   registry_path.resolve())
 
     @classmethod
     def begin(
