@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from functools import cached_property, partial
 from typing import Any
 
+from acp import Client
 from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .acp_extension import (
@@ -17,8 +18,9 @@ from .acp_extension import (
 from .comms import Comms
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .runtime import RuntimeServer
+from .runtime import RuntimeServer, SocketClient
 from .turn_lease import TurnState
+from .ui_model.observation import ObservationProcess, ReadTranscript
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -48,28 +50,25 @@ class TranscriptReplay:
 
     @cached_property
     def reads(self):
-        from .ui_model.observation import ObservationProcess
-
         return self.runtime._resources.enter_context(
             ObservationProcess.awaited(self.comms.route)
         )
 
     async def replay(self, session_id: str, name: str, client: Any = None) -> None:
-        from .ui_model.observation import ReadTranscript
-
         snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), name))
         await self._publish(session_id, snapshot, client)
 
-    async def subscribe(self, session_id: str, name: str, client: Any) -> None:
-        from .ui_model.observation import ReadTranscript
-
+    async def subscribe(self, session_id: str, name: str, client: SocketClient) -> None:
         # A socket handshake returns its read refusal, preserving its cause;
         # only the UI replay waits for a later source change.
         read = ReadTranscript(str(self.comms.root), name)
         snapshot = await Coordination.run_worker(partial(read.read, self.comms))
         await self._publish(session_id, snapshot, client)
 
-    async def _publish(self, session_id: str, snapshot: TranscriptSnapshotUpdate, client: Any) -> None:
+    async def _publish(
+        self, session_id: str, snapshot: TranscriptSnapshotUpdate,
+        client: Client | SocketClient | RuntimeServer | None,
+    ) -> None:
         destination = client or self.runtime
         metadata = await Coordination.run_worker(partial(encode_updates, snapshot))
         await destination.session_update(
