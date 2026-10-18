@@ -76,6 +76,7 @@ class FieldPlan:
         fields.append(self)
         return (self.key,)
 
+    @property
     def wire_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
@@ -155,6 +156,7 @@ class InlineFieldPlan(FieldPlan):
         fields.extend(self.record.fields)
         return self.record.init_required_keys
 
+    @cached_property
     def wire_keys(self) -> tuple[str, ...]:
         return tuple(entry.key for entry in self.record.fields)
 
@@ -164,7 +166,7 @@ class InlineFieldPlan(FieldPlan):
     def captured(self, data: object) -> dict[str, object]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a record object.")
-        return {self.name: {key: data[key] for key in self.wire_keys() if key in data}}
+        return {self.name: {key: data[key] for key in self.wire_keys if key in data}}
 
 
 class InlineFamilyPlan(InlineFieldPlan):
@@ -177,6 +179,7 @@ class InlineFamilyPlan(InlineFieldPlan):
     def contribute(self, fields):
         return (self.family.family_discriminator,)
 
+    @cached_property
     def wire_keys(self) -> tuple[str, ...]:
         return tuple(dict.fromkeys((self.family.family_discriminator, *(
             entry.key for member in self.family.members_with(self.family)
@@ -321,36 +324,53 @@ class JsonShapeFamily(WireValue):
     selection and recursive conversion. Rendering stays with the value owners.
     Its wire value is the declared shape itself, so it answers
     ``external_json_shape`` True and decodes through ``from_wire``.
+    Each family class owns the map from JSON type to the member beneath it that
+    owns that type, filled as members are defined; a bad declaration fails then.
     """
 
     external_json_shape = True
 
     accepts_null = True
 
+    _json_owners: ClassVar[dict[type, tuple[type, object]]]
+
+    def __init_subclass__(cls, **options: object) -> None:
+        super().__init_subclass__(**options)
+        if JsonShapeFamily in cls.__bases__ and not issubclass(cls, DeclaredFamily):
+            raise TypeError("A JSON shape family requires a declared family")
+        cls._json_owners = {}
+        if issubclass(cls, JsonShapeMember):
+            shape, annotation = cls._json_shape()
+            owners = [base for base in cls.__mro__ if issubclass(base, JsonShapeFamily)
+                      and "_json_owners" in vars(base)]
+            if any(shape in base._json_owners for base in owners):
+                raise TypeError(f"Two {cls.__name__} owners for {shape.__name__}")
+            for base in owners:
+                base._json_owners[shape] = (cls, annotation)
+
     @classmethod
-    def _value_annotation(cls, member):
-        if tuple(item.name for item, _ in FieldCodec.record_fields(member)) != ("value",):
+    def _json_shape(cls) -> tuple[type, object]:
+        hints = {name: hint for name, hint in get_type_hints(cls, include_extras=True).items()
+                 if hint is not ClassVar and get_origin(hint) is not ClassVar}
+        if tuple(hints) != ("value",):
             raise TypeError("A JSON shape must declare one value field")
-        return FieldCodec._types(member)["value"]
+        annotation = hints["value"]
+        shape = get_origin(annotation) or annotation
+        if shape in (tuple, frozenset):
+            shape = list
+        if shape not in (dict, list, str, int, float, bool, type(None)):
+            raise TypeError(f"Unsupported JSON shape declaration: {cls.__name__}")
+        return shape, annotation
 
     @classmethod
     def from_wire(cls, data):
-        if not issubclass(cls, DeclaredFamily):
-            raise TypeError("A JSON shape family requires a declared family")
-        owners = []
-        for member in cls.members_with(JsonShapeMember):
-            annotation = cls._value_annotation(member)
-            shape = get_origin(annotation) or annotation
-            if shape in (tuple, frozenset):
-                shape = list
-            if shape not in (dict, list, str, int, float, bool, type(None)):
-                raise TypeError(f"Unsupported JSON shape declaration: {member.__name__}")
-            if type(data) is shape:
-                owners.append((member, annotation))
-        if len(owners) != 1:
-            raise MalformedRecord(f"Expected one {cls.__name__} owner for {type(data).__name__}")
-        member, annotation = owners[0]
-        result = member.from_json_value(FieldCodec.decode(annotation, data))
+        try:
+            member, annotation = cls._json_owners[type(data)]
+        except KeyError:
+            raise MalformedRecord(
+                f"Expected one {cls.__name__} owner for {type(data).__name__}") from None
+        owner = cast(type[JsonShapeMember], member)
+        result = owner.from_json_value(FieldCodec.decode(annotation, data))
         if not isinstance(result, cls):
             raise TypeError("A JSON shape factory must return its own family")
         return result
@@ -784,7 +804,7 @@ class FieldCodec(Sealed):
                 required_keys.extend(keys)
             if entry.declared.default is MISSING and entry.declared.default_factory is MISSING:
                 init_required_keys.extend(keys)
-        wire_keys = [key for entry in entries for key in entry.wire_keys()]
+        wire_keys = [key for entry in entries for key in entry.wire_keys]
         if len(set(wire_keys)) != len(wire_keys) or (
             issubclass(record, DeclaredFamily) and record.family_discriminator in wire_keys
         ):
