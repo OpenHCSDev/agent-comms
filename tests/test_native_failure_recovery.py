@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import json
 import multiprocessing
@@ -33,7 +34,6 @@ from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 def failed_owner(directory, output, exit_allowed):
     # Persist the historical pre-settlement failure shape for operator recovery.
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
-    native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
 
     async def old_failure(*args, **kwargs):
@@ -67,7 +67,7 @@ def failed_owner(directory, output, exit_allowed):
     try:
         asyncio.run(
             runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
+                root=root, wire_root_id=root_id, owner_name="beta", native_package=VerifiedNativePackage.acquire(pinned_native_package())
             ).run()
         )
     except NativePiUnavailable:

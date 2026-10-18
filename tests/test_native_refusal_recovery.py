@@ -1,4 +1,5 @@
 """Native refusal recovery: Core reports one outcome, never blocks on a retry."""
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 from agent_comms.native_arguments import SelectedModel
 
@@ -100,9 +101,9 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
     # The recorded-protocol launch validates this test's own pinned package;
     # the live runtime route must not leak into the turn.
     package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
     agent.sessions.client = FakeClient()
     await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
     try:

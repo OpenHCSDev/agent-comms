@@ -1,5 +1,6 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from agent_comms.native_package import VerifiedNativePackage
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
@@ -234,8 +235,8 @@ async def test_quiescent_private_drain_does_no_package_or_repeated_cursor_work(
 
     monkeypatch.setattr(acp, "_accept_visible_deliveries", accepted)
     monkeypatch.setattr(NativeSourceCursor, "advance", covered)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", no_package)
-    monkeypatch.setattr(native_pi, "_trusted_package", no_package)
+    monkeypatch.setattr(VerifiedNativePackage, "acquire", classmethod(lambda cls, path: no_package(path)))
+    monkeypatch.setattr(VerifiedNativePackage, "acquire", classmethod(lambda cls, path: no_package(path)))
     assert await agent.inputs.drain_inbox("beta") == 0
     # Advancing the durable cursor changes the first before/after observation.
     assert await agent.inputs.drain_inbox("beta") == 0
