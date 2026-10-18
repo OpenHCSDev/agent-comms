@@ -477,9 +477,6 @@ class GoalDeclaration(WireValue):
     def settle_turn(self, settlement, store, permit, turn):
         pass
 
-    def fail_origin(self, comms, name):
-        pass
-
     def registration_value(self, previous):
         return previous
 
@@ -488,20 +485,6 @@ class GoalDeclaration(WireValue):
 
     def retire_attempt(self, goals):
         pass
-
-    def wait(self, rows):
-        return self.active().recorded_wait(rows)
-
-    def current_wait(self, rows, owner):
-        return self.wait(rows).for_current(self, owner)
-
-    def recorded_wait(self, rows):
-        from .goal_waits import NoGoalWait
-        return NoGoalWait()
-
-    def execution(self, rows, snapshot, agents):
-        from .goal_presentation import IdleGoalExecution
-        return IdleGoalExecution()
 
 
 
@@ -648,10 +631,6 @@ class Goal(GoalDeclaration):
     def settle_turn(self, settlement, store, permit, turn):
         settlement(store, permit, self, turn).dispatch_sync(self.state)
 
-    def fail_origin(self, comms, name):
-        from .turn_goal_account import FailedGoalOrigin
-        FailedGoalOrigin(comms, name, self).dispatch_sync(self.state)
-
     def registration_value(self, previous):
         return self
 
@@ -664,13 +643,6 @@ class Goal(GoalDeclaration):
         if generation is not None and not generation.lifecycle.terminal:
             attempts.retire_goal(self.id, expected_generation=generation.number,
                                  attempt_id=generation.attempt_id)
-
-    def recorded_wait(self, rows):
-        from .goal_waits import NoGoalWait
-        return rows.get(self.id, NoGoalWait())
-
-    def execution(self, rows, snapshot, agents):
-        return self.wait(rows).project(self, snapshot, agents)
 
     def instructions(self, todos) -> str:
         return self.render_instructions(self.order.instructions(todos))

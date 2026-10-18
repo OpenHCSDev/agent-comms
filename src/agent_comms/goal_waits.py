@@ -273,6 +273,26 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
     lock_rank = 9
     filename: ClassVar[str] = "goal_waits.json"
 
+    @staticmethod
+    def current(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:
+        wait: GoalWait = NoGoalWait()
+        for active in goal.active().active_goals():
+            wait = rows.get(active.id, wait)
+        return wait
+
+    @classmethod
+    def current_for(cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
+                    owner: RecordedThreadIncarnation) -> GoalWait:
+        return cls.current(goal, rows).for_current(goal, owner)
+
+    @classmethod
+    def execution(cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
+                  snapshot: RegistrySnapshot, agents: AgentActivity) -> ThreadGoalExecution:
+        execution: ThreadGoalExecution = IdleGoalExecution()
+        for recorded in goal.active_goals():
+            execution = cls.current(recorded, rows).project(recorded, snapshot, agents)
+        return execution
+
     @property
     def record_type(self) -> type[dict[str, RecordedGoalWait]]:
         return dict[str, RecordedGoalWait]
@@ -331,7 +351,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            wait = thread.goal.current_wait(rows, thread.incarnation.require_recorded())
+            wait = GoalWaits.current_for(thread.goal, rows, thread.incarnation.require_recorded())
             dependencies = targets if name == owner else wait.dependency_targets()
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
@@ -341,7 +361,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_wait = peer.goal.current_wait(rows, peer.incarnation.require_recorded())
+                peer_wait = GoalWaits.current_for(peer.goal, rows, peer.incarnation.require_recorded())
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before

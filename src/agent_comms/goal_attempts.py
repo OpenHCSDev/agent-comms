@@ -379,7 +379,7 @@ class GoalPermit:
         if generation is not None and generation.lifecycle.allows_resume(True):
             store.retire_goal(goal_id, expected_generation=generation.number,
                               attempt_id=generation.attempt_id)
-        current.fail_origin(account.comms, account.thread_name)
+        account.fail_current_origin(current)
 
 
 class NoGoalPermit(GoalPermit):
@@ -419,7 +419,7 @@ class LaunchPermit(GoalPermit):
             return
         with suppress(StaleAttemptError):
             self.reservation.fail(store, "Goal origin turn did not finish successfully.")
-        current.fail_origin(account.comms, account.thread_name)
+        account.fail_current_origin(current)
 
     def retire_unverified(self, store: GoalAttemptStore) -> None:
         """Release this acquired claim; settled or superseded attempts stay intact."""

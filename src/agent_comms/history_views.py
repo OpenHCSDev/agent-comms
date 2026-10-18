@@ -476,7 +476,7 @@ class HistoryViews:
                 "status": snapshot.statuses[name].declared_name,
                 "is_fork": t.is_fork,
                 "pending": pending[name],
-                "goal_execution": t.goal.execution(waits, snapshot, self.agents).to_wire(),
+                "goal_execution": GoalWaits.execution(t.goal, waits, snapshot, self.agents).to_wire(),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
             }

@@ -100,6 +100,10 @@ class TurnGoalAccount:
     def __post_init__(self) -> None:
         self.permit.bind(self.originated)
 
+    def fail_current_origin(self, current: GoalDeclaration) -> None:
+        for goal in current.active_goals():
+            FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(goal.state)
+
     @staticmethod
     def reserve(*, goal, owner, comms, autonomous):
         try:
