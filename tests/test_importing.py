@@ -513,16 +513,17 @@ def codex_entry(turn, item):
     return {"turnId": turn, "item": item, "startedAtMs": 1, "completedAtMs": 2}
 
 
-def test_codex_app_server_reads_every_page_oldest_first_and_keeps_bus_inputs():
+def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs():
     from agent_comms.cli_bridges.codex_protocol import BusInput
 
     bus = BusInput.for_message("thread", "m1", "from the bus")
-    newest = {"data": [codex_entry("t2", {"type": "agentMessage", "id": "i3", "text": "second answer"})],
-              "nextCursor": "older"}
+    newest = {"data": [
+        codex_entry("t2", {"type": "agentMessage", "id": "i3", "text": "second answer"}),
+        codex_entry("t2", {"type": "userMessage", "id": "i1", "clientId": bus.clientUserMessageId,
+                           "content": [{"type": "text", "text": "from the bus"}]}),
+    ], "nextCursor": "older"}
     older = {"data": [
         codex_entry("t1", {"type": "agentMessage", "id": "i2", "text": "first answer"}),
-        codex_entry("t1", {"type": "userMessage", "id": "i1", "clientId": bus.clientUserMessageId,
-                           "content": [{"type": "text", "text": "from the bus"}]}),
     ], "nextCursor": None}
     codex = FakeCodex({None: newest, "older": older})
     server = CodexAppServer("thread", "unused")
@@ -534,9 +535,10 @@ def test_codex_app_server_reads_every_page_oldest_first_and_keeps_bus_inputs():
         return buffer.snapshot(CodexHarness)
 
     snapshot = asyncio.run(collect())
-    assert bodies(snapshot) == ["from the bus", "first answer", "second answer"]
+    assert bodies(snapshot) == ["from the bus", "second answer"]
     assert snapshot.project == "/work/codex" and snapshot.source_id == "thread"
-    assert [type(message) for message in snapshot.messages] == [ImportedRequest, ImportedReply, ImportedReply]
+    assert [type(message) for message in snapshot.messages] == [ImportedRequest, ImportedReply]
+    assert [call.method for call in codex.calls] == ["thread/resume", "thread/items/list"]
 
 
 # OpenCode

@@ -6,8 +6,9 @@ import logging
 import os
 import shlex
 import shutil
+from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager, suppress
+from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from uuid import uuid4
@@ -16,7 +17,6 @@ from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity
 from .coordination_errors import PublicationActivationBlocked
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
-from .locked_store import LockedStore
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_package import NativePackageError, pinned_native_package
@@ -30,9 +30,10 @@ from .restart_refusals import (
     OwnerSelectionChangedRefusal,
 )
 from .store_files import _store_lock
-from .thread_identity import ClaimedIdentity, OwnerIdentity
+from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .typed_table import Column, TypedStore, TypedTable
 
 _LOG = logging.getLogger(__name__)
 
@@ -102,28 +103,56 @@ class OwnerStartResult:
     launched: bool
 
 
+class OwnerRelease(ABC):
+    """An exact release or its absence; neither grants permission to replay."""
+    @abstractmethod
+    def current(self, snapshot, expected, claim_scope) -> bool: ...
+    @abstractmethod
+    def matches(self, expected) -> bool: ...
+    @abstractmethod
+    def require_native_loss(self, snapshot, source): ...
+
+
+class NoRelease(OwnerRelease):
+    def current(self, snapshot, expected, claim_scope) -> bool:
+        return False
+
+    def matches(self, expected) -> bool:
+        return False
+
+    def require_native_loss(self, snapshot, source):
+        raise RelationViolationError("native owner release acknowledgement is missing")
+
+
 @dataclass(frozen=True)
-class OwnerReleaseEvidence:
+class ReleasedOwner(ThreadIncarnationRecord):
+    process_identity: ProcessIdentity | None
+
+    def require_process(self) -> ProcessIdentity:
+        if self.process_identity is None:
+            raise RelationViolationError(f"Thread {self.name!r} has no released process")
+        return self.process_identity
+
+    def matches(self, expected: Thread) -> bool:
+        return self.incarnation() == expected.incarnation and self.process_identity == expected.process_identity
+
+
+@dataclass(frozen=True)
+class OwnerReleaseEvidence(ReleasedOwner, OwnerRelease, TypedTable):
+    name: str = field(metadata={"sql": Column(primary_key=True)})
     before: int
     after: int
-    thread: Thread
 
     def __post_init__(self) -> None:
         if self.before <= 0 or self.after <= self.before:
             raise ValueError("Owner release requires an advanced claim_scope and a closed turn")
-        self.thread.require_idle()
 
     def current(self, snapshot: RegistrySnapshot, expected: Thread, claim_scope: int) -> bool:
-        """The stored release proves this retired owner, never a replacement."""
-        if self.before != claim_scope or self.thread.incarnation != expected.incarnation:
+        if self.before != claim_scope or not self.matches(expected):
             return False
-        if self.thread.process_identity != expected.process_identity:
+        if not self.incarnation().current(snapshot) or not self.matches(snapshot.require(self.name)):
             return False
-        if self.after != snapshot.claimed_generations.get(self.thread.name):
-            return False
-        if self.thread != snapshot.threads.get(self.thread.name):
-            return False
-        return snapshot.statuses[self.thread.name].stopped
+        return self.after == snapshot.claimed_generations[self.name] and snapshot.statuses[self.name].stopped
 
 
     def require_native_loss(self, snapshot, source) -> None:
@@ -133,39 +162,44 @@ class OwnerReleaseEvidence:
         An unrecorded epoch instead needs the exact current stopped acknowledgement. Both
         paths preserve UNKNOWN; neither says bytes were unwritten or permits retry.
         """
-        current = snapshot.threads.get(self.thread.name)
-        if current is None or current.incarnation != self.thread.incarnation:
+        if not self.incarnation().current(snapshot):
             raise RelationViolationError("Released native owner incarnation changed")
+        current = snapshot.require(self.name)
         source.require_recorded_owner(current)
-        process = self.thread.require_process()
+        process = self.require_process()
         if process.alive():
             raise RelationViolationError("Released native owner process is still alive")
         actual = snapshot.claimed_identity(current.name)
-        released = ClaimedIdentity(self.thread.incarnation, self.after)
+        released = ClaimedIdentity(self.incarnation(), self.after)
         if not actual.includes(released):
             raise RelationViolationError("Native release claim_scope regressed")
         source.sent_owner_claimed_generation.require_release(self, snapshot, current)
+        return self
 
 
-class OwnerReleaseStore(ThreadOwnedState, LockedStore[dict[str, OwnerReleaseEvidence]]):
-    lock_rank = 6
-    @property
-    def record_type(self):
-        return dict[str, OwnerReleaseEvidence]
+@dataclass(frozen=True)
+class OwnerReleaseStore(ThreadOwnedState, TypedStore):
+    root: Path
+    filename = "owner_releases.sqlite3"
+    rows = (OwnerReleaseEvidence,)
 
-    def empty(self) -> dict[str, OwnerReleaseEvidence]:
-        return {}
+    def __post_init__(self) -> None:
+        with self.writing():
+            pass  # Opening establishes the empty store; reads never manufacture absence.
+
+    def get(self, name: str) -> OwnerRelease:
+        with self.snapshot() as db, closing(OwnerReleaseEvidence.stream(db, name=name)) as records:
+            return next(records, NoRelease())
+
+    def record(self, thread: Thread, before: int, after: int) -> None:
+        thread.require_idle()
+        with self.writing() as db:
+            OwnerReleaseEvidence(thread.name, thread.created_at, thread.process_identity, before, after).upsert(db)
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:
-        """A acknowledgement attests one declared owner; it ends with the declaration."""
-        names = {thread.name for thread in threads}
-        self.update(
-            lambda evidence: (
-                {name: acknowledgement for name, acknowledgement in evidence.items() if name not in names}
-                if names & evidence.keys()
-                else evidence
-            )
-        )
+        with self.writing() as db:
+            for thread in threads:
+                OwnerReleaseEvidence.delete(db, name=thread.name)
 
 
 from .owner_cutover import OwnerCutover, PreserveOwnerRuntime
@@ -187,7 +221,7 @@ class OwnerLifecycle:
         self.bus = bus
         self._wire_lock_path = root / "wire"
         self.maintenance = MaintenanceBarrier(registry.store.path)
-        self.releases = OwnerReleaseStore(root / "owner_release_receipts.json")
+        self.releases = OwnerReleaseStore(root)
         self._private_nk_launch: PrivateNkLaunch | None = None
 
     @contextmanager
@@ -495,7 +529,7 @@ class OwnerLifecycle:
         # Voluntary release advances the input generation and marks STOPPED before Python
         # finishes shutting down. Its exact acknowledgement preserves the signaled
         # incarnation; it does not prove OS exit or authorize a replacement PID.
-        if self._released_same_owner(snapshot, thread, claimed_generation):
+        if self.releases.get(thread.name).current(snapshot, thread, claimed_generation):
             return
         try:
             snapshot.require_stopping_owner(thread, claimed_generation)
@@ -504,20 +538,10 @@ class OwnerLifecycle:
                 f"Owner changed while stopping {thread.name!r}; refusing a stale signal."
             ) from error
 
-    def _released_same_owner(
-        self, snapshot: RegistrySnapshot, thread: Thread, claimed_generation: int
-    ) -> bool:
-        acknowledgement = self.releases.read().get(thread.name)
-        return (
-            acknowledgement.current(snapshot, thread, claimed_generation)
-            if acknowledgement is not None
-            else False
-        )
-
     def _finish_stopped_owner(self, thread: Thread, claimed_generation: int) -> None:
         with _store_lock(self._wire_lock_path):
             snapshot = self.registry.snapshot()
-            if self._released_same_owner(snapshot, thread, claimed_generation):
+            if self.releases.get(thread.name).current(snapshot, thread, claimed_generation):
                 return  # An exact, durably attested release of the signaled owner.
             self._require_same_stop_owner(thread, claimed_generation)
             self._retire_owner_unlocked(thread, claimed_generation)
@@ -546,6 +570,4 @@ class OwnerLifecycle:
         """Share retirement only after the caller's distinct identity checks."""
         self.registry.unregister(thread.name)
         after = self.registry.snapshot()
-        acknowledgement = OwnerReleaseEvidence(before, after.claimed_generations[thread.name],
-                                      after.threads[thread.name])
-        self.releases.update(lambda evidence: {**evidence, thread.name: acknowledgement})
+        self.releases.record(after.threads[thread.name], before, after.claimed_generations[thread.name])

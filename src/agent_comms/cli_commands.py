@@ -30,7 +30,7 @@ from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
 from .child_process import ProcessIdentity
 from .command import Command
-from .cli_protocol import ArrivedMessage
+from .cli_protocol import ArrivedMessage, EarlierItems
 from .field_codec import FieldCodec, PathText, compile_decoder
 from .comms import Comms
 from .config_options import (
@@ -999,7 +999,15 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
                 async for message in messages:
                     emit(ArrivedMessage(message=message).model_dump_json())
 
-        asyncio.run(stream())
+        async def watch() -> None:
+            thread = ctx.registry.require(self.thread)
+            source = thread.runtime.history_source(ctx.root, thread.incarnation)
+            async with asyncio.TaskGroup() as tasks:
+                tasks.create_task(stream())
+                tasks.create_task(source.watch_requests(
+                    lambda row: emit(EarlierItems.from_row(row).model_dump_json())))
+
+        asyncio.run(watch())
         return 0
 
 
