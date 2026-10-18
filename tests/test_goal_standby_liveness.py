@@ -206,17 +206,23 @@ def test_last_target_finishes_silently_releases_once_and_reopens(tmp_path):
     assert reopened.registry.require("owner").goal == continued
 
 
-@pytest.mark.parametrize("notice", [False, True])
-def test_only_substantive_direct_reply_prevents_release(tmp_path, notice):
+@pytest.mark.parametrize(
+    "role,body,expected_changed,released",
+    [
+        (ConversationRole(), "Result", (), False),
+        (NoticeRole(), "Failure notice", ("owner",), True),
+    ],
+)
+def test_only_substantive_direct_reply_prevents_release(
+    tmp_path, role, body, expected_changed, released
+):
     comms, _goal = _waiting(tmp_path)
-    comms.messaging.send_message(
-        "child", "owner", "Result" if not notice else "Failure notice", role=NoticeRole() if notice else ConversationRole()
-    )
+    comms.messaging.send_message("child", "owner", body, role=role)
     child_fence = _finish(comms, "child", "child-turn")
     changed = comms.goals.release_waits_after_terminal_turn(child_fence)
-    assert changed == (("owner",) if notice else ())
+    assert changed == expected_changed
     assert comms.registry.require("owner").goal.state.declared_name == "active"
-    assert (isinstance(comms.goals.goal_wait("owner"), NoGoalWait)) is notice
+    assert isinstance(comms.goals.goal_wait("owner"), NoGoalWait) is released
 
 
 def test_renamed_target_keeps_incarnation_but_replacement_fails_closed(tmp_path):
@@ -488,13 +494,12 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     comms = canonical_goal_wire(tmp_path / "wire")
     with comms.bus.log.certified_read() as source:
         root_id = source.marker.root_id
+    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     agent = CommsAgent(
         comms,
         agent_bin="pi",
         runtime_enabled=True,
         auto_wake=False,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
     )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     activate_empty_source(agent)

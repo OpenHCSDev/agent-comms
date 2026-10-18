@@ -216,9 +216,9 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
             runtime_enabled=True,
             auto_wake=False,
         )
-        monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner._private_nk_wire_root_id)
+        monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", owner.configured_root_id)
         monkeypatch.setenv(
-            "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(owner._private_nk_native_package)
+            "AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", str(owner.private_nk_native_package)
         )
         updates = []
 
@@ -227,12 +227,13 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
                 updates.append(kwargs["update"].model_dump(by_alias=True))
 
         owner.on_connect(Client())
+        comms.owners.pin_private_nk_launch(
+            comms.root, owner.configured_root_id, owner.private_nk_native_package
+        )
         attachment = CommsClient(
             comms,
             agent_bin=native,
             auto_wake=False,
-            private_nk_native_package=owner._private_nk_native_package,
-            private_nk_wire_root_id=owner._private_nk_wire_root_id,
         )
         attached_facts = []
 

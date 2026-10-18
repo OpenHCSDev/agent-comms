@@ -96,10 +96,11 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
     comms, tmp_path, monkeypatch, failure, expected_state
 ):
     """Keep unstarted goals ready; retire only resources already acquired."""
+    comms.owners.pin_private_nk_launch(
+        comms.root, comms.messaging.initialize_private_initial_protocol(), tmp_path
+    )
     owner = CommsAgent(
         comms, agent_bin="unused",
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
     )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
@@ -161,10 +162,11 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
     comms, tmp_path, monkeypatch, worker_fails,
 ):
     """Cancellation cannot leave a recorded input after suppressing worker delivery."""
+    comms.owners.pin_private_nk_launch(
+        comms.root, comms.messaging.initialize_private_initial_protocol(), tmp_path
+    )
     owner = CommsAgent(
         comms, agent_bin="unused", auto_wake=False,
-        private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
-        private_nk_native_package=tmp_path,
     )
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]

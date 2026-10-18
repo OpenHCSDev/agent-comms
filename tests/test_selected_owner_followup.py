@@ -404,7 +404,8 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
     )
     parked_goal = comms.registry.require("beta").goal
     parked_wait = comms.goals.goal_wait("beta")
-    agent._private_nk_native_package = Path(package)
+    owners = agent._comms.owners
+    owners._private_nk_launch = replace(owners.launch_authority, native_package=Path(package))
     agent.turns.agent_args = NativeArguments.parse(
         [
             "--no-extensions",

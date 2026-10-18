@@ -7,6 +7,7 @@ activate private processing for existing public sessions.
 from __future__ import annotations
 from agent_comms.tool_caller import NoThreadCaller
 
+from dataclasses import replace
 import asyncio
 import json
 import os
@@ -59,12 +60,9 @@ def _session(tmp_path, *, package=True):
         store.participants.register(
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
-    agent = CommsAgent(
-        comms,
-        runtime_enabled=True,
-        private_nk_native_package=tmp_path if package else None,
-        private_nk_wire_root_id=root_id if package else None,
-    )
+    if package:
+        comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+    agent = CommsAgent(comms, runtime_enabled=True)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
     agent.sessions.worktrees["beta"] = str(tmp_path)
@@ -93,11 +91,10 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     root_id = comms.messaging.initialize_private_initial_protocol()
+    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
     )
 
     async def noop(*args, **kwargs):
@@ -648,11 +645,19 @@ async def test_acp_private_does_not_overlap_owner_turn(native_backend):
         assert not agent.turns.turn_state(session).busy and not agent.inputs.backend_inboxes
 
 
-async def test_acp_private_without_explicit_package_refuses_legacy_delivery(tmp_path):
+async def test_acp_private_without_prepared_package_refuses_delivery(tmp_path, monkeypatch):
+    """An unpinned private root derives this installation's package; none prepared refuses."""
+    from agent_comms import owner_lifecycle
+    from agent_comms.native_package import NativePackageError
+
+    def missing():
+        raise NativePackageError("Pinned native package directory is missing")
+
+    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", missing)
     comms, agent, root_id = _session(tmp_path, package=False)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    with pytest.raises(PublicationActivationBlocked, match="explicit matching root"):
+    with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
         await agent.inputs.drain_inbox("beta")
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         assert (
@@ -735,11 +740,10 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
     comms, first, root_id = _session(tmp_path)
+    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     second = CommsAgent(
         comms,
         runtime_enabled=True,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
     )
     second.sessions.bindings["beta"] = "beta"
     second.sessions.titles["beta"] = "beta"
@@ -870,10 +874,12 @@ async def test_acp_mismatched_root_and_bad_package_cannot_accept_claim(tmp_path,
     comms, agent, root_id = _session(tmp_path)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    agent._private_nk_wire_root_id = "f" * 32
+    owners = agent._comms.owners
+    pinned = owners.launch_authority
+    owners._private_nk_launch = replace(pinned, wire_root_id="f" * 32)
     with pytest.raises(IdentityConflict, match="original root changed"):
         await agent.inputs.drain_inbox("beta")
-    agent._private_nk_wire_root_id = root_id
+    owners._private_nk_launch = pinned
     # Preflight must run before any SQL acceptance, not only before reservation.
     monkeypatch.setattr(
         native_pi.NativePiRpcLaunch,

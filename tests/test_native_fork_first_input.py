@@ -185,11 +185,10 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     package = pinned_native_package()
     root_id = os.environ["AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID"]
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(
         comms,
         runtime_enabled=True,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
     )
     facts = []
 

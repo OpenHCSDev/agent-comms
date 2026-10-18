@@ -55,7 +55,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
                  "--no-extensions", "--no-skills", "--no-context-files"]
     agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package, None)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package)
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
     monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
     updates = []

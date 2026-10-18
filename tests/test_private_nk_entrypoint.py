@@ -1,4 +1,4 @@
-"""Explicit production ACP/worker N/K flags: no inferred activation or provider call."""
+"""Private N/K launch authority for ACP, worker and CLI owners; no provider call."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms import acp, active_route, cli, private_nk_entrypoint, worker
+from agent_comms import acp, active_route, cli, owner_lifecycle, private_nk_entrypoint, worker
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.launch_runtime import LaunchRuntime, PACKAGE_ENV, ROOT_ID_ENV
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
@@ -31,7 +31,7 @@ tmp_path = private_root_fixture
 def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, monkeypatch):
     root, root_id, _, _, _ = _root(tmp_path)
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    assert PrivateNkLaunch.from_environment(root, {}) is None  # marker alone never enables a worker
+    assert PrivateNkLaunch.from_environment(root, {}) is None  # no handoff decodes to nothing
     for values in (
         {ROOT_ID_ENV: root_id},
         {PACKAGE_ENV: str(tmp_path)},
@@ -48,55 +48,26 @@ def test_explicit_owner_entrypoint_requires_exact_root_and_package(tmp_path, mon
     exact.validate()
     assert exact.wire_root_id == root_id and exact.native_package == tmp_path
     assert exact.validated_root == root
-    assert exact.selected_tool_intent is None
     assert not (root / "native-sessions").exists()
 
 
-def test_private_claim_root_keeps_normal_coding_tools(tmp_path, monkeypatch):
-
-    root = tmp_path / "claim-wire"
-    root.mkdir(mode=0o700)
-    comms = Comms(root)
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    selected = PrivateNkLaunch.from_environment(root, {ROOT_ID_ENV: root_id, PACKAGE_ENV: str(tmp_path)})
-    assert selected is not None
-    assert selected.selected_tool_intent is None
-
-
 async def test_worker_rejects_partial_private_configuration_before_wire(tmp_path, monkeypatch):
-    called = False
-
-    def wire_would_create_root():
-        nonlocal called
-        called = True
-        raise AssertionError("wire should not be constructed")
-
-    monkeypatch.setattr(worker, "wire", wire_would_create_root)
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "absent"))
     monkeypatch.setenv(ROOT_ID_ENV, "f" * 32)
     monkeypatch.delenv(PACKAGE_ENV, raising=False)
     with pytest.raises(PublicationActivationBlocked, match="exact root ID"):
         await worker.run()
-    assert not called and not (tmp_path / "absent").exists()
+    assert not (tmp_path / "absent").exists()
 
 
 def test_stdio_acp_refuses_partial_private_configuration_before_wire(tmp_path, monkeypatch):
-    called = False
-
-    def wire_would_create_root():
-        nonlocal called
-        called = True
-        raise AssertionError("wire should not be constructed")
-
-    monkeypatch.setattr(acp, "wire", wire_would_create_root)
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path / "absent"))
     monkeypatch.setenv(ROOT_ID_ENV, "f" * 32)
     monkeypatch.delenv(PACKAGE_ENV, raising=False)
     monkeypatch.setattr(sys, "argv", ["agent_comms.acp"])
     with pytest.raises(PublicationActivationBlocked, match="exact root ID"):
         acp.main()
-    assert not called and not (tmp_path / "absent").exists()
+    assert not (tmp_path / "absent").exists()
 
 
 def test_environment_launch_uses_selected_root_not_cwd(tmp_path, monkeypatch):
@@ -111,8 +82,9 @@ def test_environment_launch_uses_selected_root_not_cwd(tmp_path, monkeypatch):
     monkeypatch.setenv(ROOT_ID_ENV, root_id)
     monkeypatch.setenv(PACKAGE_ENV, str(tmp_path))
     monkeypatch.chdir("/")
-    selected = private_nk_entrypoint.private_nk_from_environment()
+    selected = PrivateNkLaunch.current()
     assert selected is not None and selected.wire_root_id == root_id
+    selected.validate()
     assert selected.native_package == tmp_path and seen == [tmp_path]
     assert selected.validated_root == root
     assert os.environ["AGENT_COMMS_ROOT"] == str(root)
@@ -132,7 +104,7 @@ def test_thread_observation_does_not_admit_an_untrusted_native_owner(tmp_path, m
     observed = wire(root)
     assert observed.views.thread_detail(name, include_pending=False)["name"] == name
     with pytest.raises(PublicationActivationBlocked, match="Reviewed package differs"):
-        private_nk_entrypoint.private_nk_from_environment()
+        PrivateNkLaunch.current().validate()
     with pytest.raises(PublicationActivationBlocked, match="Reviewed package differs"):
         observed.owners.restart_environment({}, LaunchRuntime.current())
     assert not (root / "native-sessions").exists()
@@ -158,8 +130,8 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
         monkeypatch.delenv(name, raising=False)
     routed = wire()
     assert routed.root == root
-    assert routed.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path, None)
-    selected = private_nk_entrypoint.private_nk_from_environment()
+    assert routed.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path)
+    selected = PrivateNkLaunch.current()
     assert selected is not None
     assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
         root,
@@ -169,7 +141,69 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     legacy = tmp_path / "explicit-legacy"
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
     assert wire().root == legacy
-    assert private_nk_entrypoint.private_nk_from_environment() is None
+    assert PrivateNkLaunch.current() is None
+
+
+def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, monkeypatch):
+    """No route and no handoff: the marker owns the root ID, the installation owns the package."""
+    from agent_comms.native_package import NativePackageError
+    from agent_comms.native_pi import NativePiUnavailable
+
+    root, root_id, _, _, _ = _root(tmp_path)
+    package = tmp_path / "installed-package"
+    monkeypatch.setattr(active_route, "active_route_path", lambda: tmp_path / "absent" / "active-route.json")
+    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", lambda: package)
+    monkeypatch.setattr(LaunchRuntime, "current", classmethod(lambda cls: LaunchRuntime.running()))
+    for name in ("AGENT_COMMS_ROOT", ROOT_ID_ENV, PACKAGE_ENV):
+        monkeypatch.delenv(name, raising=False)
+    assert wire(tmp_path / "public").owners.launch_authority is None
+
+    comms = wire(root)
+    assert comms.owners.launch_authority == PrivateNkLaunch(root, root_id, package)
+    saved = tmp_path / "saved-session.jsonl"
+    saved.write_text('{"type":"session"}\n')
+    saved.chmod(0o600)
+    comms.registry.declare(
+        comms.registry.new_thread('headless', frozenset(), str(tmp_path), process_identity=None, session_file=str(saved))
+    )
+
+    def rejected(_package):
+        raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork")
+
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", rejected)
+    with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):
+        wire(root).owners.start("headless")
+
+    def missing():
+        raise NativePackageError("Pinned native package directory is missing")
+
+    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", missing)
+    with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
+        wire(root).owners.start("headless")
+    assert comms.registry.require("headless").process_identity is None
+
+    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", lambda: package)
+    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
+    launched: list[ParentedProcess] = []
+    captured: list[dict[str, str]] = []
+    launch = ParentedProcess.launch
+
+    def provider_free_child(_argv, **kwargs):
+        captured.append(kwargs["env"])
+        child = launch((sys.executable, "-c", "import time; time.sleep(10)"), **kwargs)
+        launched.append(child)
+        return child
+
+    monkeypatch.setattr(ParentedProcess, "launch", provider_free_child)
+    try:
+        result = wire(root).owners.start("headless")
+        assert result.pid == launched[0].pid
+        assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
+        assert captured[0][ROOT_ID_ENV] == root_id
+        assert captured[0][PACKAGE_ENV] == str(package)
+    finally:
+        for child in launched:
+            child.stop_sync()
 
 
 def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, monkeypatch):
@@ -226,7 +260,7 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     assert route_file.stat().st_mode & 0o777 == 0o600
     assert active_route.read_active_route() == route
     assert wire().root == root
-    assert private_nk_entrypoint.private_nk_from_environment().validated_root == root
+    assert PrivateNkLaunch.current().validated_root == root
     original = route_file.read_bytes()
     with pytest.raises(ValueError, match="already installed"):
         active_route.publish_active_route(route)
@@ -382,7 +416,7 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     with pytest.raises(ValueError, match="invalid JSON"):
         wire()
     with pytest.raises(ValueError, match="invalid JSON"):
-        private_nk_entrypoint.private_nk_from_environment()
+        PrivateNkLaunch.current()
     assert cli.main(["threads"]) == 1
     assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
 
@@ -456,21 +490,29 @@ async def test_private_relative_root_pinned_across_cwd_change_before_wire(
     class StopBeforeOwnerAttachmentError(Exception):
         pass
 
-    def capture_wire(pinned_root):
-        seen.append(pinned_root)
-        assert pinned_root == root
-        assert wire(pinned_root).root == root
+    def capture_wire():
+        comms = wire()
+        seen.append(comms)
+        return comms
+
+    def stop(*_args, **_kwargs):
         raise StopBeforeOwnerAttachmentError
 
     monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", trust_and_switch)
     selected = acp if entrypoint == "acp" else worker
     monkeypatch.setattr(selected, "wire", capture_wire)
+    if entrypoint == "acp":
+        monkeypatch.setattr(acp.asyncio, "run", stop)
+    else:
+        monkeypatch.setattr(worker.RestartEnvironment, "calling_thread", stop)
     with pytest.raises(StopBeforeOwnerAttachmentError):
         if entrypoint == "acp":
             acp.main()
         else:
             await worker.run()
-    assert seen == [root]
+    comms, = seen
+    assert comms.root == root
+    assert comms.owners.launch_authority.validated_root == root
     assert not (other / "wire").exists()
 
 
