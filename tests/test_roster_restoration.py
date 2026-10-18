@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
@@ -36,7 +36,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.threads["live"] == before.threads["live"]
     assert after.owner_generations["live"] == before.owner_generations["live"]
     assert after.claimed_generations["live"] == before.claimed_generations["live"]
-    assert after.threads["missing"] == replace(missing, process_identity=None, active_turn=None)
+    assert after.threads["missing"] == replace(missing, process_identity=NoProcess(), active_turn=None)
     assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"
     assert current.bus.log.path.read_bytes() == bus
@@ -77,7 +77,7 @@ def test_restore_keeps_archived_status(tmp_path):
     old.registry.register(thread, ArchivedThreadStatus())
     new.registry.restore_stopped(old.registry.snapshot(), (thread.name,))
     assert new.registry.status(thread.name) == ArchivedThreadStatus()
-    assert new.registry.require(thread.name).pid == 0
+    assert new.registry.require(thread.name).process_identity == NoProcess()
 
 
 def test_catalog_restore_preserves_current_preferences_and_historical_channels(tmp_path):
@@ -147,7 +147,7 @@ def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
         current.threads.restore_stopped(source, (missing.name,))
         snapshot = current.registry.snapshot()
         assert snapshot.statuses[missing.name] == StoppedThreadStatus()
-        assert snapshot.threads[missing.name].pid == 0
+        assert snapshot.threads[missing.name].process_identity == NoProcess()
         assert snapshot.threads[live.name] == live
         assert store.participants.get(RecordedThreadIncarnation("fixture", live.created_at).lookup) == live_before
         assert (

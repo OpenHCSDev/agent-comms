@@ -7,7 +7,6 @@ command catalog. Existing CLI spellings belong to the store_files.
 from __future__ import annotations
 
 import argparse
-from abc import abstractmethod
 import json
 import asyncio
 import os
@@ -16,14 +15,16 @@ import shlex
 import time
 import types
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Mapping
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from enum import Enum
+from itertools import dropwhile, takewhile
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_args, get_origin, get_type_hints
 
 from acp.schema import SessionConfigSelectOption
+from acp.exceptions import RequestError
 
 from .activity import ActivityState
 from .channels import Channel
@@ -31,7 +32,7 @@ from .channel_targets import CommandTarget, ResolvedChannel
 from .cli_result import CliResult
 from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
-from .child_process import ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .command import Command
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .field_codec import FieldCodec, PathText, compile_decoder
@@ -55,15 +56,17 @@ from .exporting import (
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness, HarnessInstalled
-from .importing import ImportLimits, ThreadImported
+from .importing import ImportLimits, ImportedSessionMetadata, ThreadImported
 from .historical_views import HistoryCursor
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .shared_ledger import LedgerDocument
 from .tool_caller import ToolCaller
 from .turn_context import (
-    CodexRolloutProvenance, ContextManifest, ContextSegment, ContributionCoordinates, Provenance,
-    TurnContext,
+    CodexRolloutProvenance, ContextManifest, ContextManifestChange, ContextSegment,
+    ContributionCoordinates, NextContextTurn, Provenance, TurnContext,
 )
+from .native_turn_context import NativeContextData
+from .runtime import RuntimeConnection, socket_path
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
@@ -448,7 +451,7 @@ class ThreadArchivedResult(CliResult):
 @dataclass(frozen=True)
 class ThreadCreatedResult(CliResult):
     created: str
-    pid: int | None
+    process_identity: ProcessState
 
 
 @dataclass(frozen=True)
@@ -587,7 +590,7 @@ class HeartbeatResult(CliResult):
 class SessionAttachedResult(CliResult):
     attached: str
     session_file: str | None
-    pid: int | None
+    pid: int | None = field(default=None, metadata={"wire_omit_default": True})
 
 
 @dataclass(frozen=True)
@@ -685,9 +688,91 @@ class NativeContextInspection(CliResult):
     native_source_spans: tuple[NativeSourceSpans, ...]
 
 
-@dataclass(frozen=True, kw_only=True)
-class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package="agent_comms"):
+class DeclaredOptions(Command):
+    """option() fields own a declaration's argparse subcommand and its decoding from the namespace.
+
+    A DeclaredFamily of dataclass Commands inherits it; the namespace's ``command`` names
+    the member."""
     help: ClassVar[str]
+    declared_name: ClassVar[str]
+    __dataclass_fields__: ClassVar[dict[str, Field[object]]]
+
+    @classmethod
+    def add_parser(cls, subparsers: Any) -> None:
+        parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
+        groups: dict[str, Any] = {}
+        hints = get_type_hints(cls)
+        for declared in fields(cls):
+            metadata = declared.metadata
+            group = metadata["group"]
+            owner = parser
+            if group is not None:
+                if group not in groups:
+                    groups[group] = parser.add_mutually_exclusive_group(required=True)
+                owner = groups[group]
+            options = dict(metadata["parser_options"])
+            annotation = hints[declared.name]
+            scalar = (
+                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
+            )
+            if scalar is bool:
+                options.setdefault("action", "store_true")
+            elif scalar in (int, float):
+                options.setdefault("type", scalar)
+            elif isinstance(scalar, type) and issubclass(scalar, Enum):
+                options["choices"] = [kind.value for kind in scalar]
+            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
+                options.setdefault("choices", scalar.names())
+            elif (
+                get_origin(scalar) is type and get_args(scalar)
+                and issubclass(get_args(scalar)[0], DeclaredFamily)
+            ):
+                options.setdefault("choices", get_args(scalar)[0].names())
+            if metadata["parser_default"] is not MISSING:
+                options["default"] = metadata["parser_default"]
+            elif metadata["parser_default_factory"] is not MISSING:
+                options["default"] = metadata["parser_default_factory"]()
+            elif declared.default is not MISSING:
+                options["default"] = declared.default
+            elif declared.default_factory is not MISSING:
+                options["default"] = declared.default_factory()
+            else:
+                options["required"] = True
+            if isinstance(options.get("default"), DeclaredFamily):
+                options["default"] = options["default"].declared_name
+            elif (
+                isinstance(options.get("default"), type)
+                and issubclass(options["default"], DeclaredFamily)
+            ):
+                options["default"] = options["default"].declared_name
+            if any(flag.startswith("-") for flag in metadata["flags"]):
+                options["dest"] = metadata.get("wire_name", declared.name)
+            else:
+                options.pop("required", None)
+            owner.add_argument(*metadata["flags"], **options)
+
+    @classmethod
+    def from_namespace(cls, args: argparse.Namespace) -> Self:
+        payload = {"kind": cls.declared_name}
+        hints = get_type_hints(cls)
+        for declared in fields(cls):
+            key = declared.metadata.get("wire_name", declared.name)
+            value = getattr(args, key)
+            normalize = declared.metadata["normalize"]
+            if normalize is not None:
+                value = normalize(value)
+            elif isinstance(hints[declared.name], type) and issubclass(
+                hints[declared.name], DeclaredFamily
+            ):
+                value = {"kind": value}
+            payload[key] = value
+        return cls.from_payload(payload)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CliCommand(
+    DeclaredFamily, DeclaredOptions, affix="CliCommand", discovery_package="agent_comms"
+):
     multiple_targets: ClassVar[bool] = False
 
     @classmethod
@@ -839,78 +924,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
         return selection.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
-
-    @classmethod
-    def add_parser(cls, subparsers: Any) -> None:
-        parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
-        groups: dict[str, Any] = {}
-        hints = get_type_hints(cls)
-        for declared in fields(cls):
-            metadata = declared.metadata
-            group = metadata["group"]
-            owner = parser
-            if group is not None:
-                if group not in groups:
-                    groups[group] = parser.add_mutually_exclusive_group(required=True)
-                owner = groups[group]
-            options = dict(metadata["parser_options"])
-            annotation = hints[declared.name]
-            scalar = (
-                get_args(annotation)[0] if get_origin(annotation) is types.UnionType else annotation
-            )
-            if scalar is bool:
-                options.setdefault("action", "store_true")
-            elif scalar in (int, float):
-                options.setdefault("type", scalar)
-            elif isinstance(scalar, type) and issubclass(scalar, Enum):
-                options["choices"] = [kind.value for kind in scalar]
-            elif isinstance(scalar, type) and issubclass(scalar, DeclaredFamily):
-                options.setdefault("choices", scalar.names())
-            elif (
-                get_origin(scalar) is type and get_args(scalar)
-                and issubclass(get_args(scalar)[0], DeclaredFamily)
-            ):
-                options.setdefault("choices", get_args(scalar)[0].names())
-            if metadata["parser_default"] is not MISSING:
-                options["default"] = metadata["parser_default"]
-            elif metadata["parser_default_factory"] is not MISSING:
-                options["default"] = metadata["parser_default_factory"]()
-            elif declared.default is not MISSING:
-                options["default"] = declared.default
-            elif declared.default_factory is not MISSING:
-                options["default"] = declared.default_factory()
-            else:
-                options["required"] = True
-            if isinstance(options.get("default"), DeclaredFamily):
-                options["default"] = options["default"].declared_name
-            elif (
-                isinstance(options.get("default"), type)
-                and issubclass(options["default"], DeclaredFamily)
-            ):
-                options["default"] = options["default"].declared_name
-            if any(flag.startswith("-") for flag in metadata["flags"]):
-                options["dest"] = metadata.get("wire_name", declared.name)
-            else:
-                options.pop("required", None)
-            owner.add_argument(*metadata["flags"], **options)
-
-    @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> Self:
-        member = cls.decode(args.command)
-        payload = {"kind": member.declared_name}
-        hints = get_type_hints(member)
-        for declared in fields(member):
-            key = declared.metadata.get("wire_name", declared.name)
-            value = getattr(args, key)
-            normalize = declared.metadata["normalize"]
-            if normalize is not None:
-                value = normalize(value)
-            elif isinstance(hints[declared.name], type) and issubclass(
-                hints[declared.name], DeclaredFamily
-            ):
-                value = {"kind": value}
-            payload[key] = value
-        return member.from_payload(payload)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1366,7 +1379,8 @@ class RegisterCliCommand(CliCommand):
     )
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
-    pid: int = option("--pid", default=0)
+    process: ProcessState = option("--pid", default_factory=NoProcess,
+        parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
     execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
@@ -1378,7 +1392,7 @@ class RegisterCliCommand(CliCommand):
             worktree=self.worktree,
             parent=self.parent,
             task=self.task,
-            process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
+            process_identity=self.process,
             execution=self.execution,
         )
         ctx.registry.declare(thread)
@@ -1426,13 +1440,17 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     help = "Attach a live Pi session to a registered thread"
     name: str = option("--name")
     session_file: str = option("--session-file")
-    pid: int | None = option("--pid", default=None)
+    process: ProcessState = option("--pid", default_factory=NoProcess,
+        parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
 
     def apply(self, ctx: Comms) -> CliResult:
+        current = ctx.registry.require(self.name)
         attached = ctx.threads.attach_session(
-            ctx.registry.require(self.name), self.session_file, pid=self.pid
+            current, self.session_file,
+            process=self.process.attachment_process(current.process_identity),
         )
-        return SessionAttachedResult(attached.name, attached.session_file, attached.pid)
+        return SessionAttachedResult(
+            attached.name, attached.session_file, **attached.process_identity.pid_fields())
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1648,7 +1666,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
         spec = self.spec_type.from_task(**{item.name: getattr(self, item.name)
                                            for item in fields(self.spec_type)})
         child = ctx.threads.create(spec)
-        return ThreadCreatedResult(child.name, child.pid)
+        return ThreadCreatedResult(child.name, child.process_identity)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1698,49 +1716,35 @@ class PollCliCommand(CliCommand):
 class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
     thread: str = option("thread")
-    turn: int | None = option("--turn", default=None, help="Original authorized turn generation")
-    diff: bool = option("--diff", default=False, action="store_true")
-    imported: bool = option("--imported", default=False, action="store_true",
-                            help="Original imported instruction references, not current context")
+    @classmethod
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        super().add_parser(subparsers)
+        parser = subparsers.choices[cls.declared_name]
+        parser.add_argument("--turn", type=int, default=argparse.SUPPRESS)
+        parser.add_argument("--diff", action="store_true")
+        parser.add_argument("--imported", action="store_true")
+
+    @classmethod
+    def from_namespace(cls, args: argparse.Namespace) -> ContextCliCommand:
+        if args.imported:
+            if "turn" in vars(args) or args.diff:
+                raise ValueError("--imported cannot be combined with --turn or --diff")
+            return ImportedContextCliCommand(thread=args.thread)
+        if "turn" in vars(args):
+            command = TurnDiffContextCliCommand if args.diff else TurnContextCliCommand
+            return command(thread=args.thread, turn=args.turn)
+        return (DiffContextCliCommand if args.diff else cls)(thread=args.thread)
+
+    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
+        cursor = None
+        while True:
+            page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
+            yield from (resource.value for resource in reversed(page.resources))
+            if not page.has_older():
+                return
+            cursor = page.older
 
     def apply(self, ctx: Comms) -> CliResult:
-        from .importing import ImportedSessionMetadata
-
-        if self.imported:
-            if self.turn is not None or self.diff:
-                raise ValueError("Imported source references are not recorded native turns")
-            owner = ctx.registry.require(self.thread)
-            return ImportedContextSources(
-                "historical-imported-instructions; not current or recorded native context",
-                ImportedSessionMetadata.sources_for_owner(ctx.registry, owner))
-        if self.turn is not None or self.diff:
-            selected = []
-            cursor = None
-            while True:
-                page = ctx.bus.log.context_manifest_page(self.thread, ctx.registry, cursor=cursor)
-                for resource in reversed(page.resources):
-                    manifest = resource.value
-                    if self.diff and selected:
-                        if not selected[0].turn.same_recording(manifest.turn):
-                            return selected[0].changed_since(manifest)
-                    elif self.turn is None or manifest.turn.matches_generation(self.turn):
-                        selected.append(manifest)
-                if not page.has_older():
-                    break
-                cursor = page.older
-            if not selected:
-                raise ValueError("No original context manifest exists for the requested turn")
-            if self.diff:
-                raise ValueError("No preceding recorded turn exists for comparison")
-            return RecordedContextManifests(
-                tuple(reversed(selected)),
-                all(manifest.public_text_recorded for manifest in selected))
-        from .field_codec import FieldCodec
-        from .native_turn_context import NativeContextData
-        from .runtime import RuntimeConnection, socket_path
-        from .turn_context import NextContextTurn, TurnContext
-        from acp.exceptions import RequestError
-
         owner = ctx.registry.require(self.thread)
         connection = RuntimeConnection(ctx, owner.name, socket_path(ctx.root, owner.require_process().pid))
 
@@ -1772,6 +1776,60 @@ class ContextCliCommand(CliCommand):
             tuple(NativeSourceSpans(position, segment.measured_manifest().sha256,
                                     segment.source_ranges())
                   for position, segment in enumerate(native.segments)))
+
+
+class ContextOptionCliCommand(ContextCliCommand):
+    @classmethod
+    def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+        """These commands are selected by the context parser's options."""
+
+    @abstractmethod
+    def apply(self, ctx: Comms) -> CliResult:
+        """Inspect the context selected at the CLI boundary."""
+
+
+class ImportedContextCliCommand(ContextOptionCliCommand):
+    def apply(self, ctx: Comms) -> ImportedContextSources:
+        owner = ctx.registry.require(self.thread)
+        return ImportedContextSources(
+            "historical-imported-instructions; not current or recorded native context",
+            ImportedSessionMetadata.sources_for_owner(ctx.registry, owner))
+
+
+@dataclass(frozen=True, kw_only=True)
+class SelectedContextCliCommand(ContextOptionCliCommand):
+    turn: int
+
+    def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
+        return dropwhile(lambda manifest: not manifest.turn.matches_generation(self.turn),
+                         super().manifests(ctx))
+
+
+class TurnContextCliCommand(SelectedContextCliCommand):
+    def apply(self, ctx: Comms) -> RecordedContextManifests:
+        selected = tuple(takewhile(lambda manifest: manifest.turn.matches_generation(self.turn),
+                                   self.manifests(ctx)))
+        if not selected:
+            raise ValueError("No original context manifest exists for the requested turn")
+        return RecordedContextManifests(
+            tuple(reversed(selected)), all(manifest.public_text_recorded for manifest in selected))
+
+
+class DiffContextCliCommand(ContextOptionCliCommand):
+    def apply(self, ctx: Comms) -> ContextManifestChange:
+        manifests = iter(self.manifests(ctx))
+        try:
+            current = next(manifests)
+        except StopIteration:
+            raise ValueError("No original context manifest exists for the requested turn") from None
+        for previous in manifests:
+            if not current.turn.same_recording(previous.turn):
+                return current.changed_since(previous)
+        raise ValueError("No preceding recorded turn exists for comparison")
+
+
+class TurnDiffContextCliCommand(SelectedContextCliCommand, DiffContextCliCommand):
+    """Start the shared diff walk at the requested turn."""
 
 
 @dataclass(frozen=True, kw_only=True)

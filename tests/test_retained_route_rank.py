@@ -1,5 +1,6 @@
 """A retained original cut is independent of later routes and timestamp history."""
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 from unittest.mock import patch
 
@@ -52,7 +53,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
     birth = comms.registry.require(viewer).created_at
     originals = [comms.bus.publisher.publish_ordinary(Message(
         'sender', viewer, f'original {number}', InfoKind, timestamp=timestamp,
-    )) for number, timestamp in enumerate((birth+2, birth-1, birth+2, birth+1))]
+    ), origin=AgentOrigin()) for number, timestamp in enumerate((birth+2, birth-1, birth+2, birth+1))]
     comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
         viewer, (originals[0],), comms.registry.snapshot(), comms.bus.log.path,
     ))
@@ -83,7 +84,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 timestamp = birth-1 if number % 3 == 0 else birth+2+number/1000
                 comms.bus.publisher.publish_ordinary(Message(
                     'sender', viewer, f'later {phase}/{number}', InfoKind, timestamp=timestamp,
-                ))
+                ), origin=AgentOrigin())
             for number in range(8):
                 sender = f'later-{phase}-{number}'
                 comms.registry.declare(comms.registry.new_thread(sender, frozenset(), str(tmp_path)))

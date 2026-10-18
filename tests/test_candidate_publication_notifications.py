@@ -8,6 +8,7 @@ import threading
 
 import pytest
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms import candidate_maintenance, selected_claim
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_response import (
@@ -188,7 +189,7 @@ def test_successful_append_is_not_lost_when_later_outer_work_fails(tmp_path, not
         calls, finished = notifications(comms)
         with pytest.raises(ValueError, match="later work failed"):
             with _store_lock(comms._wire_lock_path):
-                comms.bus.publisher.publish_ordinary(Message("sender", "member000", "committed", InfoKind))
+                comms.bus.publisher.publish_ordinary(Message("sender", "member000", "committed", InfoKind), origin=AgentOrigin())
                 assert not calls
                 raise ValueError("later work failed")
         assert calls == [comms.bus.log.path.stat().st_size]
@@ -210,7 +211,7 @@ async def test_joined_worker_append_waits_for_outer_async_lock(tmp_path, notific
 
         def append():
             assert permission.get() == "unbound"
-            return comms.bus.publisher.publish_ordinary(Message("sender", "member000", "joined", InfoKind))
+            return comms.bus.publisher.publish_ordinary(Message("sender", "member000", "joined", InfoKind), origin=AgentOrigin())
 
         async with _async_store_lock(comms._wire_lock_path):
             await Coordination.run_worker(append)

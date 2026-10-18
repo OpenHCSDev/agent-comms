@@ -539,6 +539,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Native Pi worktree is unavailable")
         env = dict(os.environ)
         env.update(environment or {})
+        arguments += ("--session-dir", str(session.directory))
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))

@@ -51,9 +51,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     with pytest.raises(ValueError, match="not a directory"):
         comms.threads.set_project("worker", str(file))
     comms.threads.rename_self("renamed", caller=ThreadCaller("worker"))
-    comms.threads.attach_session(
-        comms.registry.require("worker"), str(old / "session.jsonl")
-    )
+    comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(old / "session.jsonl"), process=attachment_owner.process_identity)
     restored = wire(comms.root).registry.require("worker")
     assert restored.worktree == str(new) and restored.earlier_projects == (old,)
     assert len(comms.registry.all_threads()) == 1

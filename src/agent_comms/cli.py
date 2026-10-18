@@ -52,7 +52,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
             args = build_parser().parse_args(argv)
-            command = CliCommand.from_namespace(args)
+            command = CliCommand.decode(args.command).from_namespace(args)
             from .active_route import resolve_comms_route
 
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)

@@ -1,30 +1,25 @@
 """The only way the commander sends an order to a unit. Refuses soft or vague orders; tracks deadlines and strikes.
 
-  order send UNIT DUE(HH:MM) BODYFILE [--clean] [--reassign "<concrete failure>"]   record the order in Core and send it
-     the body must declare, on their own lines:
-       Problems: P<n>[, P<m>...]                       (the listed problems it owns, batched by surface for one owner; one open order per problem)
-       Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
-       Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
-       1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
-                                             (--clean only when the unit showed no incompetence)
-     sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike
-  order say UNIT[,UNIT] BODYFILE           a non-order message (answer, ownership call); refused if it orders work
-  order problem "TEXT" --to UNIT --due HH:MM --order FILE   Core records the problem with its order, or nothing
-  order close PID --works "EVIDENCE" --artifact FILE   the fix works in the app; Core closes the problem
-  order board                               regenerate fleet-board.md from Core's Todo store
-  order done PID --sha SHA|op             Core checks the delivered commit; late delivery is a strike
-  order strike UNIT --why "..." [--caught "WHO at STAGE"]   a send-back, a missed deadline or a false claim; stage is review/install/live/user
-  order overdue                           loop: every minute, name units past their deadline
+`order send` bodies declare, on their own lines:
+  Problems: P<n>[, P<m>...]                       (the listed problems it owns, batched by surface for one owner; one open order per problem)
+  Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
+  Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
+  1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
+Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
 Incompetence is not tolerated: a unit is fired from a task, not berated about it.
 Two strikes on one task: the task is taken away and reassigned (`fire`). Nothing here judges
 code; it refuses orders that leave a unit room to interpret, and refuses to let a deadline lapse silently.
 """
-import calendar, json, os, re, subprocess, sys, time
+import argparse, calendar, json, os, re, subprocess, sys, time
+from abc import abstractmethod
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
 from ..change_report import FileLine
+from ..cli_commands import DeclaredOptions, option
+from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CountCheckResult, OrderCheck
@@ -34,7 +29,7 @@ from ..tools import CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool, C
 from ..todos import (BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, StrikeTodo)
-from . import storage
+from . import capacity, rules, storage
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -179,13 +174,6 @@ class Slop:
         if problems:
             sys.exit(self.USAGE + '\n  ' + '\n  '.join(problems))
         self.kind, self.fact, self.at, self.derive, self.by = kind, fact, at, derive, by
-
-    @classmethod
-    def from_args(cls, args):
-        try:
-            return cls(*(args[args.index(flag) + 1] for flag in ('--slop', '--fact', '--at', '--derive', '--by')))
-        except ValueError:
-            sys.exit(cls.USAGE)
 
     @classmethod
     def from_order(cls, body):
@@ -555,41 +543,160 @@ def overdue():
         time.sleep(60)
 
 
-def main(a):
-    from . import capacity
-    who = ME
-    if '--fork' in a:  # a forked commander: keeps its beat fresh and is never blocked by the overload gate
-        n = a.index('--fork')
-        who = a[n + 1]
-        capacity.beat(who)
-        del a[n:n + 2]
-    elif a[:1] and a[0] in ('send', 'say', 'problem', 'hunt'):
-        capacity.require()  # HARD RULE: overloaded means fork, not more orders from me
-    if a[:1] and a[0] in ('send', 'strike', 'done', 'say', 'problem', 'close', 'hunt'):
-        from . import rules
-        rules.require(who)  # HARD RULE: no commander action, mine or a fork's, on rules not re-read in 20 min
-    if a[:1] == ['send'] and len(a) >= 4:
-        opt = lambda k: a[a.index(k) + 1] if k in a[4:-1] else None
-        send(*a[1:4], clean='--clean' in a[4:], mechanical='--mechanical' in a[4:], reassign=opt('--reassign'), disk='--disk' in a[4:])
-    elif a[:1] == ['strike'] and len(a) == 6 and a[2] == '--why' and a[4] == '--caught':
-        strike(a[1], a[3], a[5])
-    elif a[:1] == ['strike'] and len(a) == 4 and a[2] == '--why':
-        strike(a[1], a[3])
-    elif a[:1] == ['done'] and len(a) == 4 and a[2] == '--sha':
-        done(a[1], a[3])
-    elif a[:1] == ['say'] and len(a) == 3:
-        say(a[1], a[2])
-    elif a[:1] == ['problem'] and len(a) in (8, 9) and a[2] == '--to' and a[4] == '--due' and a[6] == '--order' and a[8:] in ([], ['--disk']):
-        problem(a[1], a[3], a[5], a[7], disk=a[8:] == ['--disk'])
-    elif a[:1] == ['close'] and len(a) == 6 and a[2] == '--works' and a[4] == '--artifact':
-        close(a[1], a[3], a[5])
-    elif a[:1] == ['hunt'] and len(a) in (4, 6) and a[2] == '--why' and (len(a) == 4 or a[4] == '--sent'):
-        hunt(a[1], a[3], a[5] if len(a) == 6 else None)
-    elif a[:1] == ['next-hunt']:
+@dataclass(frozen=True, kw_only=True)
+class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+    """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
+    fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
+
+    @property
+    def who(self) -> str:
+        return self.fork or ME
+
+    def apply(self, ctx: None = None) -> None:
+        self.gate()
+        self.run()
+
+    def gate(self) -> None:
+        if self.fork:
+            capacity.beat(self.fork)
+
+    @abstractmethod
+    def run(self) -> None: ...
+
+    @classmethod
+    def parse(cls, argv: list[str], description: str) -> CommanderVerb:
+        parser = argparse.ArgumentParser(prog=cls.__name__.removesuffix('Verb').lower(), description=description,
+                                         formatter_class=argparse.RawDescriptionHelpFormatter)
+        verbs = parser.add_subparsers(dest='command', required=True)
+        for member in cls.members_with(cls):
+            member.add_parser(verbs)
+        args = parser.parse_args(argv)
+        return cls.decode(args.command).from_namespace(args)
+
+
+class RuledVerb(CommanderVerb):
+    """HARD RULE: no commander action, mine or a fork's, on rules not re-read in 20 min."""
+
+    def gate(self) -> None:
+        super().gate()
+        rules.require(self.who)
+
+
+class LoadedVerb(RuledVerb):
+    """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
+
+    def gate(self) -> None:
+        if not self.fork:
+            capacity.require()
+        super().gate()
+
+
+class OrderVerb(CommanderVerb):
+    """A verb of `order`."""
+
+
+@dataclass(frozen=True, kw_only=True)
+class SendVerb(OrderVerb, LoadedVerb):
+    help = "record the order in Core and send it"
+    unit: str = option("unit")
+    due: str = option("due", help="HH:MM local time")
+    body_file: str = option("body_file", metavar="BODYFILE")
+    clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
+    mechanical: bool = option("--mechanical", default=False)
+    reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
+    disk: bool = option("--disk", default=False, help="a cleanup order below the disk floor")
+
+    def run(self) -> None:
+        send(self.unit, self.due, self.body_file, clean=self.clean, mechanical=self.mechanical,
+             reassign=self.reassign, disk=self.disk)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StrikeVerb(OrderVerb, RuledVerb):
+    help = "a send-back, a missed deadline or a false claim"
+    unit: str = option("unit")
+    why: str = option("--why")
+    caught: str = option("--caught", default=f'{ME} at review', help='"WHO at STAGE"; stage is review/install/live/user')
+
+    def run(self) -> None:
+        strike(self.unit, self.why, self.caught)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DoneVerb(OrderVerb, RuledVerb):
+    help = "Core checks the delivered commit; late delivery is a strike"
+    pid: str = option("pid")
+    sha: str = option("--sha", help="SHA or op")
+
+    def run(self) -> None:
+        done(self.pid, self.sha)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SayVerb(OrderVerb, LoadedVerb):
+    help = "a non-order message; refused if it orders work"
+    units: str = option("units", metavar="UNIT[,UNIT]")
+    body_file: str = option("body_file", metavar="BODYFILE")
+
+    def run(self) -> None:
+        say(self.units, self.body_file)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProblemVerb(OrderVerb, LoadedVerb):
+    help = "Core records the problem with its order, or nothing"
+    text: str = option("text")
+    to: str = option("--to")
+    due: str = option("--due", help="HH:MM local time")
+    order: str = option("--order", help="the order body file")
+    disk: bool = option("--disk", default=False)
+
+    def run(self) -> None:
+        problem(self.text, self.to, self.due, self.order, disk=self.disk)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CloseVerb(OrderVerb, RuledVerb):
+    help = "the fix works in the app; Core closes the problem"
+    pid: str = option("pid")
+    works: str = option("--works")
+    artifact: str = option("--artifact")
+
+    def run(self) -> None:
+        close(self.pid, self.works, self.artifact)
+
+
+@dataclass(frozen=True, kw_only=True)
+class HuntVerb(OrderVerb, LoadedVerb):
+    help = "a hot-path read with a verdict: file:line, what scales or repeats, and the order it became"
+    where: str = option("where")
+    why: str = option("--why")
+    sent: str | None = option("--sent", default=None)
+
+    def run(self) -> None:
+        hunt(self.where, self.why, self.sent)
+
+
+class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
+    help = "print the next place to hunt"
+
+    def run(self) -> None:
         print(next_hunt())
-    elif a[:1] == ['board']:
+
+
+class BoardVerb(OrderVerb):
+    help = "regenerate fleet-board.md from Core's Todo store"
+
+    def run(self) -> None:
         board()
-    elif a[:1] == ['overdue']:
+
+
+class OverdueVerb(OrderVerb):
+    help = "loop: every minute, name units past their deadline"
+
+    def run(self) -> None:
         overdue()
-    else:
-        sys.exit('REFUSED, nothing recorded. Usage:\n' + __doc__.split('\n\n')[0])
+
+
+def main(a):
+    OrderVerb.parse(a, __doc__).apply()

@@ -496,7 +496,7 @@ async def test_attached_snapshot_client_can_page_earlier_transcript(tmp_path):
         )
         + "\n"
     )
-    comms.threads.attach_session(response.session_id, str(transcript))
+    comms.threads.attach_session((attachment_owner := comms.registry.require(response.session_id)), str(transcript), process=attachment_owner.process_identity)
     proxy = RuntimeProxy(client, response.session_id, socket_path(comms.root, os.getpid()))
     try:
         await proxy.subscribe()

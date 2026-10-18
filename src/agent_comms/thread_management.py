@@ -18,7 +18,7 @@ from uuid import uuid4
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 from agent_comms.coordination_errors import CoordinationError, IdentityConflict
 
-from .child_process import ProcessIdentity
+from .child_process import NO_PROCESS, ProcessIdentity, ProcessState
 from .cli_result import CliResult
 from .registration import Registration
 from .thread_status import StoppedThreadStatus
@@ -244,7 +244,7 @@ class ThreadManagement:
         *,
         tags: frozenset[str],
         worktree: str,
-        pid: int = 0,
+        process: ProcessState = NO_PROCESS,
         model: str | None = None,
         thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         auto_title_pending: bool = False,
@@ -255,7 +255,7 @@ class ThreadManagement:
                 name=base_name,
                 tags=tags,
                 worktree=worktree,
-                process_identity=ProcessIdentity.capture(pid) if pid > 0 else None,
+                process_identity=process,
                 model=model,
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
@@ -502,7 +502,9 @@ class ThreadManagement:
         info = self.agents.agent_info_of(thread.name)
         return info.model_or(default)
 
-    def attach_session(self, original: Thread, source_path: str, *, pid: int | None = None) -> Thread:
+    def attach_session(
+        self, original: Thread, source_path: str, *, process: ProcessState,
+    ) -> Thread:
         """Attach Pi state and retain its model once, outside the wire lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
@@ -515,14 +517,10 @@ class ThreadManagement:
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
-                current.initialized_native_configuration(model=saved_model, thinking_level=NoThinkingOverride),
-                process_identity=(
-                    current.process_identity
-                    if pid is None
-                    else ProcessIdentity.capture(pid)
-                    if pid > 0
-                    else None
+                current.initialized_native_configuration(
+                    model=saved_model, thinking_level=NoThinkingOverride,
                 ),
+                process_identity=process,
                 session_file=location.read_key,
             )
             self.registry.register(attached)

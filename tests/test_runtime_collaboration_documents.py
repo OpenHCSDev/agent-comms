@@ -32,7 +32,7 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
         async with asyncio.timeout(15):
             created = await agent.new_session(cwd=str(native.project), mcp_servers=[])
             name = created.session_id
-            agent._comms.threads.attach_session(name, str(native.session))
+            agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require(name)), str(native.session), process=attachment_owner.process_identity)
             thread = agent._comms.registry.require(name)
             # The original preparation/publication owner initializes a fresh
             # native journal, then reobserves that same retained saved source.

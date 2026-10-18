@@ -11,6 +11,7 @@ from enum import Enum
 from pathlib import Path
 
 from .active_route import guard_original_root_write
+from .bus_publication import AgentOrigin
 from .channel_targets import ChannelTarget, Tag
 from .channels import Channel, SavedView
 from .cli_result import CliResult
@@ -191,7 +192,8 @@ class ChannelManagement:
                             f"{thread.name} {change.value} {channel.name}",
                             InfoKind,
                             role=MembershipConversationRole(change),
-                        )
+                        ),
+                        origin=AgentOrigin(),
                     )
         return updated
 
