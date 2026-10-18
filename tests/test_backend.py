@@ -27,6 +27,7 @@ from agent_comms.turn_phase import (
 )
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend, RefusedSend
 from agent_comms.pi_vocabulary import ThresholdCompactionReason
 from pi_session_turn import one_turn_events
 
@@ -2039,7 +2040,7 @@ if select.select([sys.stdin], [], [], 0.3)[0]:
         @contextmanager
         def send_boundary(public_id, native_id, text):
             checks.append((public_id, native_id, text))
-            yield False
+            yield AuthorityChangedSend()
 
         events = [
             event
@@ -2487,11 +2488,12 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
                 str(tmp_path),
                 session_file=str(session),
                 env_extra={"AGENT_COMMS_ROOT": str(tmp_path)},
-                send_boundary=lambda *_: nullcontext(False),
+                send_boundary=lambda *_: nullcontext(AuthorityChangedSend()),
             )
         ]
         assert large[-1].ok is False
-        assert "Input authority changed before Pi prompt send" in large[-1].text
+        assert "Input authority changed before native send." in large[-1].text
+        assert large[-1].reason_code == "input_authority_changed"
         assert not received.exists()
         # Startup is independently owned per native child; no global slot remains.
         assert NativeStartup(tmp_path).root == tmp_path
@@ -2659,7 +2661,7 @@ for line in sys.stdin:
             @contextmanager
             def revoked_goal(public_id, native_id, text):
                 assert public_id is None and len(native_id) == 32 and text == "denied"
-                yield False
+                yield AuthorityChangedSend()
 
             denied = [
                 event
@@ -2872,7 +2874,10 @@ for line in sys.stdin:
         assert [text for _, _, text in starts] == ["goal request", "channel mention"]
         assert len([e for e in events if isinstance(e, ae.InputStarted)]) == 2
 
-    @pytest.mark.parametrize(("decision", "expected_ok"), [(None, True), (False, False)])
+    @pytest.mark.parametrize(
+        ("decision", "expected_ok"),
+        [(RefusedSend(), True), (AuthorityChangedSend(), False)],
+    )
     async def test_unsent_followup_goal_defer_or_owner_stop(self, tmp_path, decision, expected_ok):
         checked = tmp_path / "send-boundary-checked"
         stub = _stub(
@@ -2911,7 +2916,7 @@ for line in sys.stdin:
         @contextmanager
         def send_boundary(public_id, native_id, text):
             if public_id is None:
-                yield True
+                yield GrantedSend()
             else:
                 assert (public_id, text) == ("bus-42", "late direct")
                 checked.write_text("authority checked")
