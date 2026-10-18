@@ -321,7 +321,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     from agent_comms.native_package import NativePackageError
     from agent_comms.threads import Thread
 
-    comms = Comms(tmp_path, private_initial_writes=True)
+    comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")

@@ -1,5 +1,6 @@
 """Default-OFF public ACP operator preplan; selected file bytes are not model tools."""
 
+from conftest import responder
 from __future__ import annotations
 
 import json
@@ -33,7 +34,6 @@ from agent_comms.coordination_cohort import sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.coordination_response import install_private_response_schema
 from agent_comms.coordinator import Coordination
-from agent_comms.message_bus import MessageBus
 from agent_comms.native_pi import NativePiUnavailable
 from agent_comms.native_prompt_binding import install_prompt_binding_schema
 from agent_comms.native_runtime_input import NativeRuntimeInput
@@ -76,7 +76,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         resource.write_bytes(b"before\n")
         package = base / "fake-package"
         package.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+        comms = Comms(root)
         for name, incarnation in (("sender", 51001.0), ("alpha", 51002.0), ("beta", 51003.0)):
             comms.registry.declare(
                 comms.registry.new_thread(name, frozenset({'team'}), str(work), process_identity=ProcessIdentity.capture(os.getpid()), created_at=incarnation, model='test/fake')
@@ -116,7 +116,7 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
                 prior_seq = comms.messaging.send_message(
                     "sender", "#team", f"@beta earlier {index}"
                 ).seq
-        bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+        bus = responder(root, comms.registry)
         if prior_seq:
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 await _accept_visible_deliveries(
@@ -255,7 +255,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
         resource.write_bytes(b"before\n")
         package = base / "fake-package"
         package.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True, private_claim_writes=True)
+        comms = Comms(root)
         sender_pid = os.getpid()
         comms.registry.declare(
             comms.registry.new_thread('sender', frozenset(), str(work), process_identity=ProcessIdentity.capture(sender_pid), created_at=61001.0)
@@ -331,7 +331,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
             )
             await attached.load_session(str(work), "beta")
             message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
-            bus = MessageBus(root / "bus.jsonl", comms.registry, private_response_writes=True)
+            bus = responder(root, comms.registry)
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 await _accept_visible_deliveries(
                     bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 61003.0).lookup, 0, owner_name="beta"

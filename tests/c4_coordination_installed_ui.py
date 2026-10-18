@@ -36,7 +36,7 @@ async def main():
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     os.environ.update(XDG_CONFIG_HOME=str(root / 'config'), XDG_STATE_HOME=str(root / 'state'),
                       XDG_DATA_HOME=str(root / 'data'), AGENT_COMMS_ROOT=str(root / 'wire'))
-    comms = Comms(root / 'wire', private_initial_writes=True)
+    comms = Comms(root / 'wire')
     comms.messaging.initialize_private_initial_protocol()
     owner = root.name
     for name in (owner, 'stopped', 'archived'):

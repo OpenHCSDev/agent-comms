@@ -22,6 +22,7 @@ from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .publisher import ParticipantPublisher
 from .message_reference import MessageReference
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import ObservedAttestation
@@ -123,10 +124,7 @@ class SelectedParticipant(MroDispatch):
     @classmethod
     @asynccontextmanager
     async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
-        bus = MessageBus(
-            comms.root / "bus.jsonl", comms.registry, private_response_writes=True,
-            private_claim_writes=comms.bus.publisher._private_claim_writes,
-        )
+        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, ParticipantPublisher)
         owner, participant, pending, sent_outcomes = await Coordination.run_async(
             store.session.path,
             lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),

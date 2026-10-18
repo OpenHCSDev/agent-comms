@@ -17,6 +17,7 @@ from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.launch_runtime import CallingThreadUnavailable
 from agent_comms.goals import Goal
 from agent_comms.message_bus import MessageBus
+from agent_comms.publisher import InitialWrites
 from agent_comms.messages import Message, HandoffKind, InfoKind
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
@@ -35,18 +36,18 @@ def test_private_marker_checks_relative_and_absolute_ancestor_permissions(
     monkeypatch.chdir(unsafe)
     for root in (Path("relative-wire"), unsafe / "absolute-wire"):
         with pytest.raises(RelationViolationError, match="ancestry is not trusted"):
-            Comms(root, private_initial_writes=True).messaging.initialize_private_initial_protocol()
+            Comms(root).messaging.initialize_private_initial_protocol()
         assert not (root / "bus_meta.json").exists()
         assert not (root / "bus.jsonl").exists()
     monkeypatch.chdir(tmp_path)
-    safe = Comms(Path("safe-relative"), private_initial_writes=True)
+    safe = Comms(Path("safe-relative"))
     assert len(safe.messaging.initialize_private_initial_protocol()) == 32
 
 
 @pytest.mark.skipif(os.name == "posix", reason="Windows private-bus fail-closed contract")
 def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> None:
     registry = Registration(tmp_path / "registry.json")
-    bus = MessageBus(tmp_path / "bus.jsonl", registry, private_initial_writes=True)
+    bus = MessageBus(tmp_path / "bus.jsonl", registry, InitialWrites)
     with pytest.raises(RelationViolationError, match="POSIX ownership"):
         bus.publisher.initialize_private_protocol()
 
@@ -323,7 +324,7 @@ class TestRegistration:
     def test_private_marker_can_precede_first_registry_snapshot(self, tmp_path: Path) -> None:
         root = tmp_path / "private-fresh"
         root.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(root)
         comms.messaging.initialize_private_initial_protocol()
         reopened = Comms(root)
         reopened.registry.declare(reopened.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
@@ -335,7 +336,7 @@ class TestRegistration:
     ) -> None:
         root = tmp_path / "private-wire"
         root.mkdir(mode=0o700)
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         comms.messaging.initialize_private_initial_protocol()
         registry_path = root / "registry.json"
@@ -357,7 +358,7 @@ class TestRegistration:
         from agent_comms import store_files
 
         root = tmp_path / "isolated-private-root"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         root_id = comms.messaging.initialize_private_initial_protocol()
         assert len(root_id) == 32
@@ -433,7 +434,7 @@ class TestRegistration:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         root = tmp_path / "new-private"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='sender', tags=frozenset(), worktree='/wt'))
         original_fsync = os.fsync
         def fsync(fd: int) -> None:
@@ -462,7 +463,7 @@ class TestRegistration:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stage: str
     ) -> None:
         root = tmp_path / "private"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
         comms.messaging.initialize_private_initial_protocol()
         original_pwrite = os.pwrite
@@ -491,7 +492,7 @@ class TestRegistration:
         self, tmp_path: Path, damage: str
     ) -> None:
         root = tmp_path / "guarded"
-        comms = Comms(root, private_initial_writes=True)
+        comms = Comms(root)
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt', process_identity=ProcessIdentity.capture(os.getpid())))
         comms.messaging.initialize_private_initial_protocol()
         cold = Registration(root / "registry.json")

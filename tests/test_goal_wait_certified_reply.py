@@ -1,5 +1,6 @@
 """Dependency replies retain original certified identities across registry changes."""
 
+from conftest import reader
 from agent_comms.messages import NoticeRole
 import os
 from agent_comms.tool_caller import NoThreadCaller
@@ -235,9 +236,7 @@ async def test_native(retained_native_acp_owner):
         comms.agents.finish_turn(peer_lease)
         assert await agent.inputs.drain_inbox(sid) == 0
         assert native.provider.posts == 3
-        from agent_comms.comms import Comms
-
-        reopened = Comms(comms.root, private_initial_writes=False, private_claim_writes=False)
+        reopened = reader(comms.root)
         assert isinstance(reopened.goals.goal_wait(sid), NoGoalWait)
         assert reopened.registry.require(sid).goal == parked_goal
         assert reopened.bus.log.messages_for_references((original.reference,)) == (original,)

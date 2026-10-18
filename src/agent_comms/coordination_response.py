@@ -43,6 +43,7 @@ from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.message_bus import MessageBus
+from agent_comms.publisher import ResponseWrites
 from agent_comms.messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole
 from agent_comms.private_send_rules import RunningTurnRegistryCheck
 from agent_comms.native_input_owner import RegistryOwner
@@ -381,7 +382,7 @@ def _require_bound_stores(bus: MessageBus, store: Coordination) -> None:
 
 
 def _require_response_writes(bus: MessageBus) -> None:
-    if bus.publisher._private_response_writes is not True:
+    if not isinstance(bus.publisher, ResponseWrites):
         raise PublicationActivationBlocked("private response publication is disabled")
 
 

@@ -63,6 +63,7 @@ from .queued_input import DeliveredInput
 from .schedule_rules import SelectedWakeCheck
 from .input_effects import InputEffects
 from .message_bus import MessageBus
+from .publisher import ResponseWrites
 from .routing import MessageRoute
 from .runtime import (
     UNBOUND_CONTROLLER,
@@ -378,9 +379,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             return 0
         if not owner.process_identity.runs_here():
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
-        bus = MessageBus(
-            self._comms.root / "bus.jsonl", self._comms.registry, private_response_writes=True
-        )
+        bus = MessageBus(self._comms.root / "bus.jsonl", self._comms.registry, ResponseWrites)
         def read_claim():
             with bus.log.certified_read() as source:
                 return source.marker.claimed_after_seq

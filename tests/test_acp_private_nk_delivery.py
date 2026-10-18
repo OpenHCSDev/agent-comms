@@ -4,6 +4,7 @@ Only model responses are faked; this does not prove provider delivery or
 activate private processing for existing public sessions.
 """
 
+from conftest import responder
 from __future__ import annotations
 from agent_comms.tool_caller import NoThreadCaller
 
@@ -29,7 +30,6 @@ from agent_comms.coordination_errors import ParticipantNotRegistered, Publicatio
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
 from agent_comms.goal_actions import SetGoalAction
-from agent_comms.message_bus import MessageBus
 from agent_comms.native_runtime_input import NativeRuntimeInput
 from agent_comms.participant_store import ParticipantStore
 from agent_comms.pi_payloads import PublishedMessageToolDetails
@@ -164,7 +164,7 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
     lookup = RecordedThreadIncarnation("fixture", comms.registry.require("beta").created_at).lookup
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "old-before-rename"}, caller=NoThreadCaller())
     if seal_old:
-        bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+        bus = responder(comms.root, comms.registry)
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             await _accept_visible_deliveries(bus, root_id, store.session.path, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
@@ -273,7 +273,7 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
     assert (comms.root / ".private-owner-rename.pending").is_file()
     with pytest.raises(RelationViolationError, match="Private owner rename is pending"):
         comms.messaging.send_message("sender", "beta", "not published after uncertain rename")
-    bus = MessageBus(comms.root / "bus.jsonl", comms.registry, private_response_writes=True)
+    bus = responder(comms.root, comms.registry)
     with (
         Coordination(str(comms.root / "coordination.sqlite3")) as store,
         pytest.raises(RelationViolationError, match="Private owner rename is pending"),

@@ -128,12 +128,11 @@ class NativeCoordinationSession(CoordinationSession):
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
         from .message_bus import MessageBus
+        from .publisher import ClaimWrites
         from .registration import Registration
 
         return MessageBus(
-            self.path.parent / "bus.jsonl",
-            Registration(self.path.parent / "registry.json"),
-            private_claim_writes=True,
+            self.path.parent / "bus.jsonl", Registration(self.path.parent / "registry.json"), ClaimWrites,
         )
 
     def boundary(self, bus=None, **options):
