@@ -73,8 +73,8 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
             from agent_comms.native_pi import NativePiTerminalFailure
             from delivery_owner_fixture import drain_diagnostic
 
-            # This is the background reply task, not an ACP request that is
-            # still awaiting its response. The accepted ACP request already ACKed.
+            # The caller got its reply when the input was queued. A later
+            # model failure comes from this separately running reply task.
             with pytest.raises(NativePiTerminalFailure, match="Scripted provider failure"):
                 await asyncio.wait_for(wake, 12)
             assert "Scripted provider failure" in drain_diagnostic(comms, "beta").reason
@@ -94,8 +94,8 @@ async def test_selected_turn_accepts_and_starts_fresh_input_once(
         assert comms.goals.goal_wait("beta") == (
             NoGoalWait() if goal_mode == "standby" and native_ok else before_wait
         )
-        # A real running inbox opens the canonical goal store even without a
-        # goal. Directory existence is not authority; the goal above is unchanged.
+        # A real running inbox opens the goal store even without a goal.
+        # The goal itself is checked above.
     finally:
         (control / "release").touch()
         await asyncio.gather(turn, return_exceptions=True)
