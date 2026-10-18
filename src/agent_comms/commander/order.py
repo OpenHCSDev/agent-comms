@@ -32,7 +32,7 @@ from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
-                     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
+                     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
@@ -84,7 +84,8 @@ def open_todos(unit=None):
 
 def progress() -> dict[str, OrderProgress]:
     """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
-    return call(CommsTodoListTool()).progress
+    listed: TodoList = call(CommsTodoListTool())
+    return listed.progress
 
 
 def struck(todo, unit):
@@ -586,13 +587,14 @@ def deadline_lines(held: list[Todo]) -> list[str]:
     An open order whose work stopped moving prints STALL with its progress line, whatever is due."""
     now = time.time()
     pending = [t for t in held if t.pending]
-    past = [t for t in pending if t.deadline.at < now]
+    past = [t for t in pending if t.deadline.recorded_at('An order deadline') < now]
     read = progress() if pending else {}
-    late = [f'{t.assignment.owner} (due {hhmm(t.deadline)}, order {t.order.id}, {read[t.id].line}'
-            f'{replied(t.assignment.owner, t.order.at.at)})' for t in past if read[t.id].strikes]
-    stalled = [f'STALL {t.id} {t.assignment.owner}: {read[t.id].line} -> push it now or reassign'
-               for t in pending if read[t.id].stalled(t.order.at.at, now)]
-    passed = [f'DUE PASSED {t.id} {t.assignment.owner} (due {hhmm(t.deadline)}): {read[t.id].line}'
+    late = [f'{t.holder} (due {hhmm(t.deadline)}, order {t.order.id}, {read[t.id].line}'
+            f'{replied(t.holder, t.order.at.recorded_at("An order"))})'
+            for t in past if read[t.id].strikes]
+    stalled = [f'STALL {t.id} {t.holder}: {read[t.id].line} -> push it now or reassign'
+               for t in pending if read[t.id].stalled(t.order.at.recorded_at('An order'), now)]
+    passed = [f'DUE PASSED {t.id} {t.holder} (due {hhmm(t.deadline)}): {read[t.id].line}'
               for t in past if not read[t.id].strikes]
     alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
              'missed = order strike, 2 strikes = fire')

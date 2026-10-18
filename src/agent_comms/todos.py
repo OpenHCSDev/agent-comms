@@ -123,10 +123,11 @@ class PullRequest:
     updated_at: float = 0.0
 
     @classmethod
-    def listed(cls, number: str, title: str, head: str, merge: str, merged: str, updated: str) -> Self:
+    def listed(cls, number: str, title: str, head: str, merge: str, merged: str,
+               updated: str) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
-        return cls(int(number), title, head, merge or None, _github_time(merged) if merged else None,
-                   _github_time(updated))
+        return cls(int(number), title, head, merge or None,
+                   _github_time(merged) if merged else None, _github_time(updated))
 
     def names(self, problem: str) -> bool:
         return re.search(rf"\b{re.escape(problem)}\b", self.title) is not None
@@ -151,8 +152,8 @@ class PullRequests:
         listed = subprocess.run(
             ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
              "--json", "number,title,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
-             '.[] | [.number, .title, .headRefOid, .mergeCommit.oid // "", .mergedAt // "", .updatedAt]'
-             " | @tsv"),
+             '.[] | [.number, .title, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
+             " .updatedAt] | @tsv"),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
             raise ValueError(listed.stderr.strip() or f"gh pr list -R {repo} failed.")
@@ -200,8 +201,9 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     @classmethod
     def read(cls, todo: Todo, checkout_base: Path, pulls: PullRequests) -> OrderProgress:
-        assert todo.assignment is not None, "Only a held order has progress."
-        source = ProgressSource(todo, checkout_base / f"{todo.assignment.owner}--{todo.id}", pulls)
+        owner = todo.holder
+        assert owner, "Only a held order has progress."
+        source = ProgressSource(todo, checkout_base / f"{owner}--{todo.id}", pulls)
         try:
             members = (MergedProgress, OpenPrProgress, CommittedProgress, PushedProgress)
             found = (progress for member in members if (progress := member.found(source)))
