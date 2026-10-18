@@ -107,7 +107,6 @@ def edit_order(edit, msg):
     return candidates[0]
 
 
-
 def alarm():
     while True:
         late = [e for e in unjudged() if time.time() - e['at'] > 300]
