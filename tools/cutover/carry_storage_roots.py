@@ -1,23 +1,25 @@
-"""Carry storage fields in the registry and saved owner releases together.
+"""Storage roots without a checkout list (P430).
 
-Dry-run copies first. Stop old writers before applying the new registry shape.
-All records must decode before either store is written. Sessions and input
-attempts are not opened or changed.
+Storage roots keep only the scratch root; the projects a thread left move to
+earlier_projects. Every registry row must decode before the registry is written.
+Before an installation that still reads saved JSON releases stops its owners,
+those releases get the checkout list it expects.
 """
 from __future__ import annotations
 
-import argparse
 import copy
 import json
+import os
 import sqlite3
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_lifecycle import OwnerReleaseStore
 from agent_comms.registry_store import RegistryStore
 from agent_comms.storage_rules import StorageRoots, StorageRule
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
+
+from cutover.carry import Carried, Carry
 
 
 def carry_thread(row: dict, rule: StorageRule) -> None:
@@ -36,7 +38,12 @@ def carry_thread(row: dict, rule: StorageRule) -> None:
 
 
 def prepare_release(row: dict, rule: StorageRule) -> None:
-    """Run with the CURRENT interpreter so its stop command can read releases."""
+    """Run with the running installation's src: a release it already reads is left alone."""
+    try:
+        FieldCodec.decode(Thread, row)
+        return
+    except (ValueError, TypeError, KeyError):
+        pass
     old = row.get('storage_roots', {})
     paths = (*old.get('checkouts', ()), *row.pop('previous_worktrees', ()), row['worktree'])
     roots = FieldCodec.decode(StorageRoots, {
@@ -49,9 +56,11 @@ def prepare_release(row: dict, rule: StorageRule) -> None:
 def published_goals(root: Path, registry: dict) -> dict:
     """Use the publication already carried for this identity, never a new cut."""
     goals = [row['goal'] for row in registry['threads'].values() if row.get('goal')]
-    with sqlite3.connect((root / 'goal_history.sqlite3').as_uri() + '?mode=ro', uri=True) as db:
-        for pair in db.execute('SELECT "before", "after" FROM goal_history_entry'):
-            goals.extend(json.loads(raw) for raw in pair if raw is not None)
+    history = root / 'goal_history.sqlite3'
+    if history.exists():
+        with sqlite3.connect(history.as_uri() + '?mode=ro', uri=True) as db:
+            for pair in db.execute('SELECT "before", "after" FROM goal_history_entry'):
+                goals.extend(json.loads(raw) for raw in pair if raw is not None)
     published = {}
     for goal in goals:
         if goal is None:
@@ -62,73 +71,64 @@ def published_goals(root: Path, registry: dict) -> dict:
     return published
 
 
-def carry(path: Path, *, apply: bool = False, prepare_stop: bool = False) -> dict:
-    registry = RegistryStore(path)
-    releases = OwnerReleaseStore(path.with_name('owner_release_receipts.json'))
-    root = path.parent
-    with _store_lock(root / 'wire'), registry.locked(), releases.locked():
-        if apply:
-            registry.private_guard_unlocked()
-        rule = StorageRule.load(root)
-        originals = {registry.path: registry.path.read_text(),
-                     releases.path: releases.path.read_text()}
-        documents = {name: json.loads(text) for name, text in originals.items()}
-        published = published_goals(root, documents[registry.path])
-        sources = ((registry, documents[registry.path]['threads']),
-                   (releases, {name: record['thread']
-                               for name, record in documents[releases.path].items()}))
-        convert = carry_thread
-        if prepare_stop:
-            sources = sources[1:]
-            convert = prepare_release
-        reports = {}
-        for store, rows in sources:
-            changed = 0
-            failures = []
-            for name, row in rows.items():
-                before = copy.deepcopy(row)
-                try:
-                    convert(row, rule)
-                    goal = row.get('goal')
-                    if goal is not None and 'published_seq' not in goal:
-                        goal['published_seq'] = published[goal['id']]
-                    FieldCodec.decode(Thread, row)
-                except (ValueError, TypeError, KeyError) as error:
-                    failures.append({'thread': name, 'error': str(error)})
-                changed += before != row
-            if not failures:
-                FieldCodec.decode(store.record_type, documents[store.path])
-            reports[store.path.name] = {'rows': len(rows), 'changed': changed,
-                                       'decode_failures': failures}
-        clean = not any(report['decode_failures'] for report in reports.values())
-        if apply and not clean:
-            raise ValueError(json.dumps(reports, sort_keys=True))
-        if apply:
-            written = []
-            try:
-                for store, _ in sources:
-                    if reports[store.path.name]['changed']:
-                        store._write_unlocked(json.dumps(documents[store.path], indent=2))
-                        written.append(store)
-            except BaseException:
-                for store in reversed(written):
-                    store._write_unlocked(originals[store.path])
-                raise
-    return {'stores': reports, 'clean': clean, 'applied': apply}
+def decoded(rows: dict, convert, rule: StorageRule, published: dict) -> int:
+    """Convert every row in place; all must decode as this src's Thread."""
+    changed = 0
+    failures = []
+    for name, row in rows.items():
+        before = copy.deepcopy(row)
+        try:
+            convert(row, rule)
+            goal = row.get('goal')
+            if goal is not None and 'published_seq' not in goal:
+                goal['published_seq'] = published[goal['id']]
+            FieldCodec.decode(Thread, row)
+        except (ValueError, TypeError, KeyError) as error:
+            failures.append({'thread': name, 'error': str(error)})
+        changed += before != row
+    if failures:
+        raise ValueError(json.dumps(failures, sort_keys=True))
+    return changed
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('registry', type=lambda value: Path(value).expanduser().resolve())
-    parser.add_argument('--apply', action='store_true')
-    parser.add_argument('--prepare-stop', action='store_true',
-                        help='Current runtime: repair old release records before stopping workers')
-    args = parser.parse_args()
-    result = carry(args.registry, apply=args.apply, prepare_stop=args.prepare_stop)
-    print(json.dumps(result, sort_keys=True))
-    if not result['clean']:
-        raise SystemExit(1)
+class StorageRootsScratch(Carry):
+    """Storage roots keep only the scratch root; projects a thread left move to earlier_projects."""
+
+    after = None
+
+    @classmethod
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
+        registry = RegistryStore(root / 'registry.json')
+        with registry.locked():
+            if apply:
+                registry.private_guard_unlocked()
+            document = json.loads(registry.path.read_text())
+            changed = decoded(document['threads'], carry_thread, StorageRule.load(root),
+                                 published_goals(root, document))
+            FieldCodec.decode(registry.record_type, document)
+            if apply and changed:
+                registry._write_unlocked(json.dumps(document, indent=2))
+        return Carried(changed, {'threads': len(document['threads'])},
+                       (registry.path.name, registry.guard_path.name) if changed else ())
+
+    @classmethod
+    def before_stop(cls, root: Path, *, apply: bool) -> Carried:
+        """Saved JSON releases written before checkouts were recorded get them, so a
+        running installation that still reads that file can stop its owners."""
+        path = root / 'owner_release_receipts.json'
+        if not path.exists():
+            return Carried(0)
+        with _store_lock(path):
+            document = json.loads(path.read_text())
+            changed = decoded({name: record['thread'] for name, record in document.items()},
+                                 prepare_release, StorageRule.load(root), {})
+            if apply and changed:
+                stage = path.with_name(f'.{path.name}.carry')
+                stage.write_text(json.dumps(document, indent=2))
+                stage.chmod(0o600)
+                os.replace(stage, path)
+        return Carried(changed, {'releases': len(document)}, (path.name,) if changed else ())
 
 
 if __name__ == '__main__':
-    main()
+    StorageRootsScratch.main()

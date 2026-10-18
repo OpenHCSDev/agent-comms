@@ -26,26 +26,27 @@ class PrivateNkLaunch:
         """This root's launch from the owners of its facts, or None for an ordinary root.
 
         Without a root, the process's selected route names it. The marker owns
-        the root ID. A published route for this root owns its package; otherwise
-        this installation's pin does. A parent and its child read the same
-        marker, route and pin, so they derive the same launch.
+        the root ID and this installation's pin owns the package. A parent and
+        its child read the same marker and pin, so they derive the same launch.
         """
-        from .active_route import read_active_route, resolve_comms_route
+        from .active_route import resolve_comms_route
 
         root = resolve_comms_route(root).root
         metadata = WireLog(root / "bus.jsonl").read_metadata_unlocked()
         if not metadata.private:
             return None
-        route = read_active_route()
-        if route is not None and route.root == root:
-            return cls(root, route.wire_root_id, route.native_package)
+        return cls.installed(root, metadata.wire_root_id)
+
+    @classmethod
+    def installed(cls, root: Path, wire_root_id: str) -> PrivateNkLaunch:
+        """A private root's launch with this installation's pinned native package."""
         try:
             package = pinned_native_package()
         except NativePackageError as error:
             raise PublicationActivationBlocked(
                 "private owner launch needs this installation's prepared native package"
             ) from error
-        return cls(root, metadata.wire_root_id, package)
+        return cls(root, wire_root_id, package)
 
     def validate(self) -> Path:
         """Recheck this authority before a new owner process can be reserved.
