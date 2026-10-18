@@ -22,6 +22,7 @@ from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
 from .launch_runtime import ThreadLaunch
 from .native_entries import NativeEntry
+from .native_transcript import SessionCut
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
 from .store_files import SharedLock, _store_lock
@@ -626,13 +627,8 @@ class TranscriptReadState(ThreadOwnedState):
             total.record(name, result, pending)
         return TranscriptUnread(result, frozenset(pending))
 
-    def mark_read(self, viewer: str, source: str, through: int) -> None:
-        revision = FileRevision.capture(Path(source))
-        if revision is None or not 0 <= through <= revision.size:
-            raise ValueError("Transcript changed; refresh before marking it read.")
-        self.reads.mark_transcript(
-            viewer, source, revision.identity.inode, through, revision.size
-        )
+    def mark_read(self, viewer: str, source: str, through: int, cut: SessionCut) -> None:
+        cut.mark_read(self.reads, viewer, source, through)
 
 
 _shared_lock = RLock()

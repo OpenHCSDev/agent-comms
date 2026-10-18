@@ -5,6 +5,7 @@ from functools import partial
 
 from .pi_payloads import PiResponseData
 from .native_session_reopen import NativeSessionIdentity
+from .tool_result import DeclaredReply
 from .turn_context import (
     ContextManifest, ContextSourceText, MeasuredNativeSegment, PreviewProvenance,
     Provenance, SegmentManifest, TurnContext,
@@ -41,7 +42,7 @@ class NativeContextManifestData(PiResponseData):
 
 
 @dataclass(frozen=True)
-class NativeContextData(PiResponseData):
+class NativeContextData(PiResponseData, DeclaredReply):
     strict_fields = True
     counter: str
     identity: NativeSessionIdentity

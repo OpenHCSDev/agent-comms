@@ -8,7 +8,7 @@ from dataclasses import replace
 from functools import cached_property
 from itertools import chain
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
 from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
@@ -16,7 +16,7 @@ from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait
+from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait, StandbyReview
 from .registration import Registration
 from .agent_activity import AgentActivity
 
@@ -29,8 +29,8 @@ from .goals import Goal
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
-from .input_attempt import ReservedInput
-from .input_disposition import InputDispositions
+from .input_attempt import ReservedInput, UnresolvedInput
+from .input_disposition import DeliveryOverview, InputDispositions
 from .turn_lease import FinishedTurnFence
 from .todos import TodoStore
 from .wire_log import ConversationSourceWindowRequest
@@ -86,7 +86,7 @@ class Goals:
             store.recover_unreserved_ready(generation.goal_id, generation.number)
             return store.ready_grant(generation.goal_id, generation.number)
 
-    def unresolved_inputs(self, name: str) -> list[dict[str, Any]]:
+    def unresolved_inputs(self, name: str) -> tuple[UnresolvedInput, ...]:
         """Project durable unresolved inputs; reading never schedules another attempt."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             rows = (
@@ -94,7 +94,7 @@ class Goals:
                 .unresolved(aliases := self.registry.entry(name).entry.names)
                 .unknown(aliases)
             )
-            return [row.public() for row in rows]
+            return tuple(UnresolvedInput.of(row) for row in rows)
 
     def input_delivery(
         self,
@@ -102,7 +102,7 @@ class Goals:
         *,
         include_history: bool = False,
         awaiting_keys: frozenset[str] | None = None,
-    ) -> dict[str, Any]:
+    ) -> DeliveryOverview:
         """Project durable notices using current owner queue facts when available."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             aliases = self.registry.entry(name).entry.names
@@ -116,7 +116,7 @@ class Goals:
 
     def dismiss_historical_inputs(
         self, name: str, *, awaiting_keys: frozenset[str] | None = None
-    ) -> dict[str, Any]:
+    ) -> DeliveryOverview:
         """Dismiss only historical notices; UNKNOWN remains unresolved and unreplayable."""
         with _store_lock(self._wire_lock_path):
             aliases = self.registry.entry(name).entry.names
@@ -124,10 +124,11 @@ class Goals:
                 aliases, awaiting_keys=awaiting_keys
             )
 
-    def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> dict:
+    def goal_input_review(self, name: str, goal_id: str, wait_for: Sequence[str]) -> StandbyReview:
         """Project exact review eligibility for one current goal and dependency set."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            return self._goal_input_review(self.registry.require(name), goal_id, wait_for).public()
+            review = self._goal_input_review(self.registry.require(name), goal_id, wait_for)
+            return review.standby_review()
 
     def _goal_input_review(
         self, thread: Thread, goal_id: str, wait_for: Sequence[str]

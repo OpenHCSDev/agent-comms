@@ -126,7 +126,7 @@ def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         comms.goals.update_goal("owner", action)
     review = comms.goals.goal_input_review("owner", goal.id, ["peer"])
-    assert review["reviewed_inputs"] == [key]
+    assert list(review.reviewed_inputs) == [key]
     comms.goals.update_goal("owner", replace(action, reviewed_inputs=(key,)))
     row = stored_inputs(store.root).rows[key]
     assert row.accepts_reservation and row.reviewed_for_goal(goal.id)
