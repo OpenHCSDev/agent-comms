@@ -180,7 +180,7 @@ class ExternalDraftRow(TypedTable, TranscriptDraft):
     def external_row(self):
         return self
 
-    def end_turn(self, transcript) -> None:
+    def end_turn(self, transcript: TypedStore) -> None:
         with transcript.writing() as connection:
             self.delete(connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
 
