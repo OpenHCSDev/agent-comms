@@ -32,8 +32,8 @@ from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .extension_ui import UiRequest
     from .agent_events import AgentEvent
+    from .extension_ui import UiRequest
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
     from .threads import Thread

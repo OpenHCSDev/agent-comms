@@ -8,8 +8,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
-from .agent_events import UnpublishedNativeObservation
 from . import turn_phase as phases
+from .agent_events import UnpublishedNativeObservation
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_turn_context import NativeContextManifestData

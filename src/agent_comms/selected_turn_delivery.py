@@ -17,8 +17,8 @@ from .coordinator import Coordination
 from .diagnostics import record_request_progress
 from .extension_ui import NoUiRequest
 from .following_inputs import FollowingInputs
-from .native_arguments import SelectedModel
 from .maintenance_barrier import MaintenanceBarrier
+from .native_arguments import SelectedModel
 from .native_pi import NativeTurnResult
 from .native_startup import NativeStartup
 from .tracked_turn import TrackedDone, TrackedTurnSession
@@ -75,11 +75,16 @@ class SelectedTurnDelivery(TurnDelivery):
                     thinking_level=thread.thinking_level,
                     environment=self.environment,
                     ingress=MaintenanceBarrier(claim.bus._registry.store.path),
-                    startup=NativeStartup(claim.bus.log.path.parent, measurements=claim._measurements),
+                    startup=NativeStartup(
+                        claim.bus.log.path.parent, measurements=claim._measurements
+                    ),
                     selected_tool_mode=self.selected_tool_mode,
                     observe_event=observe,
-                    request_observer=partial(record_request_progress, claim.bus.log.path.parent,
-                                             thread.require_turn_lease()),
+                    request_observer=partial(
+                        record_request_progress,
+                        claim.bus.log.path.parent,
+                        thread.require_turn_lease(),
+                    ),
                     prompt_send_boundary=claim,
                     execution=self.execution,
                     following=self.following,
