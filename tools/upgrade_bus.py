@@ -357,8 +357,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.prepare_native()
         maintenance.clear(held)
         start(installed, root, running)
-        print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); bus restored, "
-              f"maintenance cleared and {running} restarted", file=sys.stderr)
+        print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
+              f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
         raise
     maintenance.clear(held)
     start(installed, root, running)
