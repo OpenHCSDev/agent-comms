@@ -25,7 +25,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedStore, TypedTable
+from .typed_table import Column, Index, TypedStore, TypedTable
 from .recorded_time import EventTime, UnrecordedEventTime
 from .change_report import FileLine
 from .goals import OrderCheck, ProblemGoalOrder
@@ -794,6 +794,10 @@ class TodoState(DeclaredFamily, affix="TodoState"):
     open: ClassVar[bool] = True  # on the board until closed with installed evidence
 
     @classmethod
+    def open_names(cls) -> tuple[str, ...]:
+        return tuple(member.declared_name for member in cls.members_with(cls) if member.open)
+
+    @classmethod
     def prepare_change(cls, goals, current):
         pass
 
@@ -1110,6 +1114,8 @@ class ChangeTodoState(TodoOperation):
 
 @dataclass(frozen=True, slots=True)
 class Todo(TypedTable):
+    indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
+
     id: str = field(metadata={"sql": Column(primary_key=True)})
     repo: str
     text: str
@@ -1302,7 +1308,7 @@ class TodoStore(TypedStore):
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
-        return any(todo.pending for todo in self._select(
+        return any(todo.pending for todo in self._open(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=?",
             (owner.name, owner.wire_birth)))
 
@@ -1313,7 +1319,12 @@ class TodoStore(TypedStore):
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 
     def for_commander(self, commander: ThreadIncarnation) -> tuple[Todo, ...]:
-        return self._select("creator=? AND creator_created=?", (commander.name, commander.created_at))
+        return self._open("creator=? AND creator_created=?", (commander.name, commander.created_at))
+
+    def _open(self, where: str, parameters: tuple) -> tuple[Todo, ...]:
+        states = TodoState.open_names()
+        selected = ','.join('?' for state in states)
+        return self._select(f"state IN ({selected}) AND ({where})", (*states, *parameters))
 
     def create(
         self,
