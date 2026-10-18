@@ -9,7 +9,7 @@ from typing import ClassVar, Literal
 from xml.etree import ElementTree
 
 from metaclass_registry import RegistryConfig
-from pydantic import Field, JsonValue, TypeAdapter, field_validator, model_validator
+from pydantic import Field, JsonValue, TypeAdapter, ValidationError, field_validator, model_validator
 
 from agent_comms.activity import ActivityState
 from agent_comms.field_codec import FieldCodec
@@ -28,6 +28,10 @@ from agent_comms.transcript_events import (
 from .shared import (
     ActiveItem,
     FinishedItem,
+    HiddenItem,
+    HistoryNotice,
+    SessionFacts,
+    Summarized,
     ToolCall,
     TranscriptUpdate,
     StatusUpdate,
@@ -199,6 +203,13 @@ class ClaudeSession:
     turn: ClaudeTurn = field(default_factory=UnknownTurn)
     tools: dict[str, ToolCall] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
+    project: str = ''
+
+    def located(self, cwd: str) -> tuple[TranscriptUpdate, ...]:
+        if not cwd or cwd == self.project:
+            return ()
+        self.project = cwd
+        return (SessionFacts(project=cwd),)
 
     def started(self, call: ToolCall) -> None:
         self.tools[call.id] = call
@@ -231,11 +242,17 @@ class ClaudeHeader(WireHeader):
     def local_command(cls, value: dict) -> dict:
         # Local slash commands (/login, /cost) are written as user records
         # without a prompt; they never reach the model. Decode that shape here.
+        # Harness notes (reminders, skill text) are meta records with no sender;
+        # a compaction summary is a user record flagged as one.
         if value.get('type') == 'user':
             if value.get('origin', {}).get('kind') == TaskNotification.wire_tag:
                 return {'type': TaskUserRecord.wire_tag}
             if 'promptId' not in value:
                 return {'type': LocalCommandOutput.wire_tag}
+            if value.get('isCompactSummary'):
+                return {'type': CompactSummary.wire_tag}
+            if value.get('isMeta') and 'origin' not in value:
+                return {'type': HarnessNote.wire_tag}
         return value
 
 
@@ -243,9 +260,14 @@ class ClaudeRecord(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = ClaudeHeader
+    cwd: str = ''
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return ()
+
+    def begins_history(self) -> bool:
+        """Whether Claude replaced everything before this record (compaction)."""
+        return False
 
 
 class AssistantBlock(TaggedWire, ABC):
@@ -364,14 +386,23 @@ class ToolUse(AssistantBlock):
     input: dict[str, JsonValue]
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        arguments_type = ClaudeToolArguments.types.get(self.name)
-        if arguments_type is None:
-            call = ToolCall(self.id, self.name, self.input)
-        else:
-            arguments = arguments_type.model_validate(self.input)
-            call = ToolCall(self.id, FieldCodec.encode(arguments.declaration), arguments.model_dump(), arguments.diff())
+        call = self.call()
         session.started(call)
         return session.turn.active(self.id, session.phase, ActivityState.WORKING, call.title)
+
+
+    def call(self) -> ToolCall:
+        """A call to a tool with a declared shape uses that declaration. The model can send input
+        that does not fit (Claude refuses it with an error result); it is shown as sent."""
+        arguments_type = ClaudeToolArguments.types.get(self.name)
+        if arguments_type is not None:
+            try:
+                arguments = arguments_type.model_validate(self.input)
+            except ValidationError:
+                pass
+            else:
+                return ToolCall(self.id, FieldCodec.encode(arguments.declaration), arguments.model_dump(), arguments.diff())
+        return ToolCall(self.id, self.name, self.input)
 
 
 class AssistantMessage(WireModel):
@@ -415,7 +446,8 @@ class KindHeader(WireHeader):
 
 
 class PromptOrigin(TaggedWire, ABC):
-    """Who wrote a user record. Only a person's prompt is shown as input."""
+    """Who wrote a user record. Only a person's prompt is shown live as input;
+    another agent's message is conversation history the live view hides."""
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = KindHeader
@@ -425,12 +457,21 @@ class PromptOrigin(TaggedWire, ABC):
         return ()
 
 
+class AgentPrompt(PromptOrigin):
+    """Input another agent wrote: the commanding session, or a peer session."""
+
+    def prompt(self, record: TimedRecord, text: str,
+               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp),)),)
+
+
 class HumanPrompt(PromptOrigin):
     wire_tag = 'human'
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return session.finished(record.uuid, (UserTranscript(text, timestamp=record.timestamp),))
+        return (TurnStarted(), *session.finished(
+            record.uuid, (UserTranscript(text, timestamp=record.timestamp),)))
 
 
 class TaskNotification(PromptOrigin):
@@ -439,8 +480,13 @@ class TaskNotification(PromptOrigin):
     kind: Literal['task-notification']
 
 
-class PeerMessage(PromptOrigin):
+class PeerMessage(AgentPrompt):
     wire_tag = 'peer'
+
+
+class CoordinatorMessage(AgentPrompt):
+    """The session that started this subagent, writing to it while it works."""
+    wire_tag = 'coordinator'
 
 
 class AutoContinuation(PromptOrigin):
@@ -448,7 +494,12 @@ class AutoContinuation(PromptOrigin):
 
 
 class ToolSupplied(PromptOrigin):
-    """Records Claude writes without an origin: tool results and summaries."""
+    """Text Claude records without a sender: a subagent's task, or a local command's echo.
+    It starts a turn; the live view does not show it as the person's prompt."""
+
+    def prompt(self, record: TimedRecord, text: str,
+               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp),)))
 
 
 class UserBlock(TaggedWire, ABC):
@@ -465,7 +516,7 @@ class UserText(UserBlock, TextContent):
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
             return (TurnEnded(),)
-        return super().updates(record, session) + record.origin.prompt(record, self.text, session)
+        return record.origin.prompt(record, self.text, session)
 
 
 class UserImage(UserBlock, ImageContent):
@@ -557,13 +608,20 @@ class UserRecord(ClaudeRecord, TimedRecord):
     promptId: str
     message: UserMessage
     origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
-    isMeta: bool = False
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         session.turn = KnownTurn(self.promptId)
-        if self.isMeta:
-            return ()
         return tuple(update for block in self.message.content for update in block.updates(self, session))
+
+
+class CompactSummary(UserRecord):
+    """Claude's summary of the conversation before its latest compaction."""
+    wire_tag = 'compact-summary'
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        session.turn = KnownTurn(self.promptId)
+        return (TurnStarted(), Summarized('\n'.join(
+            block.text for block in self.message.content if isinstance(block, UserText))))
 
 
 class TaskUserRecord(ClaudeRecord, TimedRecord):
@@ -587,6 +645,9 @@ class SystemEvent(TaggedWire, ABC):
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return ()
 
+    def begins_history(self) -> bool:
+        return False
+
 
 class TurnDuration(SystemEvent):
     wire_tag = 'turn_duration'
@@ -600,6 +661,9 @@ class CompactBoundary(SystemEvent, TimedRecord):
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp),))
+
+    def begins_history(self) -> bool:
+        return True
 
 
 class StopHookSummary(SystemEvent):
@@ -643,6 +707,9 @@ class SystemRecord(ClaudeRecord):
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return self.subtype.updates(session)
+
+    def begins_history(self) -> bool:
+        return self.subtype.begins_history()
 
 
 class MetadataRecord(ClaudeRecord, ABC):
@@ -732,6 +799,20 @@ class CostState(MetadataRecord):
 class LocalCommandOutput(MetadataRecord):
     """A terminal-only slash command and its output."""
     wire_tag = 'local-command'
+
+
+class HarnessNote(MetadataRecord):
+    """Text the harness adds for the model without a sender: reminders, skill bodies, image notes."""
+    wire_tag = 'harness-note'
+
+
+class ForkContextReference(MetadataRecord):
+    """A forked subagent starts from its parent's context, stored in the parent's transcript."""
+    wire_tag = 'fork-context-ref'
+    parentSessionId: str
+
+    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+        return (HistoryNotice(f'Context inherited from session {self.parentSessionId} is not imported.'),)
 
 
 CLAUDE_RECORD = TypeAdapter(ClaudeRecord.declared_union())

@@ -6,16 +6,21 @@ from abc import ABC, abstractmethod
 from typing import ClassVar, Literal
 
 from metaclass_registry import RegistryConfig
-from pydantic import ConfigDict, Field, JsonValue
+from pydantic import ConfigDict, Field, JsonValue, model_validator
 
 from agent_comms.activity import ActivityState
 from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.transcript_events import AssistantTranscript, ThinkingTranscript, TextTranscript, TranscriptEvent
+from agent_comms.transcript_events import (
+    AssistantTranscript, ContextTranscript, ThinkingTranscript, TextTranscript, TranscriptEvent, UserTranscript,
+)
 
 from .shared import (
     ActiveItem,
     CompletedItem,
+    HiddenItem,
+    HistoryNotice,
+    Summarized,
     StartedItem,
     TextDraft,
     ToolCall,
@@ -29,7 +34,13 @@ class MessageTime(WireModel):
 
 
 class RoleHeader(WireHeader):
-    type: str = Field(alias='role')
+    @model_validator(mode='before')
+    @classmethod
+    def summary(cls, value: dict) -> dict:
+        # The assistant message a compaction writes is flagged as the summary.
+        if value.get('role') == AssistantMessage.wire_tag and value.get('summary') is True:
+            return {'type': SummaryMessage.wire_tag}
+        return {'type': value.get('role')}
 
 
 class MessageInfo(TaggedWire, ABC):
@@ -49,8 +60,8 @@ class UserMessage(MessageInfo):
     role: Literal['user']
 
     def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
-        # Wire history owns incoming bus messages; never echo them as CLI output.
-        return ()
+        # Wire history owns incoming bus messages; the live view never echoes them as CLI output.
+        return part.prompted()
 
 
 class AssistantMessage(MessageInfo):
@@ -60,6 +71,17 @@ class AssistantMessage(MessageInfo):
 
     def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
         return part.present(self)
+
+
+class SummaryMessage(AssistantMessage):
+    """OpenCode's summary of the conversation before a compaction: shown live as the reply it
+    is, and for history it replaces everything before it."""
+    wire_tag = 'summary'
+    role: Literal['assistant']
+    summary: Literal[True]
+
+    def present(self, part: Part) -> tuple[TranscriptUpdate, ...]:
+        return (*part.present(self), *part.summarized())
 
 
 class Part(TaggedWire, ABC):
@@ -77,6 +99,14 @@ class Part(TaggedWire, ABC):
 
     @abstractmethod
     def present(self, message: AssistantMessage) -> tuple[TranscriptUpdate, ...]: ...
+
+    def prompted(self) -> tuple[TranscriptUpdate, ...]:
+        """This part in a user's message, kept for history only."""
+        return ()
+
+    def summarized(self) -> tuple[TranscriptUpdate, ...]:
+        """This part in a compaction summary."""
+        return ()
 
 
 class PartTime(WireModel):
@@ -113,6 +143,12 @@ class TextPart(TextualPart):
 
     def matches(self, session: str, text: str) -> bool:
         return self.sessionID == session and self.text == text
+
+    def prompted(self) -> tuple[TranscriptUpdate, ...]:
+        return (HiddenItem((UserTranscript(self.text),)),)
+
+    def summarized(self) -> tuple[TranscriptUpdate, ...]:
+        return (Summarized(self.text),)
 
 
 class ReasoningPart(TextualPart):
@@ -215,6 +251,12 @@ class StructuralPart(Part, ABC):
 
 class FilePart(StructuralPart):
     wire_tag = 'file'
+    filename: str = ''
+    mime: str = ''
+
+    def prompted(self) -> tuple[TranscriptUpdate, ...]:
+        return (HistoryNotice('Attachment contents are not imported; source references are retained.'),
+                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]'),)))
 
 
 class AgentPart(StructuralPart):

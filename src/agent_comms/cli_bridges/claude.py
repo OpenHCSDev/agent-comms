@@ -1,70 +1,122 @@
-"""Claude Code notifications and completed transcript blocks for Core."""
+"""Claude Code sessions: their stored transcripts, and the live bridge that follows one."""
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from contextlib import aclosing
 from pathlib import Path
-from typing import AsyncIterator
+from typing import AsyncIterator, BinaryIO, Self
 
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.harness_install import ClaudeCodeHarness
 from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
-from .claude_protocol import CLAUDE_RECORD, ClaudeSession, ClaudeMonitorFrame
+from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
+from .history import JsonLinesFile, OnlineHistory
 from .shared import (
-    LineMonitorBridge, Options, TranscriptUpdate,
+    Binding, LineMonitorBridge, Options, SessionFacts, TranscriptUpdate,
     run_bridge,
 )
 
 
-class ClaudeBridge(LineMonitorBridge):
+class ClaudeTranscript(JsonLinesFile):
+    """Claude Code writes one transcript file per session (`<id>.jsonl`) and per subagent
+    (`<id>/subagents/agent-<id>.jsonl`), under ~/.claude/projects."""
+
+    harness = ClaudeCodeHarness
+
+    def decode_line(self, raw: bytes) -> ClaudeRecord:
+        return CLAUDE_RECORD.validate_json(raw)
+
+    def begins_history(self, record: ClaudeRecord) -> bool:
+        return record.begins_history()
+
+    def start_state(self) -> ClaudeSession:
+        return ClaudeSession()
+
+    def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
+                       raw: bytes) -> Iterator[TranscriptUpdate]:
+        yield from state.located(record.cwd)
+        for update in record.updates(state):
+            yield from update.during(state.phase)
+
+    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[TranscriptUpdate]:
+        """A subagent's task description is beside its transcript, not in it."""
+        meta = self.source.with_suffix('.meta.json')
+        title = json.loads(meta.read_text())['description'] if meta.is_file() else None
+        yield SessionFacts(source_id=self.source.stem, title=title)
+
+    def __init__(self, source: Path) -> None:
+        self.source = source
+
+    @classmethod
+    def reads(cls, source: Path) -> bool:
+        return source.suffix == '.jsonl'
+
+    @classmethod
+    def opened(cls, source: Path, session_id: str | None) -> Self:
+        return cls(source)
+
+    @staticmethod
+    def subagents(session: Path) -> tuple[Path, ...]:
+        """The subagent transcripts a stored session started, oldest first."""
+        return tuple(sorted(session.with_suffix('').glob('subagents/agent-*.jsonl'),
+                            key=lambda path: path.stat().st_mtime))
+
+
+class RunningClaude(ClaudeTranscript, OnlineHistory):
+    """A session Claude Code is writing, found by its session id. Claude has no server to ask,
+    so the running session is read from the same file as a stored one."""
+
+    def __init__(self, thread: str) -> None:
+        matches = tuple((Path.home() / '.claude/projects').glob(f'*/{thread}.jsonl'))
+        if len(matches) != 1:
+            raise ValueError(f'Expected one Claude transcript for {thread}; found {len(matches)}')
+        super().__init__(matches[0])
+
+    @classmethod
+    def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
+        return cls(thread)
+
+
+class ClaudeBridge(RunningClaude, LineMonitorBridge):
+    """Follow this Claude session's file without submitting an input."""
+
     incoming_frame = ClaudeMonitorFrame
     window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
+    RECENT_BYTES = 4 * 1024 * 1024
+
+    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+        LineMonitorBridge.__init__(self, options, binding, db)
+        RunningClaude.__init__(self, binding.thread)
+
+    def history_start(self, stream: BinaryIO, boundary: int) -> int:
+        """On restart only the last 4 MiB is published again; Core's finish is idempotent, so
+        completed items may overlap. The first record starts after a newline in that window."""
+        start = max(0, boundary - self.RECENT_BYTES)
+        if start:
+            stream.seek(start - 1)
+            stream.readline()
+            start = stream.tell()
+        return start
 
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
-        """Follow this Claude file without submitting an input.
-
-        On restart, items older than the last 4 MiB are not exported. Core's
-        finish operation is idempotent, so completed items may safely overlap.
-        Only the current status is published from that initial window.
-        """
-        matches = tuple((Path.home() / '.claude/projects').glob(
-            f'*/{self.binding.thread}.jsonl'))
-        if len(matches) != 1:
-            raise ValueError(f'Expected one Claude transcript for {self.binding.thread}; found {len(matches)}')
-        path, = matches
-        session = ClaudeSession()
-        with path.open('rb') as stream:
+        session = self.start_state()
+        with self.source.open('rb') as stream:
             original = FileRevision.from_file(stream)
-            start = max(0, original.size - 4 * 1024 * 1024)
-            pending: bytes | None = b''
-            if start:
-                stream.seek(start - 1)
-                if stream.read(1) != b'\n':
-                    # None means this prefix began outside our captured window.
-                    # Discard through its newline, even if it is still being written.
-                    pending = None
-            async with aclosing(WireWatch.observations(WatchSource.modified_file(path))) as changes:
+            async with aclosing(WireWatch.observations(WatchSource.modified_file(self.source))) as changes:
+                for update in self.decoded(stream, self.history_start(stream, original.size), original.size, session):
+                    yield update
+                # Only the current status is published from the recent window.
+                for update in session.phase.window_ended(session):
+                    yield update
                 async for _ in changes:
                     opened = FileRevision.from_file(stream)
-                    current = FileRevision.capture(path)
+                    current = FileRevision.capture(self.source)
                     if (current is None or current.identity != original.identity
                             or min(opened.size, current.size) < stream.tell()):
                         raise ValueError('Claude transcript was replaced or truncated')
-                    available = opened.size - stream.tell()
-                    chunk = stream.read(available)
-                    if pending is None:
-                        boundary = chunk.find(b'\n')
-                        if boundary >= 0:
-                            pending = chunk[boundary + 1:]
-                    else:
-                        pending += chunk
-                    if pending is not None:
-                        lines = pending.split(b'\n')
-                        pending = lines.pop()
-                        for line in lines:
-                            record = CLAUDE_RECORD.validate_json(line)
-                            for update in record.updates(session):
-                                for emitted in update.during(session.phase):
-                                    yield emitted
-                    for update in session.phase.window_ended(session):
+                    for update in self.decoded(stream, stream.tell(), opened.size, session):
                         yield update
 
 

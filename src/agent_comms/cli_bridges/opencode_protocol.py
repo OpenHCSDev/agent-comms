@@ -34,6 +34,7 @@ class Toast(WireModel):
 class Session(WireModel):
     id: str
     directory: str
+    title: str | None = None
 
 
 class SavedInput(WireModel):

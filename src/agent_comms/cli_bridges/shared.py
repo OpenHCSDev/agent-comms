@@ -47,6 +47,7 @@ from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, Too
 from agent_comms.typed_table import Column, TypedTable
 
 if TYPE_CHECKING:
+    from agent_comms.importing import ImportBuffer
     from .claude_protocol import ClaudeReaderPhase
 
 
@@ -263,6 +264,9 @@ class TranscriptUpdate(ABC):
         """Whether this update still needs publication before later updates."""
         return True
 
+    def add_to(self, history: ImportBuffer) -> None:
+        """What this update contributes to an imported conversation; activity contributes nothing."""
+
     @staticmethod
     def coalesced(updates: list[TranscriptUpdate]) -> list[TranscriptUpdate]:
         later: set[tuple[str, str]] = set()
@@ -320,6 +324,60 @@ class FinishedItem(TranscriptUpdate):
     def retain_before(self, later: set[tuple[str, str]]) -> bool:
         later.add((self.turn_id, self.item_id))
         return True
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.add(self.events)
+
+
+@dataclass(frozen=True)
+class HiddenItem(TranscriptUpdate):
+    """Conversation the live view does not show, because the thread shows it another way
+    (a bus delivery) or because only the person's own prompts are shown; history keeps it."""
+    events: tuple[TranscriptEvent, ...]
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.add(self.events)
+
+
+@dataclass(frozen=True)
+class Summarized(TranscriptUpdate):
+    """The harness replaced everything before this point with a summary (compaction)."""
+    text: str
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.summarize(self.text)
+
+
+@dataclass(frozen=True)
+class SessionFacts(TranscriptUpdate):
+    """Which session this is, where it ran and its title; a later fact replaces an earlier one."""
+    source_id: str = ''
+    project: str = ''
+    title: str | None = None
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.describe(self)
+
+
+@dataclass(frozen=True)
+class HistoryNotice(TranscriptUpdate):
+    """Something about the source that an imported conversation should say it left out."""
+    text: str
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        history.notices.add(self.text)
 
 
 @dataclass(frozen=True)
