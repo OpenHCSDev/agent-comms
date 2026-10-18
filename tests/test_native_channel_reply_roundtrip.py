@@ -227,11 +227,10 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.owners.pin_private_nk_launch(comms.root, root_id, package)
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     attachment = CommsClient(
         comms,
         runtime_enabled=True,
-        private_nk_native_package=package,
-        private_nk_wire_root_id=root_id,
     )
     facts = []
 
@@ -462,9 +461,9 @@ async def test_native_channel_reply_automatically_reaches_original_sender(
                 assert current.session_file == old.session_file
                 assert Path(current.session_file).read_bytes() == saved[name]
             assert len(requests) == seed_count + 2, "Restart replayed saved input"
+            comms.owners.pin_private_nk_launch(comms.root, root_id, package)
             attachment = CommsClient(
-                comms, runtime_enabled=True, private_nk_native_package=package,
-                private_nk_wire_root_id=root_id,
+                comms, runtime_enabled=True,
             )
             attachment.on_connect(Client())
             await attachment.load_session(cwd=str(projects["questioner"]), session_id="questioner")

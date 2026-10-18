@@ -92,12 +92,11 @@ async def test_natural_owned_turn_prepares_observer_pointer_without_native_start
 
     package = str(pinned_native_package())
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
+    comms.owners.pin_private_nk_launch(comms.root, root_id, Path(package))
     agent = CommsAgent(
         comms,
         agent_bin="pi",
         auto_wake=False,
-        private_nk_wire_root_id=root_id,
-        private_nk_native_package=Path(package),
     )
     turn = OwnedTurn(agent.turns, "alpha", "alpha", "Independently authorized task")
     try:

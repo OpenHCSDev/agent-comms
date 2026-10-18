@@ -49,9 +49,9 @@ before a new initial/model send; the operator must inspect both authorities.
 This is a fail-closed recovery limit, not a cross-filesystem atomic commit or
 permission to replay an old selected input.
 
-An opt-in `CommsAgent` ACP session can now consume that same selected private
-source via its already registered process owner (`private_nk_wire_root_id` and
-`private_nk_native_package` must both be passed to the constructor). Its live
+A `CommsAgent` ACP session on a private root consumes that same selected private
+source via its already registered process owner, using the launch its owner
+lifecycle pins (`OwnerLifecycle.launch_authority`). Its live
 drain verifies the private marker and reviewed native package, seals visible
 committed initials using the same N/K coordinator, then runs at most one
 selected native claim. It refuses to run alongside an ACP owner turn and never
@@ -67,18 +67,19 @@ human/ACP turn, and pins the exact goal scheduling snapshot at turn CAS and
 final raw-send admission. A stable preexisting goal is **not** globally banned
 from an ordinary selected interruption. No early rejection implies a native
 input retry. This correction needs its own exact independent review.
-The production stdio ACP attachment and its separate owner worker now accept
-an **explicit dormant configuration**: both
-`AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID=<32-hex-root>` and
-`AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE=<absolute-reviewed-copied-Pi-package>`
-under the exact `AGENT_COMMS_ROOT`. Both entry points preflight before creating
-or attaching their wire; the worker passes the pinned pair into its owner
-`CommsAgent`. A marker alone cannot activate this path, half-configured or
-wrong-root/package inputs fail closed, and `PI_PROMPT` cannot silently launch
-an unbound legacy prompt in private mode. Nothing in this change sets those
-variables on a live installation, creates participants/schema, or retries
-uncertain inputs. An operator must separately perform fresh-root opt-in and
-commit the frozen recipients. A bounded 100-initial scan remains a scale limit.
+The production stdio ACP attachment, its separate owner worker and the
+`agent-comms start`/`restart` commands take their launch from the owner
+lifecycle. A parent owner hands its pin to each child through
+`AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID` and `AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE`
+and a published active route carries its own. With neither, a private root
+derives both facts from their owners: the root ID from the root's marker and the
+native package from this installation's pin (`pinned_native_package()`). No
+caller restates either. Half-configured or wrong-root handoffs still fail before
+the root is created; a package that differs from the reviewed tree, a replaced
+root, or a missing prepared package fail closed; and `PI_PROMPT` cannot silently
+launch an unbound legacy prompt in private mode. Nothing here creates
+participants/schema or retries uncertain inputs; an operator must still perform
+fresh-root opt-in and commit the frozen recipients. A bounded 100-initial scan remains a scale limit.
 
 ## Provider-free tests
 
