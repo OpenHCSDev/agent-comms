@@ -969,6 +969,7 @@ class _ExactScalarDecoder(_ScalarDecoder):
     """A JSON scalar decoded only from its own type."""
 
     __slots__ = ()
+    annotations = (type(None),)
 
     def accepts(self, data: object) -> bool:
         return type(data) is self.target
@@ -992,13 +993,10 @@ class _FlagDecoder(_ExactScalarDecoder):
 
 class _NumberDecoder(_ExactScalarDecoder):
     __slots__ = ()
+    annotations = (int,)
 
     def argument_options(self) -> dict[str, object]:
         return {"type": self.target}
-
-class _IntegerDecoder(_NumberDecoder):
-    __slots__ = ()
-    annotations = (int,)
 
 class _RealDecoder(_NumberDecoder):
     """A finite number; an integer is a real number on the wire."""
@@ -1008,10 +1006,6 @@ class _RealDecoder(_NumberDecoder):
 
     def accepts(self, data: object) -> bool:
         return type(data) in (int, float) and math.isfinite(cast(float, data))
-
-class _NullDecoder(_ExactScalarDecoder):
-    __slots__ = ()
-    annotations = (type(None),)
 
 @dataclass(frozen=True, slots=True)
 class _RepresentedDecoder(ValueDecoder[Any]):
