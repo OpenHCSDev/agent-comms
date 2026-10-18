@@ -3,8 +3,10 @@
 import importlib
 import json
 import os
+import sqlite3
 import subprocess
 import sys
+from contextlib import closing
 from pathlib import Path
 
 import pytest
@@ -17,7 +19,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
-from tools.upgrade_bus import bus_files, carried
+from tools.upgrade_bus import Revisions, Stack, UpgradeRefused, before_stop, bus_files, carried, carry_all
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -159,6 +161,64 @@ def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
     changed = {"src/agent_comms/record.py"}
     assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
         {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
+
+
+class CheckoutStack(Stack):
+    """A checkout's stack running this test's interpreter in place of its synced one."""
+
+    @property
+    def python(self) -> Path:
+        return Path(sys.executable)
+
+
+def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_path):
+    """The installed checkout's src lacks what the new step imports; both passes import
+    the src of the tree that declares the step."""
+    (tmp_path / "checkout/src").mkdir(parents=True)
+    repo = Repository(tmp_path / "checkout")
+    (repo.path / "src/probe_api.py").write_text("OLD = 1\n")
+    older = repo.commit({"carry": (REPO / STEPS / "carry.py").read_text()})
+    (repo.path / "src/probe_api.py").write_text("OLD = 1\nNEW = 2\n")
+    newer = repo.commit({"carry_probe": (
+        "from probe_api import NEW\n\nfrom cutover.carry import Carried, Carry\n\n\n"
+        "class Probe(Carry):\n    after = None\n\n"
+        "    @classmethod\n    def before_stop(cls, root, *, apply):\n"
+        "        (root / 'stopped').write_text(str(NEW))\n        return Carried(1, {}, ('stopped',))\n\n"
+        "    @classmethod\n    def carry(cls, root, *, apply):\n"
+        "        (root / 'carried').write_text(str(NEW))\n        return Carried(1, {}, ('carried',))\n\n\n"
+        "if __name__ == '__main__':\n    Probe.main()\n")})
+    repo.git("checkout", "-q", older)
+    root = tmp_path / "bus"
+    root.mkdir()
+    pending = CarryChain.at(repo.path, newer).pending(())
+    revisions = Revisions(repo.path, tmp_path / "trees")
+    try:
+        installed = CheckoutStack(repo.path, home=tmp_path)
+        before = bus_files(root)
+        steps = [*before_stop(root, pending, installed, revisions), *carry_all(root, pending, installed, revisions)]
+    finally:
+        revisions.close()
+    assert carried(root, before, steps) == {"identical": 0, "rewritten": 3}
+    assert (root / "stopped").read_text() == (root / "carried").read_text() == "2"
+    assert CarryLedger(root).applied() == ("carry_probe",)
+
+
+def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
+    store = tmp_path / "todos.sqlite3"
+    with closing(sqlite3.connect(store)) as db:
+        db.execute("PRAGMA journal_mode=WAL")
+        db.execute("CREATE TABLE todo (id)")
+        db.execute("INSERT INTO todo VALUES (1)")
+        db.commit()
+    before = bus_files(tmp_path)
+    with closing(sqlite3.connect(store, autocommit=True)) as opened:
+        opened.execute("BEGIN IMMEDIATE")
+        opened.execute("ROLLBACK")
+        assert {"todos.sqlite3-wal", "todos.sqlite3-shm"} <= {path.name for path in tmp_path.iterdir()}
+        assert carried(tmp_path, before, [{"rewritten": []}]) == {"identical": 1, "rewritten": 0}
+        opened.execute("UPDATE todo SET id = 2")
+        with pytest.raises(UpgradeRefused, match=r"\['todos.sqlite3'\]"):
+            carried(tmp_path, before, [{"rewritten": []}])
 
 
 def run_step(name: str, root: Path, *flags: str) -> dict:

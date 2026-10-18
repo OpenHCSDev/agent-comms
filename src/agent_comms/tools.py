@@ -623,7 +623,7 @@ class CommsGoalTool(ThreadToolRequest):
         "The goal remains active, but only a direct message from a named dependency or "
         "a user follow-up starts its next turn. Do not repeatedly announce waiting or "
         "return empty output. If existing dependency replies block standby, inspect "
-        "comms_inbox with this goal_id and wait_for. Read standby_review.messages and "
+        "comms_inbox with standby {goal_id, wait_for}. Read standby_review.messages and "
         "copy only standby_review.reviewed_inputs into reviewed_inputs; this records "
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
@@ -1021,6 +1021,12 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
         return self.text
 
 
+@dataclass(frozen=True)
+class StandbyRequest:
+    goal_id: str = tool_field("Current goal for scoped standby review")
+    wait_for: tuple[str, ...] = tool_field("Declared dependencies for standby review")
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
@@ -1029,17 +1035,14 @@ class CommsInboxTool(ToolRequest):
         "Optional target limits the conversation. ACK marks exactly the returned "
         "message references; unresolved_inputs remain UNKNOWN. Oversized results return "
         "complete=false, counts, and a complete result_file; ACK is deferred. Read that "
-        "file selectively, never dump it into context. For standby, supply goal_id and "
-        "wait_for to get standby_review: exact eligible keys and messages, already "
-        "reviewed entries, and excluded owner/other-dependency inputs."
+        "file selectively, never dump it into context. For standby, supply standby "
+        "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
+        "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
     target: str | None = tool_field("Optional channel or peer conversation", default=None)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
-    goal_id: str | None = tool_field("Current goal for scoped standby review", default=None)
-    wait_for: list[str] | None = tool_field(
-        "Declared dependencies for standby review", default=None
-    )
+    standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxRead:
         thread = self.thread
@@ -1048,13 +1051,10 @@ class CommsInboxTool(ToolRequest):
             target = target.strip()
             if not target:
                 raise ValueError("An inbox target cannot be empty.")
-        goal_id = self.goal_id
-        wait_for = self.wait_for
-        if bool(goal_id) != bool(wait_for):
-            raise ValueError("Provide goal_id and wait_for together for standby review.")
+        standby = self.standby
         review = (
-            comms.goals.goal_input_review(thread, goal_id, wait_for)
-            if goal_id and wait_for
+            comms.goals.goal_input_review(thread, standby.goal_id, standby.wait_for)
+            if standby is not None
             else None
         )
         messages = tuple(comms.bus.inbox(thread, target))
