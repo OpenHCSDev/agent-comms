@@ -483,24 +483,32 @@ class GoalTurnPermit(ABC):
         for permit in self.claims:
             goal.settle(settlement, store, permit, turn)
 
-    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
-        return any(permit.has_verified_progress(store) for permit in self.claims)
+    @abstractmethod
+    def has_verified_progress(self, store: GoalAttemptStore) -> bool: ...
 
     @abstractmethod
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
 
+    @abstractmethod
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool:
-        return any(permit.charge_for(goal_id, goals, response, usage) for permit in self.claims)
+                   usage: Mapping[str, object]) -> bool: ...
 
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
-        for permit in self.claims:
-            context = permit.add_context(context, owner, goals)
-        return context
+    @abstractmethod
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
 
 
 class NoLaunchPermit(GoalTurnPermit):
     claims: ClassVar[tuple[LaunchPermit, ...]] = ()
+
+    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
+        return False
+
+    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+                   usage: Mapping[str, object]) -> bool:
+        return False
+
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+        return context
 
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
         generation = store.snapshot(goal_id)

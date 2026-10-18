@@ -355,26 +355,22 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def apply(cls, incoming: GoalDeclaration, previous: GoalDeclaration) -> GoalDeclaration:
         return incoming.registration_value(previous)
 
-    def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
-        return self.project(lambda goal: goal, lambda: previous)
+    @abstractmethod
+    def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration: ...
 
     @abstractmethod
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T: ...
 
+    @abstractmethod
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
-        self.project(lambda goal: settlement(store, permit, goal, turn).dispatch_sync(goal.state),
-                     lambda: None)
+               permit: LaunchPermit, turn: TurnId) -> None: ...
 
+    @abstractmethod
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
-        return self.project(lambda goal: goals.block_goal_after_failed_turn(
-            name, started_goal=goal, expected_worktree=worktree, diagnostic=diagnostic,
-        ), lambda: self)
+                                diagnostic: str) -> GoalDeclaration: ...
 
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
-        return self.project(lambda goal: (goal.render_instructions(
-            goal.order.instructions(goal.order.todos(goals, owner, goal.id))),), tuple)
+    @abstractmethod
+    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
 
     def after_failed_turn(self, diagnostic: str) -> GoalDeclaration:
         return self
@@ -393,12 +389,12 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         return self
 
     @property
-    def shows_document(self) -> bool:
-        return self.visible
+    @abstractmethod
+    def shows_document(self) -> bool: ...
 
     @property
-    def shows_progress(self) -> bool:
-        return bool(self.progress)
+    @abstractmethod
+    def shows_progress(self) -> bool: ...
 
     @property
     @abstractmethod
@@ -410,9 +406,8 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
     unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
-    def wake_context(self):
-        return self.project(lambda goal: {"text": goal.text, "status": goal.state.declared_name,
-                           "progress": goal.progress}, lambda: None)
+    @abstractmethod
+    def wake_context(self) -> dict[str, object] | None: ...
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
@@ -420,11 +415,11 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def require(self) -> Goal:
         raise RelationViolationError("No goal is set for this thread.")
 
-    def reported_id(self) -> str | None:
-        return self.project(lambda goal: goal.id, lambda: None)
+    @abstractmethod
+    def reported_id(self) -> str | None: ...
 
-    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
-        return self.project(lambda goal: waits.clear(goal.id, wait_id=wait_id), lambda: False)
+    @abstractmethod
+    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool: ...
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -455,6 +450,32 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
+    def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
+        return previous
+
+    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
+               permit: LaunchPermit, turn: TurnId) -> None:
+        pass
+
+    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
+                                diagnostic: str) -> GoalDeclaration:
+        return self
+
+    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
+        return ()
+
+    def reported_id(self) -> None:
+        return None
+
+    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
+        return False
+
+    def wake_context(self) -> None:
+        return None
+
+    shows_document: ClassVar[bool] = False
+    shows_progress: ClassVar[bool] = False
+
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T:
         return on_absent()
 
@@ -486,6 +507,38 @@ class Goal(RecordMember, GoalDeclaration):
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+
+    def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
+        return self
+
+    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
+               permit: LaunchPermit, turn: TurnId) -> None:
+        settlement(store, permit, self, turn).dispatch_sync(self.state)
+
+    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
+                                diagnostic: str) -> GoalDeclaration:
+        return goals.block_goal_after_failed_turn(
+            name, started_goal=self, expected_worktree=worktree, diagnostic=diagnostic,
+        )
+
+    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
+        return (self.render_instructions(self.order.instructions(
+            self.order.todos(goals, owner, self.id))),)
+
+    def reported_id(self) -> str:
+        return self.id
+
+    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
+        return waits.clear(self.id, wait_id=wait_id)
+
+    def wake_context(self) -> dict[str, object]:
+        return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+
+    shows_document: ClassVar[bool] = True
+
+    @property
+    def shows_progress(self) -> bool:
+        return bool(self.progress)
 
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T:
         return on_goal(self)
