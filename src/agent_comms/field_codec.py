@@ -767,16 +767,22 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
 
     @classmethod
     def encode(cls, value):
-        return cls.decode(value)
+        # An in-process value that is not JSON is the caller's bug, not refused data.
+        try:
+            return cls.validator().validate_python(value, strict=True)
+        except ValueError as error:
+            raise TypeError("Expected a JSON value with string keys and finite numbers") from error
 
     @classmethod
     def schema(cls):
         return {}
 
+
 def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
     """A wire name the family does not declare is malformed data."""
     with MalformedRecord.refusing(f"Invalid {family.__name__} name"):
         return family.decode(name)
+
 
 @dataclass(frozen=True, slots=True)
 class _FamilyNameDecoder(ValueDecoder[Any]):
