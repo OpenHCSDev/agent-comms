@@ -1572,7 +1572,7 @@ class TestAgentTurnForwarding:
 
         async with native.open_owner(native_options=("--tools", "bash"), client=Client()) as (agent, session):
             await agent.prompt(session, [{"type": "text", "text": "!agent report working directory"}])
-            assert agent._comms.agents.activity_of(session).state is ActivityState.IDLE
+            assert agent._comms.agents.activity_of(session, snapshot=agent._comms.registry.snapshot()).state is ActivityState.IDLE
             states = [fact.state for update in updates for fact in decode_updates(update.field_meta)
                       if isinstance(fact, TurnChangedUpdate)]
             assert any(isinstance(state.phase, ToolRunningPhase) and state.busy for state in states)
@@ -1587,7 +1587,7 @@ class TestActivityLayer:
 
         wired.registry.require("PR111")
         wired.agents.set_activity("PR111", ActivityState.WORKING, "bash: echo hi")
-        activity = wired.agents.activity_of("PR111")
+        activity = wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot())
         assert activity.state is ActivityState.WORKING
         assert activity.detail == "bash: echo hi"
 
@@ -1617,7 +1617,7 @@ class TestActivityLayer:
         lines = [_json.loads(line) for line in log.read_text().splitlines()]
         lines[-1]["ts"] = _time.time() - 1000
         log.write_text("\n".join((_json.dumps(line) for line in lines)))
-        assert wired.agents.activity_of("PR111").state is ActivityState.IDLE
+        assert wired.agents.activity_of("PR111", snapshot=wired.registry.snapshot()).state is ActivityState.IDLE
 
     def test_activity_persistence(self, tmp_path):
         from agent_comms.activity import Activity, ActivityLog, ActivityState

@@ -31,7 +31,6 @@ class ClaudeBridge(LineMonitorBridge):
             raise ValueError(f'Expected one Claude transcript for {self.binding.thread}; found {len(matches)}')
         path, = matches
         session = ClaudeSession()
-        last_status: TranscriptUpdate | None = None
         with path.open('rb') as stream:
             original = FileRevision.from_file(stream)
             start = max(0, original.size - 4 * 1024 * 1024)
@@ -63,14 +62,10 @@ class ClaudeBridge(LineMonitorBridge):
                         for line in lines:
                             record = CLAUDE_RECORD.validate_json(line)
                             for update in record.updates(session):
-                                if session.catching_up and update.is_status:
-                                    last_status = update
-                                else:
-                                    yield update
-                    if session.catching_up:
-                        session.catching_up = False
-                        if last_status is not None:
-                            yield last_status
+                                for emitted in update.during(session.phase):
+                                    yield emitted
+                    for update in session.phase.window_ended(session):
+                        yield update
 
 
 def main() -> None:

@@ -219,7 +219,7 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
     for event in value.body():
         await progress.consume(event)
         if isinstance(event, ae.CompactionStart):
-            assert comms.agents.activity_of(execution.thread_name).detail == "Compacting context"
+            assert comms.agents.activity_of(execution.thread_name, snapshot=comms.registry.snapshot()).detail == "Compacting context"
     await progress.consume(ae.StreamSettled())
     assert execution.finish_event.is_set()
     assert comms.registry.require(execution.thread_name).turn_lease == execution.turn_lease

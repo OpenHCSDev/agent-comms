@@ -166,7 +166,7 @@ def test_failed_delivery_posts_a_non_waking_notice_to_the_origin(tmp_path):
     notice = list(comms.views.channel_history_page("#team").messages)[-1]
     assert notice.notice is True and not notice.starts_turn
     with comms.bus.opened_activity() as clocks:
-        assert "sender" not in comms.views.last_sent_timestamps(clocks.sent)
+        assert "sender" not in comms.views.last_sent_timestamps(clocks.sent, registry=comms.registry.snapshot())
     assert Message.from_wire(notice.to_wire()) == notice
 
 

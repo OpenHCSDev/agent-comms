@@ -919,7 +919,7 @@ class ThreadRelationships:
             group.selected_order(context)
             for group in SortableRelationshipGroup.members_with(SortableRelationshipGroup)
         }:
-            context.sent.update(order.sent_timestamps(self.views))
+            context.sent.update(order.sent_timestamps(self.views, registry=registry))
         return ThreadCommsSnapshot(
             thread.name,
             str(self.root.resolve()),

@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
-from typing import AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
+from typing import TYPE_CHECKING, AsyncIterator, ClassVar, Generic, Literal, Self, TypeVar
 
 from pydantic import JsonValue, TypeAdapter, Field, model_validator
 from metaclass_registry import RegistryConfig
@@ -45,6 +45,9 @@ from agent_comms.tool_declaration import ToolDeclaration
 from agent_comms.tool_results import ToolDiff
 from agent_comms.transcript_events import TextTranscript, ToolEndTranscript, ToolStartTranscript, TranscriptEvent
 from agent_comms.typed_table import Column, TypedTable
+
+if TYPE_CHECKING:
+    from .claude_protocol import ClaudeReaderPhase
 
 
 @dataclass(frozen=True)
@@ -243,7 +246,9 @@ class ThreadOutput:
 @dataclass(frozen=True)
 class TranscriptUpdate(ABC):
     """One change a CLI reports about its thread."""
-    is_status: ClassVar[bool] = False
+
+    def during(self, phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
+        return (self,)
 
     @abstractmethod
     def publish(self, output: ThreadOutput) -> None: ...
@@ -265,9 +270,15 @@ class TranscriptUpdate(ABC):
         return list(reversed(kept))
 
 
+class StatusUpdate(TranscriptUpdate):
+    """Reader phases decide when current activity is published."""
+
+    def during(self, phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
+        return phase.status(self)
+
+
 @dataclass(frozen=True)
-class TurnStarted(TranscriptUpdate):
-    is_status = True
+class TurnStarted(StatusUpdate):
     detail: str = ''
 
     def publish(self, output: ThreadOutput) -> None:
@@ -275,18 +286,15 @@ class TurnStarted(TranscriptUpdate):
 
 
 @dataclass(frozen=True)
-class TurnEnded(TranscriptUpdate):
-    is_status = True
-
+class TurnEnded(StatusUpdate):
     def publish(self, output: ThreadOutput) -> None:
         output.transcript.end_turn()
         output.status(ActivityState.IDLE)
 
 
 @dataclass(frozen=True)
-class ActiveItem(TranscriptUpdate):
+class ActiveItem(StatusUpdate):
     """An item the CLI started producing: what it is doing now."""
-    is_status = True
     turn_id: str
     item_id: str
     state: ActivityState

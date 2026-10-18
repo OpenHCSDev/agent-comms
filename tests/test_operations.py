@@ -344,7 +344,7 @@ class TestThreadOps:
         assert wired.registry.require("PR111").name == "planner"
         assert wired.registry.require("planner").tags == frozenset({"base"})
         assert wired.registry.require("fixer").parent == "planner"
-        assert wired.agents.activity_of("planner").detail == "renaming"
+        assert wired.agents.activity_of("planner", snapshot=wired.registry.snapshot()).detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == "test/model"
         assert wired.ledger.read()["owner"] == "planner"
         assert wired.bus.pending_count("planner", "fixer") == 0

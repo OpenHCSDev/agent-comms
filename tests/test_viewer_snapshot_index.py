@@ -191,7 +191,7 @@ async def test_sidebar_roster_precedes_rewritten_bus_projection_rebuild(tmp_path
         assert completed.snapshot == expected
         assert completed.snapshot.unread_pending == frozenset()
         assert len(attempts) == 2
-        assert service.observations[SidebarReading].request is request
+        assert service.interest.observations[SidebarReading].request is request
     finally:
         connection.close()
         receiver.close()
@@ -230,7 +230,7 @@ async def test_sidebar_does_not_spin_when_route_preparation_is_owned_by_another_
         completed = [answer for answer in answers if isinstance(answer, SidebarObserved)][-1]
         assert completed.snapshot.unread == {"sender": 2}
         assert not completed.snapshot.unread_pending
-        assert service.observations[SidebarReading].request is request
+        assert service.interest.observations[SidebarReading].request is request
     finally:
         connection.close()
         receiver.close()
@@ -276,9 +276,9 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
         results = []
         while receiver.poll():
             results.append(receiver.recv())
-        published = service.observations[SidebarReading].published
+        published = service.interest.observations[SidebarReading].published
         assert published.snapshot.channel_unread["#team"] == 1
-        observer = service.observations[SidebarReading]
+        observer = service.interest.observations[SidebarReading]
         original = comms.views.presentation.display_view_metrics
         comms.messaging.send("bob", "#team", "second")
         preserved = comms.bus.log.path.read_bytes()
@@ -295,7 +295,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
             result = receiver.recv()
             assert not isinstance(result, SidebarObserved)
         assert observer.published is published
-        assert service.observations[SidebarReading] is observer
+        assert service.interest.observations[SidebarReading] is observer
         assert observer.request is request
 
         monkeypatch.setattr(comms.views.presentation, "display_view_metrics", original)
@@ -306,7 +306,7 @@ async def test_sidebar_retries_an_activity_source_change(tmp_path, monkeypatch):
             recovered.append(receiver.recv())
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
         assert latest.snapshot.channel_unread["#team"] == 2
-        assert service.observations[SidebarReading] is observer
+        assert service.interest.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.log.path.read_bytes() == preserved
     finally:
@@ -544,7 +544,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         await service.observe(set())
         while receiver.poll():
             receiver.recv()
-        observer = service.observations[SidebarReading]
+        observer = service.interest.observations[SidebarReading]
         published = observer.published
         assert published.snapshot.unread == expected
         with closing(CoordinationStore.writer(BusRouteCounts(comms.bus.log.path).path)) as writer:
@@ -560,7 +560,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         while receiver.poll():
             result = receiver.recv()
             assert not isinstance(result, SidebarObserved)
-        assert service.observations[SidebarReading] is observer
+        assert service.interest.observations[SidebarReading] is observer
         assert observer.published is published
         assert observer.request is request
         await service.observe(set())
@@ -570,7 +570,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         latest = [r for r in recovered if isinstance(r, SidebarObserved)][-1]
         assert latest.snapshot.unread == {"renamed-bob": 3}
         assert wire(tmp_path).views.viewer_snapshot(str(tmp_path)).unread == {"renamed-bob": 3}
-        assert service.observations[SidebarReading] is observer
+        assert service.interest.observations[SidebarReading] is observer
         assert observer.request is request
         assert comms.bus.reads.read() == ledger
     finally:

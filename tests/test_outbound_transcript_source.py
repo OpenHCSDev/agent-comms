@@ -71,7 +71,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     # A diagnostic from another owner generation cannot block a current
     # participant; neither its text nor a running PID grants that relation.
     foreign = replace(diagnostic,owner=replace(owner,generation=owner.generation+1))
-    activity = comms.agents.activity_of('beta').source_event()
+    activity = comms.agents.activity_of('beta', snapshot=comms.registry.snapshot()).source_event()
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
     current = next(item for item in comms.views.thread_presentations(('sender',)).require('sender').notifications
                    if item.recipient=='beta')

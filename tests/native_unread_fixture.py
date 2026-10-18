@@ -3,7 +3,7 @@
 
 def completed_counts(state, viewer, sources):
     for _ in range(50):
-        result = state.counts(viewer, sources)
+        result = state.counts(viewer, sources, document=state.reads.read())
         if not result.pending:
             return result
         preparation = state.preparation
