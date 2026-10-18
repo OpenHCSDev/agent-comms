@@ -22,6 +22,7 @@ from agent_comms.envelope_claim_transitions import (
     ExistingFileClaim,
 )
 from agent_comms.errors import ClaimEnvelopeUnknownError, RelationViolationError, StoredHistoryUnreadable
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.exporting import (
     EverythingScope,
     FullLimit,
@@ -572,7 +573,8 @@ def test_invalid_claim_record_cannot_be_exposed_as_plain_message(tmp_path: Path)
     comms.bus.log.path.write_bytes(json.dumps(public).encode() + b"\n")
     with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as malformed:
         list(comms.bus.full_history_page().messages)
-    assert type(malformed.value.__cause__) is ValueError
+    assert type(malformed.value.__cause__) is MalformedRecord
+    assert "claim_transition" in str(malformed.value.__cause__)
 
 
 def _private_verified_rows(comms: Comms) -> list[tuple[object, object, object]]:

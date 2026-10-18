@@ -9,12 +9,14 @@ import pytest
 
 from agent_comms import HistoricalMessage, HistoryCursor
 from agent_comms.comms import Comms
+from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.historical_views import HistoryArchive
 from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
-from agent_comms.message_page import PageBounds, PageTraversal
+from agent_comms.message_page import PageBounds
+from agent_comms.page_traversal import OlderTraversal
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -22,7 +24,7 @@ def test_catalogue_creation_or_change_during_read_is_rejected(tmp_path, exists):
     archive = HistoryArchive(tmp_path / 'bus.jsonl')
     if exists:
         archive.path.write_text('[]')
-    with pytest.raises(ValueError, match='catalogue changed'):
+    with pytest.raises(HistoricalSourceChanged, match='catalogue changed'):
         with archive.read_sources() as sources:
             assert sources == ()
             archive.path.write_text('[ ]')
@@ -52,9 +54,7 @@ def collect(comms, method, *args, **kwargs):
     for _ in range(40):
         if not page.has_older:
             return result
-        page = getattr(comms.views, method)(
-            *args, bounds=PageBounds(PageTraversal.capture(before=page.oldest_cursor), 3), **kwargs
-        )
+        page = getattr(comms.views, method)(*args, bounds=PageBounds(page.oldest_cursor.older(), 3), **kwargs)
         result[0:0] = page.messages
     raise AssertionError("paging did not terminate")
 
@@ -91,9 +91,7 @@ def test_all_history_backward_and_forward(migrated, method, args, reader):
     forward = []
     cursor = HistoryCursor(source.key, 0)
     for _ in range(40):
-        page = getattr(live.views, method)(
-            *args, bounds=PageBounds(PageTraversal.capture(after=cursor), 2), **scope
-        )
+        page = getattr(live.views, method)(*args, bounds=PageBounds(cursor.newer(), 2), **scope)
         forward.extend(page.messages)
         if not page.has_newer:
             break
@@ -119,7 +117,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     viewer = live.messaging.user_identity(str(live.root))
     page = live.views.channel_display_page(
         "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
-        bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100)), 3),
+        bounds=PageBounds(OlderTraversal(100, source.key), 3),
     )
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
     snapshot = live.registry.snapshot()
@@ -198,12 +196,12 @@ def test_duplicate_and_newer_incarnations_sessions(tmp_path):
 def test_byte_boundaries_and_stale_cursor(migrated):
     _, _, live, source = migrated
     page = live.views.channel_display_page(
-        "#team", bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100)), max_bytes=1)
+        "#team", bounds=PageBounds(OlderTraversal(100, source.key), max_bytes=1)
     )
     assert len(page.messages) == 1
     assert page.has_older
-    with pytest.raises(ValueError):
-        live.views.channel_display_page("#team", bounds=PageBounds(PageTraversal.capture(before=HistoryCursor("detached", 2))))
+    with pytest.raises(HistoricalSourceChanged):
+        live.views.channel_display_page("#team", bounds=PageBounds(OlderTraversal(2, "detached")))
 
 
 def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path):
@@ -257,9 +255,9 @@ def test_detached_recorded_witness_cannot_rebind_to_same_name_live_thread(migrat
     with pytest.raises(StaleRevision, match="original thread"):
         live.transcripts.bind_page_read("bob", read.identity)
     live.bus.history.path.write_text("[]")
-    with pytest.raises(ValueError, match="detached"):
+    with pytest.raises(HistoricalSourceChanged, match="detached"):
         read.current_identity()
-    with pytest.raises(ValueError, match="detached"):
+    with pytest.raises(HistoricalSourceChanged, match="detached"):
         live.transcripts.bind_page_read("alice", read.identity)
 
 
@@ -287,7 +285,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
     assert not (Path(source.root) / "unknown-input.json").exists()
     page = live.views.channel_display_page(
         "#team", viewer=NamedViewer(live.messaging.user_identity(str(live.root)).name),
-        bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100))),
+        bounds=PageBounds(OlderTraversal(100, source.key)),
     )
     path = Path(source.root) / "bus.jsonl"
     path.write_bytes(path.read_bytes() + b"\n")
@@ -295,7 +293,7 @@ def test_attach_only_reads_original_roots_and_rejects_changed_snapshot(tmp_path)
         live.views.mark_historical_view_read(page.historical_display)
     with pytest.raises(ValueError, match="snapshot changed"):
         live.views.channel_display_page(
-            "#team", bounds=PageBounds(PageTraversal.capture(before=HistoryCursor(source.key, 100)))
+            "#team", bounds=PageBounds(OlderTraversal(100, source.key))
         )
 
 

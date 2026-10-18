@@ -228,7 +228,7 @@ class ThinkingLevel(ThinkingChoice, DeclaredFamily, affix="ThinkingLevel"):
 
     @classmethod
     def wire_value(cls) -> str:
-        return FieldCodec.decode(str, FieldCodec.encode(cls))
+        return cls.declared_name
 
 
 class NoThinkingOverride(ThinkingChoice):

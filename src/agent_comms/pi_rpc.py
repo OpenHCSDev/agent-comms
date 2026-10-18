@@ -1,7 +1,8 @@
 """Pi JSON-line transport; tolerant discovery and strict native proof share one decoder."""
 
 from __future__ import annotations
-from .jsonl_stream import JsonlStreamReader, unique_fields
+from .field_codec import FieldCodec, MalformedRecord
+from .jsonl_stream import JsonlStreamReader
 from .pi_events import PiEvent, Response
 from contextlib import asynccontextmanager
 
@@ -90,12 +91,13 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
     @staticmethod
     def decode_record(raw: bytes, *, strict: bool = False, max_bytes: int | None = None, event_type: type[PiEvent] = PiEvent) -> PiEvent:
         if max_bytes is not None and len(raw) > max_bytes:
-            raise ValueError("Native RPC record exceeds transport limit")
+            raise MalformedRecord("Native RPC record exceeds transport limit")
         if strict and (not raw or not raw.endswith(b"\n")):
-            raise ValueError("Native RPC record is incomplete")
-        data = json.loads(raw.decode("utf-8"), object_pairs_hook=unique_fields if strict else None)
+            raise MalformedRecord("Native RPC record is incomplete")
+        # Discovery skips lines that are not JSON; the native proof refuses them.
+        data = FieldCodec.parse(raw) if strict else json.loads(raw.decode("utf-8"))
         if not isinstance(data, dict):
-            raise ValueError("Pi RPC record has wrong type")
+            raise MalformedRecord("Pi RPC record has wrong type")
         return event_type.from_wire(data)
 
     async def receive(

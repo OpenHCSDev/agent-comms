@@ -26,7 +26,6 @@ from .audience_manifest import MAX_WIRE_SEQ
 from .bus_publication import (
     CommittedDelivery,
     has_private_wire_fields,
-    unique_wire_object,
 )
 from .bus_source_page import AddressedPage
 from .bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
@@ -39,7 +38,7 @@ from .errors import (
     RelationViolationError,
 )
 from .coordination_errors import StaleRevision
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
 from .private_path import FileIdentity, FileRevision
 from .private_bus_checkpoint import RecordedContextManifestSources
@@ -145,7 +144,7 @@ class WireSnapshot(ABC):
 
         try:
             return WireRecord.public_from_wire(record).messages()
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise StoredHistoryUnreadable("Stored bus history cannot be decoded") from error
 
     def messages_for_references(self, references):
@@ -253,7 +252,7 @@ class OpenedWireSnapshot(WireSnapshot):
         """Complete rows whose starts fall within the requested original cut."""
         stop = self.boundary if before_offset is None else min(before_offset, self.boundary)
         if after_offset < 0 or stop < 0:
-            raise ValueError("Wire row offsets must be nonnegative")
+            raise MalformedRecord("Wire row offsets must be nonnegative")
         self.stream.seek(after_offset)
         while self.stream.tell() < stop:
             offset = self.stream.tell()
@@ -262,9 +261,9 @@ class OpenedWireSnapshot(WireSnapshot):
             if not raw.endswith(b"\n"):
                 raise RelationViolationError("Wire source has an incomplete original row")
             if raw.strip():
-                record = json.loads(raw, object_pairs_hook=unique_wire_object)
+                record = FieldCodec.parse(raw)
                 if not isinstance(record, Mapping):
-                    raise ValueError("JSONL bus row must be an object")
+                    raise MalformedRecord("JSONL bus row must be an object")
                 yield record, offset, self.stream.tell()
 
     def fingerprint(self, offset: int) -> str:
@@ -947,21 +946,21 @@ class WireLog:
                 raise RelationViolationError(
                     "Bus protocol marker is unreadable or redirected."
                 ) from error
-            with os.fdopen(descriptor, encoding="utf-8") as source:
+            with os.fdopen(descriptor, "rb") as source:
                 info = os.fstat(source.fileno())
                 if not stat.S_ISREG(info.st_mode):
                     raise RelationViolationError("Bus protocol marker must be regular storage.")
                 try:
-                    data = json.load(source, object_pairs_hook=unique_wire_object)
-                except (ValueError, UnicodeError) as error:
+                    data = FieldCodec.parse(source.read())
+                except MalformedRecord as error:
                     raise RelationViolationError("Bus protocol marker is malformed.") from error
             try:
                 metadata = FieldCodec.decode(WireMetadata, data)
                 # Omitted optional fields express absence. Explicit nulls, missing
                 # required public sequence and mixed protocol rows are not aliases.
                 if FieldCodec.encode(metadata) != data:
-                    raise ValueError("Noncanonical bus protocol marker")
-            except (TypeError, ValueError) as error:
+                    raise MalformedRecord("Noncanonical bus protocol marker")
+            except MalformedRecord as error:
                 raise RelationViolationError(f"Bus protocol marker is invalid: {error}") from error
             if metadata.private and (
                 info.st_uid != os.geteuid()

@@ -42,6 +42,7 @@ from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
+from .field_codec import MalformedRecord
 from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
@@ -354,7 +355,7 @@ class TurnSession:
                         break
                     try:
                         abort_payload = PiRpcChannel.decode_record(response)
-                    except (ValueError, TypeError, UnicodeError):
+                    except (json.JSONDecodeError, UnicodeDecodeError, MalformedRecord):
                         continue
                     abort_payload.observe_abort(self)
                     if (
@@ -502,7 +503,7 @@ class TurnSession:
         except json.JSONDecodeError:
             self.skip = True
             return
-        except (ValueError, TypeError) as error:
+        except MalformedRecord as error:
             if self.awaiting_native_attestation:
                 self.output.record_failure(
                     failures.InputIdUnavailable(

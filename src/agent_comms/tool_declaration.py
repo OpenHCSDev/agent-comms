@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from typing import ClassVar, Self
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .native_tool_call import SelectedToolDenied
 
 
@@ -41,7 +41,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         selected = {cls.family_discriminator: cls.declared_name}
         try:
             return FieldCodec.decode(cls, {**selected, **arguments})
-        except (TypeError, ValueError, KeyError) as error:
+        except MalformedRecord as error:
             raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
 
     @classmethod
@@ -50,7 +50,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         try:
             decoded = FieldCodec.decode(dict[str, object], arguments)
             return cls.for_name(name).parse_arguments(decoded)
-        except (TypeError, ValueError):
+        except (MalformedRecord, SelectedToolDenied):
             return None
 
     def reads(self) -> str:

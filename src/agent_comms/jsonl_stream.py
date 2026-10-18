@@ -1,15 +1,8 @@
-"""Cancellation-safe JSONL framing and shared object-field integrity."""
+"""Cancellation-safe JSONL framing."""
 import asyncio
-from pydantic import JsonValue
 
+from .field_codec import MalformedRecord
 
-def unique_fields(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
-    result: dict[str, JsonValue] = {}
-    for key, value in pairs:
-        if key in result:
-            raise ValueError("Duplicate JSON field")
-        result[key] = value
-    return result
 
 class JsonlStreamReader:
     def __init__(self, reader: asyncio.StreamReader):
@@ -24,7 +17,7 @@ class JsonlStreamReader:
             except asyncio.LimitOverrunError as error:
                 if max_bytes is not None and size + error.consumed > max_bytes:
                     self.chunks.clear()
-                    raise ValueError("Native RPC record exceeds transport limit") from error
+                    raise MalformedRecord("Native RPC record exceeds transport limit") from error
                 self.chunks.append(await self.reader.readexactly(error.consumed))
                 size += error.consumed
                 continue
@@ -32,7 +25,7 @@ class JsonlStreamReader:
                 line = error.partial
             if max_bytes is not None and size + len(line) > max_bytes:
                 self.chunks.clear()
-                raise ValueError("Native RPC record exceeds transport limit")
+                raise MalformedRecord("Native RPC record exceeds transport limit")
             self.chunks.append(line)
             record = b"".join(self.chunks)
             self.chunks.clear()

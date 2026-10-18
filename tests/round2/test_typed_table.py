@@ -6,6 +6,7 @@ from dataclasses import dataclass, field, replace
 import pytest
 from typing import Type
 
+from agent_comms.field_codec import MalformedRecord
 from agent_comms.messages import InfoKind, MessageKind
 from agent_comms.typed_table import (
     Column,
@@ -174,7 +175,7 @@ def test_new_row_declaration_needs_no_other_edit():
             Projection.read(db.execute("SELECT 'new' AS label"))
         with pytest.raises(ValueError):
             Projection.read(db.execute("SELECT 'a' AS label, 'b' AS label"))
-        with pytest.raises(TypeError):
+        with pytest.raises(MalformedRecord, match="Missing required fields for TableChildRow"):
             AddedTableRow.update(db, where="1", child={"kind": "table_child"})
 
 

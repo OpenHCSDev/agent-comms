@@ -63,7 +63,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     @classmethod
     def wire_kind(cls) -> str:
         """The Pi ``type`` this member converts."""
-        return FieldCodec.decode(str, FieldCodec.encode(cls))
+        return cls.declared_name
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
@@ -493,7 +493,7 @@ class ExtensionUiRequest(NativePiEvent):
 
     @classmethod
     def wire_kind(cls) -> str:
-        return FieldCodec.decode(str, FieldCodec.encode(ExtensionUiRequest))
+        return ExtensionUiRequest.declared_name
 
     @classmethod
     def wire_case(cls, wire):
