@@ -52,7 +52,7 @@ async def test_current_project_observation_keeps_original_binding_across_rename_
                     await writer.wait_closed()
 
             assert (await query())['result']['worktree'] == str(first)
-            name = comms.threads.rename_managed_thread(thread.name, 'project-renamed', owner_pid=thread.pid).current
+            name = comms.threads.rename_managed_thread(thread.name, 'project-renamed', owner_pid=thread.require_process().pid).current
             assert (await query())['result']['worktree'] == str(first)
             changed = []
 

@@ -109,40 +109,74 @@ class PersistentPiSession:
         self.lock = asyncio.Lock()
         self.child_state: NativeChildState = EmptyNative()
 
-    def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
-        return delivery.native_events(self, thread, content)
-
-    async def run_tracked_turn(self, claim, execution, *, model, selected_tool_mode,
-                               observe_event, following):
-        from .coordinator import Coordination
+    async def run_turn(
+        self, thread: Thread, content: InputContent, delivery: TurnDelivery
+    ) -> AsyncIterator[AgentEvent]:
+        from .agent_events import AgentEvent
         from .diagnostics import record_request_progress
         from .maintenance_barrier import MaintenanceBarrier
         from .native_startup import NativeStartup
-        from .tracked_turn import TrackedTurnSession
+        from .selected_turn_delivery import SelectedTurnDelivery
+        from .tracked_turn import TrackedDone, TrackedTurnSession
 
-        registry = await Coordination.run_worker(claim.bus._registry.snapshot)
-        return await TrackedTurnSession.execute(
-            execution.native_package,
-            input_id=claim.input_id,
-            prompt=claim.prompt.text,
-            context_contributions=claim.prompt.contributions,
-            worktree=Path(claim.owner.thread.worktree).absolute(),
-            session=claim.session,
-            model=model,
-            thinking_level=claim.owner.thread.thinking_level,
-            environment=claim.owner.thread.native_environment(
-                claim.bus.log.path.parent, registry, claim.owner.thread.worktree,
-            ),
-            ingress=MaintenanceBarrier(claim.bus._registry.store.path),
-            startup=NativeStartup(claim.bus.log.path.parent, measurements=claim._measurements),
-            selected_tool_mode=selected_tool_mode,
-            observe_event=observe_event,
-            request_observer=partial(record_request_progress, claim.bus.log.path.parent,
-                                     claim.owner.thread.require_turn_lease()),
-            prompt_send_boundary=claim,
-            execution=execution,
-            following=following,
-        )
+        if not isinstance(delivery, SelectedTurnDelivery):
+            async for event in self.stream_native_turn(thread, content, delivery):
+                yield event
+            return
+
+        claim = delivery.claim
+        # TrackedTurnSession is the native turn owner. Adapt its callback to the
+        # backend event stream without letting it outrun the selected observer.
+        pending: asyncio.Queue[tuple[AgentEvent, asyncio.Future[None]] | None] = asyncio.Queue()
+
+        async def observe(event):
+            if not isinstance(event, AgentEvent):
+                await delivery.observe_event(event)
+                return
+            acknowledged = asyncio.get_running_loop().create_future()
+            await pending.put((event, acknowledged))
+            await acknowledged
+
+        async def produce():
+            try:
+                result = await TrackedTurnSession.execute(
+                    delivery.execution.native_package,
+                    input_id=claim.input_id,
+                    prompt=content.text,
+                    context_contributions=content.contributions,
+                    worktree=Path(thread.worktree).absolute(),
+                    session=claim.session,
+                    model=delivery.model,
+                    thinking_level=thread.thinking_level,
+                    environment=delivery.environment,
+                    ingress=MaintenanceBarrier(claim.bus._registry.store.path),
+                    startup=NativeStartup(claim.bus.log.path.parent, measurements=claim._measurements),
+                    selected_tool_mode=delivery.selected_tool_mode,
+                    observe_event=observe,
+                    request_observer=partial(record_request_progress, claim.bus.log.path.parent,
+                                             thread.require_turn_lease()),
+                    prompt_send_boundary=claim,
+                    execution=delivery.execution,
+                    following=delivery.following,
+                )
+                await observe(TrackedDone(text=result.text, ok=True, proof=result.context))
+            finally:
+                pending.put_nowait(None)
+
+        task = asyncio.create_task(produce())
+        try:
+            while (item := await pending.get()) is not None:
+                event, acknowledged = item
+                try:
+                    yield event
+                finally:
+                    if not acknowledged.done():
+                        acknowledged.set_result(None)
+            await task
+        finally:
+            if not task.done():
+                task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
 
     def retained_source(self, session_file: Path, package: Path):
         from .native_pi import NativePiUnavailable

@@ -52,9 +52,6 @@ if TYPE_CHECKING:
 class AgentEvent(ABC):
     """Identity and data for one observation made by the backend."""
 
-    def selected_result(self, path, current):
-        return current
-
     @abstractmethod
     def __init__(self) -> None:
         """Concrete dataclass declarations supply their own payload constructor."""
@@ -232,6 +229,11 @@ class Done(AgentEvent):
     outcome: NativeTurnOutcome = field(default_factory=UnresolvedNativeTurnOutcome)
     # Immutable completion snapshot of TurnOutput's already decoded result.
     retry_result: ProviderRetryResult | None = None
+
+    def selected_result(self, path):
+        from .native_pi import NativePiUnavailable
+
+        raise NativePiUnavailable("Selected turn ended without a proven final answer")
 
     def resolve(
         self, error: Error | None, document: InputDocument, original: OriginalTurnInput,

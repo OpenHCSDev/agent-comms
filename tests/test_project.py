@@ -37,7 +37,7 @@ def test_self_project_change_preserves_thread_and_rejects_invalid_paths(tmp_path
     assert result["current"] == str(new) and result["changed"]
     thread = comms.registry.require("worker")
     assert thread.worktree == str(new)
-    assert thread.pid == os.getpid() and thread.model == "test/model"
+    assert thread.require_process().pid == os.getpid() and thread.model == "test/model"
     assert thread.goal == goal and thread.created_at == 123
     assert thread.session_file == str(old / "session.jsonl")
     assert thread.storage_roots == comms.registry.storage_rule.initial_roots('worker')

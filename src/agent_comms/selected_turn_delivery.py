@@ -3,15 +3,14 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from functools import partial
-from pathlib import Path
-from typing import TYPE_CHECKING, Any, NoReturn
+from typing import TYPE_CHECKING, Any
 
 from .agent_backend import InputContent, TurnDelivery, TurnInbox
-from .agent_events import AgentEvent, Done
+from .agent_events import Done
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .diagnostics import record_request_progress
@@ -24,14 +23,8 @@ if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
     from .native_session_reopen import NativeSessionIdentity
     from .private_send_claim import PrivateSendClaim
-    from .threads import Thread
     from .tracked_turn import NativeObserver
 from .send_outcome import GrantedSend
-
-
-class NoSelectedAnswer:
-    def require(self) -> NoReturn:
-        raise NativePiUnavailable("Selected turn ended without a final answer")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -56,19 +49,6 @@ class SelectedTurnDelivery(TurnDelivery):
         if public_id is not None or native_id != claim.input_id or text != claim.prompt.text:
             raise IdentityConflict("Selected write differs from its original claim")
         yield GrantedSend()
-
-    async def native_events(
-        self, backend: Any, thread: Thread, content: InputContent
-    ) -> AsyncIterator[AgentEvent]:
-        result = await backend.run_tracked_turn(
-            self.claim,
-            self.execution,
-            model=self.model,
-            selected_tool_mode=self.selected_tool_mode,
-            observe_event=self.observe_event,
-            following=self.following,
-        )
-        yield SelectedDone(text=result.text, ok=True, result=result)
 
     @classmethod
     async def execute(
@@ -111,20 +91,12 @@ class SelectedTurnDelivery(TurnDelivery):
             ui_request=NoUiRequest(),
             selected_tool_mode=selected_tool_mode,
         )
-        result: NoSelectedAnswer | NativeTurnResult = NoSelectedAnswer()
         async for event in execution.backend.run_turn(
             thread,
             InputContent(text=claim.prompt.text, contributions=claim.prompt.contributions),
             delivery,
         ):
             await observe_event(event)
-            result = event.selected_result(claim.session.path, result)
-        return result.require()
-
-
-@dataclass(frozen=True, kw_only=True)
-class SelectedDone(Done):
-    result: NativeTurnResult
-
-    def selected_result(self, path: Path, current: Any) -> NativeTurnResult:
-        return self.result
+            if isinstance(event, Done):
+                return event.selected_result(claim.session.path)
+        raise NativePiUnavailable("Selected turn ended without a proven final answer")

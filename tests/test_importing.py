@@ -23,6 +23,7 @@ from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, OpenCod
 from agent_comms.importing import ImportBuffer, ThreadImported, ImportSnapshot, ImportedSessionMetadata
 from agent_comms.native_entries import NativeEntry, ImportedMetadataEntry
 from agent_comms.thread_identity import ThreadProvenance
+from agent_comms.child_process import NoProcess
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.transcript_events import ImportedReply, ImportedRequest
 from agent_comms.turn_context import CodexRolloutProvenance
@@ -585,7 +586,7 @@ def test_opencode_snapshot_is_stopped_resumable_and_source_unchanged(tmp_path, c
     acknowledgement = comms.threads.import_thread(
         OfflineHistory.of(OpenCodeHarness, source, None), name="imported")
     thread = comms.registry.require("imported")
-    assert thread.pid == 0 and comms.registry.status(thread.name) == StoppedThreadStatus()
+    assert thread.process_identity == NoProcess() and comms.registry.status(thread.name) == StoppedThreadStatus()
     assert acknowledgement.source_id == "ses_test" and acknowledgement.imported_messages == 5
     assert thread.title == "Current task"
     assert source.read_bytes() == before

@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Generic, TypeVar
 
 from . import pi_commands as commands
 from . import pi_events as pi
-from .agent_events import AgentEvent, InputRefused
+from .agent_events import AgentEvent, Done, InputRefused
 from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
@@ -53,6 +53,16 @@ if TYPE_CHECKING:
 
 
 NativeObserver = Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]]
+
+
+@dataclass(frozen=True, kw_only=True)
+class TrackedDone(Done):
+    """The settled native turn's verified context and final text."""
+
+    proof: NativeContextProof
+
+    def selected_result(self, path: Path) -> NativeTurnResult:
+        return NativeTurnResult(self.text, self.proof)
 
 
 class NoObserver:

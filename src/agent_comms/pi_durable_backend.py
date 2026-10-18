@@ -340,7 +340,7 @@ class DurableProofData:
 class DurableDone(Done):
     proof: DurableProofData
 
-    def selected_result(self, path: Path, current: Any) -> NativeTurnResult:
+    def selected_result(self, path: Path) -> NativeTurnResult:
         record = self.proof.context
         proof = DurableContextProof(record.input_id, record.session_id, record.session_entry_id,
             record.request_generation, record.llm_context_digest, record.committed_at_ms,

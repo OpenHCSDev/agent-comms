@@ -10,7 +10,7 @@ from acp.schema import SessionConfigSelectOption
 
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.acp import CommsClient
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.coordinator import Coordination
 from agent_comms.errors import RelationViolationError
@@ -89,7 +89,7 @@ async def test_attached_declaration_publishes_membership_without_acquiring_execu
             lambda: attachment.sessions.declare_thread(str(tmp_path / "attached"))
         )
         assert type(attachment.sessions) is AttachedSessionLifecycle
-        assert thread.pid == 0 and thread.process_identity is None
+        assert thread.process_identity == NoProcess()
         assert owner._comms.registry.require(thread.name) == thread
         assert owner._comms.registry.status(thread.name).active
         assert not attachment.sessions.bindings and not attachment.sessions.proxies
