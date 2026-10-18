@@ -24,7 +24,7 @@ def owed_orders() -> dict[str, list[Todo]]:
     owed: dict[str, list[Todo]] = {}
     for todo in order.COMMS.goals.todos.held_for_commander(
         order.COMMS.registry.require(order.ME).incarnation):
-        owed.setdefault(todo.assignment.owner, []).append(todo)
+        owed.setdefault(todo.held().owner, []).append(todo)
     return owed
 
 
