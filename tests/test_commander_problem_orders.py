@@ -95,8 +95,7 @@ def test_two_orders_keep_one_original_goal_and_independent_facts(commander):
     assert first.order.check.result == CountCheckResult(1)
     assert second.order.check.result == CountCheckResult(2)
     assert first.order.first_call_deadline == RecordedEventTime(220)
-    rows = comms.goals.todos.for_goal(comms.registry.require('worker').incarnation, goal.id)
-    rendered = goal.instructions(rows)
+    rendered = '\n'.join(goal.instructions_for(comms.goals, comms.registry.require('worker').incarnation))
     assert 'Problem: P1' in rendered and 'Problem: P2' in rendered
     assert 'printf 1' in rendered and 'printf 2' in rendered
     assert 'P1' not in goal.text and 'P2' not in goal.text
@@ -113,9 +112,9 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
         request='request', deadline=RecordedEventTime(3000), commander='lead',
         expected_revision=todo.revision)).apply(comms, caller)
     assert comms.registry.require('worker').goal.text == 'Original commander brief'
-    rows = comms.goals.todos.for_goal(comms.registry.require('worker').incarnation, goal.id)
-    assert 'printf 7' in goal.instructions(rows)
-    assert 'printf 1' not in goal.instructions(rows)
+    worker = comms.registry.require('worker').incarnation
+    rows, rendered = comms.goals.todos.for_goal(worker, goal.id), '\n'.join(goal.instructions_for(comms.goals, worker))
+    assert 'printf 7' in rendered and 'printf 1' not in rendered
     assert rows[0].deadline == RecordedEventTime(3000)
 
 
@@ -148,9 +147,8 @@ def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
     assert not comms.goals.todos.get('P1').pending
     assert comms.goals.todos.get('P1').order.delivery.at.at > 0
     goal = comms.registry.require('worker').goal
-    rows = comms.goals.todos.for_goal(comms.registry.require('worker').incarnation, goal.id)
-    assert 'Problem: P1' not in goal.instructions(rows)
-    assert 'Problem: P2' in goal.instructions(rows)
+    rendered = '\n'.join(goal.instructions_for(comms.goals, comms.registry.require('worker').incarnation))
+    assert 'Problem: P1' not in rendered and 'Problem: P2' in rendered
     CommsOrderDoneTool(problem='P2', delivery=OperationDelivery()).apply(comms, caller)
     assert isinstance(comms.registry.require('worker').goal.state, CompletedGoal)
 
