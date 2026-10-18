@@ -112,6 +112,41 @@ the last call in plain words, source lines added and removed since the order,
 last message to anyone. Flags are judged by the commander reading the card,
 not by regex (Tristan 2026-10-15: reason semantically).
 
+### Distilled looking: levels of detail
+
+Like zoom levels in an RTS: the default view is cheap, and each unit expands
+on demand. Every level ends with what it left out ("+14 calls", "+3 files"),
+so the commander knows what it has not seen.
+
+**Level 0, the card (one line per unit, every minute).** Only facts that
+change a decision:
+
+- *On target?* Files edited since the order compared with the files and owner
+  the order named: `on order` or `off order: field_codec.py`.
+- *Moving?* Commits pushed, PR state, source lines +/- since the order.
+- *What kind of work?* The mix of the unit's recent calls by tool kind, read
+  from the typed tool family (not by regex on text): `read 6, edit 3, test 2`.
+  The commander judges the pattern: edit/test alternating is moving; tests
+  only is rerunning as investigation; reads only for ten minutes is lost;
+  writing reports is paperwork.
+- *Claim versus state.* The unit's last claim beside the git fact: "merged"
+  next to whether that sha is on main.
+- *New since last look.* Units with nothing new collapse to one dim line;
+  the commander marks a unit seen when it reads it.
+
+**Level 1, the turn (expand one unit).** The newest turns compressed to one
+line each: `14:12 read goals.py, todos.py; edited goals.py (+12/-30); ran
+pytest goals (2 failed)`, plus the unit's last message and the order's
+numbered steps with which ones the edits touched.
+
+**Level 2, the evidence (expand one turn or file).** The diff stat, then the
+hunks for one file, then a single tool call's full input and output.
+
+Commands: `look` (level 0), `look UNIT` (level 1), `look UNIT diff [FILE]` or
+`look UNIT call ID` (level 2). In Toad the same levels are collapsible rows.
+Each level is a Core query over Goals, Todos, `TurnDigestRead` and git, so
+cost stays constant per unit and nothing rescans history.
+
 ## Done so far
 
 - `order.py send` requires a "Works when: <user-visible run>" line; `done`
