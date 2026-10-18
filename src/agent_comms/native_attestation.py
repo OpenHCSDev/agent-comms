@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from . import pi_commands as commands
+from .agent_events import UnpublishedNativeObservation
 from . import turn_failure as failures
 from .native_pi import CAPABILITY
 from .native_session_reopen import NativeSessionIdentity
@@ -34,7 +35,7 @@ class IdentityAttestationError(AttestationError):
         await super().refuse(session)
 
 
-class NativeAttestation(ABC):
+class NativeAttestation(UnpublishedNativeObservation, ABC):
     @property
     @abstractmethod
     def observed(self) -> bool: ...

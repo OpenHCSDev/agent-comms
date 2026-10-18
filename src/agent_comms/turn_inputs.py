@@ -59,7 +59,7 @@ class TurnInboxReceiver(ABC):
                 self.current = None
 
     async def use_settings(self, session, item):
-        await self.write(session, commands.SetModel.from_name(item.model),
+        await self.write(session, *commands.SetModel.from_name(item.model).native_commands(),
                          *item.thinking_level.native_arguments(
                              lambda level: commands.SetThinkingLevel(level=level.wire_value())))
         return True

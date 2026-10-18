@@ -340,7 +340,7 @@ class DurableProofData:
 class DurableDone(Done):
     proof: DurableProofData
 
-    def selected_result(self, path: Path) -> NativeTurnResult:
+    def selected_result(self, path: Path, current: object) -> NativeTurnResult:
         record = self.proof.context
         proof = DurableContextProof(record.input_id, record.session_id, record.session_entry_id,
             record.request_generation, record.llm_context_digest, record.committed_at_ms,
@@ -457,7 +457,7 @@ class PiDurableBackend(PiCapabilities, AgentBackend, Steers):
                         resources=resources.pop_all(), location=location)
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
-                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(environment).native_config / 'auth.json')))
+                    await child.request(Open(str(path), thread.worktree, *model.open_arguments(), thread.thinking_level, str(RestartEnvironment.inherit(environment).native_config / 'auth.json')))
                     await child.request(Resume())
                 self.child = child
             return self.child

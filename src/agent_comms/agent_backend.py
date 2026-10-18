@@ -302,6 +302,10 @@ class TurnDelivery:
     ui_request: UiRequest
     selected_tool_mode: NativeToolMode = field(default_factory=NoNativeTools)
 
+    def run_native(self, backend: Any, thread: Thread,
+                   content: InputContent) -> AsyncIterator[AgentEvent]:
+        return backend.stream_native_turn(thread, content, self)
+
     def request_id(self) -> str:
         from uuid import uuid4
 

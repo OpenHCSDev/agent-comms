@@ -61,7 +61,7 @@ class TrackedDone(Done):
 
     proof: NativeContextProof
 
-    def selected_result(self, path: Path) -> NativeTurnResult:
+    def selected_result(self, path: Path, current: object) -> NativeTurnResult:
         return NativeTurnResult(self.text, self.proof)
 
 

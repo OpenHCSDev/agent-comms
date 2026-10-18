@@ -49,8 +49,28 @@ if TYPE_CHECKING:
     from .turn_phase import TurnPhase
 
 
+class UnpublishedNativeObservation:
+    """Native records affect selected state without becoming backend events."""
+
+    async def observe_selected(self, observer, publish):
+        await observer(self)
+
+
+class UnresolvedSelectedResult:
+    def require(self):
+        from .native_pi import NativePiUnavailable
+
+        raise NativePiUnavailable("Selected turn ended without a proven final answer")
+
+
 class AgentEvent(ABC):
     """Identity and data for one observation made by the backend."""
+
+    async def observe_selected(self, observer, publish):
+        await publish(self)
+
+    def selected_result(self, path, current):
+        return current
 
     @abstractmethod
     def __init__(self) -> None:
@@ -230,7 +250,7 @@ class Done(AgentEvent):
     # Immutable completion snapshot of TurnOutput's already decoded result.
     retry_result: ProviderRetryResult | None = None
 
-    def selected_result(self, path):
+    def selected_result(self, path, current):
         from .native_pi import NativePiUnavailable
 
         raise NativePiUnavailable("Selected turn ended without a proven final answer")

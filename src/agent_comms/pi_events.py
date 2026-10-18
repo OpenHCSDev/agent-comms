@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
+from .agent_events import UnpublishedNativeObservation
 from . import turn_phase as phases
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
@@ -35,7 +36,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class PiEvent(PiPayload, DeclaredFamily):
+class PiEvent(UnpublishedNativeObservation, PiPayload, DeclaredFamily):
     """One declaration-owned record received by the Pi RPC channel."""
 
     wire_tag = "type"

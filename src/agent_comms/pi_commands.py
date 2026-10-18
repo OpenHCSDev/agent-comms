@@ -333,6 +333,9 @@ class SettingCommand(CatalogQuery):
     def require_applied(self, state: StateData) -> None:
         """The command owns any postcondition its response must satisfy."""
 
+    def native_commands(self) -> tuple[SettingCommand, ...]:
+        return (self,)
+
     @property
     @abstractmethod
     def result_type(self) -> type[events.SettingChangeResult]: ...
@@ -374,18 +377,17 @@ class SettingCommand(CatalogQuery):
 @dataclass(frozen=True, kw_only=True)
 class SetModel(SettingCommand):
     @classmethod
-    def from_name(cls, model: str | None):
+    def from_name(cls, model: str | None) -> SetModel | NoModelSelection:
         if model is None:
-            return cls()
+            return NoModelSelection()
         provider, model_id = model.split('/', 1)
         return cls(provider=provider, model_id=model_id)
 
     def require_applied(self, state: StateData) -> None:
-        from .native_pi import NativePiUnavailable
-
-        if self.provider is None or self.model_id is None:
-            raise NativePiUnavailable("Model selection has no requested identity")
         state.model.require_selection(f"{self.provider}/{self.model_id}")
+
+    def open_arguments(self) -> tuple[str | None, str | None]:
+        return self.provider, self.model_id
 
     result_type = events.ModelChanged
     error_message = "Model change failed"
@@ -393,6 +395,17 @@ class SetModel(SettingCommand):
     model_id: str | None = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "modelId"}
     )
+
+
+class NoModelSelection:
+    def native_commands(self) -> tuple[()]:
+        return ()
+
+    def open_arguments(self) -> tuple[None, None]:
+        return None, None
+
+    def require_applied(self, state: StateData) -> None:
+        """No model was requested; retain the host's chosen model."""
 
 
 @dataclass(frozen=True, kw_only=True)
