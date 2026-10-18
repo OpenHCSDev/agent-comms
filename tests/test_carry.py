@@ -16,7 +16,7 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
-from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat
+from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from tools.upgrade_bus import bus_files, carried
 
 REPO = Path(__file__).resolve().parents[1]
@@ -127,7 +127,9 @@ def test_a_deleted_step_name_is_never_reused(tmp_path):
 
 
 def record_source(version: int, fields: str) -> str:
-    return f"class Record:\n    version: ClassVar[int] = {version}\n{fields}"
+    return ("from dataclasses import dataclass\nfrom typing import Annotated, ClassVar\n"
+            "from agent_comms.wire_metadata import WireRootIdText\n\n"
+            f"@dataclass(frozen=True)\nclass Record:\n    version: ClassVar[int] = {version}\n{fields}")
 
 
 @pytest.mark.refactor_guard
@@ -136,17 +138,20 @@ def record_source(version: int, fields: str) -> str:
     (2, "    root: str\n    label: str\n", {}, 1),
     (2, "    root: str\n    label: str\n", {"carry_record": step_source(None)}, 0),
     (1, "    root: str\n    kind: ClassVar[str] = 'x'\n", {}, 0),
+    (1, "    root: Annotated[str, WireRootIdText]\n", {}, 0),
 ])
 def test_a_stored_record_format_change_bumps_its_version_and_ships_a_carry(
         tmp_path, version, fields, step, uncarried):
     repo = Repository(tmp_path)
-    record = tmp_path / "src" / "record.py"
-    record.parent.mkdir()
+    package = git(REPO, "archive", "HEAD", "--", "src/agent_comms")
+    subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=package, check=True, timeout=60)
+    record = tmp_path / "src" / "agent_comms" / "record.py"
     record.write_text(record_source(1, "    root: str\n"))
     base = repo.commit({})
     record.write_text(record_source(version, fields))
     head = repo.commit(step)
-    assert UncarriedRecordFormat.compare(tmp_path, base, head, {"src/record.py"}, "src") == (
+    changed = {"src/agent_comms/record.py"}
+    assert UncarriedRecordFormat.compare(tmp_path, base, head, changed, "src/agent_comms") == (
         {"UncarriedRecordFormat": 0}, {"UncarriedRecordFormat": uncarried})
 
 
