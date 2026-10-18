@@ -10,6 +10,9 @@ from collections.abc import Mapping
 from dataclasses import field, dataclass
 from typing import TYPE_CHECKING, Final
 
+from .delivery_policy import DeliveryPolicy
+from .messages import Message
+from .wake_policy import RecipientDecision
 from .wire_record import MessageWireRecord
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
 from .errors import HumanInitialUnknownError, RelationViolationError
@@ -17,11 +20,9 @@ from .errors import HumanInitialUnknownError, RelationViolationError
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
-    from .messages import Message
     from .private_bus_checkpoint import CertifiedSourceRead
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .wake_policy import RecipientDecision
     from .wire_log import WireLog
     from .wire_metadata import WireMetadata
 
@@ -109,12 +110,6 @@ class CommittedDelivery(MessageWireRecord):
         return self.messages() if addressed or authored else ()
 
     @classmethod
-    def from_wire(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
-        from .messages import Message
-
-        return cls.attest(Message.from_committed_wire(record), record, wire_root_id)
-
-    @classmethod
     def attest(
         cls, message: Message, record: Mapping[str, object], wire_root_id: str
     ) -> CommittedDelivery:
@@ -122,14 +117,13 @@ class CommittedDelivery(MessageWireRecord):
         from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION
 
         from .audience_manifest import freeze_audience
-        from .delivery_policy import DeliveryPolicy
 
         if set(key for key in record if key.startswith(_PRIVATE_WIRE_PREFIX)) != {
             PRIVATE_WIRE_FIELD
         }:
             raise MalformedRecord("Unknown private bus namespace.")
         private = record[PRIVATE_WIRE_FIELD]
-        policy = FieldCodec.decode(DeliveryPolicy, private)
+        policy = DeliveryPolicy.from_sideband(private)
         if _canonical(private) != _canonical(FieldCodec.encode(policy)):
             raise MalformedRecord("Private publication is not canonical.")
         raw = policy.initial
@@ -159,15 +153,33 @@ class CommittedDelivery(MessageWireRecord):
         if raw.decisions != rows or raw.decisions_digest != decisions_digest(rows):
             raise MalformedRecord("Delivery decisions do not match the full committed N.")
         acknowledgement = policy.require_acknowledgement(wire_root_id, message)
+        return cls.proved(wire_root_id, message, policy, decisions, acknowledgement)
+
+    @classmethod
+    def recorded(cls, record: Mapping[str, object], wire_root_id: str) -> CommittedDelivery:
+        """A row the private bus row store indexed, so attest proved it when it entered."""
+        policy = DeliveryPolicy.from_sideband(record[PRIVATE_WIRE_FIELD])
+        decisions = tuple(map(RecipientDecision.from_wire, policy.initial.decisions))
+        message = Message.from_committed_wire(record)
+        return cls.proved(wire_root_id, message, policy, decisions, policy.acknowledgement)
+
+    @classmethod
+    def proved(
+        cls, wire_root_id: str, message: Message, policy: DeliveryPolicy,
+        decisions: tuple[RecipientDecision, ...],
+        acknowledgement: KeyedResponseAcknowledgement | None,
+    ) -> CommittedDelivery:
+        """The delivery a proved policy declares for its message."""
+        raw = policy.initial
         return cls(
             wire_root_id,
             message,
-            candidate,
+            raw.audience,
             decisions,
             raw.decisions_digest,
             raw.control.value,
-            RESOLVER_VERSION,
-            POLICY_VERSION,
+            raw.resolver_version,
+            raw.policy_version,
             acknowledgement=acknowledgement,
         )
 
