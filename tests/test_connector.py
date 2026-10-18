@@ -19,7 +19,7 @@ from agent_comms.connector import (
     RevokeVerb,
 )
 from agent_comms.tool_caller import NoThreadCaller
-from agent_comms.tools import invoke_tool
+from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
@@ -95,7 +95,8 @@ async def test_an_approved_client_lists_exactly_the_readable_tools(client, store
     listed = await (
         await client.post("/mcp", json=LIST, headers={"Authorization": f"Bearer {token}"})
     ).json()
-    assert [tool["name"] for tool in listed["result"]["tools"]] == ["comms_threads"]
+    assert [tool["name"] for tool in listed["result"]["tools"]] == [
+        tool.declared_name for tool in ToolRequest.members_with(ReadTool)]
 
 
 async def test_a_call_returns_what_the_tool_returns_in_process(client, store, root):
