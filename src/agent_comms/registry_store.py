@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
@@ -17,6 +18,10 @@ from .locked_store import LockedStore
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
 from .registry_document import RegistryDocument, RegistryEntry
+from .routing import TurnRouting
+from .thread_identity import TurnIdentity
+from .threads import Thread
+from .turn_lease import ActiveTurn, TurnRecord
 from .store_files import SharedLock
 
 
@@ -36,16 +41,8 @@ class RegistryRevision:
 class RegistryEntryRevision:
     """One thread's entry and the registry revision it was read from, under one lock."""
 
-    revision: tuple[FileRevision | None, ...]
+    revision: tuple[FileRevision | None, FileRevision | None]
     entry: RegistryEntry
-
-    @classmethod
-    def capture(
-        cls, revision: tuple[FileRevision | None, ...], entry: RegistryEntry,
-    ) -> RegistryEntryRevision:
-        source = entry.thread.turn_record
-        turn_revision = FileRevision.capture(source.path) if source is not None else None
-        return cls((*revision, turn_revision), entry)
 
 
 @dataclass(slots=True)
@@ -79,6 +76,27 @@ class RegistryEdit:
     document: RegistryDocument
     original: RegistryDocument
 
+    def lease_turn(
+        self, current: Thread, turn_id: str, routing: TurnRouting | None,
+    ) -> tuple[Thread, int]:
+        """Allocate the original record under this bound registry transaction."""
+        if current.turn_generation >= (1 << 63) - 1:
+            raise RelationViolationError("Turn generation exhausted")
+        identity = TurnIdentity(current.incarnation, current.turn_generation + 1)
+        turn = ActiveTurn(
+            turn_id, current.require_process().pid, routing=routing,
+            claimed_generation=self.document.claims.generations[current.name],
+            turn_generation=identity.generation,
+        )
+        leased = replace(
+            current, turn_generation=identity.generation, last_finished_turn_id=None,
+            project_resume_due=False,
+            turn_record=TurnRecord.begin(self.store.path, identity, turn),
+        )
+        self.document.threads[current.name] = leased
+        self.document.last_seen[current.name] = time.time()
+        return leased, self.document.owners.generations[current.name]
+
     def commit(self) -> None:
         if self.document != self.original:
             self.store.save_unlocked(self.document)
@@ -108,11 +126,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
             return self.empty()
         entry = self.cache.entry
         if entry is not None and entry.revision == revision:
-            return entry.document.capture_turns()
+            return entry.document
         with self.cache.decoding:
             entry = self.cache.entry
             if entry is not None and entry.revision == revision:
-                return entry.document.capture_turns()
+                return entry.document
             raw = json.loads(self.path.read_text())
             if entry is None:
                 document = RegistryDocument.from_wire(raw)
@@ -140,17 +158,12 @@ class RegistryStore(LockedStore[RegistryDocument]):
             self.private_guard_unlocked()
             revision = self.revision_unlocked()
             if revision[0] is None:
-                return RegistryEntryRevision.capture(revision, self.empty().entry(name))
+                return RegistryEntryRevision(revision, self.empty().entry(name))
             entry = self.cache.entry
             if entry is not None and entry.revision == revision[0]:
-                original = entry.document.entry(name)
-                return RegistryEntryRevision.capture(
-                    revision, replace(original, thread=replace(original.thread))
-                )
+                return RegistryEntryRevision(revision, entry.document.entry(name))
             raw = json.loads(self.path.read_text())
-            return RegistryEntryRevision.capture(
-                revision, RegistryDocument.entry_from_wire(raw, name)
-            )
+            return RegistryEntryRevision(revision, RegistryDocument.entry_from_wire(raw, name))
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)

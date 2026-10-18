@@ -30,7 +30,7 @@ from agent_comms.thread_status import (
     StoppedThreadStatus,
 )
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import TurnLeaseFence
+from agent_comms.turn_lease import TurnLeaseFence, TurnRecord
 
 
 @pytest.fixture
@@ -42,7 +42,11 @@ def bound(tmp_path, *, thread_registration):
     owner = thread_registration.new_thread('owner', frozenset(), '/private-worktree', process_identity=ProcessIdentity.capture(os.getpid()), created_at=10.0, goal=goal, turn_generation=7, last_finished_turn_id='a' * 32)
     store.create_goal(goal.id)
     permit = store.claim_launch(store.reserve(goal.id, 1))
-    lease = TurnLeaseFence(TurnIdentity(owner.incarnation, 7), "a" * 32, 3)
+    identity = TurnIdentity(owner.incarnation, 7)
+    lease = TurnLeaseFence(
+        identity, "a" * 32, 3,
+        record=TurnRecord.for_identity(thread_registration.store.path, identity),
+    )
     observation = FailedTurnObservation.from_terminal(
         permit.reservation,
         owner=owner,

@@ -82,7 +82,7 @@ class Registration:
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
             # observed source must not rewrite this authorized turn's settings.
-            observed = replace(change.installed_thread,
+            observed = replace(change.thread,
                 worktree=original.thread.worktree, model=original.thread.model,
                 thinking_level=original.thread.thinking_level)
             return replace(original, thread=observed)
@@ -131,7 +131,7 @@ class Registration:
             change = self._prepare_declaration(edit.document, channels, thread, status)
             change = self._commit_registration(edit, change)
             channels.remember_tags(change.thread.tags, change.thread.created_at)
-        return change.installed_thread
+        return change.thread
 
     def _commit_registration(self, edit: RegistryEdit, change: RegistrationChange) -> RegistrationChange:
         change.thread.role.require_maintenance_open(
@@ -258,7 +258,7 @@ class Registration:
             owner = RegistryOwner.capture_local(edit.document.snapshot(), expected.name)
             owner.require_claim(expected, generation)
             self._assert_maintenance_open_unlocked()
-            leased, _ = edit.document.lease_turn(owner.thread, turn.value, None, self.store.path)
+            leased, _ = edit.lease_turn(owner.thread, turn.value, None)
             edit.commit()
             return leased, generation
 
@@ -280,7 +280,7 @@ class Registration:
             owner.require_exact(snapshot, expected, generation)
             owner.thread.require_idle()
             self._assert_maintenance_open_unlocked()
-            result = edit.document.lease_turn(owner.thread, turn.value, routing, self.store.path)
+            result = edit.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
 
@@ -298,7 +298,7 @@ class Registration:
             owner = RegistryOwner.capture_local(edit.document.snapshot(), name)
             owner.thread.require_idle()
             self._assert_maintenance_open_unlocked()
-            result = edit.document.lease_turn(owner.thread, turn.value, routing, self.store.path)
+            result = edit.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
             return result
 

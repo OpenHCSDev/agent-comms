@@ -6,7 +6,7 @@ import time
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Self
 
 from .activity import ObservedActivity
 from .routing import TurnRouting
@@ -124,7 +124,7 @@ class TurnFence:
     claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
 
 
-    def renamed(self, name: str) -> TurnFence:
+    def renamed(self, name: str) -> Self:
         """Registry alias resolution changes the name, never incarnation or epochs."""
         return replace(self, identity=replace(
             self.identity, incarnation=replace(self.identity.incarnation, name=name)
@@ -142,11 +142,23 @@ class TurnFence:
         )
 
 
+@dataclass(frozen=True, slots=True)
 class TurnLeaseFence(TurnFence):
-    """Exact local begin-turn lease; a reused turn ID is not this lease."""
+    """Exact local begin-turn lease and the record it holds."""
 
-    def record(self, registry_path: Path) -> TurnRecord:
-        return TurnRecord.for_identity(registry_path, self.identity)
+    record: TurnRecord = field(kw_only=True)
+
+    def holds(self, active: ActiveTurn) -> bool:
+        return active.id == self.turn_id and active.current(
+            self.claimed_generation, self.identity.generation
+        )
+
+    def may_release(self, active: ActiveTurn) -> bool:
+        """Withdrawal denies publication, not cleanup of that original turn."""
+        return self.holds(active) or (
+            active.claimed_generation is None
+            and self.holds(replace(active, claimed_generation=self.claimed_generation))
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,16 +196,16 @@ class TurnRecord(JsonDocument[ActiveTurn]):
 
     def without_claim(self) -> None:
         """The revoking registry transaction owns the same lock."""
-        self._publish_unlocked(replace(self.read(), claimed_generation=None))
+        active = self.read()
+        if active.claimed_generation is not None:
+            self._publish_unlocked(replace(active, claimed_generation=None))
 
     def _turn_effects(
         self, lease: TurnLeaseFence, observe: Callable[[TurnState], Iterable[TurnState]],
     ) -> tuple[TurnState, ...]:
         with _store_lock(self.registry_path):
             active = self.read()
-            if active.id != lease.turn_id or not active.current(
-                lease.claimed_generation, lease.identity.generation
-            ):
+            if not lease.holds(active):
                 return ()
             effects = tuple(observe(TurnState(active)))
             for state in effects:

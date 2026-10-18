@@ -77,9 +77,10 @@ class RegistryOwner:
 
     def require_active_turn(self):
         """Return the captured executable turn if its process and input generation still match."""
-        turn = self.thread.active_turn
-        if turn is None:
+        record = self.thread.turn_record
+        if record is None:
             raise StaleFence("registry owner has no active turn")
+        turn = record.read()
         self.thread.role.require_executable(StaleFence("registry owner is not executable"))
         try:
             self.thread.execution.require_native()

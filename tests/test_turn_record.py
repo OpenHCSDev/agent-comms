@@ -1,13 +1,15 @@
 """Real registry/turn files and the public Comms phase entrypoint."""
 
 import os
+from dataclasses import replace
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
+from agent_comms.turn_lease import TurnRecord
 
 
-def test_phase_write_changes_only_the_leased_turn_and_refreshes_point_reads(tmp_path):
+def test_phase_write_changes_only_the_leased_turn_at_point_of_use(tmp_path, monkeypatch):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread(
         'worker', frozenset(), str(tmp_path),
@@ -16,7 +18,7 @@ def test_phase_write_changes_only_the_leased_turn_and_refreshes_point_reads(tmp_
     owner = comms.agents.begin_turn('worker', 'original')
     lease = owner.turn_lease
     before = comms.registry.entry('worker')
-    original_phase = before.entry.thread.turn_state.phase
+    captured_state = before.entry.thread.turn_state
     registry = tmp_path / 'registry.json'
     guard = tmp_path / '.registry-owner-guard'
     root_bytes = registry.read_bytes()
@@ -32,10 +34,24 @@ def test_phase_write_changes_only_the_leased_turn_and_refreshes_point_reads(tmp_
     assert b'"phase"' not in registry.read_bytes()
     assert b'"active_turn"' not in registry.read_bytes()
     after = comms.registry.entry('worker')
-    assert after.revision != before.revision
+    assert after.revision == before.revision
     assert after.entry.thread.turn_state.phase == phase
-    assert before.entry.thread.turn_state.phase == original_phase
+    assert before.entry.thread.turn_state.phase == phase
+    assert captured_state.phase != phase
     assert comms.registry.snapshot().threads['worker'].turn_state.phase == phase
+
+    reads = []
+    read = TurnRecord.read
+
+    def counted(record):
+        reads.append(record.path)
+        return read(record)
+
+    monkeypatch.setattr(TurnRecord, 'read', counted)
+    snapshot = comms.registry.snapshot()
+    comms.registry.entry('worker')
+    replace(snapshot.threads['worker'], title='metadata only')
+    assert reads == []
 
     current_record = after.entry.thread.turn_record.path
     current_bytes = current_record.read_bytes()
@@ -45,5 +61,5 @@ def test_phase_write_changes_only_the_leased_turn_and_refreshes_point_reads(tmp_
     comms.agents.begin_turn('worker', 'successor')
     assert comms.agents.observe_native_phase(lease, ModelWaitPhase()) == ()
     current = comms.registry.require('worker')
-    assert current.active_turn.id == 'successor'
+    assert current.turn_record.read().id == 'successor'
     assert current.turn_record.path != current_record

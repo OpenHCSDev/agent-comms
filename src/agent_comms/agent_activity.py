@@ -238,7 +238,7 @@ class AgentActivity:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
-        if diagnostic is None or diagnostic.recorded_at >= thread.active_turn.started_at:
+        if diagnostic is None or diagnostic.recorded_at >= lease.record.read().started_at:
             return False
         return self._recover_drain(thread.name, owner, diagnostic)
 
@@ -252,7 +252,7 @@ class AgentActivity:
             assert lease is not None
             try:
                 phase = PreparingPhase(detail)
-                lease.record(self.registry.store.path).transition(lease, phase)
+                lease.record.transition(lease, phase)
                 self._record_turn_activity(leased.name, (phase,))
             except BaseException:
                 self.registry.release_turn(lease)
@@ -266,13 +266,13 @@ class AgentActivity:
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = lease.record(self.registry.store.path).transition(lease, phase)
+            effects = lease.record.transition(lease, phase)
             self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = lease.record(self.registry.store.path).observe_native_phase(lease, phase)
+            effects = lease.record.observe_native_phase(lease, phase)
             self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
             return effects
 
