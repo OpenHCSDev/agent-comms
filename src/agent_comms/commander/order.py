@@ -380,6 +380,24 @@ def board():
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
 
 
+def on_record(line: str, recorded: str) -> None:
+    """Put one line on the public record: the narrative file, then #comms.
+
+    Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
+    """
+    new_file = not os.path.exists(NARRATIVE)
+    with open(NARRATIVE, 'a') as f:
+        if new_file:
+            f.write('# What the fleet actually did\n\nEvery failure, in plain words, as it happened. '
+                    'Written by agent-comms-commander order; never edited.\n\n')
+        f.write(f'- {line}\n')
+    try:
+        post(['#comms'], f'On the record: {line}')
+    except SystemExit as failed:
+        print(f'{recorded} recorded, but the #comms post failed ({failed}). '
+              'Repost with order.post; do not record it again.', file=sys.stderr)
+
+
 def strike(unit, why, caught=f'{ME} at review'):
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
 
@@ -401,15 +419,7 @@ def strike(unit, why, caught=f'{ME} at review'):
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
             f'caught by {caught}): {why}')
-    new_file = not os.path.exists(NARRATIVE)
-    with open(NARRATIVE, 'a') as f:
-        if new_file:
-            f.write('# What the fleet actually did\n\nEvery failure, in plain words, as it happened. Written by agent-comms-commander order strike; never edited.\n\n')
-        f.write(f'- {line}\n')
-    try:
-        post(['#comms'], f'On the record: {line}')
-    except SystemExit as failed:  # the strike is already on the record; a rerun would strike twice
-        print(f'Strike recorded, but the #comms post failed ({failed}). Repost with order.post; do not strike again.', file=sys.stderr)
+    on_record(line, 'Strike')
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
@@ -652,13 +662,7 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
             f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
-    with open(NARRATIVE, 'a') as f:
-        f.write(f'- {line}\n')
-    try:
-        post(['#comms'], f'On the record: {line}')
-    except SystemExit as failed:  # the void is on the record; a rerun would find no live strike
-        print(f'Void recorded, but the #comms post failed ({failed}). Repost with order.post.',
-              file=sys.stderr)
+    on_record(line, 'Void')
     print(f'{unit}: {n} strike(s) on {task}')
 
 
