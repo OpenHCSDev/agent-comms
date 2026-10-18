@@ -49,7 +49,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     routed = wire()
     assert routed.root == root
     assert routed.owners.launch_authority == PrivateNkLaunch(root, root_id, tmp_path)
-    selected = PrivateNkLaunch.derive(active_route.resolve_comms_route().root)
+    selected = PrivateNkLaunch.derive()
     assert selected is not None
     assert (selected.validated_root, selected.wire_root_id, selected.native_package) == (
         root,
@@ -59,7 +59,7 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     legacy = tmp_path / "explicit-legacy"
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
     assert wire().root == legacy
-    assert PrivateNkLaunch.derive(active_route.resolve_comms_route().root) is None
+    assert PrivateNkLaunch.derive() is None
 
 
 def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, monkeypatch):
@@ -178,7 +178,7 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     assert route_file.stat().st_mode & 0o777 == 0o600
     assert active_route.read_active_route() == route
     assert wire().root == root
-    assert PrivateNkLaunch.derive(active_route.resolve_comms_route().root).validated_root == root
+    assert PrivateNkLaunch.derive().validated_root == root
     original = route_file.read_bytes()
     with pytest.raises(ValueError, match="already installed"):
         active_route.publish_active_route(route)
@@ -334,7 +334,7 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     with pytest.raises(ValueError, match="invalid JSON"):
         wire()
     with pytest.raises(ValueError, match="invalid JSON"):
-        PrivateNkLaunch.derive(active_route.resolve_comms_route().root)
+        PrivateNkLaunch.derive()
     assert cli.main(["threads"]) == 1
     assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
 

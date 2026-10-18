@@ -22,18 +22,20 @@ class PrivateNkLaunch:
     native_package: Path
 
     @classmethod
-    def derive(cls, root: Path) -> PrivateNkLaunch | None:
+    def derive(cls, root: Path | None = None) -> PrivateNkLaunch | None:
         """This root's launch from the owners of its facts, or None for an ordinary root.
 
-        The marker owns the root ID. A published route for this root owns its
-        package; otherwise this installation's pin does. A parent and its child
-        read the same marker, route and pin, so they derive the same launch.
+        Without a root, the process's selected route names it. The marker owns
+        the root ID. A published route for this root owns its package; otherwise
+        this installation's pin does. A parent and its child read the same
+        marker, route and pin, so they derive the same launch.
         """
+        from .active_route import read_active_route, resolve_comms_route
+
+        root = resolve_comms_route(root).root
         metadata = WireLog(root / "bus.jsonl").read_metadata_unlocked()
         if not metadata.private:
             return None
-        from .active_route import read_active_route
-
         route = read_active_route()
         if route is not None and route.root == root:
             return cls(root, route.wire_root_id, route.native_package)
