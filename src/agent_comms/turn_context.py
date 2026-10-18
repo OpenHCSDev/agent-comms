@@ -10,6 +10,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Self
 
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
@@ -1003,14 +1004,20 @@ class ContextManifest:
             raise ValueError("Source is outside the original recorded context segment")
         return ContextSourceText(source.public_description(), source.public_text(comms))
 
-    def changed_since(self, previous: ContextManifest) -> dict:
+    def changed_since(self, previous: ContextManifest) -> ContextManifestChange:
         """An inspection projection, never a retained input copy."""
-        return {
-            "previous_turn": FieldCodec.encode(previous.turn),
-            "turn": FieldCodec.encode(self.turn),
-            "removed": [FieldCodec.encode(s) for s in previous.segments if s not in self.segments],
-            "added": [FieldCodec.encode(s) for s in self.segments if s not in previous.segments],
-        }
+        return ContextManifestChange(
+            previous.turn, self.turn,
+            tuple(s for s in previous.segments if s not in self.segments),
+            tuple(s for s in self.segments if s not in previous.segments))
+
+
+@dataclass(frozen=True)
+class ContextManifestChange(CliResult):
+    previous_turn: ContextTurn
+    turn: ContextTurn
+    removed: tuple[SegmentManifest, ...]
+    added: tuple[SegmentManifest, ...]
 
 
 @dataclass(frozen=True)

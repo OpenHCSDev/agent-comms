@@ -18,6 +18,9 @@ from agent_comms.selected_tool_broker import (
     record_selected_terminal,
 )
 from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.coordinated_runtime import IndependentExecution
+from agent_comms.native_startup import NativeStartup
+from agent_comms.turn_watchdog import ModelWait
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_session import SelectedSession
 
@@ -111,9 +114,10 @@ send({'type':'agent_settled'})
         prompt="Selected request",
         worktree=tmp_path,
         session=SelectedSession(tmp_path / "sessions"),
-        pi_session=PersistentPiSession(),
+        execution=IndependentExecution(),
+        startup=NativeStartup(tmp_path),
         selected_tool_mode=SelectedToolMode(owner_action),
-        model_wait_timeout=15,
+        model_wait=ModelWait(15),
         model=selected_model,
     )
     if variant == "success":

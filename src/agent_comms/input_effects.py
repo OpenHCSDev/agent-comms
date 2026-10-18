@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -27,7 +26,3 @@ class InputEffects(ABC):
     @property
     @abstractmethod
     def configured_root_id(self) -> str: ...
-
-    @property
-    @abstractmethod
-    def private_nk_native_package(self) -> Path | None: ...

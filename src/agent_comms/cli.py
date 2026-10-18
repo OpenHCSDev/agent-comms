@@ -15,6 +15,7 @@ from collections.abc import Sequence
 from contextlib import ExitStack
 from pathlib import Path
 
+from .bus_route_counts import CompletingRouteCounts
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import wire
@@ -51,12 +52,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         with ExitStack() as route_guard:
             args = build_parser().parse_args(argv)
-            command = CliCommand.from_namespace(args)
+            command = CliCommand.decode(args.command).from_namespace(args)
             from .active_route import resolve_comms_route
 
             route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
             route_guard.enter_context(route.hold_client_route())
-            comms = wire(route)
+            # One CLI call answers in full; only the UI yields between index units.
+            comms = wire(route, projection=CompletingRouteCounts)
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

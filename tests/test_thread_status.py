@@ -63,7 +63,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     assert reopened.snapshot() == before
     assert reopened.status("owner") == status
     assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
-    assert comms.views.thread_detail("owner")["status"] == status.declared_name
+    assert comms.views.thread_detail("owner").to_wire()["status"] == status.declared_name
     assert comms.views.list_threads()[0]["status"] == status.declared_name
     activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
     comms.agents.activity.emit(activity)
@@ -130,17 +130,18 @@ def test_delete_fence_rejects_metadata_and_presence_without_erasing_data(tmp_pat
 def test_roster_and_controls_keep_archived_threads_dormant():
     from agent_comms.tools import CommsStartTool, ToolRequest
     from agent_comms.thread_execution import OwnerLifecycleControl
+    from agent_comms.child_process import NoProcess
 
     archived = ArchivedThreadStatus()
     assert archived.restored() == archived
     for command in ToolRequest.members_with(OwnerLifecycleControl):
-        assert not command.available_for(archived, owner_pid=123)
+        assert not command.available_for(archived, process=ProcessIdentity(123, 1))
     stopped = StoppedThreadStatus()
-    assert CommsStartTool.available_for(stopped, owner_pid=123)
+    assert CommsStartTool.available_for(stopped, process=ProcessIdentity(123, 1))
     for live in (RunningThreadStatus(), IdleThreadStatus()):
         assert live.restored() == stopped
-        assert not CommsStartTool.available_for(live, owner_pid=123)
-        assert CommsStartTool.available_for(live, owner_pid=0)
+        assert not CommsStartTool.available_for(live, process=ProcessIdentity(123, 1))
+        assert CommsStartTool.available_for(live, process=NoProcess())
 
 
 def test_batch_source_rename_keeps_the_original_registry_fence(comms):

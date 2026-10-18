@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from conftest import publish_initial
 import os
 import sys
 from dataclasses import replace
@@ -57,7 +58,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                 comms.registry.new_thread(name, frozenset({'team'}), str(worktree), process_identity=ProcessIdentity.capture(os.getpid()), created_at=created)
             )
         root_id = comms.messaging.initialize_private_initial_protocol()
-        message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+        message = publish_initial(comms, "sender", "#team", "@Alice investigate")
         initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
         with Coordination(str(root / "coordination.sqlite3")) as store:
             install_private_cohort_schema(store)
@@ -126,14 +127,14 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
                     ExistingFileClaim(Path(resource)),
                 )
             assert comms.bus.log.claim_projection().get(str(resource)) is None
-            append = comms.bus.log._append_private_unlocked
+            append = comms.bus.log.append_private_unlocked
 
             def append_then_lose_receipt(metadata: dict[str, int | str], row: dict) -> None:
                 append(metadata, row)
                 raise OSError("lost acknowledgement after durable append")
 
             with monkeypatch.context() as patch:
-                patch.setattr(comms.bus.log, "_append_private_unlocked", append_then_lose_receipt)
+                patch.setattr(comms.bus.log, "append_private_unlocked", append_then_lose_receipt)
                 with pytest.raises(ClaimEnvelopeUnknownError):
                     publish_selected_resource_claim(
                         comms, store, claim_scope, owner.name, ExistingFileClaim(Path(resource))

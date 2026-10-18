@@ -254,7 +254,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
         try:
             await wait_for(lambda: native.provider.posts == 1)
             message = await Coordination.run_worker(partial(
-                Comms(native.root, private_initial_writes=True).messaging.send_message,
+                Comms(native.root).messaging.send_message,
                 "sender", session, "are you still on the parser?",
             ))
             native.provider.response_gate = None
@@ -345,7 +345,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
 
         await Coordination.run_worker(prepare)
         initial = await Coordination.run_worker(partial(
-            Comms(native.root, private_initial_writes=True).messaging.send_message,
+            Comms(native.root).messaging.send_message,
             "sender", session, "first",
         ))
         try:
@@ -354,7 +354,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
             # implementation while Core still has not opened following input.
             await wait_for(lambda: b'"id":"local-tool-once"' in native.session.read_bytes())
             message = await Coordination.run_worker(partial(
-                Comms(native.root, private_initial_writes=True).messaging.send_message,
+                Comms(native.root).messaging.send_message,
                 "sender", session, "deliver as soon as following input opens",
             ))
             await wait_for(lambda: session in owner.inputs._idle_private_revisions)
@@ -433,7 +433,7 @@ async def test_waiting_messages_follow_the_original_on_the_changed_model(
         try:
             await wait_for(lambda: native.provider.posts == 1)
             assert native.provider.requests[0]["model"] == "fixture"
-            sender = Comms(native.root, private_initial_writes=True).messaging
+            sender = Comms(native.root).messaging
             for body in ("first question", "second question"):
                 await Coordination.run_worker(partial(
                     sender.send_message, "sender", session, body
@@ -554,7 +554,7 @@ async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(na
             reply_turn = owner.inputs.wake_tasks[session]
             known = len(stored_inputs(owner.inputs.dispositions.root).rows)
             assert native.provider.requests[0]["model"] == "fixture"
-            elsewhere = Comms(native.root, private_initial_writes=True)
+            elsewhere = Comms(native.root)
 
             def store_change():
                 thread = elsewhere.registry.require(session)
@@ -614,7 +614,7 @@ async def test_model_change_stored_by_another_process_reaches_the_running_turn(n
             await wait_for(lambda: native.provider.posts == 1)
             assert native.provider.requests[0]["model"] == "fixture"
             # What `agent-comms invoke --tool comms_model` does from its own process.
-            elsewhere = Comms(native.root, private_initial_writes=True)
+            elsewhere = Comms(native.root)
 
             def store_change():
                 thread = elsewhere.registry.require(session)

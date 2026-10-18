@@ -32,7 +32,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
     # Preserve the actual old acknowledgement database for history; rebuild only runtime.
     (comms.root / "coordination.sqlite").rename(comms.root / "prior-runtime.sqlite")
     with comms.bus.log.locked():
-        marker = comms.bus.log._private_marker_unlocked()
+        marker = comms.bus.log.private_marker_unlocked()
         marker.claimed_after_seq = marker.last_seq
         comms.bus.log.write_metadata_unlocked(marker)
 
@@ -63,7 +63,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         fresh = reopened.messaging.send_user_message("bob", "fresh input", worktree=str(tmp_path))
         assert fresh.seq > old.seq
         with reopened.bus.log.locked():
-            assert reopened.bus.log._private_marker_unlocked().claimed_after_seq == old.seq
+            assert reopened.bus.log.private_marker_unlocked().claimed_after_seq == old.seq
         for _ in range(2):
             await _accept_visible_deliveries(
                 reopened.bus, root_id, store.session.path, lookups["bob"], 0, owner_name="bob"
@@ -87,7 +87,7 @@ def test_persisted_marker_cannot_omit_claim_authority(tmp_path):
     del data[FieldCodec.record_key(WireMetadata, "claimed_after_seq")]
     path.write_text(json.dumps(data))
     with pytest.raises(RelationViolationError, match="required fields"), comms.bus.log.locked():
-        comms.bus.log._private_marker_unlocked()
+        comms.bus.log.private_marker_unlocked()
 
 
 def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):

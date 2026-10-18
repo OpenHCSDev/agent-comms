@@ -87,12 +87,12 @@ from agent_comms.child_process import PosixPlatform
 from agent_comms.cli import main
 BusRouteCounts.rebuild_bytes = 1
 original = PosixPlatform.acquire_store_lock
-def observe(self, descriptor, *, shared, blocking):
+def observe(self, descriptor, *, mode, blocking):
     if blocking and os.readlink(f'/proc/self/fd/{descriptor}').endswith(
         f'.bus_route_counts.v{RouteTable.schema}.sqlite3.lock'
     ):
         os.write(int(sys.argv[1]), b'B')
-    return original(self, descriptor, shared=shared, blocking=blocking)
+    return original(self, descriptor, mode=mode, blocking=blocking)
 PosixPlatform.acquire_store_lock = observe
 raise SystemExit(main(sys.argv[2:]))
 '''

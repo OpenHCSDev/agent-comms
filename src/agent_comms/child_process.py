@@ -25,12 +25,21 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, UnionDecoder, ValueDecoder, WireValue
+from .errors import RelationViolationError
 from .sealed import Sealed
+
+if TYPE_CHECKING:
+    from .registration_change import RegistrationChange, UpdatedRegistration
+    from .store_files import LockMode
+    from .thread_identity import ThreadIncarnation, ThreadRole
+    from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .thread_status import ThreadStatus
+    from .turn_lease import ActiveTurn
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -51,8 +60,157 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
+class ProcessState(WireValue):
+    """An exact recorded process or a worker which has never started."""
+
+    accepts_null = True
+    external_json_shape = True
+    _decoder: ClassVar[UnionDecoder[ProcessState]]
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if ProcessState in cls.__bases__:
+            ProcessState._decoder = ValueDecoder.for_members(tuple(ProcessState.__subclasses__()))
+
+    @classmethod
+    def from_wire(cls, data: object) -> ProcessState:
+        return cls._decoder.decode(data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(cls._decoder.target)
+
+    def to_wire(self) -> object:
+        return FieldCodec.encode_record(self)
+
+    @abstractmethod
+    def allows_owner_start(self) -> bool: ...
+    @abstractmethod
+    def allows_inactive_stop(self) -> bool: ...
+    @abstractmethod
+    def allows_goal_observation(self, status: ThreadStatus) -> bool: ...
+    @abstractmethod
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool: ...
+    @abstractmethod
+    def conflicts_with(self, previous: ProcessState) -> bool: ...
+
+    @abstractmethod
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange: ...
+
+    @abstractmethod
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange: ...
+
+    @abstractmethod
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation: ...
+
+    @abstractmethod
+    def attachment_process(self, previous: ProcessState) -> ProcessState: ...
+
+    @abstractmethod
+    def offline(self) -> bool: ...
+
+    @abstractmethod
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity: ...
+
+    @abstractmethod
+    def alive(self) -> bool: ...
+
+    @abstractmethod
+    def runs_here(self) -> bool: ...
+    @abstractmethod
+    def owns_turn(self, turn: ActiveTurn) -> bool: ...
+
+    @abstractmethod
+    def signal(self, signum: int) -> None: ...
+
+    @abstractmethod
+    def require_release_by(self, process: ProcessIdentity) -> None: ...
+
+    @abstractmethod
+    def pid_fields(self) -> dict[str, int]: ...
+
+
 @dataclass(frozen=True)
-class ProcessIdentity:
+class NoProcess(ProcessState):
+    @classmethod
+    def from_wire(cls, data: object) -> NoProcess:
+        FieldCodec.decode(type(None), data)
+        return cls()
+
+    def to_wire(self) -> None:
+        return None
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(type(None))
+
+    def allows_owner_start(self) -> bool:
+        return True
+
+    def allows_inactive_stop(self) -> bool:
+        return True
+
+    def allows_goal_observation(self, status: ThreadStatus) -> bool:
+        return False
+
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
+        return False
+
+    def conflicts_with(self, previous: ProcessState) -> bool:
+        return False
+
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return change
+
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return change
+
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
+        return ordinary
+
+    def attachment_process(self, previous: ProcessState) -> ProcessState:
+        return previous
+
+    def offline(self) -> bool:
+        return False
+
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity:
+        raise RelationViolationError(message)
+
+    def alive(self) -> bool:
+        return False
+
+    def runs_here(self) -> bool:
+        return False
+
+    def owns_turn(self, turn: ActiveTurn) -> bool:
+        return False
+
+    def signal(self, signum: int) -> None:
+        pass
+
+    def require_release_by(self, process: ProcessIdentity) -> None:
+        # Stopping before the first start still produces a valid release.
+        pass
+
+    def pid_fields(self) -> dict[str, int]:
+        return {}
+
+
+@dataclass(frozen=True)
+class ProcessIdentity(ProcessState):
     pid: int
     start_time: int
 
@@ -61,16 +219,104 @@ class ProcessIdentity:
             raise ValueError("A positive PID and platform start time are required")
 
     @classmethod
+    def pid_argument(cls, value: str) -> dict[str, object]:
+        return FieldCodec.encode_record(cls.capture(int(value)))
+
+    @classmethod
     def capture(cls, pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
+
+    @classmethod
+    def from_wire(cls, data: object) -> ProcessIdentity:
+        return FieldCodec.decode_record(cls, data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.record_schema(cls)
+
+    def allows_owner_start(self) -> bool:
+        return False
+
+    def allows_inactive_stop(self) -> bool:
+        return self.runs_here()
+
+    def allows_goal_observation(self, status: ThreadStatus) -> bool:
+        return status.active
+
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
+        return role.executable and status.active
+
+    def conflicts_with(self, previous: ProcessState) -> bool:
+        return self != previous
+
+    def offline(self) -> bool:
+        return not self.alive()
+
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
+        return binding.native_presentation(ordinary)
+
+    def attachment_process(self, previous: ProcessState) -> ProcessState:
+        return self
+
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity:
+        return self
+
+    @staticmethod
+    def in_group(pid: int, start_time: int, pgid: int) -> ProcessIdentity:
+        return GroupLeader(pid, start_time) if pgid == pid else GroupMember(pid, start_time)
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ProcessIdentity):
+            return NotImplemented
+        return (self.pid, self.start_time) == (other.pid, other.start_time)
 
     def alive(self) -> bool:
         return Platform.current().matches(self)
 
+    def runs_here(self) -> bool:
+        return os.getpid() == self.pid
 
-class ProcessGroups(ABC):
-    @abstractmethod
-    def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]: ...
+    def owns_turn(self, turn: ActiveTurn) -> bool:
+        return turn.owner_pid == self.pid
+
+    def signal(self, signum: int) -> None:
+        Platform.current().send(self, signum)
+
+    def require_release_by(self, process: ProcessIdentity) -> None:
+        if self != process:
+            raise RelationViolationError("Only the registered owner may release itself.")
+
+    def pid_fields(self) -> dict[str, int]:
+        return {"pid": self.pid}
+
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return previous.restarted_registration(change, incarnation)
+
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
+        return change.restarted() if incarnation != change.previous.incarnation else change
+
+    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+        return ()  # A stored, exited identity cannot grant group ownership.
+
+
+NO_PROCESS = NoProcess()
+
+
+class GroupLeader(ProcessIdentity):
+    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+        return tuple(member for member in platform.members_of_group(self.pid)
+                     if member.start_time >= self.start_time)
+
+
+class GroupMember(ProcessIdentity):
+    def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
+        return (self,) if platform.matches(self) else ()
 
 
 class PidfdHandles:
@@ -177,14 +423,14 @@ class Platform(DeclaredFamily, affix="Platform"):
         return cls.decode(sys.platform)()
 
     @abstractmethod
-    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         """One nonblocking native attempt; busy is BlockingIOError."""
 
-    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         """Use the common physical wait driver when the platform needs polling."""
         from .store_files import StoreLockContention
 
-        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, shared=shared)
+        StoreLockContention(math.inf if blocking else 0).acquire(descriptor, self, mode=mode)
 
     def release_store_lock(self, descriptor: int) -> None:
         """POSIX locks end at last close, including inherited descriptors."""
@@ -192,11 +438,11 @@ class Platform(DeclaredFamily, affix="Platform"):
     @abstractmethod
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
 
-    @abstractmethod
-    def terminate_group(self, identity: ProcessIdentity) -> None: ...
+    def terminate_group(self, identity: ProcessIdentity) -> None:
+        self.signal_group(identity, signal.SIGTERM)
 
-    @abstractmethod
-    def force_group(self, identity: ProcessIdentity) -> None: ...
+    def force_group(self, identity: ProcessIdentity) -> None:
+        self.signal_group(identity, signal.SIGKILL)
 
     @abstractmethod
     def identity(self, pid: int) -> ProcessIdentity: ...
@@ -207,9 +453,12 @@ class Platform(DeclaredFamily, affix="Platform"):
         except ProcessLookupError:
             return False
 
-    def require(self, identity: ProcessIdentity) -> None:
-        if not self.matches(identity):
-            raise IdentityMismatchError(f"Process incarnation changed: {identity.pid}")
+    def require(self, identity: ProcessIdentity) -> ProcessIdentity:
+        with suppress(ProcessLookupError):
+            current = self.identity(identity.pid)
+            if current == identity:
+                return current
+        raise IdentityMismatchError(f"Process incarnation changed: {identity.pid}")
 
     @abstractmethod
     def send(self, identity: ProcessIdentity, signum: int) -> None: ...
@@ -220,45 +469,41 @@ class Platform(DeclaredFamily, affix="Platform"):
     def signal_group(self, leader: ProcessIdentity, signum: int) -> None:
         # Snapshot identities, then signal each exact member. Never signal a
         # numeric group after its leader may have been reaped and reused.
+        signalled = 0
         for member in self.group_members(leader):
-            with suppress(ProcessLookupError):
+            try:
                 self.send(member, signum)
+            except IdentityMismatchError:
+                raise
+            except ProcessLookupError:
+                continue
+            signalled += 1
+        if not signalled and self.matches(leader):
+            raise RuntimeError(f"Live process {leader.pid} was not signalled")
 
 
-class PosixPlatform(ProcessGroups, Platform):
-    def acquire_store_lock(self, descriptor: int, *, shared: bool, blocking: bool) -> None:
+class PosixPlatform(Platform):
+    def acquire_store_lock(self, descriptor: int, *, mode: LockMode, blocking: bool) -> None:
         import fcntl
 
-        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-        fcntl.flock(descriptor, mode | (0 if blocking else fcntl.LOCK_NB))
+        fcntl.flock(descriptor, mode.flock() | (0 if blocking else fcntl.LOCK_NB))
 
-    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import fcntl
 
-        mode = fcntl.LOCK_SH if shared else fcntl.LOCK_EX
-        fcntl.flock(descriptor, mode | fcntl.LOCK_NB)
+        fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
 
     def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
         return PosixLaunch(command, pass_fds)
-
-    def terminate_group(self, identity: ProcessIdentity) -> None:
-        self.signal_group(identity, signal.SIGTERM)
-
-    def force_group(self, identity: ProcessIdentity) -> None:
-        self.signal_group(identity, signal.SIGKILL)
 
     def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
         try:
             current = self.identity(leader.pid)
         except ProcessLookupError:
-            current = None
-        if current is not None and current != leader:
-            raise IdentityMismatchError(f"Process group leader changed: {leader.pid}")
-        return tuple(
-            member
-            for member in self.members_of_group(leader.pid)
-            if member.start_time >= leader.start_time
-        )
+            return leader.members(self)
+        if current != leader:
+            raise IdentityMismatchError(f"Process incarnation changed: {leader.pid}")
+        return current.members(self)
 
     @abstractmethod
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]: ...
@@ -279,7 +524,8 @@ class LinuxPlatform(NamespaceContainment, PidfdHandles, PosixPlatform):
             raise ProcessLookupError(pid) from None
         if fields[0] in {"Z", "X"}:
             raise ProcessLookupError(pid)
-        return ProcessIdentity(pid, int(fields[19])), int(fields[2])
+        group = int(fields[2])
+        return ProcessIdentity.in_group(pid, int(fields[19]), group), group
 
     def identity(self, pid: int) -> ProcessIdentity:
         return self._stat(pid)[0]
@@ -367,7 +613,9 @@ class DarwinPlatform(PosixPlatform):
             raise OSError(code, os.strerror(code))
         if info.status == 5:  # SZOMB: exited, awaiting reap.
             raise ProcessLookupError(pid)
-        return ProcessIdentity(pid, info.start_seconds * 1_000_000 + info.start_microseconds)
+        return ProcessIdentity.in_group(
+            pid, info.start_seconds * 1_000_000 + info.start_microseconds, info.pgid,
+        )
 
     def members_of_group(self, pgid: int) -> tuple[ProcessIdentity, ...]:
         # proc_listpids returns bytes. Grow until one query fits; never mistake
@@ -390,18 +638,19 @@ class DarwinPlatform(PosixPlatform):
         return tuple(members)
 
 
-class Win32Platform(ProcessGroups, Platform):
+class Win32Platform(Platform):
     """Kernel creation times and named job objects bind the complete child tree."""
 
     store_lock_interval = 0.01
 
-    def try_store_lock(self, descriptor: int, *, shared: bool) -> None:
+    def try_store_lock(self, descriptor: int, *, mode: LockMode) -> None:
         import errno
         import msvcrt
 
         os.lseek(descriptor, 0, os.SEEK_SET)
         try:
-            msvcrt.locking(descriptor, msvcrt.LK_NBRLCK if shared else msvcrt.LK_NBLCK, 1)
+            # The Windows runtime has no shared lock: LK_NBRLCK is LK_NBLCK.
+            msvcrt.locking(descriptor, msvcrt.LK_NBLCK, 1)
         except OSError as error:
             if error.errno not in {errno.EACCES, errno.EDEADLK}:
                 raise
@@ -1244,7 +1493,7 @@ class ObservedProcess(SynchronousProcess):
     """A recorded incarnation: may signal it, cannot claim a parent's exit code."""
 
     def require_stop_authority(self) -> None:
-        self.platform.require(self.identity)
+        self.identity = self.platform.require(self.identity)
 
     def reap(self) -> ChildOutcome:
         return DetachedExitOutcome()

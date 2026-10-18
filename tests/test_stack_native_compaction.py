@@ -210,7 +210,7 @@ async def test_pi_engine_compacts_inside_a_core_turn(case: str, monkeypatch) -> 
                 async with asyncio.timeout(30):
                     async for event in backend.stream_agent_events(
                         native_bin, native_args, "Reply OK.", str(project),
-                        env_extra=child_env, session_file=str(session),
+                        root=Path(str(project)), env_extra=child_env, session_file=str(session),
                         native_start=lambda *_: True,
                         persistent_session=pi_session,
                     ):
@@ -315,7 +315,7 @@ async def _acp_threshold(root, project, session, native_bin, native_args, child_
     await owner.new_session(str(project))
     owner.inputs.drain_tasks["project"].cancel()
     await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
-    comms.threads.attach_session(comms.registry.require("project"), str(session))
+    comms.threads.attach_session((attachment_owner := comms.registry.require("project")), str(session), process=attachment_owner.process_identity)
     turn = asyncio.create_task(InitialInput.run(owner.inputs, "project", "project", "Reply OK."))
     try:
         entered = await asyncio.to_thread(summary_entered.wait, 10)

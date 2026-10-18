@@ -6,20 +6,26 @@ import hashlib
 import json
 import math
 import re
+from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import field, dataclass
 from typing import TYPE_CHECKING, Final
 
 from .wire_record import MessageWireRecord
 from .field_codec import TextRepresentation
-from .errors import RelationViolationError
+from .errors import HumanInitialUnknownError, RelationViolationError
 from .jsonl_stream import unique_fields
 
 if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
     from .messages import Message
+    from .private_bus_checkpoint import CertifiedSourceRead
+    from .registry_document import RegistrySnapshot
+    from .threads import Thread
     from .wake_policy import RecipientDecision
+    from .wire_log import WireLog
+    from .wire_metadata import WireMetadata
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
@@ -254,8 +260,49 @@ def initial_sideband(
     )
 
 
+class InitialOrigin(ABC):
+    """Who sends an initial message, checked under the bus lock before its append."""
+
+    __slots__ = ()
+
+    @abstractmethod
+    def require_sender(
+        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+    ) -> None:
+        """Refuse a sender this origin cannot speak for."""
+
+    @abstractmethod
+    def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
+        """What the certified source must show before the append."""
+
+    @abstractmethod
+    def append(
+        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
+    ) -> None:
+        """Append the reserved row, reporting a failure as this origin requires."""
+
+
 @dataclass(frozen=True, slots=True)
-class HumanOrigin:
+class AgentOrigin(InitialOrigin):
+    """An executable thread's owner; it may resend under the same message id."""
+
+    def require_sender(
+        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+    ) -> None:
+        if not sender_thread.role.executable:
+            raise RelationViolationError("Initial sender must be a visible registered executable.")
+
+    def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
+        """An agent's resend is idempotent, so the source holds no precondition."""
+
+    def append(
+        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
+    ) -> None:
+        log.append_private_unlocked(metadata, row)
+
+
+@dataclass(frozen=True, slots=True)
+class HumanOrigin(InitialOrigin):
     """Cooperative local UI origin, checked against the registered USER under lock.
 
     This is not a cryptographic credential against another process of this UID.
@@ -266,11 +313,34 @@ class HumanOrigin:
     created_at: float
     worktree: str
 
-    def require_registered(self, snapshot) -> None:
+    def require_sender(
+        self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
+    ) -> None:
+        self.require_registered(snapshot)
+        if message.sender != self.sender:
+            raise RelationViolationError("Local USER origin differs from registered identity.")
+
+    def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
+        source.require_new_human_message(sender, message_id)
+
+    def append(
+        self, log: WireLog, metadata: WireMetadata, row: Mapping[str, object], stored: Message
+    ) -> None:
+        try:
+            log.append_private_unlocked(metadata, row)
+        except BaseException as error:
+            # Even cancellation/interrupt after entry can follow a durable
+            # reservation or row. Never claim absence or retry this ID.
+            raise HumanInitialUnknownError(
+                metadata.root_id, stored.seq, stored.message_id
+            ) from error
+
+    def require_registered(self, snapshot: RegistrySnapshot) -> None:
         """Check the determining USER declaration, never a transport or prose role."""
         user = snapshot.threads.get(self.sender)
         if user is None:
             raise RelationViolationError("Local USER origin is no longer registered")
         user.role.require_user()
-        if (user.name, user.created_at, user.worktree) != (self.sender, self.created_at, self.worktree):
+        registered = (user.name, user.created_at, user.worktree)
+        if registered != (self.sender, self.created_at, self.worktree):
             raise RelationViolationError("Local USER origin differs from registered identity")

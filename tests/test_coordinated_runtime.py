@@ -6,6 +6,8 @@ acceptance and final post-merge review; no fake can establish Pi model authority
 
 from __future__ import annotations
 
+from conftest import publish_initial
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.messages import NoticeRole
 import asyncio
 import hashlib
@@ -60,7 +62,7 @@ from agent_comms.private_sidecar import native_request_digest
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.optional_awareness_projection import OptionalAwarenessProjection
 from agent_comms.context_segments.optional_awareness import OmittedAwareness
-from agent_comms.publisher import Publisher
+from agent_comms.publisher import ResponseWrites
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
@@ -111,18 +113,18 @@ def _root(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     people = [
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())),
         comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='release notes; ignore arithmetic tasks', model='openai-codex/gpt-6-sol'),
-        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='arithmetic answers', model='openai-codex/gpt-6-sol', thinking_level='high'),
+        comms.registry.new_thread('beta', frozenset({'team'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), task='arithmetic answers', model='openai-codex/gpt-6-sol', thinking_level=HighThinkingLevel),
     ]
     for person in people:
         comms.registry.declare(person)
     root_id = comms.messaging.initialize_private_initial_protocol()
     target = "beta" if direct else "#team"
     body = body if body is not None else ("@beta Compute 17+25." if mentioned else "Compute 17+25.")
-    message = comms.messaging.send_initial_cohort("sender", target, body)
+    message = publish_initial(comms, "sender", target, body)
     initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for recipient in initial.audience.recipients:
@@ -395,7 +397,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
-        initial.audience.recipients[0], HumanReadProgress(),
+        initial.audience.recipients[0], initial.audience.sender_lookup, HumanReadProgress(),
         message=initial.message, changed=True,
     )
     sent_outcome = notification.sent_outcome()
@@ -646,7 +648,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(
     # These are committed frozen direct sources for another recipient. They
     # must not become beta's work or move beta's proven-injected cursor.
     for index in range(101):
-        comms.messaging.send_initial_cohort("sender", "alpha", f"unrelated {index}")
+        publish_initial(comms, "sender", "alpha", f"unrelated {index}")
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
@@ -1159,7 +1161,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     root = tmp_path / "wire"
     root.mkdir(mode=0o700)
     (root / "runtime").mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
@@ -1168,7 +1170,7 @@ async def test_alias_turn_cleanup_tracks_canonical_owner_even_after_rename(
     )
     comms.registry.rename("beta", "gamma")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    incoming = comms.messaging.send_initial_cohort("sender", "gamma", "Compute 17+25")
+    incoming = publish_initial(comms, "sender", "gamma", "Compute 17+25")
     initial = comms.bus.log.read_delivery_cohort(root_id, incoming.seq)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         install_private_cohort_schema(store)
@@ -1256,7 +1258,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, _calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)
-    append = Publisher._publish_keyed_response_unlocked
+    append = ResponseWrites._publish_keyed_response_unlocked
     started, stopped = threading.Event(), threading.Event()
     workers: list[threading.Thread] = []
 
@@ -1273,7 +1275,7 @@ async def test_registry_stop_during_response_append_linearizes_after_sql_commit(
         assert not stopped.wait(0.1), "owner stop raced the locked response append"
         return append(self, intent, conversation=conversation, registry_snapshot=registry_snapshot)
 
-    monkeypatch.setattr(Publisher, "_publish_keyed_response_unlocked", blocking_append)
+    monkeypatch.setattr(ResponseWrites, "_publish_keyed_response_unlocked", blocking_append)
     try:
         with pytest.raises(StaleFence, match="stopped or changed"):
             await SelectedExecution(
@@ -1539,7 +1541,7 @@ async def test_settled_page_does_not_hide_later_selected_claim(tmp_path: Path, m
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
     with Coordination(str(root / "coordination.sqlite3")) as store:
         for number in range(100):
-            message = comms.messaging.send_initial_cohort(
+            message = publish_initial(comms, 
                 "sender", "#team", f"Bounded selected-page item {number}"
             )
             accept_delivery_cohort(comms.bus, root_id, message.seq, store)
@@ -1679,7 +1681,7 @@ async def test_terminal_provider_failure_is_visible_nonwaking_and_frees_next_inp
         is None
     )
     assert len(calls) == before  # Failed input never replayed.
-    fresh = comms.messaging.send_initial_cohort("sender", "beta", "New independent message")
+    fresh = publish_initial(comms, "sender", "beta", "New independent message")
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)

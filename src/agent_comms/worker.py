@@ -48,11 +48,11 @@ async def run() -> None:
 
 async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
     """Consume this launch's explicitly authorized input, never scan for retries."""
-    from .store_files import _store_lock
+    from .store_files import SharedLock, _store_lock
 
     async with agent.turns.turn_locks.setdefault(name, asyncio.Lock()):
         def capture():
-            with _store_lock(agent._comms._wire_lock_path, shared=True):
+            with _store_lock(agent._comms._wire_lock_path, mode=SharedLock()):
                 snapshot = agent._comms.registry.snapshot()
                 owner = snapshot.threads[name]
                 row = agent.inputs.dispositions.lookup(key)
@@ -103,7 +103,7 @@ def main() -> int:
     comms = wire()
     comms.owners.require_private_launch()  # Headless execution needs a private bus root.
     thread = comms.registry.require(name)
-    if thread.process_identity is not None and thread.process_identity.alive():
+    if thread.process_identity.alive():
         raise ValueError(f"Thread {thread.name!r} already has a live owner")
     with suppress(KeyboardInterrupt):
         asyncio.run(run())

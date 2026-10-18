@@ -1,5 +1,6 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
 import importlib
+import os
 import subprocess
 
 import pytest
@@ -13,12 +14,13 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
-from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt,
+from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+    RecordedCommitDelivery,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    RecordHuntTodo, StrikeTodo, Todo)
+    RecordHuntTodo, StrikeTodo, Todo, TodoConflict)
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -56,7 +58,7 @@ def test_two_orders_keep_one_original_goal_and_independent_facts(commander):
     assert 'Problem: P1' in rendered and 'Problem: P2' in rendered
     assert 'printf 1' in rendered and 'printf 2' in rendered
     assert 'P1' not in goal.text and 'P2' not in goal.text
-    assert len(CommsTodoListTool().apply(comms, caller)['todos']) == 2
+    assert len(CommsTodoListTool().apply(comms, caller).todos) == 2
     assert FieldCodec.decode(Todo, FieldCodec.encode(second)) == second
 
 
@@ -160,11 +162,60 @@ def test_commit_delivery_records_the_actual_clean_commit_time(commander):
     git('add', 'source.txt')
     git('commit', '-qm', 'Delivered fixture')
     commit = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', commit)
     create(commander, 'P1')
-    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit)).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=commit, delivered_commit=commit)).apply(comms, caller)
     delivery = comms.goals.todos.get('P1').order.delivery
-    assert delivery.commit == commit
+    assert delivery.commit == delivery.delivered == commit
     assert delivery.at == RecordedEventTime(float(git('show', '-s', '--format=%ct', 'HEAD')))
+
+
+def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, commander_script):
+    comms, caller = commander
+    script, _ = commander_script
+
+    def git(*args, at=None):
+        env = {**os.environ, 'GIT_AUTHOR_DATE': f'@{at} +0000', 'GIT_COMMITTER_DATE': f'@{at} +0000'} if at else None
+        return subprocess.check_output(('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t',
+                                        *args), env=env, stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'base', at=500)
+    git('checkout', '-q', '-b', 'work')
+    git('commit', '-q', '--allow-empty', '-m', 'delivered before the deadline', at=1000)
+    delivered = git('rev-parse', 'HEAD')
+    git('checkout', '-q', 'main')
+    git('merge', '-q', '--no-ff', '-m', 'merged after the deadline', 'work', at=5000)
+    merge = git('rev-parse', 'HEAD')
+    create(commander, 'P1', deadline=2000)
+    create(commander, 'P2', deadline=2000)
+    with pytest.raises(ValueError, match='no origin branch'):
+        CommsOrderDoneTool(problem='P1', delivery=CommitDelivery(commit=merge, delivered_commit=delivered)).apply(comms, caller)
+    git('update-ref', 'refs/remotes/origin/work', delivered)
+    script.done('P1', merge, delivered)
+    met = comms.goals.todos.get('P1')
+    assert (met.order.delivery.delivered, met.order.delivery.at) == (delivered, RecordedEventTime(1000))
+    assert script.struck(met, 'worker') == 0
+
+    git('checkout', '-q', '-b', 'side', delivered)
+    git('commit', '-q', '--allow-empty', '-m', 'never merged', at=1500)
+    side = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/side', side)
+    git('checkout', '-q', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'delivered after the deadline', at=3000)
+    late = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', late)
+    with pytest.raises(ValueError, match='not in the checked commit'):
+        CommsOrderDoneTool(problem='P2', delivery=CommitDelivery(commit=late, delivered_commit=side)).apply(comms, caller)
+    script.done('P2', late, late)
+    struck = comms.goals.todos.get('P2')
+    assert script.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
+
+
+def test_a_done_record_from_before_the_split_reads_its_one_commit_as_both():
+    old = {'kind': 'commit', 'commit': 'd012d23b4', 'at': FieldCodec.encode(RecordedEventTime(1000))}
+    recorded = FieldCodec.decode(OrderDelivery, old)
+    assert type(recorded) is RecordedCommitDelivery and recorded.delivered == recorded.commit == 'd012d23b4'
+    assert FieldCodec.encode(recorded) == old
 
 
 def test_delivery_time_has_its_own_named_requirement():
@@ -201,7 +252,8 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
 
     (repo / 'count.txt').write_text('1\n')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'fix')
-    script.done('P1', git('rev-parse', 'HEAD'))
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    script.done('P1', git('rev-parse', 'HEAD'), git('rev-parse', 'HEAD'))
     assert not comms.goals.todos.get('P1').pending
 
     artifact = repo.parent / 'seen.png'
@@ -211,3 +263,72 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
                 'sent.jsonl', 'hunts.jsonl'} & {
         path.name for path in (repo.parent / 'state').iterdir()}
+
+
+def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(commander, commander_script):
+    """A wrong check the commander wrote is corrected on the open order; its id, holder, deadline and strikes stay."""
+    comms, _ = commander
+    script, repo = commander_script
+    git = lambda *a: subprocess.run(['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@t', *a],
+                                    check=True, capture_output=True, text=True).stdout.strip()
+    (repo / 'count.txt').write_text('0\n')
+    git('add', '.')
+    git('commit', '-qm', 'base')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: grep -c two count.txt -> 1\n"
+                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+    script.strike('worker', 'P1 was sent back once before its check was corrected')
+    sent = comms.goals.todos.get('P1')
+    corrected = f'{repo} :: cat count.txt -> 1'
+    why = 'the recorded check greps a word the ordered edit never writes'
+    with pytest.raises(SystemExit, match='does not pass undelivered work'):
+        script.correct_check('P1', corrected, why)  # main still holds 0
+    with pytest.raises(TodoConflict):
+        CommsOrderCheckTool(problem='P1', check=OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)),
+                            why=why).apply(comms, ThreadCaller('worker'))
+    assert comms.goals.todos.get('P1') == sent
+
+    (repo / 'count.txt').write_text('1\n')
+    git('commit', '-qam', 'fix')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    fixed = git('rev-parse', 'HEAD')
+    with pytest.raises(ValueError, match='expected last integer'):
+        script.done('P1', fixed, fixed)
+    script.correct_check('P1', corrected, why)
+    current = comms.goals.todos.get('P1')
+    assert (current.order.id, current.assignment, current.deadline, current.strikes) == (
+        sent.order.id, sent.assignment, sent.deadline, sent.strikes)
+    [record] = current.order.check_corrections
+    assert (record.previous, record.check, record.reason) == (
+        sent.order.check, OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)), why)
+    script.done('P1', fixed, fixed)
+    assert not comms.goals.todos.get('P1').pending
+    assert comms.goals.todos.get('P1').order.check_corrections == (record,)
+
+
+def test_commander_refuses_jargon_before_core_records_the_problem(commander_script):
+    """A refused outgoing text leaves Core without the problem, so "nothing recorded" is true."""
+    script, repo = commander_script
+    (repo / 'count.txt').write_text('0\n')
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+    assert script.open_todos() == [] and 'Problem: NEW' in body.read_text()
+
+
+def test_commander_refuses_a_check_that_prints_no_count(commander_script):
+    """done could never pass a check that prints no integer, so send refuses it before Core records anything."""
+    script, repo = commander_script
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: git grep -c no-such-text -> 0\n"
+                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    with pytest.raises(SystemExit, match='the check printed no integer'):
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
+    assert script.open_todos() == []

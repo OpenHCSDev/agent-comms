@@ -104,12 +104,13 @@ class NativeBoundary(ExitStack):
         self.measurements = measurements if measurements is not None else PublicationMeasurements()
 
     def __enter__(self):
-        from .store_files import StoreLock
+        from .store_files import ExclusiveLock, SharedLock, StoreLock
 
         try:
             with self.measurements.operation("file_exclusion"):
                 locks = self.enter_context(StoreLock.ordered(
-                    {self.bus: True, self.bus.log: False, self.bus._registry.store: True},
+                    {self.bus: SharedLock(), self.bus.log: ExclusiveLock(),
+                     self.bus._registry.store: SharedLock()},
                     blocking=self.blocking, contention=self.contention))
             self.bus_lock = locks[self.bus.log]
             with self.measurements.operation("registry_snapshot"):
@@ -126,13 +127,12 @@ class NativeCoordinationSession(CoordinationSession):
     @cached_property
     def bus(self) -> MessageBus:
         """Create native bus owners only when this session first needs a boundary."""
-        from .message_bus import MessageBus
-        from .registration import Registration
+        from . import message_bus, publisher, registration
 
-        return MessageBus(
+        return message_bus.MessageBus(
             self.path.parent / "bus.jsonl",
-            Registration(self.path.parent / "registry.json"),
-            private_claim_writes=True,
+            registration.Registration(self.path.parent / "registry.json"),
+            publisher.ClaimWrites,
         )
 
     def boundary(self, bus=None, **options):

@@ -23,7 +23,7 @@ from .coordination_errors import CoordinationReadUnavailable
 from .native_entries import NativeEntry
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 
@@ -270,27 +270,54 @@ class ReplyIndexUpdate(ReplyIndexResult):
         self.after.upsert(database)
 
 
+class ReplyResume:
+    """The committed resume position orders the next source reads."""
+
+    def order(
+        self, needed: Mapping[str, tuple[ReplyIndex, FileRevision]],
+    ) -> tuple[tuple[ReplyIndex, FileRevision], ...]:
+        return tuple(needed.values())
+
+
+@dataclass(frozen=True)
+class ResumeFromStart(ReplyResume):
+    """No source has been visited; use the sources' natural order."""
+
+
+@dataclass(frozen=True)
+class ResumeAfter(ReplyResume):
+    source: str
+
+    def order(
+        self, needed: Mapping[str, tuple[ReplyIndex, FileRevision]],
+    ) -> tuple[tuple[ReplyIndex, FileRevision], ...]:
+        names = tuple(needed)
+        start = names.index(self.source) + 1 if self.source in needed else 0
+        reads = super().order(needed)
+        return (*reads[start:], *reads[:start])
+
+
 @dataclass(frozen=True)
 class ReplyIndexBatch:
     """The compact result of one bounded, fair native-file preparation unit."""
 
     updates: tuple[ReplyIndexUpdate, ...]
-    last_source: str | None
+    resume: ReplyResume
 
     @classmethod
     def prepare(cls, reads: tuple[tuple[ReplyIndex, FileRevision], ...]) -> ReplyIndexBatch:
         budget = IndexSlice.worker_slice()
         updates: list[ReplyIndexUpdate] = []
-        last_source = None
+        resume: ReplyResume = ResumeFromStart()
         for index, revision in reads:
             if not budget.available:
                 break
-            last_source = index.source
+            resume = ResumeAfter(index.source)
             try:
                 index.prepare(revision, budget).collect(updates)
             except FileNotFoundError:
                 continue  # A later source observation sees the missing file.
-        return cls(tuple(updates), last_source)
+        return cls(tuple(updates), resume)
 
 
 class ReplyPreparation:
@@ -302,8 +329,8 @@ class ReplyPreparation:
     def pending(self) -> bool:
         return not self.future.done()
 
-    def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> str | None:
-        return None
+    def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> ReplyResume:
+        return ResumeFromStart()
 
     def cancel(self) -> None:
         pass
@@ -337,7 +364,7 @@ class ReplyPreparation:
 
 
 _EMPTY_REPLY_FUTURE: Future[ReplyIndexBatch] = Future()
-_EMPTY_REPLY_FUTURE.set_result(ReplyIndexBatch((), None))
+_EMPTY_REPLY_FUTURE.set_result(ReplyIndexBatch((), ResumeFromStart()))
 
 
 class IdleReplyPreparation(ReplyPreparation):
@@ -351,12 +378,8 @@ class IdleReplyPreparation(ReplyPreparation):
     ) -> ReplyPreparation:
         if not needed or not state._cleanup.alive:
             return self
-        names = tuple(needed)
-        start = names.index(state._next_source) + 1 if state._next_source in names else 0
-        reads = tuple(needed.values())
-        ordered = (*reads[start:], *reads[:start])
         return NativeReplyPreparation(
-            needed, state._pool.submit(ReplyIndexBatch.prepare, ordered)
+            needed, state._pool.submit(ReplyIndexBatch.prepare, state._resume.order(needed))
         )
 
     def read_counts(
@@ -393,8 +416,8 @@ class NativeReplyPreparation(ReplyPreparation):
         # A busy writer retains this exact work; it does not invalidate other
         # sources. The wire lock orders publication against source deletion.
         try:
-            with _store_lock(state.path.parent / "wire", shared=True, blocking=False):
-                state._next_source = self.commit(database, wanted)
+            with _store_lock(state.path.parent / "wire", mode=SharedLock(), blocking=False):
+                state._resume = self.commit(database, wanted)
         except (BlockingIOError, CoordinationReadUnavailable):
             return self
         return state._idle
@@ -407,9 +430,9 @@ class NativeReplyPreparation(ReplyPreparation):
             self.future.add_done_callback(on_done)
         return self.future
 
-    def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> str | None:
+    def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> ReplyResume:
         if self.future.cancelled():
-            return None
+            return ResumeFromStart()
         batch = self.future.result()
         with CoordinationReadUnavailable.checking():
             with database:
@@ -422,7 +445,7 @@ class NativeReplyPreparation(ReplyPreparation):
                     expected = self.reads[source][1]
                     if revision is not None and expected.holds_cut(revision, expected.size):
                         update.commit(database)
-        return batch.last_source
+        return batch.resume
 
 
 class TranscriptReadState(ThreadOwnedState):
@@ -443,7 +466,7 @@ class TranscriptReadState(ThreadOwnedState):
         self._lock = RLock()
         self._context = multiprocessing.get_context("spawn")
         self._cancelled = self._context.Event()
-        self._next_source: str | None = None
+        self._resume: ReplyResume = ResumeFromStart()
         self._idle = IdleReplyPreparation()
         self._preparation: ReplyPreparation = self._idle
         self._database_resources = ExitStack()

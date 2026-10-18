@@ -27,11 +27,13 @@ from .message_bus import MessageBus
 from .native_input_owner import ParticipantOwner, RegistryOwner
 from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
+from .native_prompt_send import PromptBoundary, send_fenced_prompt
+from .native_startup import NativeStartup
 from .pi_vocabulary import ThinkingLevel
 from .native_session_reopen import NativeSessionIdentity
 from .text_digest import TextDigest
 from .following_inputs import FollowingInputs
-from .tracked_turn import TrackedTurnSession
+from .tracked_turn import NativeObserver, NoObserver, TrackedTurnSession
 from .native_tool_call import NativeToolMode, NoNativeTools
 from .turn_context import RenderedInput
 
@@ -46,7 +48,7 @@ from .private_send_stage import NativeSendStage
 
 
 @dataclass(frozen=True, kw_only=True)
-class PrivateSendClaim:
+class PrivateSendClaim(PromptBoundary):
     selected: SelectedParticipant
     stage: NativeSendStage
     input_id: str
@@ -138,7 +140,7 @@ class PrivateSendClaim:
         *,
         model: SelectedModel,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
-        observe_event: Callable[[PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
+        observe_event: NativeObserver = NoObserver(),
         following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:
         """Return only live corroborated proof, or settle a proved terminal failure.
@@ -157,12 +159,13 @@ class PrivateSendClaim:
                 worktree=Path(self.owner.thread.worktree).absolute(),
                 session=self.session,
                 model=model,
-                thinking_level=ThinkingLevel.optional_name(self.owner.thread.thinking_level),
+                thinking_level=self.owner.thread.thinking_level,
                 environment=self.owner.thread.native_environment(
                     self.bus.log.path.parent, registry,
                     self.owner.thread.worktree,
                 ),
-                maintenance_root=self.bus.log.path.parent,
+                ingress=MaintenanceBarrier(self.bus._registry.store.path),
+                startup=NativeStartup(self.bus.log.path.parent, measurements=self._measurements),
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
@@ -170,8 +173,7 @@ class PrivateSendClaim:
                     self.owner.thread.require_turn_lease(),
                 ),
                 prompt_send_boundary=self,
-                acquisition_measurements=self._measurements,
-                launch_owner=execution,
+                execution=execution,
                 following=following,
             )
         except NativePiTerminalFailure as error:
@@ -254,6 +256,19 @@ class PrivateSendClaim:
             # certified originals, and this grant changes only their SQL/input
             # records. No payload byte is
             # eligible until all of that retirement has returned successfully.
+
+    async def send_prompt(self, turn) -> None:
+        with turn.startup.measurements.operation("prompt_writer_join"):
+            await send_fenced_prompt(
+                turn.native.proc.stdin, turn.native.reader.encode(turn.command),
+                partial(self.prompt_boundary, turn), measurements=turn.startup.measurements,
+            )
+
+    @contextmanager
+    def prompt_boundary(self, turn):
+        with self(turn.native.attestation.identity):
+            turn.grant_prompt()
+            yield
 
     @contextmanager
     def __call__(

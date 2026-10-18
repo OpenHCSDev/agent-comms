@@ -1,5 +1,6 @@
 """How much one thread matters to another, and what its peers see of that."""
 
+from conftest import publish_initial
 import json
 
 import pytest
@@ -155,8 +156,8 @@ def test_awareness_shows_a_related_peers_messages_first_within_the_same_window(t
     from test_private_bus_checkpoint import _root
 
     comms, _ = _root(tmp_path)
-    earlier = comms.messaging.send_initial_cohort("outsider", "Alice", "From a stranger")
-    later = comms.messaging.send_initial_cohort("Bob", "Alice", "From a partner")
+    earlier = publish_initial(comms, "outsider", "Alice", "From a stranger")
+    later = publish_initial(comms, "Bob", "Alice", "From a partner")
     owner = comms.registry.require("Alice")
 
     def shown():
@@ -207,7 +208,7 @@ def test_recent_direct_work_stays_addressable_without_bare_peer_inventory(tmp_pa
     from test_private_bus_checkpoint import _root
 
     comms, _ = _root(tmp_path)
-    original = comms.messaging.send_initial_cohort("Bob", "Alice", "Current work")
+    original = publish_initial(comms, "Bob", "Alice", "Current work")
     assert [r.peer.name for r in comms.relationships.context_relations("Alice")] == ["Bob"]
     assert _peers(comms, "Alice") == ()
     comms.owners.stop("Bob")

@@ -5,23 +5,24 @@ from __future__ import annotations
 from .native_arguments import SelectedModel
 
 import asyncio
-import math
 import re
 from abc import ABC, abstractmethod
-from collections.abc import Awaitable, Callable
-from contextlib import AsyncExitStack, contextmanager
+from collections.abc import Awaitable, Callable, Mapping
+from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Generic, TypeVar
+from types import MappingProxyType
 
 from . import pi_commands as commands
 from . import pi_events as pi
 from .agent_events import AgentEvent, InputRefused
 from .following_inputs import FollowingInputs
-from .backend import MODEL_WAIT_TIMEOUT_SECONDS, TurnSession
+from .backend import TurnSession
+from .turn_watchdog import ModelWait, TurnWait
 from .errors import RelationViolationError
-from .maintenance_barrier import MaintenanceBarrier
+from .maintenance_barrier import MaintenanceIngress, UncoordinatedIngress
 from .mro_dispatch import MroDispatch, handles
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_pi import (
@@ -32,15 +33,15 @@ from .native_pi import (
     NativeTurnResult,
     _verify_context,
 )
-from .native_prompt_send import PromptSendFailure, send_fenced_prompt
+from .native_prompt_send import PromptBoundary, PromptSendFailure, UnguardedPrompt
 from .native_entries import NativeEntry
 from .native_startup import NativeStartup
-from .diagnostics import PublicationMeasurements
 from .child_process import ProcessIdentity
 from .coordinator import Coordination
-from .request_progress import RequestProgress
+from .request_progress import NoRequestObserver, RequestObserver
 from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied, ToolTransport
 from .pi_payloads import TextDelta
+from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
 from .pi_rpc import PiRpcChannel
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
@@ -49,9 +50,16 @@ from .turn_context import InputContributionCoordinates
 if TYPE_CHECKING:
     from .pi_native_backend import PersistentPiSession
     from .agent_backend import TurnInbox
-    from .coordinated_runtime import SelectedExecution
+    from .coordinated_runtime import NativeExecution
     from .owned_send import OwnedSend
-    from .private_send_claim import PrivateSendClaim
+
+
+NativeObserver = Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]]
+
+
+class NoObserver:
+    async def __call__(self, event: pi.PiEvent | AgentEvent | ObservedAttestation) -> None:
+        pass
 
 
 T = TypeVar("T")
@@ -192,14 +200,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         command,
         *,
         model: SelectedModel,
-        model_wait_timeout,
+        model_wait: TurnWait,
         prompt_send_boundary,
-        maintenance_root,
+        ingress: MaintenanceIngress,
         startup: NativeStartup,
         selected_tool_mode,
-        observe_event,
-        request_observer,
-        pi_session: PersistentPiSession | None,
+        observe_event: NativeObserver,
+        request_observer: RequestObserver,
+        pi_session: PersistentPiSession,
         following: FollowingInputs,
     ):
         # The owner's Pi session child: an idle child left by its previous
@@ -207,7 +215,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         super().__init__(
             launch,
             command.message,
-            model_wait_timeout=model_wait_timeout,
+            model_wait=model_wait,
             startup=startup,
             request_observer=request_observer,
             native_session=pi_session,
@@ -218,7 +226,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.rejected_commands: list[InputRefused] = []
         self.model = model
         self.prompt_send_boundary = prompt_send_boundary
-        self.maintenance_root = maintenance_root
+        self.ingress = ingress
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
         self.tool_socket: ToolTransport
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
@@ -238,36 +246,31 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         worktree: Path,
         session: SelectedSession,
         model: SelectedModel,
-        thinking_level: str | None = None,
-        environment: dict[str, str] | None = None,
-        model_wait_timeout: float | None = MODEL_WAIT_TIMEOUT_SECONDS,
-        prompt_send_boundary: PrivateSendClaim | None = None,
-        maintenance_root: Path | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        environment: Mapping[str, str] = MappingProxyType({}),
+        model_wait: TurnWait = ModelWait(),
+        prompt_send_boundary: PromptBoundary = UnguardedPrompt(),
+        ingress: MaintenanceIngress = UncoordinatedIngress(),
+        startup: NativeStartup,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
-        observe_event: Callable[[pi.PiEvent | AgentEvent | ObservedAttestation], Awaitable[None]] | None = None,
-        acquisition_measurements: PublicationMeasurements | None = None,
-        request_observer: Callable[[RequestProgress, ProcessIdentity], None] | None = None,
-        launch_owner: SelectedExecution | None = None,
-        pi_session: PersistentPiSession | None = None,
+        observe_event: NativeObserver = NoObserver(),
+        request_observer: RequestObserver = NoRequestObserver(),
+        execution: NativeExecution,
         following: FollowingInputs = FollowingInputs(),
     ) -> NativeTurnResult:
         if type(input_id) is not str or re.fullmatch(r"[0-9a-f]{32}", input_id) is None:
             raise ValueError("A native turn requires a 128-bit lowercase hex input ID")
         if not prompt or not isinstance(prompt, str):
             raise ValueError("A native turn requires a nonempty prompt")
-        if model_wait_timeout is not None and (
-            not math.isfinite(model_wait_timeout) or model_wait_timeout <= 0
-        ):
-            raise ValueError("A model progress wait must be positive and finite")
-        measurements = (acquisition_measurements if acquisition_measurements is not None
-                        else PublicationMeasurements())
+        measurements = startup.measurements
         # Independent execution acquires a fresh artifact. A selected stage
         # derives from its execution's original pre-claim factory; source/config and
         # child permissions remain fresh. Finish construction before acquiring the child.
         with measurements.operation("native_launch_selection"):
             launch = await Coordination.run_worker(partial(
-                NativePiRpcLaunch.tracked if launch_owner is None else launch_owner.tracked_launch,
+                execution.tracked_launch,
                 package,
+                root=startup.root,
                 worktree=worktree,
                 session=session,
                 model=model,
@@ -284,16 +287,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 context_contributions=context_contributions,
             ),
             model=model,
-            model_wait_timeout=model_wait_timeout,
+            model_wait=model_wait,
             prompt_send_boundary=prompt_send_boundary,
-            maintenance_root=maintenance_root,
-            startup=NativeStartup.for_launch(launch, root=maintenance_root, measurements=measurements),
+            ingress=ingress,
+            startup=startup,
             selected_tool_mode=selected_tool_mode,
             observe_event=observe_event,
             request_observer=request_observer,
-            # A selected stage runs on its execution's child; an independent
-            # execution names the child it runs on.
-            pi_session=launch_owner.pi_session if launch_owner is not None else pi_session,
+            pi_session=execution.pi_session,
             following=following,
         )
         return await turn.complete()
@@ -321,9 +322,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                             while not self.finished:
                                 event = await self.next_event()
                                 async for update in self.consume_native_event(event):
-                                    if self.observe_event is not None:
-                                        await self.observe_event(update)
-                                if not self.finished and self.observe_event is not None:
+                                    await self.observe_event(update)
+                                if not self.finished:
                                     await self.observe_event(event)
                             result = await self.result()
                             # A per-input tool socket dies with this input; only a
@@ -389,19 +389,12 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def send(self, command: commands.PiCommand) -> None:
         payload = self.native.reader.encode(command)
-        if self.maintenance_root is not None:
-            try:
-                async with MaintenanceBarrier(
-                    self.maintenance_root / "registry.json"
-                ).ingress_async() as status:
-                    status.require_open()
-                    self.write(command, payload)
-            except RelationViolationError as error:
-                raise NativePiUnavailable(
-                    "Maintenance closed before Pi capability preflight"
-                ) from error
-        else:
-            self.write(command, payload)
+        try:
+            async with self.ingress.ingress_async() as status:
+                status.require_open()
+                self.write(command, payload)
+        except RelationViolationError as error:
+            raise NativePiUnavailable("Maintenance closed before Pi capability preflight") from error
         wait = self.watchdog.wait_for(self)
         with wait.charge(self.watchdog.clock):
             await asyncio.wait_for(self.native.proc.stdin.drain(), timeout=wait.timeout())
@@ -435,34 +428,16 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             raise NativePiUnavailable("Native Pi omitted its private session identity")
         self.active_session_file = self.launch.session.attest(observed.identity)
         self.native.attestation = observed
-        if self.observe_event is not None:
-            with self.startup.measurements.operation("attestation_publication"):
-                await self.observe_event(observed)
+        with self.startup.measurements.operation("attestation_publication"):
+            await self.observe_event(observed)
 
     def write(self, command: commands.PiCommand, payload: bytes) -> None:
         if command is self.command:
             self.grant_prompt()
         self.native.proc.stdin.write(payload)
 
-    @contextmanager
-    def prompt_boundary(self):
-        with self.prompt_send_boundary(self.native.attestation.identity):
-            # The isolated writer alone reaches this original granted boundary.
-            # The awaiting owner cannot consume native events until it is joined.
-            self.grant_prompt()
-            yield
-
     async def send_prompt(self) -> None:
-        if self.prompt_send_boundary is None:
-            await self.send(self.command)
-        else:
-            with self.startup.measurements.operation("prompt_writer_join"):
-                await send_fenced_prompt(
-                    self.native.proc.stdin,
-                    self.native.reader.encode(self.command),
-                    self.prompt_boundary,
-                    measurements=self.startup.measurements,
-                )
+        await self.prompt_send_boundary.send_prompt(self)
 
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
@@ -476,8 +451,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             raise NativePiUnavailable("Native Pi session identity changed during a turn")
         else:
             async for update in event.apply(self):
-                if self.observe_event is not None:
-                    await self.observe_event(update)
+                await self.observe_event(update)
 
     @handles(pi.InputCommitted)
     async def committed_input(self, event: pi.InputCommitted) -> None:

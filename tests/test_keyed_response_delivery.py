@@ -53,7 +53,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         assert coverage.read().blocked_seq == response.seq
         assert coverage.read().injected_source_seqs == ()
         with case.bus.log.locked():
-            marker = case.bus.log._private_marker_unlocked()
+            marker = case.bus.log.private_marker_unlocked()
             pointers = addressed_source_pointers_unlocked(case.bus.log, marker, lookup)
         assert [p.seq for p in pointers] == [response.seq]
         assert str(response.seq) in "".join(segment.text() for segment in case.bus.awareness_segments(sender, ()))
@@ -106,7 +106,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
             case.store, case.bus, case.fence, "answer", exact_target=case.reply_target, owner_witness=case.witness
         )
         publish_fenced_response(case.store, case.bus, case.fence, exact_target=case.reply_target, owner_witness=case.witness)
-        marker = case.bus.log._private_marker_unlocked()
+        marker = case.bus.log.private_marker_unlocked()
         rows = [json.loads(line) for line in case.bus.log.path.read_bytes().splitlines()]
         rows[-1]["_agent_comms_private_v1"]["response"][field] = value
         # The semantic decoder shared by both readers rejects each invalid acknowledgement.
@@ -163,7 +163,7 @@ def test_duplicate_response_bytes_cannot_recertify_a_missing_checkpoint(tmp_path
             duplicate = conversation.record(
                 case.root_id, replace(response, seq=response.seq + 1), intent
             )
-            marker = case.bus.log._private_marker_unlocked()
+            marker = case.bus.log.private_marker_unlocked()
         with case.bus.log.path.open("a") as stream:
             stream.write(json.dumps(duplicate) + "\n")
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
@@ -216,7 +216,7 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
 
     case = _ready(tmp_path, direct=True)
     try:
-        marker = case.bus.log._private_marker_unlocked()
+        marker = case.bus.log.private_marker_unlocked()
         raw = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
         policy = FieldCodec.decode(DeliveryPolicy, raw[PRIVATE_WIRE_FIELD])
         raw[PRIVATE_WIRE_FIELD] = FieldCodec.encode(
@@ -233,7 +233,7 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
         assert len(public) == 1
         install_private_bus_checkpoint(case.bus.log)
         with case.bus.log.certified_read() as source:
-            marker = case.bus.log._private_marker_unlocked()
+            marker = case.bus.log.private_marker_unlocked()
             full = tuple(case.bus.log.verified_records_unlocked(marker))
             assert full[0].message == public[0]
             delivery, = full[0].deliveries()
@@ -254,7 +254,7 @@ def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path)
 
     case = _ready(tmp_path, direct=True)
     try:
-        marker = case.bus.log._private_marker_unlocked()
+        marker = case.bus.log.private_marker_unlocked()
         row = json.loads(case.bus.log.path.read_bytes().splitlines()[0])
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
         marker.checkpoint_version = None

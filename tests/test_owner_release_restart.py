@@ -91,7 +91,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         async def attach_current():
             current = comms.registry.require(name)
             from agent_comms.runtime import socket_path
-            await asyncio.to_thread(wait_for, socket_path(native.root, current.pid))
+            await asyncio.to_thread(wait_for, socket_path(native.root, current.require_process().pid))
             agent = canonical_agent(comms, auto_wake=False)
             try:
                 async with asyncio.timeout(20):
@@ -112,7 +112,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
             agent_bin=str(Path(sys.executable).with_name('pi-comms-native')),
             runtime=RestartEnvironment.inherit(target_environment),
             source_interpreter=source_python)
-        assert len(results) == 1 and results[0].previous_pid == original.pid
+        assert len(results) == 1 and results[0].previous_pid == original.require_process().pid
         assert not original.process_alive
         current = await attach_current()
         replacement = RetainedOwnerLaunch.capture(current, comms.registry.snapshot(),
@@ -197,7 +197,7 @@ while True: time.sleep(0.01)
 
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.child_process import NoProcess, ProcessIdentity
     from agent_comms.threads import Thread
 
     comms = Comms(tmp_path / "wire")
@@ -206,7 +206,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
-    assert snapshot.threads[declared.name].process_identity is None
+    assert snapshot.threads[declared.name].process_identity == NoProcess()
     assert comms.owners.releases.get(declared.name).current(snapshot, declared, generation)
 
     waiting = comms.registry.declare(comms.registry.new_thread('waiting', frozenset(), str(tmp_path)))
@@ -249,7 +249,7 @@ def test_released_process_must_exit_before_replacement(releasing_owner, mode):
         replacement = comms.registry.require("worker")
         assert replacement.process_alive
         assert replacement.process_identity != original.process_identity
-        assert result.previous_pid == original.pid
+        assert result.previous_pid == original.require_process().pid
     assert (comms.root / "released").exists()
     assert not child.alive()
     assert child.reap() == SignaledOutcome(signal.SIGKILL)
@@ -303,7 +303,7 @@ def test_changed_owner_after_release_refuses_escalation_and_replacement(releasin
     assert phase.exited_processes == phase.retired == ()
     assert phase.launches[0].process == child.identity
     assert child.alive(), "Stale fence must not authorize forced retirement"
-    assert comms.registry.require("worker").pid == child.identity.pid
+    assert comms.registry.require("worker").require_process().pid == child.identity.pid
     with _store_lock(comms._wire_lock_path, blocking=False):
         pass  # the failed restart released the wire itself
 
@@ -321,7 +321,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     from agent_comms.native_package import NativePackageError
     from agent_comms.threads import Thread
 
-    comms = Comms(tmp_path, private_initial_writes=True)
+    comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid())))
     monkeypatch.setenv("AGENT_COMMS_THREAD", "worker")

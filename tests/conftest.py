@@ -9,7 +9,13 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
+from agent_comms.message_bus import MessageBus
+from agent_comms.publisher import Publisher, ResponseWrites
+from agent_comms.registration import Registration
+from agent_comms.messages import ConversationRole, InfoKind, Message
+from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from native_backend_fixture import native_backend_fixture
 
@@ -29,6 +35,26 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_WORKTREE",
 })
 
+
+
+def reader(root: Path) -> Comms:
+    """A Comms over an existing wire that makes no private write."""
+    return Comms(root, Publisher)
+
+
+def responder(root: Path, registry: Registration) -> MessageBus[ResponseWrites]:
+    """The bus a selected owner publishes its keyed responses through."""
+    return MessageBus(root / "bus.jsonl", registry, ResponseWrites)
+
+
+def publish_initial(comms, sender, target, body, type=InfoKind, *, role=ConversationRole()):
+    """Stage an agent's initial message on the bus; no SQL acceptance or live wake."""
+    type.require_sendable()
+    with _store_lock(comms.root / "wire"):
+        return comms.bus.publisher.publish_initial_cohort(
+            Message(sender=sender, target=target, body=body, type=type, role=role),
+            origin=AgentOrigin(),
+        )
 
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -85,7 +111,7 @@ def private_comms(private_directory):
     """
     root = private_directory / "wire"
     root.mkdir(mode=0o700)
-    comms = Comms(root, private_initial_writes=True)
+    comms = Comms(root)
     comms.messaging.initialize_private_initial_protocol()
     return comms
 
@@ -198,6 +224,15 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.fixture
+def tool_watch(commander_script):
+    """The tool-call watcher reading the commander config commander_script installed."""
+    import importlib
+
+    from agent_comms.commander import tool_watch
+    return importlib.reload(tool_watch)
+
+
+@pytest.fixture
 def thread_registration(tmp_path_factory):
     from agent_comms.registration import Registration
     return Registration(tmp_path_factory.mktemp('thread-registration') / 'registry.json')
@@ -274,7 +309,7 @@ def native_rpc_fixture(monkeypatch):
     original_retained = NativePiRpcLaunch.retained_managed
 
     def prepare(
-        command, arguments, *, worktree, environment=None, session_file=None
+        command, arguments, *, worktree, root, environment=None, session_file=None
     ):
         script = Path(command)
         if not script.is_file():
@@ -282,6 +317,7 @@ def native_rpc_fixture(monkeypatch):
                 command,
                 arguments,
                 worktree=worktree,
+                root=root,
                 environment=environment,
                 session_file=session_file,
             )
@@ -301,11 +337,11 @@ def native_rpc_fixture(monkeypatch):
                 pinned_native_package(),
             ),
             Path(worktree),
-            runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
+            root=Path(root), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
     def retained(
-        launch, command, arguments, *, worktree, environment=None, session_file=None
+        launch, command, arguments, *, worktree, root, environment=None, session_file=None
     ):
         if (
             Path(command).is_file()
@@ -321,6 +357,7 @@ def native_rpc_fixture(monkeypatch):
             command,
             arguments,
             worktree=worktree,
+            root=root,
             environment=environment,
             session_file=session_file,
         )

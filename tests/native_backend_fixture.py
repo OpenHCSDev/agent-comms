@@ -68,7 +68,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
         def acquire():
             comms = agent._comms
             owned = agent.sessions.declare_thread(str(project))
-            return comms.threads.attach_session(owned, str(session))
+            return comms.threads.attach_session(owned, str(session), process=owned.process_identity)
 
         thread = await Coordination.run_worker(acquire)
         await agent.sessions.bind_owned(thread, thread.name)
@@ -155,7 +155,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 self.native_arguments(),
                 text,
                 str(self.project),
-                session_file=str(self.session),
+                root=self.root, session_file=str(self.session),
                 persistent_session=self.persistent,
                 steering_queue=queue,
                 native_start=self.started,

@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-import getpass
-import os
-import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -44,24 +41,15 @@ class NativeStartupPolicy:
 NATIVE_STARTUP_POLICY = NativeStartupPolicy()
 
 
+@dataclass
 class NativeStartup:
     """Directory and measurements shared while opening one native child."""
 
-    def __init__(self, root: Path, *, measurements: PublicationMeasurements | None = None):
-        self.root = root
-        self.measurements = measurements if measurements is not None else PublicationMeasurements()
+    root: Path
+    measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements, kw_only=True)
 
     @classmethod
     def for_launch(
-        cls, launch: NativePiRpcLaunch, *, root: Path | None = None,
-        measurements: PublicationMeasurements | None = None,
+        cls, launch: NativePiRpcLaunch,
     ) -> NativeStartup:
-        if root is not None:
-            return cls(root, measurements=measurements)
-        return cls(
-            Path(
-                launch.env.get("AGENT_COMMS_ROOT")
-                or os.environ.get("AGENT_COMMS_ROOT")
-                or str(Path(tempfile.gettempdir()) / f"agent-comms-startup-{getpass.getuser()}")
-            ).expanduser(), measurements=measurements,
-        )
+        return cls(launch.root)

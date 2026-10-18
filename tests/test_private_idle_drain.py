@@ -1,5 +1,6 @@
 """Idle observations avoid repeated work without becoming delivery authority."""
 
+from conftest import publish_initial
 from agent_comms.messages import NoticeRole
 import asyncio
 import os
@@ -202,7 +203,7 @@ def _covered_session(tmp_path):
         store.participants.register(
             RecordedThreadIncarnation("fixture", other.created_at).lookup, other.name, other.name, committed=True,
         )
-    comms.messaging.send_initial_cohort("sender", other.name, "another recipient's original source")
+    publish_initial(comms, "sender", other.name, "another recipient's original source")
     return comms, agent, root_id
 
 
@@ -513,13 +514,13 @@ async def test_new_inputs_and_recovery_revision_invalidate_idle_observation(tmp_
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 4
     # A new original message cut must invalidate even when beta has no work.
-    first = comms.messaging.send_initial_cohort("sender", "alpha", "new absent-audience source")
+    first = publish_initial(comms, "sender", "alpha", "new absent-audience source")
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 5
     assert await agent.inputs.drain_inbox("beta") == 0
     assert len(calls) == 6
     before = agent.inputs._idle_private_revisions["beta"]
-    second = comms.messaging.send_initial_cohort("sender", "beta", "new pending input")
+    second = publish_initial(comms, "sender", "beta", "new pending input")
     assert first.seq < second.seq
     with Coordination(comms.root / "coordination.sqlite3") as store:
         await cohort_foreground._accept_visible_deliveries(
@@ -550,7 +551,7 @@ async def test_during_scan_change_is_not_absorbed_as_idle(tmp_path, monkeypatch)
     monkeypatch.setattr(agent, "_drain_private_nk", paused)
     task = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     await entered.wait()
-    comms.messaging.send_initial_cohort("sender", "beta", "arrived during observation")
+    publish_initial(comms, "sender", "beta", "arrived during observation")
     resume.set()
     assert await task == 0
     assert await agent.inputs.drain_inbox("beta") == 0
@@ -589,7 +590,7 @@ async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypa
         )
         assert not accepted
         assert not any("BEGIN IMMEDIATE" in sql for sql in statements)
-        message = comms.messaging.send_initial_cohort("sender", "beta", "unaccepted source")
+        message = publish_initial(comms, "sender", "beta", "unaccepted source")
         await cohort_foreground._accept_visible_deliveries(
             comms.bus, root_id, store.session.path, lookup, 0, owner_name="beta"
         )
