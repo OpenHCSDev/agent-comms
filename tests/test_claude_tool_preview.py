@@ -1,6 +1,9 @@
 """Claude's decoder publishes the shared native tool preview, not a UI special case."""
 import pytest
 from agent_comms.cli_bridges.claude_protocol import ClaudeSession, KnownTurn, Live, TimedRecord, ToolResult, ToolUse
+from agent_comms.cli_bridges.shared import ToolCall
+from agent_comms.field_codec import FieldCodec
+from agent_comms.native_tools import BashTool
 
 
 @pytest.mark.parametrize('name,arguments,native,expected,title,patch', [
@@ -43,8 +46,8 @@ def test_diff_constructor_preserves_a_newline_only_change():
     assert '-old\n\\ No newline at end of file\n+old\n' in patch.text
 
 
-def test_known_claude_tool_requires_its_actual_caption_input():
-    from pydantic import ValidationError
-    with pytest.raises(ValidationError):
-        ToolUse(id='x',name='Bash',input={}).updates(
-            TimedRecord(uuid='r',timestamp='2026-10-17T00:00:00+00:00'),ClaudeSession(turn=KnownTurn('t')))
+def test_known_claude_tool_with_input_that_does_not_fit_is_recorded_as_sent():
+    # Claude records calls the model sent with invalid input (a real Glob call with {})
+    # and answers them with an error result; the call is shown under the name Claude used.
+    assert ToolUse(id='x', name='Glob', input={}).call() == ToolCall('x', 'Glob', {})
+    assert ToolUse(id='y', name='Bash', input={'command': 'ls'}).call().name == FieldCodec.encode(BashTool)

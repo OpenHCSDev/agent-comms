@@ -13,7 +13,7 @@ import sys
 import traceback
 from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
 from functools import cached_property
 from pathlib import Path
@@ -366,6 +366,19 @@ class SessionFacts(TranscriptUpdate):
 
     def add_to(self, history: ImportBuffer) -> None:
         history.describe(self)
+
+
+@dataclass(frozen=True)
+class EarlierRequest(TranscriptUpdate):
+    """The newest request before the selected history, looked up only if that history has none."""
+    find: Callable[[], str] = field(compare=False)
+
+    def publish(self, output: ThreadOutput) -> None:
+        pass
+
+    def add_to(self, history: ImportBuffer) -> None:
+        if not history.latest_request:
+            history.latest_request = self.find()[: history.limits.per_message]
 
 
 @dataclass(frozen=True)

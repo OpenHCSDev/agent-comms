@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from contextlib import aclosing
+from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
 
@@ -69,10 +70,14 @@ class RunningClaude(ClaudeTranscript, OnlineHistory):
     so the running session is read from the same file as a stored one."""
 
     def __init__(self, thread: str) -> None:
-        matches = tuple((Path.home() / '.claude/projects').glob(f'*/{thread}.jsonl'))
+        self.thread = thread
+
+    @cached_property
+    def source(self) -> Path:
+        matches = tuple((Path.home() / '.claude/projects').glob(f'*/{self.thread}.jsonl'))
         if len(matches) != 1:
-            raise ValueError(f'Expected one Claude transcript for {thread}; found {len(matches)}')
-        super().__init__(matches[0])
+            raise ValueError(f'Expected one Claude transcript for {self.thread}; found {len(matches)}')
+        return matches[0]
 
     @classmethod
     def connected(cls, thread: str, address: str | None, directory: Path) -> Self:

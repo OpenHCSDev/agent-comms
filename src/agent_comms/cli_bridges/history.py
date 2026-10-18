@@ -16,7 +16,7 @@ from typing import BinaryIO, ClassVar, Self
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_install import Harness
 
-from .shared import HistoryNotice, TranscriptUpdate
+from .shared import EarlierRequest, HistoryNotice, TranscriptUpdate
 
 
 class History(DeclaredFamily, affix="History", discovery_package="agent_comms.cli_bridges"):
@@ -102,9 +102,9 @@ class JsonLines:
 
     def decoded(self, stream: BinaryIO, start: int, boundary: int, state) -> Iterator[TranscriptUpdate]:
         for offset, raw in self.complete_lines(stream, start, boundary):
-            yield from self.line_updates(raw, state, offset)
+            yield from self.line_updates(raw, state, offset, 'A source record that was not valid JSON was omitted.')
 
-    def line_updates(self, raw: bytes, state, offset: int) -> Iterator[TranscriptUpdate]:
+    def line_updates(self, raw: bytes, state, offset: int, damage: str) -> Iterator[TranscriptUpdate]:
         """A line that is not JSON is the harness's damage (a killed writer, two writers on one
         line) and is left out with a notice; JSON this decoder does not know is our gap and fails."""
         try:
@@ -113,10 +113,20 @@ class JsonLines:
             try:
                 json.loads(raw)
             except ValueError:
-                yield HistoryNotice('A source record that was not valid JSON was omitted.')
+                yield HistoryNotice(damage)
                 return
             raise
         yield from self.record_updates(record, state, offset, raw)
+
+    def earlier_request(self, stream: BinaryIO, start: int) -> str:
+        for _, raw in self.reverse_lines(stream, start):
+            try:
+                record = self.decode_line(raw)
+            except ValueError:
+                continue
+            if text := record.request():
+                return text
+        return ''
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         for offset, raw in self.reverse_lines(stream, boundary):
@@ -171,8 +181,10 @@ class JsonLinesFile(JsonLines, OfflineHistory):
             boundary = stream.seek(0, 2)
             yield from self.facts(stream, boundary)
             state = self.start_state()
-            yield from self.decoded(stream, self.history_start(stream, boundary), boundary, state)
+            start = self.history_start(stream, boundary)
+            yield from self.decoded(stream, start, boundary, state)
             # The harness may still be writing its last record.
             offset = stream.tell()
             if raw := stream.read(boundary - offset).strip():
-                yield from self.line_updates(raw, state, offset)
+                yield from self.line_updates(raw, state, offset, 'An incomplete final source record was omitted.')
+            yield EarlierRequest(lambda: self.earlier_request(stream, start))

@@ -98,6 +98,9 @@ class RolloutItem(TaggedWire, ABC):
     def instructions(self) -> tuple[InstructionMessage, ...]:
         return ()
 
+    def request(self) -> str:
+        return ''
+
 
 class ForeignItem(RolloutItem):
     """Reasoning, searches and other items that are not portable conversation."""
@@ -123,6 +126,9 @@ class UserMessageItem(MessageItem):
 
     def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
         return (FinishedItem('', self.id, (UserTranscript(self.text),)),)
+
+    def request(self) -> str:
+        return self.text
 
 
 class AssistantMessageItem(MessageItem):
@@ -210,6 +216,9 @@ class RolloutRecord(TaggedWire, ABC):
     def begins_history(self) -> bool:
         return False
 
+    def request(self) -> str:
+        return ''
+
     @property
     def session(self) -> SessionMeta:
         raise ValueError('A Codex rollout starts with its session metadata.')
@@ -274,6 +283,9 @@ class CompactedRecord(RolloutRecord):
         return tuple(instruction for item in self.payload.replacement_history
                      for instruction in item.instructions())
 
+    def request(self) -> str:
+        return next((text for item in reversed(self.payload.replacement_history) if (text := item.request())), '')
+
 
 class ResponseItemRecord(RolloutRecord):
     wire_tag = 'response_item'
@@ -284,6 +296,9 @@ class ResponseItemRecord(RolloutRecord):
 
     def instructions(self) -> tuple[InstructionMessage, ...]:
         return self.payload.instructions()
+
+    def request(self) -> str:
+        return self.payload.request()
 
 
 ROLLOUT_RECORD = TypeAdapter(RolloutRecord.declared_union())

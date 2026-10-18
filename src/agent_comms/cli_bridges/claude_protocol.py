@@ -269,6 +269,10 @@ class ClaudeRecord(TaggedWire, ABC):
         """Whether Claude replaced everything before this record (compaction)."""
         return False
 
+    def request(self) -> str:
+        """The prompt this record carries, read without the session around it."""
+        return ''
+
 
 class AssistantBlock(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
@@ -456,8 +460,18 @@ class PromptOrigin(TaggedWire, ABC):
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return ()
 
+    def request(self, text: str) -> str:
+        return ''
 
-class AgentPrompt(PromptOrigin):
+
+class Prompting(PromptOrigin, ABC):
+    """An origin whose text is a request to the model."""
+
+    def request(self, text: str) -> str:
+        return text
+
+
+class AgentPrompt(Prompting):
     """Input another agent wrote: the commanding session, or a peer session."""
 
     def prompt(self, record: TimedRecord, text: str,
@@ -465,7 +479,7 @@ class AgentPrompt(PromptOrigin):
         return (HiddenItem((UserTranscript(text, timestamp=record.timestamp),)),)
 
 
-class HumanPrompt(PromptOrigin):
+class HumanPrompt(Prompting):
     wire_tag = 'human'
 
     def prompt(self, record: TimedRecord, text: str,
@@ -493,7 +507,7 @@ class AutoContinuation(PromptOrigin):
     wire_tag = 'auto-continuation'
 
 
-class ToolSupplied(PromptOrigin):
+class ToolSupplied(Prompting):
     """Text Claude records without a sender: a subagent's task, or a local command's echo.
     It starts a turn; the live view does not show it as the person's prompt."""
 
@@ -509,9 +523,15 @@ class UserBlock(TaggedWire, ABC):
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return (TurnStarted(),)
 
+    def prompt_text(self) -> str:
+        return ''
+
 
 class UserText(UserBlock, TextContent):
     wire_tag = 'text'
+
+    def prompt_text(self) -> str:
+        return self.text
 
     def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
@@ -613,6 +633,13 @@ class UserRecord(ClaudeRecord, TimedRecord):
         session.turn = KnownTurn(self.promptId)
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
+    @property
+    def text(self) -> str:
+        return '\n'.join(text for block in self.message.content if (text := block.prompt_text()))
+
+    def request(self) -> str:
+        return self.origin.request(self.text)
+
 
 class CompactSummary(UserRecord):
     """Claude's summary of the conversation before its latest compaction."""
@@ -620,8 +647,10 @@ class CompactSummary(UserRecord):
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         session.turn = KnownTurn(self.promptId)
-        return (TurnStarted(), Summarized('\n'.join(
-            block.text for block in self.message.content if isinstance(block, UserText))))
+        return (TurnStarted(), Summarized(self.text))
+
+    def request(self) -> str:
+        return ''
 
 
 class TaskUserRecord(ClaudeRecord, TimedRecord):
