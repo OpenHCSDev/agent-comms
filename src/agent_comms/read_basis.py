@@ -22,6 +22,7 @@ from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
+from .field_codec import FieldCodec
 from .private_path import FileRevision
 from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -34,7 +35,7 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page, presentation, source, index, document, snapshot) -> HistoricalDisplay | None: ...
+    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay | None: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document, source) -> ReadCursor: ...
@@ -54,7 +55,7 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page, presentation, source, index, document, snapshot) -> None:
+    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> None:
         return None
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
@@ -77,8 +78,7 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page, presentation, source, index, document, snapshot) -> HistoricalDisplay:
-        historical = page.messages[0].source
+    def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay:
         historical.validate()
         return HistoricalDisplay(historical, presentation.bus.reads.capture_indexed(
             self.resolve(snapshot).name, page.messages, snapshot, source, index,
@@ -94,9 +94,9 @@ class NamedViewer(DisplayViewer):
         return snapshot.canonical_name(self.name)
 
     def read_page(self, scope, bounds, basis, source) -> MessagePage:
-        result = bounds.conversation(scope).for_display(
-            basis.reads, basis.document, self.name, basis.registry, basis.registry,
-        ).read_opened(source)
+        result = bounds.conversation(scope).displayed(
+            basis.reads, basis.document, self.name, basis.registry, basis.registry, source,
+        )
         return replace(result.page, display_scope=replace(scope, displayed=result.displayed))
 
 
@@ -268,6 +268,13 @@ class ReadCursor:
     """Read evidence stays keyed by conversation even when viewer aliases join."""
 
     conversations: dict[Conversation, ConversationCursor] = field(default_factory=dict)
+
+    @classmethod
+    def decode_conversation(cls, data, conversations):
+        data = FieldCodec.record_data(cls, data)
+        entry = FieldCodec.field_plan(cls, "conversations")
+        return FieldCodec.construct(cls, entry.decoded_using(data, lambda value:
+            entry.value.decode_selected(value, conversations, entry.value.value.decode)))
 
     def lower_bound(self, scope: ChannelDisplayScope, snapshot: RegistryProvenance) -> int:
         targets = scope.index_targets
@@ -513,10 +520,13 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             viewer_thread = snapshot.threads[viewer_name]
             peer_thread = snapshot.participant(peer_name)
             viewer_names, peer_names = scope.first_names, scope.second_names
-            document = bus.reads.read()
-        result = bounds.conversation(scope).for_display(
-            bus.reads, document, viewer_name, snapshot, snapshot,
-        ).read(bus.log)
+            revision = registry.store.revision_unlocked()
+            document = bus.reads.read_conversation(viewer_name, scope.read_key(viewer_name, peer_name, snapshot), snapshot)
+        from .wire_log import CurrentSnapshotOpening
+        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
+            result = bounds.conversation(scope).displayed(
+                bus.reads, document, viewer_name, snapshot, snapshot, source,
+            )
         page, displayed = result.page, result.displayed
         with _store_lock(root / "wire", mode=SharedLock()):
             kind = CoveredDMDisplayBasis if displayed.message_count else EmptyDMDisplayBasis
@@ -534,8 +544,10 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 displayed=displayed,
                 fetched_through=page.newest_seq or 0,
             )
-            with registry.store.reading() as document:
-                basis.validate_identity(document.snapshot(), bus.reads.bus_identity(bus.log.path))
+            with registry.store.locked(mode=SharedLock()):
+                if registry.store.revision_unlocked() != revision:
+                    raise HistoricalSourceChanged("Registry changed; refresh the DM page")
+                basis.validate_identity(snapshot, bus.reads.bus_identity(bus.log.path))
             return replace(page, display_basis=basis)
 
     def selection(self, history_revision: FileRevision | None) -> SelectedDisplay:

@@ -38,8 +38,11 @@ class JsonDocument(ABC, Generic[T]):
         """Return a fresh value for a missing document."""
 
     def _read_unlocked(self) -> T:
+        return self._read_using(self._decode)
+
+    def _read_using(self, decode: Callable[[object], T]) -> T:
         try:
-            return self._decode(FieldCodec.parse(self.path.read_bytes()))
+            return decode(FieldCodec.parse(self.path.read_bytes()))
         except FileNotFoundError:
             return self.empty()
         except (OSError, MalformedRecord) as error:

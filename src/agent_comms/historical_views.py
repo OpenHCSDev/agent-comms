@@ -498,10 +498,8 @@ class HistoryArchive(RootFile):
                     projected = replace(raw, messages=tuple(
                         HistoricalMessage.project(message, source, index, snapshot)
                         for message in raw.messages))
-                    if not projected.messages:
-                        return projected
                     return replace(projected, historical_display=view.viewer.display_evidence(
-                        projected, presentation, opened, page_index, document, current_snapshot))
+                        projected, presentation, source, opened, page_index, document, current_snapshot))
                 page = opened.query_page_index(read)
             if page.messages:
                 return replace(

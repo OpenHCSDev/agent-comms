@@ -135,9 +135,9 @@ class MessageBus[Writes: Publisher]:
                 frozenset(row.seq for row in unread),
                 frozenset(row.target for row in unread),
             )
-            return MessagePageRequest.every(listed, after=min(listed.sequences, default=1) - 1).for_display(
-                self.reads, document, delivery.actor, snapshot, snapshot,
-            ).read_opened(source)
+            return MessagePageRequest.every(listed, after=min(listed.sequences, default=1) - 1).displayed(
+                self.reads, document, delivery.actor, snapshot, snapshot, source,
+            )
 
     async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment], after: MessageReference | None = None) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.

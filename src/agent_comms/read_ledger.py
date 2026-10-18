@@ -15,6 +15,8 @@ from typing import TYPE_CHECKING
 from .channel_targets import CommandTarget
 from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
+from .field_codec import FieldCodec
+from .store_files import SharedLock
 from .private_path import FileIdentity, ObservedPath
 from .read_basis import (
     ChannelConversation,
@@ -44,6 +46,17 @@ class ReadDocument:
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
+
+    @classmethod
+    def decode_conversation(cls, data, owners, conversations):
+        data = FieldCodec.record_data(cls, data)
+        messages = FieldCodec.field_plan(cls, "messages")
+        identity = FieldCodec.field_plan(cls, "bus_identity")
+        return FieldCodec.construct(cls, {
+            **messages.decoded_using(data, lambda value: messages.value.decode_selected(
+                value, owners, lambda cursor: ReadCursor.decode_conversation(cursor, conversations))),
+            **identity.decoded(data),
+        })
 
     def cursors(self, viewer: str, snapshot: RegistryProvenance,
                 source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
@@ -78,6 +91,13 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
     def empty(self) -> ReadDocument:
         return ReadDocument()
+
+    def read_conversation(self, viewer: str, conversation: Conversation,
+                          snapshot: RegistryProvenance) -> ReadDocument:
+        owners = tuple(snapshot.threads[snapshot.canonical_name(viewer)].incarnation.recorded_names(snapshot))
+        conversations = tuple(conversation.recorded_keys(snapshot))
+        with self.locked(mode=SharedLock()):
+            return self._read_using(lambda data: ReadDocument.decode_conversation(data, owners, conversations))
 
     @staticmethod
     def bus_identity(path: Path) -> tuple[int, int] | None:
@@ -181,7 +201,11 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
 
     def displayed_incarnation(self, message, incarnation, snapshot, *, document):
         conversation = self.conversation(message, snapshot)
-        if message.seq in self.cursor(incarnation.name, snapshot, document=document).for_conversation(conversation):
+        document = (self.read_conversation(incarnation.name, conversation, snapshot)
+                    if document is None else document)
+        if message.seq in document.for_conversation(
+            incarnation.name, conversation, snapshot, ObservedPath.at(self.path.with_name("bus.jsonl"))
+        ):
             return (incarnation,)
         return ()
 

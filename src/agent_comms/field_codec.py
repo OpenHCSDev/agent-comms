@@ -97,13 +97,49 @@ class FieldPlan:
             schema["default"] = FieldCodec.encode(declared.default, annotation)
         return {self.key: schema}
 
+    def default(self) -> Any:
+        declared = self.declared
+        return declared.default if declared.default is not MISSING else (
+            declared.default_factory() if declared.default_factory is not MISSING else MISSING
+        )
+
+    def omitted(self, value: Any) -> bool:
+        metadata = self.declared.metadata
+        return bool(metadata.get("wire_omit_default") and value == self.default())
+
+    def captured(self, data: object) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object.")
+        return {self.name: data[self.key]} if self.key in data else {}
+
+    def raw(self, data: object) -> Any:
+        values = self.captured(data)
+        if self.name not in values:
+            raise MalformedRecord(f"Missing required field {self.key}")
+        return values[self.name]
+
+    def read(self, data: object) -> Any:
+        values = self.decoded(data)
+        if self.name in values:
+            return values[self.name]
+        default = self.default()
+        if default is MISSING:
+            raise MalformedRecord(f"Missing required field {self.key}")
+        return default
+
     def decoded(self, data):
-        if self.key not in data:
+        return self.decoded_using(data, self.value.decode)
+
+    def decoded_using(self, data, decode):
+        captured = self.captured(data)
+        if self.name not in captured:
             return {}
-        value = data[self.key]
+        value = captured[self.name]
+        if self.reject_null and value is None:
+            raise MalformedRecord(f"Null field {self.key}")
         if self.choices is not None and value not in self.choices():
             raise MalformedRecord(f"Field {self.key} must be one of: {', '.join(self.choices())}")
-        return {self.name: self.value.decode(value)}
+        return {self.name: decode(value)}
 
 
 class InlineFieldPlan(FieldPlan):
@@ -128,9 +164,10 @@ class InlineFieldPlan(FieldPlan):
     def encoded(self, value, *, key=None):
         return value
 
-    def decoded(self, data):
-        inlined = {key: data[key] for key in self.wire_keys() if key in data}
-        return {self.name: self.value.decode(inlined)}
+    def captured(self, data: object) -> dict[str, Any]:
+        if not isinstance(data, dict):
+            raise MalformedRecord("Expected a record object.")
+        return {self.name: {key: data[key] for key in self.wire_keys() if key in data}}
 
 
 class InlineFamilyPlan(InlineFieldPlan):
@@ -551,9 +588,9 @@ class FieldCodec(Sealed):
         hints = cls._types(type(value))
         result: dict[str, object] = {}
         plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
-        for field, key in cls.record_fields(type(value)):
+        for field, _key in cls.record_fields(type(value)):
             current = getattr(value, field.name)
-            if not field.metadata.get("wire_exclude") and not cls._omitted(field, current):
+            if not field.metadata.get("wire_exclude") and not plans[field.name].omitted(current):
                 result.update(plans[field.name].encoded(cls.encode(current, hints[field.name])))
         result.update(
             (member.wire_name, cls.encode(getattr(value, name)))
@@ -561,17 +598,24 @@ class FieldCodec(Sealed):
         )
         return result
 
-    @staticmethod
-    def _omitted(field: Field[object], current: object) -> bool:
-        default = field.default if field.default is not MISSING else (
-            field.default_factory() if field.default_factory is not MISSING else MISSING
-        )
-        return bool(field.metadata.get("wire_omit_default")) and current == default
-
     @classmethod
     def decode_record(cls, target: type[T], data: object) -> T:
         """Decode declared fields without reentering the record's wire representation."""
         return cast(T, _RecordDecoder(target).decode(data))
+
+    @classmethod
+    def record_member[Member: DeclaredFamily](
+        cls, family: type[Member], data: object
+    ) -> tuple[type[Member], dict]:
+        return _FamilyRecordDecoder(family).member(data)
+
+    @classmethod
+    def record_data(cls, record: type, data: object) -> dict:
+        return _RecordDecoder(record).checked(data)
+
+    @classmethod
+    def field_plan(cls, record: type, name: str) -> FieldPlan:
+        return next(item for item in cls._record_plan(record).bindings if item.name == name)
 
     @classmethod
     def decode(cls, target: type[T], data: object) -> T:
@@ -682,7 +726,7 @@ class FieldCodec(Sealed):
             plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
             for field, key in cls.record_fields(type(value)):
                 current = getattr(value, field.name)
-                if not field.metadata.get(f"{view}_exclude") and not cls._omitted(field, current):
+                if not (field.metadata.get(f"{view}_exclude") or plans[field.name].omitted(current)):
                     encoded = cls.project(current, view, hints[field.name])
                     result.update(plans[field.name].encoded(
                         encoded, key=field.metadata.get(f"{view}_name", key)
@@ -706,7 +750,6 @@ class FieldCodec(Sealed):
         bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
-        reject_null_keys: frozenset[str]
         accepted_keys: frozenset[str]
 
         def schema_fields(self, properties, required):
@@ -752,7 +795,6 @@ class FieldCodec(Sealed):
             bindings=entries,
             required_keys=tuple(required_keys),
             init_required_keys=tuple(init_required_keys),
-            reject_null_keys=frozenset(entry.key for entry in entries if entry.reject_null),
             accepted_keys=frozenset(wire_keys) | computed,
         )
 
@@ -952,8 +994,10 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
 
 def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
     """A wire name the family does not declare is malformed data."""
-    with MalformedRecord.refusing(f"Invalid {family.__name__} name"):
+    try:
         return family.decode(name)
+    except ValueError as error:
+        raise MalformedRecord(str(error)) from error
 
 
 @dataclass(frozen=True, slots=True)
@@ -1107,11 +1151,16 @@ class _DictDecoder(ValueDecoder[Any]):
     def decode(self, data):
         return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
 
+    def decode_selected(self, data, keys, decode_value):
+        encoded = tuple(FieldCodec.encode(key) for key in keys)
+        return {self.key.decode(key): decode_value(value)
+                for key, value in self.entries(data) if key in encoded}
+
 @dataclass(frozen=True, slots=True)
-class _FamilyRecordDecoder(ValueDecoder[Any]):
+class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
     """The encoded object carries its member's name under the family tag."""
 
-    family: type[DeclaredFamily]
+    family: type[Member]
 
     @staticmethod
     def document_member(declared: object) -> type[DeclaredFamily] | None:
@@ -1141,17 +1190,20 @@ class _FamilyRecordDecoder(ValueDecoder[Any]):
     def argument_payload(self, text: object) -> object:
         return {self.family.family_discriminator: text}
 
-    def decode(self, data):
+    def member(self, data: object) -> tuple[type[Member], dict]:
         if not isinstance(data, dict):
             raise MalformedRecord("Expected a family object.")
         tag = self.family.family_discriminator
         name = data.get(tag)
         if not isinstance(name, str):
             raise MalformedRecord(f"Expected a string family {tag}.")
-        member = _declared_member(self.family, name)
-        return _member_decoder(member).decode(
-            {key: value for key, value in data.items() if key != tag}
-        )
+        return _declared_member(self.family, name), {
+            key: value for key, value in data.items() if key != tag
+        }
+
+    def decode(self, data):
+        member, payload = self.member(data)
+        return _member_decoder(member).decode(payload)
 
 @dataclass(frozen=True, slots=True)
 class _RecordDecoder(ValueDecoder[Any]):
@@ -1160,7 +1212,7 @@ class _RecordDecoder(ValueDecoder[Any]):
 
     record: type
 
-    def decode(self, data):
+    def checked(self, data: object) -> dict:
         target = self.record
         plan = FieldCodec._record_plan(target)
         if not isinstance(data, dict):
@@ -1175,11 +1227,13 @@ class _RecordDecoder(ValueDecoder[Any]):
         unknown = data.keys() - plan.accepted_keys
         if unknown:
             raise MalformedRecord(f"Unknown fields for {target.__name__}: {sorted(unknown)}")
-        null = plan.reject_null_keys & data.keys()
-        if any(data[key] is None for key in null):
-            raise MalformedRecord(f"Null field for {target.__name__}")
+        return data
+
+    def decode(self, data):
+        data = self.checked(data)
+        target = self.record
         values = {}
-        for entry in plan.bindings:
+        for entry in FieldCodec._record_plan(target).bindings:
             values.update(entry.decoded(data))
         return FieldCodec.construct(target, values)
 
