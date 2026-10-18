@@ -49,6 +49,7 @@ class TranscriptReplay:
 
     @cached_property
     def reads(self):
+        # Replay and subscription share this process and its request/wait lifetime.
         return self.runtime._resources.enter_context(
             ObservationProcess.awaited(self.comms.route)
         )
