@@ -255,6 +255,7 @@ class SubclassUnion(WireValue):
     external_json_shape = True
     _decoder: ClassVar[UnionDecoder[Self]]
     _members: ClassVar[dict[str, type[Self]]]
+    _member_qualname: ClassVar[str]
 
     def __init_subclass__(cls) -> None:
         super().__init_subclass__()
@@ -263,8 +264,9 @@ class SubclassUnion(WireValue):
             return
         for base in cls.__bases__:
             if SubclassUnion in base.__bases__:
-                # A slots dataclass re-declares its qualified name; the final class owns decoding.
-                base._members[cls.__qualname__] = cls
+                # Slots rebuilds a nested class before restoring its Python qualified name.
+                cls._member_qualname = cls.__dict__.get('_member_qualname', cls.__qualname__)
+                base._members[cls._member_qualname] = cls
                 base._decoder = ValueDecoder.for_members(tuple(base._members.values()))
 
     @classmethod
