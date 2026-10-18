@@ -74,6 +74,9 @@ class ThreadPoll(CliResult):
     ledger: LedgerDocument
     peers: tuple[Mapping[str, object], ...]
 
+    def encoded(self) -> object:
+        return self.to_wire()
+
     def to_wire(self) -> dict[str, object]:
         return {"thread": self.thread.to_wire(),
                 "inbox": [message.to_wire() for message in self.inbox],

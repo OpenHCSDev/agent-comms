@@ -8,6 +8,7 @@ import sqlite3
 
 from .cli_result import CliResult
 from .coordination_database import CoordinationStore
+from .field_codec import FieldCodec
 from .typed_table import SQLiteSchemaDifference, SQLiteSchemaObject, TypedRow, TypedTable
 
 
@@ -87,3 +88,6 @@ class UnavailableStoreSchemaReport:
 class StoreSchemaReports(CliResult):
     """Every store scanned at one read, available or not."""
     reports: tuple[StoreSchemaReport | UnavailableStoreSchemaReport, ...]
+
+    def encoded(self) -> object:
+        return FieldCodec.encode(self.reports)

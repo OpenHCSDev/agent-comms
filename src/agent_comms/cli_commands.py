@@ -486,6 +486,9 @@ class ThreadPinnedResult(CliResult):
 class TargetCatalogResult(CliResult):
     actions: tuple[TargetAction, ...]
 
+    def encoded(self) -> object:
+        return {'actions': [action.encode() for action in self.actions]}
+
 
 @dataclass(frozen=True)
 class MessageSentResult(CliResult):
@@ -525,6 +528,9 @@ class ConstraintDroppedResult(CliResult):
 class InboxResult(CliResult):
     messages: tuple[Message, ...]
 
+    def encoded(self) -> object:
+        return {"messages": [message.to_wire() for message in self.messages]}
+
 
 @dataclass(frozen=True)
 class AcknowledgedResult(CliResult):
@@ -554,6 +560,10 @@ class HistoryPageResult(CliResult):
     messages: tuple[Message, ...]
     before: int | HistoryCursor | None
     has_older: bool
+
+    def encoded(self) -> object:
+        return {"messages": [{**m.to_wire(), **m.display_metadata} for m in self.messages],
+                "before": FieldCodec.encode(self.before), "has_older": self.has_older}
 
 
 @dataclass(frozen=True)
@@ -612,9 +622,6 @@ class OwnerReleasedResult(CliResult):
 class LedgerMergedResult(CliResult):
     merged: bool = True
 
-    def to_wire(self) -> dict[str, object]:
-        return {"merged": self.merged}
-
 
 @dataclass(frozen=True)
 class SubagentsImportedResult(CliResult):
@@ -625,6 +632,11 @@ class SubagentsImportedResult(CliResult):
 class InstallResult(CliResult):
     config: str
     harnesses: Mapping[str, HarnessInstalled]
+
+    def encoded(self) -> object:
+        # Each harness's installation sits beside the config path on the wire.
+        return {"config": self.config,
+                **{name: FieldCodec.encode(installed) for name, installed in self.harnesses.items()}}
 
 
 @dataclass(frozen=True)
@@ -777,7 +789,7 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package=
         return result.exit_code()
 
     def encode_result(self, result: CliResult) -> object:
-        return FieldCodec.encode(result)
+        return result.encoded()
 
     @classmethod
     def open_targets(cls, result) -> tuple[str, ...]:
@@ -1119,9 +1131,6 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
         return WorkingMemoryAnnotations.calibration(
             ctx.root / "coordination.sqlite3", self.question, self.classifier)
 
-    def encode_result(self, result):
-        return result.public_report()
-
 
 @dataclass(frozen=True, kw_only=True)
 class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constraint"):
@@ -1168,9 +1177,6 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
         return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
             self.output, overwrite=self.overwrite)
 
-    def encode_result(self, result: WireExportProvenance) -> object:
-        return result.to_wire()
-
 
 @dataclass(frozen=True, kw_only=True)
 class InboxCliCommand(CliCommand):
@@ -1179,9 +1185,6 @@ class InboxCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         return InboxResult(tuple(ctx.bus.inbox(self.thread)))
-
-    def encode_result(self, result: InboxResult) -> object:
-        return {"messages": [message.to_wire() for message in result.messages]}
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1270,10 +1273,6 @@ class HistoryCliCommand(CliCommand):
             page = ctx.views.full_history_page(**paging)
         return HistoryPageResult(tuple(reversed(page.messages)), page.oldest_cursor, page.has_older)
 
-    def encode_result(self, result: HistoryPageResult) -> object:
-        return {"messages": [{**m.to_wire(), **m.display_metadata} for m in result.messages],
-                "before": FieldCodec.encode(result.before), "has_older": result.has_older}
-
 
 @dataclass(frozen=True, kw_only=True)
 class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
@@ -1334,9 +1333,6 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
         )
         return exported
 
-    def encode_result(self, result: WireExportProvenance) -> object:
-        return result.to_wire()
-
 
 @dataclass(frozen=True, kw_only=True)
 class ChannelsCliCommand(CliCommand):
@@ -1365,9 +1361,6 @@ class ThreadCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.views.thread_detail(self.name, include_pending=not self.no_pending)
-
-    def encode_result(self, result: ThreadRecord) -> object:
-        return result.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1424,11 +1417,6 @@ class InstallCliCommand(CliCommand):
             type(harness).declared_name: harness.install(ctx, self.commander, project)
             for harness in Harness.present(home)})
 
-    def encode_result(self, result: InstallResult) -> object:
-        # Each harness's installation sits beside the config path on the wire.
-        return {"config": result.config,
-                **{name: FieldCodec.encode(installed) for name, installed in result.harnesses.items()}}
-
 
 @dataclass(frozen=True, kw_only=True)
 class HeartbeatCliCommand(CliCommand):
@@ -1460,9 +1448,6 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
 
     def apply(self, ctx: Comms) -> CliResult:
         return StoreSchemaReports(StoreSchemaReport.scan(ctx))
-
-    def encode_result(self, result: StoreSchemaReports) -> object:
-        return FieldCodec.encode(result.reports)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1703,10 +1688,8 @@ class LedgerCliCommand(CliCommand):
             ctx.ledger.merge(updates, self.author)
             return LedgerMergedResult()
         else:
-            return ctx.ledger.document()
-
-    def encode_result(self, result: LedgerMergedResult | LedgerDocument) -> object:
-        return result.to_wire()
+            document: LedgerDocument = ctx.ledger.document()
+            return document
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1716,9 +1699,6 @@ class PollCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.views.poll(self.thread)
-
-    def encode_result(self, result: ThreadPoll) -> object:
-        return result.to_wire()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1813,9 +1793,6 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
         return TargetCatalogResult(CliCommand.target_catalog(
             ctx, CommandTarget.arguments(self.target, self.project), self.channel,
             project=self.project))
-
-    def encode_result(self, result: TargetCatalogResult) -> object:
-        return {'actions': [action.encode() for action in result.actions]}
 
 
 @dataclass(frozen=True, kw_only=True)

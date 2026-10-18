@@ -638,6 +638,9 @@ class ThreadRecord(CliResult):
             pending=None if pending is None else pending[thread.name],
         ) for thread in threads)
 
+    def encoded(self) -> object:
+        return self.to_wire()
+
     def to_wire(self) -> dict[str, object]:
         return {
             **self.thread.to_wire(),

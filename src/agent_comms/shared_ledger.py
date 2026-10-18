@@ -18,7 +18,11 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class LedgerDocument(CliResult):
     """The ledger's one free-form JSON document as read; its keys are its authors'."""
+
     entries: Mapping[str, object]
+
+    def encoded(self) -> object:
+        return self.to_wire()
 
     def to_wire(self) -> dict[str, object]:
         return dict(self.entries)

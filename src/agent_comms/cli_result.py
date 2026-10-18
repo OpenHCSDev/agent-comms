@@ -1,6 +1,8 @@
-"""A CLI command's result owns its exit code and the targets it reconnects."""
+"""A CLI command's result owns its exit code, reconnected targets and JSON."""
 
 from __future__ import annotations
+
+from .field_codec import FieldCodec
 
 
 class CliResult:
@@ -13,3 +15,7 @@ class CliResult:
 
     def exit_code(self) -> int:
         return 0
+
+    def encoded(self) -> object:
+        """The CLI's JSON; a record with its own wire form overrides it."""
+        return FieldCodec.encode(self)
