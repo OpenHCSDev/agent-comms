@@ -49,10 +49,10 @@ class PrivateNkLaunch:
         return cls(root, wire_root_id, package)
 
     def validate(self) -> VerifiedNativePackage:
-        """Recheck this authority before a new owner process can be reserved.
+        """Recheck the root, retaining this process's acquired immutable package.
 
         Creates no root, registry, SQLite database or provider opportunity when
-        the owner-only directory or the reviewed copied Pi is absent.
+        the owner-only directory or the certified root is absent.
         """
         _private_session_dir(self.validated_root)
         with WireLog(self.validated_root / "bus.jsonl").certified_read() as source:

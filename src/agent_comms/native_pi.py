@@ -12,10 +12,9 @@ import re
 import shutil
 import sqlite3
 import sys
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
-from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
@@ -117,7 +116,7 @@ def main() -> int:
     package = launch.validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
-        package.cli, tuple(sys.argv[1:]), Path.cwd(), environment,
+        package, tuple(sys.argv[1:]), Path.cwd(), environment,
         RestartEnvironment.inherit(environment),
         LaunchRuntime.running(),
     )
@@ -413,7 +412,7 @@ class NativePiRpcLaunch:
 
     @classmethod
     def bootstrap(
-        cls, cli, arguments, cwd, environment, configuration: RestartEnvironment,
+        cls, package: VerifiedNativePackage, arguments, cwd, environment, configuration: RestartEnvironment,
         runtime: LaunchRuntime,
     ):
         """Encode the held launch configuration at the native process boundary."""
@@ -428,6 +427,7 @@ class NativePiRpcLaunch:
         env[ThreadLaunch.variable("worktree")] = str(cwd)
         env = runtime.environment(env)
         env.update(configuration.encode_native())
+        cli = package.cli
         argv = (
             "node", "--no-global-search-paths",
             "--import", str(cli.with_name("agent-comms-import-fence.mjs")),
@@ -437,8 +437,8 @@ class NativePiRpcLaunch:
         return argv, env
 
     @classmethod
-    def _build(cls, cli, arguments, cwd, environment, session, package, configuration, runtime, root):
-        argv, env = cls.bootstrap(cli, arguments, cwd, environment, configuration, runtime)
+    def _build(cls, package, arguments, cwd, environment, session, configuration, runtime, root):
+        argv, env = cls.bootstrap(package, arguments, cwd, environment, configuration, runtime)
         return cls(argv, cwd, env, session, package, root=root, configuration=configuration, runtime=runtime)
 
     @classmethod
@@ -552,7 +552,7 @@ class NativePiRpcLaunch:
         arguments += session.launch_arguments(NoThinkingOverride)
         if session.path is not None:
             arguments += ("--session", str(session.path))
-        return cls._build(package.cli, arguments, cwd, env, session, package, RestartEnvironment.inherit(env), runtime, root)
+        return cls._build(package, arguments, cwd, env, session, RestartEnvironment.inherit(env), runtime, root)
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
@@ -621,7 +621,7 @@ class NativePiRpcLaunch:
         if session_file is not None:
             arguments.extend(("--session", str(session_file)))
         env, configuration = session.launch_environment(agent_dir, environment)
-        return cls._build(package.cli, tuple(arguments), worktree, env, session, package, configuration, runtime, root)
+        return cls._build(package, tuple(arguments), worktree, env, session, configuration, runtime, root)
 
 
 def _read_private_file(path: Path):
