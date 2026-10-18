@@ -1,19 +1,17 @@
 """Disposable activity projection of the original complete bus boundary."""
 from __future__ import annotations
 
-import json
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 
 from .bus_projection import AppendCheckpoint, BusAppendIndex
-from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .channels import Channel
     from .messages import Message
-    from .wire_log import OpenedWireSnapshot, WireSnapshot
+    from .wire_log import WireSnapshot
 
 ActivityFields = tuple[str, str, float, bool, bool]
 
@@ -46,13 +44,7 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
 
     def snapshot(self, opened: WireSnapshot,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
-        return opened.read(lambda source: self._snapshot(source, parse),
-                           absent=lambda: ActivityClocks({}, {}))
-
-    def _snapshot(self, opened: OpenedWireSnapshot,
-                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
         boundary = opened.complete_boundary
-        source, stream = opened.revision, opened.stream
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is None:
             channels, sent, offset = {}, {}, 0
@@ -60,30 +52,19 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
             channels, sent = dict(checkpoint.channels), dict(checkpoint.sent)
             offset = checkpoint.offset
         if offset == boundary:
-            return (checkpoint or ActivityCheckpoint(
-                source, boundary, AppendCheckpoint.fingerprint(stream, boundary),
-                channels, sent)).snapshot
-        stream.seek(offset)
-        while stream.tell() < boundary:
-            raw = stream.readline(boundary - stream.tell())
-            if not raw.endswith(b"\n"):
-                raise RelationViolationError("Activity source has an incomplete original row")
-            if not raw.strip():
-                continue
-            record = json.loads(raw)
-            if not isinstance(record, Mapping):
-                raise ValueError("JSONL bus row must be an object")
+            return ActivityClocks({name: ChannelActivity(*clock) for name, clock in channels.items()}, sent)
+        for record, _, _ in opened.rows(offset, boundary):
             for sender, target, timestamp, is_user, is_sent in parse(record):
                 last_message, last_user = channels.get(target, (0.0, 0.0))
                 channels[target] = (max(last_message, timestamp),
                                     max(last_user, timestamp) if is_user else last_user)
                 if is_sent:
                     sent[sender] = max(sent.get(sender, 0.0), timestamp)
-        projected = ActivityCheckpoint(source, boundary,
-                    AppendCheckpoint.fingerprint(stream, boundary), channels, sent)
+        projected = ActivityCheckpoint(opened.revision, boundary, opened.fingerprint(boundary), channels, sent)
         self.write(projected)
         opened.remember_append_checkpoint(self, projected)
         return projected.snapshot
+
 
 
 @dataclass(frozen=True, slots=True)

@@ -16,7 +16,7 @@ from .read_basis import (
     ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
     MessageDisplayScope, NoDisplaySelection, ReadCursor,
 )
-from .wire_log import OpenedWireSnapshot, WireSnapshot
+from .wire_log import CurrentSnapshotOpening, WireSnapshot
 
 if TYPE_CHECKING:
     from .historical_views import HistoryCursor
@@ -192,14 +192,14 @@ class MessageReadRequest[T](ABC):
     def empty(self) -> T: ...
 
     @abstractmethod
-    def indexed(self, index, source: OpenedWireSnapshot) -> T: ...
+    def indexed(self, index, source: WireSnapshot) -> T: ...
 
     def read(self, log) -> T:
-        with log._opened_wire_snapshot(need_sequence=False) as source:
+        with log._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
             return self.read_opened(source)
 
     def read_opened(self, source: WireSnapshot) -> T:
-        return source.query_page_index(lambda index: self.indexed(index, source.opened), empty=self.empty)
+        return source.query_page_index(lambda index: self.indexed(index, source))
 
     def indexed_records(self, source, rows):
         for message, size in source.indexed_records(rows, before_offset=source.boundary):
@@ -235,7 +235,7 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
         """
         return cls(scope, NewerTraversal(after), sys.maxsize, sys.maxsize)
 
-    def indexed(self, index, source: OpenedWireSnapshot) -> MessagePage:
+    def indexed(self, index, source: WireSnapshot) -> MessagePage:
         window = PageWindow(self.limit, self.max_bytes)
         opposite = more = False
         with closing(self.traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
@@ -260,7 +260,7 @@ class UnreadBeforeRequest(MessageReadRequest[bool]):
     def includes(self, message: Message | BusPageRow) -> bool:
         return self.scope.unread_before(message, self.before, self.seen)
 
-    def indexed(self, index, source: OpenedWireSnapshot) -> bool:
+    def indexed(self, index, source: WireSnapshot) -> bool:
         with closing(OlderTraversal(self.before).offsets(index, self.scope, source.boundary)) as rows:
             candidates = (row for row in rows if self.includes(row))
             return any(True for _ in self.indexed_records(source, candidates))
