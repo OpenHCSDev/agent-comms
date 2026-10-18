@@ -331,7 +331,7 @@ def test_public_rename_preserves_claim_release_then_new_owner_wins(
     assert comms.registry.require("alice-final").created_at == original.created_at
     for alias in ("alice", "alice-new", "alice-next"):
         assert comms.registry.require(alias).name == "alice-final"
-        assert comms.registry.name_reserved(alias)
+        assert comms.registry.name_taken(alias)
     next_thread = comms.threads.claim_thread(
         "alice", tags=frozenset({"team"}), worktree=str(worktree)
     )
