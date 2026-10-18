@@ -310,9 +310,7 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
     path: Annotated[Path, PathText]
     registry_path: Annotated[Path, PathText]
 
-    @property
-    def record_type(self) -> type[ActiveTurn]:
-        return ActiveTurn
+    record_type = ActiveTurn
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
