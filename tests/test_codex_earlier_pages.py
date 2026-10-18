@@ -124,15 +124,18 @@ async def test_rearmed_same_cursor_is_a_new_watch_request(tmp_path):
     watching = asyncio.create_task(transcript.watch_requests(
         lambda row: frames.put_nowait(EarlierItems.from_row(row))))
     try:
-        assert not transcript.request_earlier(1)  # The local item has not been consumed.
-        assert transcript.request_earlier(0)
+        with transcript.reading() as records:
+            assert not records.request_earlier(1)  # The local item has not been consumed.
+            assert records.request_earlier(0)
         first = await asyncio.wait_for(frames.get(), 3)
         # A reconnect republishes the newest snapshot while the old frame is queued.
         page.publish(output)
-        assert transcript.request_earlier(0)
+        with transcript.reading() as records:
+            assert records.request_earlier(0)
         second = await asyncio.wait_for(frames.get(), 3)
         assert first.request.request_id != second.request.request_id
-        assert not transcript.pending(first) and transcript.pending(second)
+        with transcript.reading() as records:
+            assert not records.pending(first) and records.pending(second)
     finally:
         watching.cancel()
         with suppress(asyncio.CancelledError):

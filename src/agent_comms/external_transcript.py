@@ -64,7 +64,7 @@ class EarlierPage(ExternalPage):
 
     def request_page(self, transcript, row) -> bool:
         with transcript.writing() as connection:
-            if transcript.oldest(connection) != [row]:
+            if transcript.oldest(connection) != row:
                 return True  # The read retries against the newly published prefix.
             row.continue_with(connection, RequestedEarlierPage(self.cursor, uuid4().hex))
         return True
@@ -82,6 +82,28 @@ class RequestedEarlierPage(EarlierPage):
         return (row,)
 
 
+class NoItems:
+    start = 0
+
+    def has_older(self, offset: int) -> bool:
+        return False
+
+    def request_earlier(self, transcript, offset: int) -> bool:
+        return False
+
+    def frames(self) -> tuple:
+        return ()
+
+    def continue_with(self, connection, earlier: ExternalPage) -> None:
+        pass
+
+    def matches(self, item) -> bool:
+        return False
+
+    def pending(self, request) -> bool:
+        return False
+
+
 @dataclass(frozen=True)
 class ExternalPageRow(TypedRow):
     thread: str = field(metadata={"sql": Column(primary_key=True)})
@@ -90,11 +112,24 @@ class ExternalPageRow(TypedRow):
     seq: int
     earlier: ExternalPage = field(default_factory=NoEarlierPage, kw_only=True)
 
+    @property
+    def start(self) -> int:
+        return self.seq - 1
+
     def has_older(self, offset: int) -> bool:
         return self.earlier.has_older(offset, self)
 
     def request_earlier(self, transcript, offset: int) -> bool:
-        return self.has_older(offset) and self.earlier.request(transcript, self, offset)
+        return self.earlier.request(transcript, self, offset)
+
+    def frames(self) -> tuple:
+        return self.earlier.frames(self)
+
+    def matches(self, item) -> bool:
+        return (self.turn_id, self.item_id) == (item.turn_id, item.item_id)
+
+    def pending(self, request) -> bool:
+        return self.matches(request) and self.earlier == request.request
 
     def continue_with(self, connection, earlier: ExternalPage) -> None:
         ExternalItemRow.update(connection, where="thread=? AND turn_id=? AND item_id=?",
@@ -187,9 +222,6 @@ class NoStoreRead(ExternalTranscriptRead):
     def cut(self) -> ExternalCut:
         return ExternalCut(0)
 
-    def has_older(self, offset: int) -> bool:
-        return False
-
     def _records(self, where, parameters, *, descending):
         yield from ()
 
@@ -212,8 +244,7 @@ class StoreRead(ExternalTranscriptRead):
 
     @property
     def start(self) -> int:
-        rows = self.transcript.oldest(self.connection)
-        return rows[0].seq - 1 if rows else 0
+        return self.transcript.oldest(self.connection).start
 
     def has_records(self, through: int) -> bool:
         return True  # Zero and negative positions name real prepended items.
@@ -222,18 +253,16 @@ class StoreRead(ExternalTranscriptRead):
         return offset <= through
 
     def has_older(self, offset: int) -> bool:
-        return any(row.has_older(offset) for row in self.transcript.oldest(self.connection))
+        return self.transcript.oldest(self.connection).has_older(offset)
 
     def request_earlier(self, offset: int) -> bool:
-        return any(row.request_earlier(self.transcript, offset)
-                   for row in self.transcript.oldest(self.connection))
+        return self.transcript.oldest(self.connection).request_earlier(self.transcript, offset)
 
     def pending(self, request) -> bool:
-        return bool(self.transcript._requested(self.connection, request))
+        return self.transcript.oldest(self.connection).pending(request)
 
     def frames(self) -> tuple:
-        return tuple(frame for row in self.transcript.oldest(self.connection)
-                     for frame in row.earlier.frames(row))
+        return self.transcript.oldest(self.connection).frames()
 
     def end_turn(self) -> None:
         with self.transcript.writing() as connection:
@@ -285,57 +314,43 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
-        key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         with self.writing() as connection:
-            if events and not ExternalItemRow.count(connection, **key):
-                ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
-                                **key).insert(connection)
-            ExternalDraftRow.delete(connection, **key)
+            if events:
+                self._insert_once(connection, turn_id, item_id, events, self._cut(connection).offset + 1)
+            ExternalDraftRow.delete(connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
 
-    def oldest(self, connection) -> list[ExternalPageRow]:
-        return ExternalItemRow.select(connection, thread=self.lookup, row_type=ExternalPageRow,
-                                      order_by=("seq",), limit=1)
+    def _insert_once(self, connection, turn_id, item_id, events, seq) -> bool:
+        key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
+        if ExternalItemRow.count(connection, **key):
+            return False
+        ExternalItemRow(seq=seq, events=events, **key).insert(connection)
+        return True
+
+    def oldest(self, connection) -> ExternalPageRow | NoItems:
+        return ExternalItemRow.one(connection, thread=self.lookup, row_type=ExternalPageRow,
+                                   order_by=("seq",), limit=1) or NoItems()
 
     def publish_page(self, items, earlier: ExternalPage) -> None:
         """Publish the newest snapshot once, including empty items that own a continuation."""
         with self.writing() as connection:
             for item in items:
-                key = dict(thread=self.lookup, turn_id=item.turn_id, item_id=item.item_id)
-                if not ExternalItemRow.count(connection, **key):
-                    ExternalItemRow(seq=self._cut(connection).offset + 1,
-                                    events=item.events, **key).insert(connection)
-            rows = self.oldest(connection)
-            if rows and items and (rows[0].turn_id, rows[0].item_id) == (items[0].turn_id, items[0].item_id):
-                rows[0].continue_with(connection, earlier)
-
-    def request_earlier(self, offset: int) -> bool:
-        with self.reading() as records:
-            return records.request_earlier(offset)
-
-    def pending(self, request) -> bool:
-        with self.reading() as records:
-            return records.pending(request)
-
-    def _requested(self, connection, request) -> list[ExternalPageRow]:
-        return [row for row in self.oldest(connection)
-                if (row.turn_id, row.item_id, row.earlier) ==
-                (request.turn_id, request.item_id, request.request)]
+                self._insert_once(connection, item.turn_id, item.item_id, item.events,
+                                  self._cut(connection).offset + 1)
+            oldest = self.oldest(connection)
+            if items and oldest.matches(items[0]):
+                oldest.continue_with(connection, earlier)
 
     def prepend(self, request, items, earlier: ExternalPage) -> None:
         with self.writing() as connection:
-            rows = self._requested(connection, request)
-            if not rows:
+            anchor = self.oldest(connection)
+            if not anchor.pending(request):
                 return  # An already fulfilled watch frame cannot publish twice.
-            anchor = rows[0]
             anchor.continue_with(connection, NoEarlierPage())
             seq = anchor.seq
             for item in reversed(items):
-                key = dict(thread=self.lookup, turn_id=item.turn_id, item_id=item.item_id)
-                if not ExternalItemRow.count(connection, **key):
+                if self._insert_once(connection, item.turn_id, item.item_id, item.events, seq - 1):
                     seq -= 1
-                    ExternalItemRow(seq=seq, events=item.events, **key).insert(connection)
-            oldest, = self.oldest(connection)
-            oldest.continue_with(connection, earlier)
+            self.oldest(connection).continue_with(connection, earlier)
 
     async def watch_requests(self, emit) -> None:
         previous = ()

@@ -141,7 +141,10 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
 
     async def earlier(self, request: EarlierItems) -> None:
         transcript = await asyncio.to_thread(self.comms.transcripts.external, self.binding.bus)
-        if not await asyncio.to_thread(transcript.pending, request):
+        def pending():
+            with transcript.reading() as records:
+                return records.pending(request)
+        if not await asyncio.to_thread(pending):
             return
         async with CodexConnection.open(self.socket) as codex:
             page = ItemsPage.model_validate(await codex.call(ItemsList(
