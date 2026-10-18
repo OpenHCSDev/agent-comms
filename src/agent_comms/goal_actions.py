@@ -397,10 +397,9 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
         return await invoke(FieldCodec.encode(SetGoalRuntimeRequest), text=text)
 
     def change(self, ctx: GoalActionContext) -> Goal:
-        for current in ctx.thread.goal.matching(self.goal_id):
-            if (current.text, current.order) != (self.text.strip(), self.order):
-                raise ValueError("Goal identity already has different instructions.")
-            return current
+        return ctx.thread.goal.matching(self.goal_id).apply_set_goal(self, ctx)
+
+    def create_goal(self, ctx: GoalActionContext) -> Goal:
         ctx.thread.goal.require_replacement(ctx.goals, ctx.thread.incarnation)
         goal = Goal(
             text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
@@ -432,10 +431,8 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
         self.deadline.require_deadline()
         self.order.owner.require_exists()
         self.order.check.require_directory()
-        todo = self.reserve(ctx)
-        for current in ctx.thread.goal.matching(self.goal_id):
-            return replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
-        return SetGoalAction(text="Complete the assigned problems.", goal_id=self.goal_id, order=ProblemGoalOrder()).change(ctx)
+        self.reserve(ctx)
+        return ctx.thread.goal.matching(self.goal_id).apply_problem_order(self, ctx)
 
 
 @dataclass(frozen=True, kw_only=True)

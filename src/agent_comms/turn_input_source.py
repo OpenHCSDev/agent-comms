@@ -228,11 +228,7 @@ class FollowingTurnInput(TurnInputSource):
         return row.source_text if row is not None and row.exists else text
 
     def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
-        return (
-            (original is None or not original.state.active)
-            and current is not None
-            and current.state.active
-        )
+        return current.active().defers_following_from(original.active())
 
 
 class AcceptedFollowingInput(FollowingTurnInput, DirectInput):

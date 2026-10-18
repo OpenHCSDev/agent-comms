@@ -715,19 +715,9 @@ class ThreadRelationships:
         contacts: list[GoalDerivedContact] = []
         diagnostics: list[GoalMentionDiagnostic] = []
         for owner in registry.threads.values():
-            goal = owner.goal.active()
-            if goal is None or not owner.role.executable:
-                continue
-            source = goal.mention_source
-            # Missing historical evidence grants no contact or current-name binding.
-            if source is None:
-                continue
-            if not source.matches(goal, owner, registry):
-                continue
-            for binding in source.bindings:
-                projected, issues = binding.project(registry, owner, goal, source)
-                contacts.extend(projected)
-                diagnostics.extend(issues)
+            projected, issues = owner.goal.active().contacts(owner, registry)
+            contacts.extend(projected)
+            diagnostics.extend(issues)
         return tuple(contacts), tuple(diagnostics)
 
     def goal_contacts(

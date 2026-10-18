@@ -311,9 +311,6 @@ class GoalDeclaration(WireValue):
     def schema(cls):
         return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(Goal)]}
 
-    @abstractmethod
-    def __iter__(self): ...
-
     def require(self) -> Goal:
         raise RelationViolationError("No goal is set for this thread.")
 
@@ -323,8 +320,8 @@ class GoalDeclaration(WireValue):
             raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
         return goal
 
-    def require_active(self, goal_id: str) -> Goal:
-        goal = self.require_id(goal_id)
+    def require_active(self) -> Goal:
+        goal = self.require()
         goal.state.require_active()
         return goal
 
@@ -349,17 +346,14 @@ class GoalDeclaration(WireValue):
         from .goal_attempt_identity import FailureNotObserved
         raise FailureNotObserved("owner_or_goal_changed")
 
-    def matching(self, goal_id: str):
-        return tuple(goal for goal in self if goal.id == goal_id)
+    def matching(self, goal_id: str) -> GoalDeclaration:
+        return self
 
-    def active_records(self):
-        return (goal for goal in self if goal.state.active)
+    def active(self) -> GoalDeclaration:
+        return self
 
-    def active(self) -> Goal | None:
-        return next(self.active_records(), None)
-
-    def active_id(self) -> str | None:
-        return next((goal.id for goal in self.active_records()), None)
+    def continuation(self, current: GoalDeclaration) -> GoalDeclaration:
+        return self
 
     @property
     def captured(self) -> GoalCheckpoint:
@@ -381,16 +375,96 @@ class GoalDeclaration(WireValue):
     def retained_task_facts(self):
         return ()
 
+    def permits_continuation(self, goal_id: str) -> bool:
+        return self.active().continues(goal_id)
+
+    def continues(self, goal_id: str) -> bool:
+        return False
+
+    def permits_inactive_input(self) -> bool:
+        return True
+
+    def permits_accepted(self, goal_id: str | None) -> bool:
+        return goal_id is None
+
+    def accepted_permission(self):
+        from .turn_goal_permission import AcceptedGoalPermission
+        return AcceptedGoalPermission(None)
+
+    def continuation_permission(self):
+        from .turn_goal_permission import InactiveGoalPermission
+        return InactiveGoalPermission()
+
+    def defers_following_from(self, original: GoalDeclaration) -> bool:
+        return False
+
+    async def pause_for_cancel(self, runner, name):
+        pass
+
+    def admit_turn(self, turn, permits) -> bool:
+        return not turn.autonomous_goal
+
+    def filter_scheduled(self, pending):
+        return pending
+
+    async def failed_schedule(self, error, scheduled, comms, owner):
+        raise error
+
+    def contacts(self, owner, registry):
+        return (), ()
+
+    def peer_state(self, owner, relation, goals):
+        from .turn_context import PeerState
+        return PeerState(owner.name, relation.relevance, relation.note, None)
+
+    def apply_set_goal(self, action, ctx):
+        return action.create_goal(ctx)
+
+    def apply_problem_order(self, action, ctx):
+        from .goal_actions import SetGoalAction
+        return SetGoalAction(text="Complete the assigned problems.", goal_id=action.goal_id,
+                             order=ProblemGoalOrder()).change(ctx)
+
+    def append_progress(self, note: str) -> GoalDeclaration:
+        return self
+
+    def current_wait(self, rows, owner):
+        return self.wait(rows)
+
+    def block_after_failed(self, goals, owner, diagnostic: str):
+        return owner.goal
+
+    def record_usage(self, account, event):
+        account.unattributed_usage.append((str(event.response_id), event.usage))
+
+    def claim_origin(self, account, owner, completions):
+        pass
+
+    def check_turn_result(self, account, event):
+        pass
+
+    def block_turn_account(self, account, diagnostic: str):
+        pass
+
+    def settle_turn(self, settlement, store, permit, turn):
+        pass
+
+    def fail_origin(self, comms, name):
+        pass
+
     def registration_value(self, previous):
         return previous
 
-    def clear_wait(self, waits):
-        pass
+    def clear_wait(self, waits, *, wait_id: str | None = None) -> bool:
+        return False
 
     def retire_attempt(self, goals):
         pass
 
     def wait(self, rows):
+        return self.active().recorded_wait(rows)
+
+    def recorded_wait(self, rows):
         from .goal_waits import NoGoalWait
         return NoGoalWait()
 
@@ -405,9 +479,6 @@ class GoalDeclaration(WireValue):
 
 @dataclass(frozen=True)
 class NoGoal(GoalDeclaration):
-    def __iter__(self):
-        return iter(())
-
     def to_wire(self):
         return None
 
@@ -428,11 +499,17 @@ class Goal(GoalDeclaration):
 
     accepts_null = False
 
-    def __iter__(self):
-        return iter((self,))
-
     def require(self) -> Goal:
         return self
+
+    def matching(self, goal_id: str) -> GoalDeclaration:
+        return self if self.id == goal_id else NoGoal()
+
+    def active(self) -> GoalDeclaration:
+        return self.state.declaration(self)
+
+    def continuation(self, current: GoalDeclaration) -> GoalDeclaration:
+        return current.matching(self.id)
 
     @property
     def captured(self) -> GoalCheckpoint:
@@ -452,26 +529,141 @@ class Goal(GoalDeclaration):
         return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
 
     def owes_project_resume(self, thread) -> bool:
-        return not self.state.active and super().owes_project_resume(thread)
+        return False
 
     def task_scope(self, thread):
         from .task_sources import GoalTaskScope
-        return (GoalTaskScope(project=thread.worktree, goal=self.checkpoint)
-                if self.state.active else super().task_scope(thread))
+        return GoalTaskScope(project=thread.worktree, goal=self.checkpoint)
 
     def context_segments(self, thread, goals):
         from .turn_context import GoalSegment
-        return (GoalSegment.capture(thread, self, goals),) if self.state.active else ()
+        return (GoalSegment.capture(thread, self, goals),)
 
     def retained_task_facts(self):
         from .retained_task_facts import GoalTaskFact
         return (GoalTaskFact(self),)
 
+    def continues(self, goal_id: str) -> bool:
+        return self.id == goal_id
+
+    def permits_inactive_input(self) -> bool:
+        return False
+
+    def permits_accepted(self, goal_id: str | None) -> bool:
+        return self.active().accepted_permission().goal_id == goal_id
+
+    def accepted_permission(self):
+        from .turn_goal_permission import AcceptedGoalPermission
+        return AcceptedGoalPermission(self.id)
+
+    def continuation_permission(self):
+        from .turn_goal_permission import ContinuationGoalPermission
+        return ContinuationGoalPermission(self)
+
+    def defers_following_from(self, original: GoalDeclaration) -> bool:
+        return original.permits_inactive_input()
+
+    async def pause_for_cancel(self, runner, name):
+        from .coordinator import Coordination
+        from .goal_actions import GoalPrecondition, OwnerInvocable, PausedGoalAction
+        from functools import partial
+        await Coordination.run_worker(partial(
+            runner.comms.goals.update_goal, name,
+            PausedGoalAction(expect=GoalPrecondition(goal_id=self.id)), actor=OwnerInvocable,
+        ))
+
+    def admit_turn(self, turn, permits) -> bool:
+        from .turn_goal_account import TurnGoalAccount
+        if turn.original_owner_input:
+            return True
+        turn.goal_permit = TurnGoalAccount.reserve(
+            goal=self, owner=turn.thread, comms=turn.runner.comms,
+            autonomous=turn.autonomous_goal,
+        )
+        if turn.goal_permit is None:
+            return False
+        permits.callback(turn.goal_permit.retire_unverified,
+                         turn.runner.comms.goals.open_goal_store())
+        return True
+
+    def filter_scheduled(self, pending):
+        return [turn for turn in pending if turn.goal_id == self.id]
+
+    async def failed_schedule(self, error, scheduled, comms, owner):
+        from .coordinator import Coordination
+        from functools import partial
+        scheduled.require_dependency_wake(error)
+        await Coordination.run_worker(partial(
+            comms.goals.block_goal_after_failed_turn, owner.name,
+            started_goal=self, expected_worktree=owner.worktree,
+            diagnostic="Standby wake launch authority unavailable; inspect the UNKNOWN "
+                       "input before explicit Retry. No input was replayed.",
+        ))
+
+    def contacts(self, owner, registry):
+        contacts, diagnostics = [], []
+        source = self.mention_source
+        if owner.role.executable and source is not None and source.matches(self, owner, registry):
+            for binding in source.bindings:
+                projected, issues = binding.project(registry, owner, self, source)
+                contacts.extend(projected)
+                diagnostics.extend(issues)
+        return tuple(contacts), tuple(diagnostics)
+
+    def peer_state(self, owner, relation, goals):
+        from .turn_context import PeerState
+        return PeerState(owner.name, relation.relevance, relation.note,
+                         self.instructions(self.order.todos(goals, owner.incarnation, self.id)))
+
+    def apply_set_goal(self, action, ctx):
+        if (self.text, self.order) != (action.text.strip(), action.order):
+            raise ValueError("Goal identity already has different instructions.")
+        return self
+
+    def apply_problem_order(self, action, ctx):
+        return replace(self, order=ProblemGoalOrder(), revision=self.revision + 1)
+
+    def append_progress(self, note: str) -> Goal:
+        return replace(self, progress=f"{self.progress}\n\n{note}" if self.progress else note,
+                       revision=self.revision + 1)
+
+    def current_wait(self, rows, owner):
+        return self.wait(rows).for_current(self, owner)
+
+    def block_after_failed(self, goals, owner, diagnostic: str):
+        blocked = self.after_failed_turn(diagnostic)
+        if blocked is not self:
+            goals.registry.register(replace(owner, goal=blocked), goals.registry.status(owner.name))
+        return blocked
+
+    def record_usage(self, account, event):
+        account.record_goal_usage(self, event)
+
+    def claim_origin(self, account, owner, completions):
+        account.claim_goal_origin(self, owner, completions)
+
+    def check_turn_result(self, account, event):
+        if not event.ok:
+            account.block_current("Backend turn failed; inspect local diagnostics before resuming.")
+        elif account.productive_tool is None and not str(event.text or "").strip():
+            account.block_current("Backend reported success without assistant output or tool activity; "
+                                  "inspect the session before resuming.")
+
+    def block_turn_account(self, account, diagnostic: str):
+        account.block_current(diagnostic)
+
+    def settle_turn(self, settlement, store, permit, turn):
+        settlement(store, permit, self, turn).dispatch_sync(self.state)
+
+    def fail_origin(self, comms, name):
+        from .turn_goal_account import FailedGoalOrigin
+        FailedGoalOrigin(comms, name, self).dispatch_sync(self.state)
+
     def registration_value(self, previous):
         return self
 
-    def clear_wait(self, waits):
-        return waits.clear(self.id)
+    def clear_wait(self, waits, *, wait_id: str | None = None) -> bool:
+        return waits.clear(self.id, wait_id=wait_id)
 
     def retire_attempt(self, goals):
         attempts = goals.open_goal_store()
@@ -480,9 +672,9 @@ class Goal(GoalDeclaration):
             attempts.retire_goal(self.id, expected_generation=generation.number,
                                  attempt_id=generation.attempt_id)
 
-    def wait(self, rows):
+    def recorded_wait(self, rows):
         from .goal_waits import NoGoalWait
-        return rows.get(self.id, NoGoalWait()) if self.state.active else NoGoalWait()
+        return rows.get(self.id, NoGoalWait())
 
     def execution(self, rows, snapshot, agents):
         return self.wait(rows).project(self, snapshot, agents)

@@ -124,7 +124,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             turn = OwnedTurn(
                 agent.turns, session_id, agent.sessions.require(session_id), text,
                 original_keys=(item.key,), initial_display_text=text,
-                original_owner_input=True, original_goal_id=item.context.active_goal_id,
+                original_owner_input=True, original_goal_permission=item.context.goal_permission,
             )
             async with AsyncExitStack() as permits:
                 assert await turn.acquire(resources, permits)

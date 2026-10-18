@@ -25,12 +25,12 @@ class ContinuationGoalPermission(TurnGoalPermission):
     goal: Goal
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return current is not None and current.id == self.goal.id and current.state.active
+        return current.permits_continuation(self.goal.id)
 
 
 class InactiveGoalPermission(TurnGoalPermission):
     def allows(self, current: GoalDeclaration) -> bool:
-        return current is None or not current.state.active
+        return current.active().permits_inactive_input()
 
 
 @dataclass(frozen=True)
@@ -38,6 +38,4 @@ class AcceptedGoalPermission(TurnGoalPermission):
     goal_id: str | None
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return self.goal_id == (
-            current.id if current is not None and current.state.active else None
-        )
+        return current.permits_accepted(self.goal_id)

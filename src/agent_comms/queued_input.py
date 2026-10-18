@@ -76,8 +76,8 @@ class QueuedInputContext:
         return self.named(claim_scope.incarnation.name).claim_scope == claim_scope
 
     @property
-    def active_goal_id(self) -> str | None:
-        return self.goal.active_id()
+    def goal_permission(self) -> AcceptedGoalPermission:
+        return self.goal.active().accepted_permission()
 
 
 @dataclass(frozen=True, slots=True)
@@ -108,7 +108,7 @@ class QueuedInput:
         return AcceptedFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=self.context.goal_permission,
         )
 
     @classmethod
@@ -235,7 +235,7 @@ class QueuedInput:
             original_keys=(self.key,),
             initial_display_text=self.text if self.echo else None,
             original_owner_input=True,
-            original_goal_id=self.context.active_goal_id,
+            original_goal_permission=self.context.goal_permission,
             accepted_input_id=self.accepted_id,
         )
 
@@ -321,7 +321,7 @@ class DeliveredInput(QueuedInput):
         return DeliveredFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=self.context.goal_permission,
             origins=(self.message,),
         )
 

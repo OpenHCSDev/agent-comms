@@ -43,6 +43,7 @@ from .pi_payloads import StateData
 from .threads import Thread
 from .transcript_updates import TurnTranscriptUpdate
 from .turn_effects import TurnEffects
+from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 from .turn_lease import TurnLeaseFence, TurnState
 from .turn_phase import CancellingPhase, TurnPhase
 
@@ -225,12 +226,8 @@ class TurnRunner:
             return
         name = self.sessions.bindings.get(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
-        if thread is not None and (goal := thread.goal) and goal.state.active:
-            await Coordination.run_worker(partial(
-                self.comms.goals.update_goal, name,
-                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
-                actor=OwnerInvocable,
-            ))
+        if thread is not None:
+            await thread.goal.active().pause_for_cancel(self, name)
         task = self.turn_tasks.get(session_id)
         if task is not None:
             current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
@@ -439,7 +436,7 @@ class TurnRunner:
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
         original_owner_input: bool = False,
-        original_goal_id: str | None = None,
+        original_goal_permission: TurnGoalPermission = InactiveGoalPermission(),
         accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
@@ -456,7 +453,7 @@ class TurnRunner:
             initial_display_text=initial_display_text,
             autonomous_goal=autonomous_goal,
             original_owner_input=original_owner_input,
-            original_goal_id=original_goal_id,
+            original_goal_permission=original_goal_permission,
             accepted_input_id=accepted_input_id,
             dependency_wait_id=dependency_wait_id,
         ).run()

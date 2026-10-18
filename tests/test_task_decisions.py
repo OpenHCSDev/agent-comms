@@ -310,7 +310,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     owner = replace(owner, goal=Goal("Keep exact scope", "goal", published_seq=0, revision=1))
     comms.registry.register(owner)
     declaration = Decision(
-        chosen="A", rejected=("B",), scope=owner.task_scope,
+        chosen="A", rejected=("B",), scope=owner.goal.active().task_scope(owner),
         source_turn=owner.turn_identity,
         source_turn_id=TurnId(owner.active_turn.id),
     )

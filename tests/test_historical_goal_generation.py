@@ -59,7 +59,7 @@ def test_carried_blocked_goal_requires_explicit_retry_preserving_unknown(tmp_pat
         comms.goals.update_goal(thread.name, RetryGoalAction(expect=stale), actor=OwnerInvocable)
     assert store.require_generation(goal.id).number == 1
     retried = comms.goals.update_goal(thread.name, RetryGoalAction(expect=expect), actor=OwnerInvocable)
-    assert retried.id == goal.id and retried.state.active
+    assert retried.id == goal.id and ((__observed_goal := retried).active().require() is __observed_goal)
     generation = store.require_generation(goal.id)
     assert generation.number == 2 and generation.attempt_id is None
     assert inputs.path.read_bytes() == original_inputs

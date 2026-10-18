@@ -54,11 +54,11 @@ class GoalTaskScope(TaskScope):
     goal: GoalRevision
 
     def require_context(self, owner: Thread) -> None:
-        owner.goal.require_active(self.goal.id)
+        owner.goal.require_id(self.goal.id).require_active()
         owner.goal.require_checkpoint(self.goal)
 
     def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
-        return owner.task_scope == self
+        return owner.goal.active().task_scope(owner) == self
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -75,7 +75,7 @@ class TurnTaskScope(TaskScope):
     """The enclosing declaration's original turn determines this scope."""
 
     def require_context(self, owner: Thread) -> None:
-        if owner.task_scope != self:
+        if owner.goal.active().task_scope(owner) != self:
             raise RelationViolationError("An active goal requires its revision scope")
 
     def applies(self, owner: Thread, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot) -> bool:
@@ -104,10 +104,10 @@ class TaskScopeSelection(DeclaredFamily, affix="ScopeSelection"):
 @dataclass(frozen=True)
 class CurrentTaskScopeSelection(TaskScopeSelection, declared_name="current"):
     def select(self, owner: Thread) -> TaskScope:
-        return owner.task_scope
+        return owner.goal.active().task_scope(owner)
 
     def select_human(self, owner: Thread) -> TaskScope:
-        return owner.task_scope.for_human()
+        return owner.goal.active().task_scope(owner).for_human()
 
 
 @dataclass(frozen=True)

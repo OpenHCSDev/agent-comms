@@ -108,11 +108,6 @@ class Thread(ThreadProvenance):
         )
 
     @property
-    def owes_project_resume(self) -> bool:
-        """Idle with the resume still due; a turn for the active goal is that turn."""
-        return self.goal.owes_project_resume(self)
-
-    @property
     def turn_state(self) -> TurnState:
         return TurnState(self.active_turn, self.last_finished_turn_id)
 
@@ -259,14 +254,6 @@ class Thread(ThreadProvenance):
         if turn is None or TurnId(turn.id) != turn_id:
             raise RelationViolationError("live owner does not hold the requested turn")
 
-    @property
-    def task_scope(self):
-        return self.goal.task_scope(self)
-
-    def context_goal_segments(self, goals):
-        """Project this declaration's active goal without a second goal state."""
-        return self.goal.context_segments(self, goals)
-
     def wake_context(self) -> dict[str, object]:
         """This captured thread owns its selected-wake work and goal projection."""
         return {
@@ -275,17 +262,11 @@ class Thread(ThreadProvenance):
             "current_goal": FieldCodec.encode(self.goal.wake_context()),
         }
 
-    def retained_task_facts(self):
-        return self.goal.retained_task_facts()
-
-    def continuation_goal(self, original: Thread) -> Goal | None:
-        """The current active goal still belongs to this captured project/goal."""
+    def continuation_goal(self, original: Thread) -> GoalDeclaration:
+        """The current active declaration still belongs to the captured project/goal."""
         if self.worktree != original.worktree:
-            return None
-        goal, captured = self.goal.active(), original.goal.active()
-        if goal is None or captured is None:
-            return None
-        return goal if goal.id == captured.id else None
+            return NoGoal()
+        return original.goal.active().continuation(self.goal.active())
 
     @property
     def has_process(self) -> bool:

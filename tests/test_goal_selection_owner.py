@@ -111,7 +111,7 @@ def test_model_edit_and_resume_use_current_goal_selection(selected_goal, monkeyp
     comms.goals.update_goal("worker", PausedGoalAction())
     resumed = CommsResumeGoalTool(goal_id=original.id, progress="Explicit model resume").apply(comms, caller)
     assert FieldCodec.decode(Goal, resumed["goal"]).id == original.id
-    assert comms.registry.require("worker").goal.state.active
+    assert ((__observed_goal := comms.registry.require("worker").goal).active().require() is __observed_goal)
     replacement = comms.goals.update_goal("worker", SetGoalAction(text="Replacement"))
     with pytest.raises(ValueError, match="replaced or cleared"):
         CommsEditGoalTool(goal_id=original.id, text="Stale edit").apply(comms, caller)

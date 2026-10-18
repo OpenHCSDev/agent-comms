@@ -826,13 +826,9 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else None
-        return cls(
-            view.thread.name,
-            relation.relevance,
-            relation.note,
-            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal is not None else None,
-        )
+        from .goals import NoGoal
+        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else NoGoal()
+        return goal.peer_state(view.thread, relation, goals)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1069,7 +1065,7 @@ class TurnContext:
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        for segment in owner.context_goal_segments(comms.goals):
+        for segment in owner.goal.active().context_segments(owner, comms.goals):
             context = context.prepend(segment)
         return context.with_awareness(comms, owner, relations, blocking=True)
 

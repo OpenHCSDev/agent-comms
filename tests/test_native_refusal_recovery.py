@@ -120,7 +120,7 @@ async def test_three_refusals_retry_to_one_answered_turn_without_blocking(
         )
         # The goal was never blocked on an interim refusal.
         current = wired.registry.require("proj").goal
-        assert current.id == observed['goal'].id and current.state.active
+        assert current.id == observed['goal'].id and ((__observed_goal := current).active().require() is __observed_goal)
     finally:
         await agent.shutdown()
 

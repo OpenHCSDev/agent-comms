@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
@@ -47,6 +47,24 @@ class GoalWait(ABC):
         return True
 
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
+        return False
+
+    def for_current(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> GoalWait:
+        return self
+
+    def dependency_targets(self) -> tuple[GoalWaitTarget, ...]:
+        return ()
+
+    def belongs_to_turn(self, turn) -> bool:
+        return False
+
+    def include_dependency(self, pending: list[str], name: str) -> None:
+        pass
+
+    def release_closed(self, goals, owner, snapshot, rows) -> tuple[str, ...]:
+        return ()
+
+    def consume_owned_reply(self, goals, owner, reference) -> bool:
         return False
 
     def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
@@ -122,7 +140,7 @@ class RecordedGoalWait(GoalWait):
         )
         return GoalExecution(GoalExecutionState.STANDBY, goal.id, targets, inactive)
 
-    def current_for(self, goal: Goal, owner: RecordedThreadIncarnation) -> bool:
+    def current_for(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> bool:
         """A retained wait can survive edits, but not replacement of its owner.
 
         Callers select the row by goal ID before asking this question. A newer
@@ -132,6 +150,58 @@ class RecordedGoalWait(GoalWait):
         return self.owner_matches(owner) and goal.accepts_observation(
             self.goal_id, self.revision
         )
+
+    def for_current(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> GoalWait:
+        return self if self.current_for(goal, owner) else NoGoalWait()
+
+    def dependency_targets(self) -> tuple[GoalWaitTarget, ...]:
+        return self.targets
+
+    def belongs_to_turn(self, turn) -> bool:
+        return (turn is not None and self.report_turn_id == turn.turn_id
+                and self.report_turn_generation == turn.identity.generation)
+
+    def include_dependency(self, pending: list[str], name: str) -> None:
+        pending.append(name)
+
+    def release_closed(self, goals, owner, snapshot, rows) -> tuple[str, ...]:
+        closed = GoalWaits.closed_wait_group(owner.name, self.targets, rows, snapshot, goals.agents)
+        if not closed or self.has_reply(goals.bus.log, owner.incarnation.require_recorded()):
+            return ()
+        names = ", ".join(f"@{member}" for member in closed)
+        note = (f"Dependency wait group ({names}) has no independent worker. "
+                "Standby was released; inspect dependencies and continue useful work.")
+        goals.registry.register(replace(owner, goal=owner.goal.append_progress(note)),
+                                snapshot.statuses[owner.name])
+        if not goals.waits.clear(self.goal_id, wait_id=self.wait_id):
+            return ()
+        return closed
+
+    def release_after_finished_turn(self, goals, owner, source_name, snapshot, goal: GoalDeclaration) -> bool:
+        if (not self.current_for(goal, owner.incarnation.require_recorded())
+                or any(goals.agents.is_working(target.incarnation, snapshot) for target in self.targets)
+                or self.has_reply(goals.bus.log, owner.incarnation.require_recorded())):
+            return False
+        diagnostic = (
+            f"Declared dependency @{source_name} finished without a qualifying direct "
+            "reply, and no declared dependency has an active turn. "
+            "Standby was released; inspect messages and UNKNOWN inputs, then "
+            "continue independent work or redelegate. No input was replayed."
+        )
+        # Persist the explanation before clearing the wait, as one ordered release.
+        goals.registry.register(replace(owner, goal=owner.goal.append_progress(diagnostic)),
+                                snapshot.statuses[owner.name])
+        goals.waits.clear(self.goal_id, wait_id=self.wait_id)
+        return True
+
+    def consume_owned_reply(self, goals, owner, reference) -> bool:
+        with goals.bus.log.certified_read() as source:
+            original = source.delivery(reference.seq)
+            if original.message.reference != reference:
+                raise ValueError("Dependency reply source reference changed.")
+            if not self.matches(original, owner.incarnation.require_recorded()):
+                return False
+        return self.consume_reply(goals.waits, self.goal_id)
 
     def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
         """Join original sender and the actual addressed owner through its source."""
@@ -239,20 +309,6 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         return removed
 
     @staticmethod
-    def for_goal(goal: Goal, rows: dict[str, RecordedGoalWait]) -> GoalWait:
-        if not goal.state.active:
-            return NoGoalWait()
-        return rows.get(goal.id, NoGoalWait())
-
-    @classmethod
-    def execution(
-        cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
-        agents: AgentActivity,
-    ) -> ThreadGoalExecution:
-        """Resolve absence once beside the goal/wait acquisition."""
-        return goal.execution(rows, snapshot, agents)
-
-    @staticmethod
     def closed_wait_group(
         owner: str,
         targets: tuple[GoalWaitTarget, ...],
@@ -275,14 +331,8 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            goal = thread.goal.active()
-            wait = rows.get(goal.id) if goal is not None else None
-            if wait is not None and (
-                goal is None
-                or not wait.current_for(goal, thread.incarnation.require_recorded())
-            ):
-                wait = None
-            dependencies = targets if name == owner else (wait.targets if wait is not None else ())
+            wait = thread.goal.current_wait(rows, thread.incarnation.require_recorded())
+            dependencies = targets if name == owner else wait.dependency_targets()
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
                 peer = snapshot.threads.get(canonical)
@@ -291,29 +341,13 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_goal = peer.goal.active()
-                peer_wait = (
-                    rows.get(peer_goal.id)
-                    if peer_goal is not None
-                    else None
-                )
-                if peer_wait is not None and (
-                    peer_goal is None
-                    or not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded())
-                ):
-                    peer_wait = None
+                peer_wait = peer.goal.current_wait(rows, peer.incarnation.require_recorded())
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before
                     # its turn finishes; only the reporting turn belongs here.
                     current_turn = peer.turn_lease
-                    if (
-                        peer_wait is None
-                        or current_turn is None
-                        or peer_wait.report_turn_id != current_turn.turn_id
-                        or peer_wait.report_turn_generation != current_turn.identity.generation
-                    ):
+                    if not peer_wait.belongs_to_turn(current_turn):
                         return ()
-                if peer_wait is not None:
-                    pending.append(canonical)
+                peer_wait.include_dependency(pending, canonical)
         return tuple(sorted(seen))
