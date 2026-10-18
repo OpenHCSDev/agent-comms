@@ -327,7 +327,7 @@ class ProblemGoalOrder(GoalOrder):
             raise ValueError("The problem Goal has no assigned Todos.")
 
     def require_replacement(self, goal, goals, owner):
-        if any(todo.pending for todo in goals.todos.for_goal(owner, goal.id)):
+        if goals.todos.holds_pending(owner):
             raise ValueError("Finish or release the assigned problems before replacing this Goal.")
 
     def todos(self, goals, owner, goal_id):
