@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import math
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import Field, dataclass, field, fields, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
@@ -95,27 +96,92 @@ class RegistryPresence(RegistryNames[Thread]):
         return self.visible_threads(DEFAULT_ROSTER)
 
 
+class ThreadSlice[Value](ABC):
+    """How one thread's part of a registry document field is cut from the wire, and
+    how the field is copied. Every document field names its kind in its metadata."""
+
+    @staticmethod
+    def canonical(raw: dict, name: str) -> str:
+        return name
+
+    @staticmethod
+    @abstractmethod
+    def cut(raw: dict, canonical: str) -> dict:
+        """This field's wire value restricted to ``canonical``."""
+
+    @classmethod
+    @abstractmethod
+    def copy(cls, value: Value) -> Value:
+        """A copy an edit can change without changing ``value``."""
+
+    @staticmethod
+    def of(declared: Field) -> type[ThreadSlice]:
+        kind: type[ThreadSlice] = declared.metadata["thread_slice"]
+        return kind
+
+    @staticmethod
+    def required[Document: type](document: Document) -> Document:
+        """Refuse, at class definition, a document field without a slice kind."""
+        for declared in fields(document):
+            if not issubclass(declared.metadata.get("thread_slice", type), ThreadSlice):
+                raise TypeError(f"{document.__name__}.{declared.name} declares no thread slice")
+        return document
+
+
+class OwnRow(ThreadSlice[dict]):
+    """The row under the thread's own name."""
+
+    @staticmethod
+    def cut(raw: dict, canonical: str) -> dict:
+        return {canonical: raw[canonical]} if canonical in raw else {}
+
+    @classmethod
+    def copy(cls, value: dict) -> dict:
+        return dict(value)
+
+
+class AliasesOf(OwnRow):
+    """The aliases that point at the thread; they also resolve its canonical name."""
+
+    @staticmethod
+    def canonical(raw: dict[str, str], name: str) -> str:
+        return raw.get(name, name)
+
+    @staticmethod
+    def cut(raw: dict, canonical: str) -> dict:
+        return {alias: target for alias, target in raw.items() if target == canonical}
+
+
+class GenerationOf(ThreadSlice[GenerationCounter]):
+    """A generation counter whose generations are restricted to the thread."""
+
+    @staticmethod
+    def cut(raw: dict, canonical: str) -> dict:
+        return {**raw, "generations": OwnRow.cut(raw["generations"], canonical)}
+
+    @classmethod
+    def copy(cls, value: GenerationCounter) -> GenerationCounter:
+        return GenerationCounter(value.counter, dict(value.generations))
+
+
+@ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence):
-    threads: dict[str, Thread] = field(default_factory=dict)
-    statuses: dict[str, ThreadStatus] = field(default_factory=dict)
-    last_seen: dict[str, float] = field(default_factory=dict)
-    aliases: dict[str, str] = field(default_factory=dict)
-    owners: GenerationCounter = field(default_factory=GenerationCounter)
-    claims: GenerationCounter = field(metadata={"wire_name": 'admissions'}, default_factory=GenerationCounter)
+    threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
+    statuses: dict[str, ThreadStatus] = field(
+        default_factory=dict, metadata={"thread_slice": OwnRow})
+    last_seen: dict[str, float] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
+    aliases: dict[str, str] = field(default_factory=dict, metadata={"thread_slice": AliasesOf})
+    owners: GenerationCounter = field(
+        default_factory=GenerationCounter, metadata={"thread_slice": GenerationOf})
+    claims: GenerationCounter = field(
+        default_factory=GenerationCounter,
+        metadata={"wire_name": 'admissions', "thread_slice": GenerationOf})
 
     def copy(self) -> RegistryDocument:
-        return replace(
-            self,
-            threads=dict(self.threads),
-            statuses=dict(self.statuses),
-            last_seen=dict(self.last_seen),
-            aliases=dict(self.aliases),
-            owners=GenerationCounter(self.owners.counter, dict(self.owners.generations)),
-            claims=GenerationCounter(
-                self.claims.counter, dict(self.claims.generations)
-            ),
-        )
+        return replace(self, **{
+            declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
+            for declared in fields(self)})
 
     def snapshot(self) -> RegistrySnapshot:
         return RegistrySnapshot.capture(self)
@@ -142,33 +208,21 @@ class RegistryDocument(RegistryPresence):
         thread's declaration is neither decoded nor validated here.
         """
         try:
-            aliases = raw["aliases"]
-            canonical = aliases.get(name, name)
-
-            def own(rows: dict) -> dict:
-                return {canonical: rows[canonical]} if canonical in raw["threads"] else {}
-
-            def counter(raw_counter: dict) -> dict:
-                return {**raw_counter, "generations": own(raw_counter["generations"])}
-
-            claims_key = FieldCodec.record_key(cls, "claims")
-            restricted = {
-                "threads": own(raw["threads"]),
-                "statuses": own(raw["statuses"]),
-                "last_seen": own(raw["last_seen"]),
-                "aliases": {
-                    alias: target for alias, target in aliases.items()
-                    if target == canonical
-                },
-                "owners": counter(raw["owners"]),
-                claims_key: counter(raw[claims_key]),
-            }
+            keyed = [(ThreadSlice.of(declared), FieldCodec.record_key(cls, declared.name))
+                     for declared in fields(cls)]
+            canonical = name
+            for kind, key in keyed:
+                canonical = kind.canonical(raw[key], canonical)
+            restricted = {key: kind.cut(raw[key], canonical) for kind, key in keyed}
         except (AttributeError, KeyError, TypeError) as error:
             raise RelationViolationError(f"Invalid registry document: {error!r}") from error
         return cls.from_wire(restricted).entry(name)
 
-    # The sections that hold one row per thread name.
-    THREAD_ROWS = ("threads", "statuses", "last_seen")
+    @classmethod
+    def thread_rows(cls) -> tuple[str, ...]:
+        """The sections that hold one row per thread name."""
+        return tuple(declared.name for declared in fields(cls)
+                     if ThreadSlice.of(declared) is OwnRow)
 
     @classmethod
     def from_wire(cls, raw: dict, earlier: tuple[dict, RegistryDocument] | None = None
@@ -186,18 +240,19 @@ class RegistryDocument(RegistryPresence):
                 document = FieldCodec.decode(cls, raw)
             else:
                 earlier_raw, decoded = earlier
+                thread_rows = cls.thread_rows()
                 kept = {
                     section: {
                         name for name, row in raw[section].items()
                         if name in getattr(decoded, section)
                         and name in earlier_raw[section] and earlier_raw[section][name] == row
                     }
-                    for section in cls.THREAD_ROWS
+                    for section in thread_rows
                 }
                 changed = FieldCodec.decode(cls, {**raw, **{
                     section: {name: row for name, row in raw[section].items()
                               if name not in kept[section]}
-                    for section in cls.THREAD_ROWS
+                    for section in thread_rows
                 }})
                 document = replace(changed, **{
                     section: {
@@ -205,7 +260,7 @@ class RegistryDocument(RegistryPresence):
                                else getattr(changed, section))[name]
                         for name in raw[section]
                     }
-                    for section in cls.THREAD_ROWS
+                    for section in thread_rows
                 })
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
