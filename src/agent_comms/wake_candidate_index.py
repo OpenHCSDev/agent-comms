@@ -51,7 +51,7 @@ class CheckpointState(ABC):
 @dataclass(frozen=True)
 class NoCheckpoint(CheckpointState):
     def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
-        raise ProjectionRebuildRequiredError("candidate index requires initial rebuild")
+        raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
 
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
         raise ProjectionUnavailableError("candidate projection is stale or unrelated")
@@ -197,8 +197,6 @@ class ResumeIndex(IndexStart):
         return checkpoint.require_source(source, root_id)
 
     def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
-        if not index.path.exists():
-            raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
         return index._verified_checkpoint(hint.root_id).byte_offset
 
 
