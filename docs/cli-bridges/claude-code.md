@@ -25,6 +25,8 @@ Monitor(
 )
 ```
 
+Run the watch with the longest Monitor timeout (`timeout_ms=1800000`), and on every expiry notice re-arm it at once with the same command; a unit with open orders never lets its watch lapse.
+
 Monitor owns notification injection and its duration. The bridge owns its Core
 watch child and joins that child when cancelled. The shared session lock prevents
 two watchers for the same session, even with different state directories.

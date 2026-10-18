@@ -31,9 +31,9 @@ def order(root, identity, command='printf 1', expected=1):
         at=RecordedEventTime(100), first_call_deadline=RecordedEventTime(220))
 
 
-def create(commander, problem, command='printf 1', expected=1, deadline=1000):
+def create(commander, problem, command='printf 1', expected=1, deadline=1000, owner='worker'):
     comms, caller = commander
-    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+    CommsTodoCreateTool(owner=owner, order=CreateProblemGoalAction(
         problem=problem, order=order(comms.root, 'order-' + problem, command, expected),
         request='request', deadline=RecordedEventTime(deadline), commander='lead',
         repo='OpenHCSDev/agent-comms', text='Fix ' + problem,
@@ -472,3 +472,25 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     assert request.stalled() == []
+
+
+def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander, commander_script, tmp_path):
+    """Two CLI units hold orders; only the one whose bridge left is detached, with its unread count."""
+    import importlib
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms.thread_status import StoppedThreadStatus
+
+    comms, _ = commander
+    for created, unit in enumerate(('parted', 'watching'), 3):
+        comms.registry.declare(comms.registry.new_thread(
+            unit, frozenset(), str(tmp_path), created_at=float(created), execution=ExternalThreadExecution),
+            StoppedThreadStatus())
+        comms.goals.update_goal(unit, SetGoalAction(text='Commander brief', goal_id=f'{unit}-brief'))
+    create(commander, 'P1', owner='parted')
+    create(commander, 'P2', owner='watching')
+    comms.messaging.send('lead', 'parted', 'Are you there?')
+    rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
+    with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
+        lines = rotate.detached(rotate.owed_orders())
+    assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
