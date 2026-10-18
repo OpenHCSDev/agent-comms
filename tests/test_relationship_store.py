@@ -11,7 +11,7 @@ from agent_comms.comms import Comms
 from agent_comms.display_order import CreatedThreadSort
 from agent_comms.locked_store import LockedStore
 from agent_comms.relationships import RelationshipDocument, RelationshipStore
-from agent_comms.store_files import _store_lock
+from agent_comms.store_files import SharedLock, _store_lock
 from test_locked_store import _hold_lock, event, process
 from test_relationships import setup_wire
 
@@ -81,7 +81,7 @@ def test_actual_adopter_reads_share_document_lock(tmp_path):
     comms = setup_wire(tmp_path)
     path = comms.relationships.store.path
     ready, release, done = event(), event(), event()
-    with process(_hold_lock, path, True, ready, release):
+    with process(_hold_lock, path, SharedLock(), ready, release):
         try:
             assert ready.wait(5)
             with process(_read_adopter, comms.root, done):

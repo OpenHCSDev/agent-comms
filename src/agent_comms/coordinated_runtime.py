@@ -8,6 +8,7 @@ orders those lifetimes and cannot represent a half-initialized native attempt.
 from __future__ import annotations
 
 import threading
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,7 +36,20 @@ from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthori
 
 
 @dataclass(kw_only=True)
-class SelectedExecution:
+class NativeExecution(ABC):
+    pi_session: PersistentPiSession = field(default_factory=PersistentPiSession, compare=False)
+
+    @abstractmethod
+    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch: ...
+
+
+class IndependentExecution(NativeExecution):
+    def tracked_launch(self, package: Path, **options) -> NativePiRpcLaunch:
+        return NativePiRpcLaunch.tracked(package, **options)
+
+
+@dataclass(kw_only=True)
+class SelectedExecution(NativeExecution):
     max_attempts: ClassVar[int] = 3
 
     root: Path
@@ -52,11 +66,6 @@ class SelectedExecution:
     # place) and hands every run that one verified launcher, only when needed.
     verified_launcher: Callable[[], Callable[..., NativePiRpcLaunch]] | None = None
     _run_permit: threading.Lock = field(init=False, default_factory=threading.Lock)
-    # The thread's Pi session child. A foreground execution owns its own; a
-    # worker runs this execution on its thread backend's child (run(pi_session=...)).
-    pi_session: PersistentPiSession = field(
-        default_factory=PersistentPiSession, init=False, compare=False,
-    )
     following: FollowingInputs = field(default_factory=FollowingInputs, init=False, compare=False)
     _tracked_factory: Callable[..., NativePiRpcLaunch] | None = field(
         init=False, default=None, repr=False, compare=False,

@@ -1,6 +1,7 @@
 """Opt-in Pi Durable: existing Pi records, RPC correlation and history owners."""
 from __future__ import annotations
 
+from .field_codec import FieldCodec
 import asyncio
 import fcntl
 from contextlib import ExitStack, contextmanager
@@ -21,7 +22,7 @@ from .native_transcript import StoredRecord
 from .pi_commands import Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
 
@@ -143,7 +144,7 @@ class Open(HostQuery):
     cwd: str
     provider: str | None
     model_id: str | None = field(metadata={'wire_name': 'modelId'})
-    thinking_level: str | None = field(metadata={'wire_name': 'thinkingLevel'})
+    thinking_level: ThinkingLevelField = field(metadata={'wire_name': 'thinkingLevel'})
     auth_path: str = field(metadata={'wire_name': 'authPath'})
     response_payload = RecoveryData
 
@@ -254,4 +255,4 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
             await child.request(SetThinkingLevel(level=thinking))
         state = await child.request(GetState())
         reported = state.model.require_selection(model if model is not None else state.model.display_name)
-        return reported.display_name, ThinkingLevel.optional_name(state.thinking_level)
+        return reported.display_name, FieldCodec.encode(state.thinking_level)

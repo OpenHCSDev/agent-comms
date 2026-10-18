@@ -66,7 +66,7 @@ async def test_private_native_raw_prompt_refused_after_pause_ack(
             env,
             SelectedSession(session_dir),
             tmp_path,
-            runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
+            root=worktree, runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
     with (

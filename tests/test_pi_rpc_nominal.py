@@ -15,6 +15,7 @@ from agent_comms import pi_commands as commands
 from agent_comms import pi_events as pi
 from agent_comms import turn_failure as failures
 from agent_comms.backend import TurnSession
+from agent_comms.native_startup import NativeStartup
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.pi_rpc import PiRpcChannel
@@ -105,8 +106,8 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
 )
 def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
     session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
-        native_session=PersistentPiSession(),
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+        native_session=PersistentPiSession(), startup=NativeStartup(Path.cwd()),
     )
     for cls in (left, right, left):
         session.output.record_failure(cls(cls.__name__))
@@ -268,9 +269,9 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     """A message queued mid-turn is not killed by the time the turn keeps working."""
     from types import SimpleNamespace
 
-    from agent_comms.turn_watchdog import InputStartWait, ProgressWatchdog
+    from agent_comms.turn_watchdog import InputStartWait, ModelWait, ProgressWatchdog
 
-    watchdog = ProgressWatchdog(model_wait_timeout=60.0, input_timeout=180.0, preflight_timeout=5.0)
+    watchdog = ProgressWatchdog(model_wait=ModelWait(60.0), input_timeout=180.0, preflight_timeout=5.0)
     session = SimpleNamespace(
         awaiting_native_attestation=False,
         stats=SimpleNamespace(requested=False),

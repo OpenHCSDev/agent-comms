@@ -1,5 +1,6 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
+from agent_comms.pi_vocabulary import HighThinkingLevel
 import asyncio
 import logging
 from contextlib import suppress
@@ -528,7 +529,7 @@ def test_fork_rejects_duplicate_instead_of_overwriting_owner(tmp_path):
         comms.registry.new_thread(name='child', tags=frozenset(), worktree=str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     with pytest.raises(RelationViolationError, match="already exists"):
-        comms.threads.create(ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level="high", task="duplicate"))
+        comms.threads.create(ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level=HighThinkingLevel, task="duplicate"))
     assert comms.registry.require("child").pid == os.getpid()
 
 

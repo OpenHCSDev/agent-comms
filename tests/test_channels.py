@@ -1,3 +1,4 @@
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.messages import Membership
 import os
 from dataclasses import replace
@@ -368,7 +369,7 @@ def test_all_implicit_tag_introduction_paths_honor_name_reservations(tmp_path):
     )
     with pytest.raises(ValueError, match="reserved by a saved view"):
         comms.threads.create(
-            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level="high", task="task", tags=frozenset({"reserved"})),
+            ForkSpec.from_task(name="child", parent="parent", project=str(tmp_path), model="test/model", thinking_level=HighThinkingLevel, task="task", tags=frozenset({"reserved"})),
         )
 
     after = comms.registry.snapshot()

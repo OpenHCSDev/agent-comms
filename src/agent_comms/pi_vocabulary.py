@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import Annotated, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, FieldRepresentation
+from .native_arguments import ThinkingArgument
 
 if TYPE_CHECKING:
     from .backend import TurnSession
@@ -201,8 +203,55 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def optional_name(cls, level):
-        return None if level is None else level.declared_name
+    def native_arguments(cls):
+        return (ThinkingArgument(FieldCodec.encode(cls)),)
+
+    @classmethod
+    def launch_arguments(cls):
+        return tuple(token for argument in cls.native_arguments() for token in argument.argv)
+
+    @classmethod
+    def applied(cls, current):
+        return cls
+
+    @classmethod
+    def observed(cls, level):
+        return cls
+
+
+class NoThinkingOverride(ThinkingLevel):
+    declared_name = None
+
+    @classmethod
+    def native_arguments(cls):
+        return ()
+
+    @classmethod
+    def applied(cls, current):
+        return current
+
+    @classmethod
+    def observed(cls, level):
+        return level
+
+
+class ThinkingLevelValue(FieldRepresentation):
+    accepts_null = True
+
+    @classmethod
+    def decode(cls, value):
+        return NoThinkingOverride if value is None else ThinkingLevel.decode(FieldCodec.decode(str, value))
+
+    @classmethod
+    def encode(cls, value):
+        return FieldCodec.encode(value)
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type[ThinkingLevel] | None)
+
+
+ThinkingLevelField = Annotated[type[ThinkingLevel], ThinkingLevelValue]
 
 
 class OffThinkingLevel(ThinkingLevel):
