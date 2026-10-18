@@ -24,7 +24,7 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
 from agent_comms.todos import (AwaitingFirstCall, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
-    RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
+    ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
@@ -833,6 +833,27 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     assert judged.strikes[0].reason == why
     revised = comms.registry.require('worker').goal
     assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+
+
+def test_close_quotes_the_works_line(commander):
+    """Closing evidence must quote four consecutive words of the order's Works when run."""
+    comms, caller = commander
+    run = ApplicationOrderRun('The board shows the problem closed after the commander reopens the session')
+    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+        problem='P1', order=replace(order(comms.root, 'order-P1'), run=run), request='request',
+        deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P1',
+    )).apply(comms, caller)
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    artifact = comms.root / 'installed-evidence'
+    artifact.write_text('Verified installed path')
+    delivered = comms.goals.todos.get('P1')
+    with pytest.raises(ValueError, match='consecutive words of: Works when:'):
+        CommsProblemCloseTool(problem='P1', artifact=str(artifact),
+            works='The installed application kept both queued orders through tab returns.').apply(comms, caller)
+    assert comms.goals.todos.get('P1') == delivered
+    CommsProblemCloseTool(problem='P1', artifact=str(artifact),
+        works='In the installed app the board shows the problem closed, read after a restart.').apply(comms, caller)
+    assert comms.goals.todos.get('P1').state.declared_name == 'done'
 
 
 def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
