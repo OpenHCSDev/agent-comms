@@ -12,7 +12,7 @@ import hashlib
 import json
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import InitVar, dataclass, field, replace
 from pathlib import Path
 from typing import Never
 
@@ -27,7 +27,7 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
 )
-from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied
+from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
 from .native_tools import NativeExecutableTool
 from .selected_tool_broker import (
     OwnerToolSocket,
@@ -63,8 +63,6 @@ class CodingCall(NativeToolCall):
         ):
             raise SelectedToolDenied("Malformed native coding call identity")
         try:
-            if type(arguments) is not dict:
-                raise SelectedToolDenied("Native coding arguments must be an object")
             return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
         except (ValueError, TypeError, KeyError) as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
@@ -87,33 +85,42 @@ class ExecutableCodingCall(CodingCall):
 
 
 @dataclass
+class ArgumentRefusal(UncertainClaim):
+    reason: str
+
+    async def consume(
+        self, call: NativeToolCall, action: Callable[[], Awaitable[None]],
+    ) -> None:
+        raise SelectedToolDenied(self.reason)
+
+
+@dataclass
 class RefusedCodingCall(CodingCall):
     """Invalid arguments cannot execute, but still own real start/error events."""
 
     tool_name: str
     arguments: object
-    reason: str = field(compare=False)
+    reason: InitVar[str]
+
+    def __post_init__(self, reason: str) -> None:
+        self.claim_scope = ArgumentRefusal(reason)
 
     @property
     def name(self) -> str:
         return self.tool_name
 
     def require_tool(self) -> Never:
-        raise SelectedToolDenied(self.reason)
+        raise SelectedToolDenied("Refused native coding arguments cannot execute")
 
     def correlate(self, candidate: NativeToolCall) -> None:
-        # Pi may normalize arguments before its socket request. This call
-        # remains refused whatever it supplies; a changed identity is not ours.
-        if (self.call_id, self.name) != (candidate.call_id, candidate.name):
+        self.reject_correlated(candidate)
+
+    def reject_correlated(self, existing: NativeToolCall) -> None:
+        # Pi may normalize arguments before its socket arrives. Whichever
+        # arrives first keeps the same lifecycle object, never permission.
+        if (self.call_id, self.name) != (existing.call_id, existing.name):
             raise SelectedToolDenied("Refused coding call identity changed")
-
-    def start(self) -> None:
-        super().start()
-        self.claim_scope.expire(self)
-
-    async def authorize(self, action: Callable[[], Awaitable[None]]) -> None:
-        await self._wait_started()
-        self.require_tool()
+        existing.claim_scope.refuse(existing, self.claim_scope)
 
 
 @dataclass

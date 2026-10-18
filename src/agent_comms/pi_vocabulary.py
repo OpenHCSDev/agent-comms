@@ -7,10 +7,10 @@ from typing import Annotated, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
-from .native_arguments import ThinkingArgument
 
 if TYPE_CHECKING:
     from .backend import TurnSession
+    from .native_arguments import ThinkingArgument
 
 
 class PiStopReason(DeclaredFamily, affix="StopReason"):
@@ -203,12 +203,8 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    def native_arguments(cls):
-        return (ThinkingArgument(FieldCodec.encode(cls)),)
-
-    @classmethod
-    def launch_arguments(cls):
-        return tuple(token for argument in cls.native_arguments() for token in argument.argv)
+    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
+        return (argument(cls),)
 
     @classmethod
     def applied(cls, current):
@@ -223,7 +219,7 @@ class NoThinkingOverride(ThinkingLevel):
     declared_name = None
 
     @classmethod
-    def native_arguments(cls):
+    def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:
         return ()
 
     @classmethod

@@ -45,11 +45,11 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
             raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
 
     @classmethod
-    def record(cls, name: str, arguments: Mapping[str, object]) -> ToolDeclaration | None:
+    def record(cls, name: str, arguments: object) -> ToolDeclaration | None:
         """The call decoded once as Core's tool record, or None when Core does not decode it."""
         try:
-            return cls.for_name(name).parse_arguments(arguments)
-        except SelectedToolDenied:
+            return cls.for_name(name).parse_arguments(FieldCodec.decode(dict[str, object], arguments))
+        except (TypeError, ValueError):
             return None
 
     def reads(self) -> str:
