@@ -275,7 +275,7 @@ class ChangedSource:
         return cls(path, git(repo, "show", f"{head}:{path}"), frozenset(lines))
 
 
-class CleanChangedLines:
+class CleanChangedLines(OccurrenceMeasure):
     """No occurrence may be written, even when another occurrence is deleted."""
 
     @staticmethod
@@ -287,8 +287,9 @@ class CleanChangedLines:
         """The first changed line of each occurrence written on a changed line."""
         sites = []
         for node in cls.sites(source.tree):
-            if (count := cls.occurrences(node)) and (touched := source.lines.intersection(cls.site_lines(node))):
-                sites.extend([min(touched)] * count)
+            if count := cls.occurrences(node):
+                if touched := source.lines.intersection(cls.site_lines(node)):
+                    sites.extend([min(touched)] * count)
         return sites
 
 
@@ -347,6 +348,45 @@ class BannedVocabulary(CleanChangedLines, PerFileOccurrenceMeasure):
         return [*super().changed_sites(source), *(cls.prose_lines(source) & source.lines)]
 
 
+class NoneSpelling(MroDispatch):
+    """One node's spellings of absence as None, never evaluated code."""
+
+    def __init__(self) -> None:
+        self.found = 0
+
+    @staticmethod
+    def absent(node: ast.AST) -> bool:
+        match node:
+            case ast.Constant(value=None):
+                return True
+        return False
+
+    @handles(ast.Compare)
+    def identity(self, node: ast.Compare) -> None:
+        left = node.left
+        for operator, right in zip(node.ops, node.comparators, strict=True):
+            identity = isinstance(operator, (ast.Is, ast.IsNot))
+            self.found += identity and (self.absent(left) or self.absent(right))
+            left = right
+
+    @handles(ast.BinOp)
+    def union(self, node: ast.BinOp) -> None:
+        union = isinstance(node.op, ast.BitOr)
+        self.found += union and (self.absent(node.left) or self.absent(node.right))
+
+    @handles(ast.Subscript)
+    def typing_spelling(self, node: ast.Subscript) -> None:
+        match node.value, node.slice:
+            case ast.Name(id="Optional") | ast.Attribute(attr="Optional"), _:
+                self.found += 1
+            case ast.Name(id="Union") | ast.Attribute(attr="Union"), ast.Tuple(elts=members):
+                self.found += any(self.absent(member) for member in members)
+
+    @handles(ast.keyword)
+    def default(self, node: ast.keyword) -> None:
+        self.found += node.arg == "default" and self.absent(node.value)
+
+
 class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
     """Absence spelled as None: ``is None`` tests, annotations that allow None, ``default=None``.
 
@@ -364,38 +404,20 @@ class NoneAbsence(CleanChangedLines, PerFileOccurrenceMeasure):
         while pending:
             node, scope = pending.pop()
             match node:
-                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) | ast.ClassDef(name=name):
+                case ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name) if (
+                        ".".join((*scope, name)) in cls.boundary_decoders):
+                    continue
+                case (ast.FunctionDef(name=name) | ast.AsyncFunctionDef(name=name)
+                      | ast.ClassDef(name=name)):
                     scope = (*scope, name)
-                    if not isinstance(node, ast.ClassDef) and ".".join(scope) in cls.boundary_decoders:
-                        continue
             yield node
             pending.extend((child, scope) for child in ast.iter_child_nodes(node))
 
     @staticmethod
-    def absent(node: ast.AST) -> bool:
-        match node:
-            case ast.Constant(value=None):
-                return True
-        return False
-
-    @classmethod
-    def occurrences(cls, node: ast.AST) -> int:
-        match node:
-            case ast.Compare(left=left, ops=ops, comparators=comparators):
-                operands = [left, *comparators]
-                return sum(isinstance(op, (ast.Is, ast.IsNot)) and (cls.absent(first) or cls.absent(second))
-                           for op, first, second in zip(ops, operands, operands[1:]))
-            case ast.BinOp(op=ast.BitOr(), left=left, right=right):
-                return int(cls.absent(left) or cls.absent(right))
-            case ast.Subscript(value=ast.Name(id="Optional") | ast.Attribute(attr="Optional")):
-                return 1
-            case ast.Subscript(value=ast.Name(id="Union") | ast.Attribute(attr="Union"),
-                               slice=ast.Tuple(elts=members)):
-                return int(any(cls.absent(member) for member in members))
-            case ast.keyword(arg="default", value=value):
-                return int(cls.absent(value))
-        return 0
-
+    def occurrences(node: ast.AST) -> int:
+        spelling = NoneSpelling()
+        spelling.dispatch_sync(node)
+        return spelling.found
 
 class FunctionLocalImport(PerFileMeasure):
     """Imports executed inside a function, including nested local classes."""
@@ -1233,7 +1255,8 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
             introduced[identity] = len(sites)
             if sites:
                 introduced_lines[identity] = sorted(sites)
-    return Comparison(root, base, head, tuple(sorted(paths)), before, after, introduced, introduced_lines)
+    return Comparison(root, base, head, tuple(sorted(paths)), before, after,
+                      introduced, introduced_lines)
 
 
 def main() -> int:
