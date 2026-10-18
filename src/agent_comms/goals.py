@@ -226,10 +226,8 @@ class CountCheckResult(CheckResult):
             raise ValueError("An expected count must be nonnegative.")
 
     @staticmethod
-    def printed(stdout: bytes) -> int | None:
-        """The count a check printed (its last integer), or None when it printed no integer."""
-        counts = re.findall(r"\d+", stdout.decode(errors="replace"))
-        return int(counts[-1]) if counts else None
+    def printed(stdout: bytes) -> int | None:  # a check's count is its last printed integer
+        return next((int(n) for n in reversed(re.findall(r"\d+", stdout.decode(errors="replace")))), None)
 
     def require(self, result):
         if not isinstance(result.outcome, ExitedOutcome) or self.printed(result.stdout) != self.expected:
