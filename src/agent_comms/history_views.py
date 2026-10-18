@@ -452,10 +452,6 @@ class HistoryViews:
         messages = self.bus.inbox(viewer, thread.name)
         self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
-    def revision_paths(self) -> dict[str, tuple[Path, ...]]:
-        """The revision owner's declarations supply both stat and watch paths."""
-        return WireRevision.source_paths(self)
-
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""
         return self.bus.log.latest_sequence()

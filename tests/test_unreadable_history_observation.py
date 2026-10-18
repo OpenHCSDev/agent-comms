@@ -33,7 +33,7 @@ from agent_comms.ui_model.observation import (
     SidebarUnreadable,
     SidebarDeferred,
     SidebarReading,
-    CompleteSidebarRead,
+    SidebarReadStage,
     ThreadsObserved,
     ThreadUnavailable,
     UnreadableHistory,
@@ -150,19 +150,20 @@ def test_sidebar_deferred_read_does_not_replace_its_original_interest(
     request = ObserveSidebar(str(comms.root.parent), True, True)
     revision = comms.views.revision()
     reading = SidebarReading(request)
-    reading.stage = stage = CompleteSidebarRead()
+    reading.stage = stage = SidebarReadStage()
+    initial_sent, initial_published = reading.sent, reading.published
     with monkeypatch.context() as patch:
         patch.setattr(comms.views, "viewer_snapshot", deferred)
         result = stage.read(request, comms, revision)
         assert isinstance(result, SidebarDeferred)
         assert list(reading.read(comms, revision)) == []
         assert reading.request is request and reading.stage is stage
-        assert reading.sent is None and reading.published is None
+        assert reading.sent is initial_sent and reading.published is initial_published
     assert comms.views.viewer_snapshot == original
     completed = list(reading.read(comms, revision))
     assert len(completed) == 1
     assert reading.published is completed[0]
-    assert reading.stage is stage and reading.sent is not None
+    assert reading.stage is stage and reading.sent is not initial_sent
     # The unchanged interest publishes once, then remains quiet.
     assert list(reading.read(comms, revision)) == []
 
