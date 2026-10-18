@@ -216,7 +216,7 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
 
 
 class NoThinkingOverride(ThinkingLevel):
-    declared_name = ThinkingLevel.declared_name
+    declared_name = None
 
     @classmethod
     def native_arguments(cls, argument: type[ThinkingArgument]) -> tuple[ThinkingArgument, ...]:

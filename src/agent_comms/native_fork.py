@@ -46,7 +46,7 @@ class ForkSessionHelper(PiHelper):
         if not isinstance(result.outcome, (TimedOutOutcome, SignaledOutcome)):
             return super().failure(request, result)
         return PiHelperFailed(
-            cls.declared_name,
+            cls.require_name(),
             result,
             f"killed (bound {cls.timeout_for(request):.0f}s) while it may hold the native "
             f"writer locks of {request.file}; that lock and any partial fork in "

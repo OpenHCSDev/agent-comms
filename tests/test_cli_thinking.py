@@ -88,7 +88,7 @@ def test_native_arguments_configured_has_one_default(monkeypatch):
     monkeypatch.setenv(NativeArguments.arguments_key, '--model "fixture/model" --thinking off')
     assert NativeArguments.configured_binary() == "/fixture/pi"
     assert NativeArguments.configured().model == "fixture/model"
-    assert NativeArguments.configured().thinking == "off"
+    assert NativeArguments.configured().thinking is OffThinkingLevel
     assert NativeArguments.configured([]).argv == ()
 
 
