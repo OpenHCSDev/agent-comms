@@ -58,6 +58,10 @@ class DisplaySnapshot:
     def metrics(self) -> DisplayMetrics:
         return self.activity, self.counts
 
+    @staticmethod
+    def empty(semantics: DisplayMetricScope) -> DisplaySnapshot:
+        return DisplaySnapshot(semantics, *semantics.empty_metrics)
+
 
 @dataclass(frozen=True)
 class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
@@ -71,9 +75,25 @@ class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
         if self.activity.keys() != expected or self.counts.keys() != expected:
             raise ValueError("Projection metrics differ from the captured channel scope")
 
-
     def current_for(self, revision: FileRevision, semantics: DisplayMetricScope) -> bool:
         return (self.source, self.semantics) == (revision, semantics)
+
+    @classmethod
+    def from_prefix(cls, index: BusDisplayIndex, opened: WireSnapshot, boundary: int,
+                    semantics: DisplayMetricScope, checkpoint: DisplayCheckpoint | None) -> DisplayCheckpoint:
+        if checkpoint is None or checkpoint.semantics != semantics:
+            metrics = opened.query_page_index(lambda page: page.display_metrics(semantics, boundary))
+            offset = boundary
+        else:
+            metrics = (dict(checkpoint.activity), dict(checkpoint.counts))
+            offset = checkpoint.offset
+            for message, _ in opened.public_records(offset, before_offset=boundary):
+                semantics.observe(message, metrics)
+        projected = cls(opened.revision, boundary, opened.fingerprint(boundary), semantics, *metrics)
+        if checkpoint is None or checkpoint.semantics != semantics or offset != boundary:
+            index.write(projected)
+        opened.remember_append_checkpoint(index, projected)
+        return projected
 
 class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
     record_type = DisplayCheckpoint
@@ -84,25 +104,8 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
         super().__init__(bus_path, path)
 
     def snapshot(self, opened: WireSnapshot, semantics: DisplayMetricScope) -> DisplaySnapshot:
-        boundary = opened.complete_boundary
+        prefix = opened.complete_prefix
         checkpoint = opened.append_checkpoint(self)
-        if checkpoint is not None and not opened.changed_since(checkpoint.source) and checkpoint.semantics == semantics:
+        if checkpoint is not None and checkpoint.current_for(opened.revision, semantics):
             return checkpoint
-        if checkpoint is None or checkpoint.semantics != semantics:
-            metrics = opened.query_page_index(lambda index: index.display_metrics(semantics, boundary))
-            offset = boundary
-        else:
-            metrics, offset = (dict(checkpoint.activity), dict(checkpoint.counts)), checkpoint.offset
-        rows = opened.query_page_index(lambda index: tuple(index.offsets(
-            lower=None, upper=None, targets=None, after_offset=offset,
-            descending=False, before_offset=boundary)))
-        for message, _ in opened.indexed_records(rows, before_offset=boundary):
-            semantics.observe(message, metrics)
-        result = DisplaySnapshot(semantics, *metrics)
-        if boundary:
-            projected = DisplayCheckpoint(opened.revision, boundary, opened.fingerprint(boundary), semantics, *metrics)
-            if checkpoint is None or checkpoint.semantics != semantics or offset != boundary:
-                self.write(projected)
-            opened.remember_append_checkpoint(self, projected)
-            return projected
-        return result
+        return prefix.project(self, opened, semantics, checkpoint)

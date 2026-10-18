@@ -30,7 +30,8 @@ from .bus_publication import (
 )
 from .bus_source_page import AddressedPage
 from .bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
-from .bus_projection import AppendCheckpoint, BusAppendIndex, Checkpoint
+from .bus_projection import (AppendCheckpoint, BusAppendIndex, Checkpoint,
+                             WirePrefix, EmptyWirePrefix, CompleteWirePrefix)
 from .envelope_claim_transitions import (
     ClaimProjection,
 )
@@ -72,7 +73,7 @@ class WireSnapshot(ABC):
 
     @property
     @abstractmethod
-    def complete_boundary(self) -> int: ...
+    def complete_prefix(self) -> WirePrefix: ...
 
     @property
     @abstractmethod
@@ -149,7 +150,7 @@ class WireSnapshot(ABC):
             message.reference: message
             for message, _ in self.public_records_for(
                 frozenset(reference.seq for reference in references),
-                before_offset=self.complete_boundary,
+                before_offset=self.complete_prefix.boundary,
             )
         }
         if any(reference not in messages for reference in references):
@@ -181,7 +182,8 @@ class WireSnapshot(ABC):
 class AbsentWireSnapshot(WireSnapshot):
     """No descriptor existed at acquisition; later appends stay outside this cut."""
 
-    complete_boundary = boundary = position = 0
+    complete_prefix = EmptyWirePrefix()
+    boundary = position = 0
 
     def same_file(self, identity: FileIdentity) -> bool:
         return False
@@ -288,8 +290,8 @@ class OpenedWireSnapshot(WireSnapshot):
             yield scan.read(raw)
 
     @property
-    def complete_boundary(self) -> int:
-        """Last complete line inside this fixed physical cut, without reading history."""
+    def complete_prefix(self) -> WirePrefix:
+        """Decode prefix presence at the last complete line of this fixed cut."""
         stream, revision = self.stream, self.revision
         if not revision.opened_by(stream):
             raise StaleRevision("Opened wire stream no longer contains its captured revision")
@@ -299,15 +301,15 @@ class OpenedWireSnapshot(WireSnapshot):
             if end:
                 stream.seek(end - 1)
                 if stream.read(1) == b"\n":
-                    return end
+                    return CompleteWirePrefix(end)
             while end:
                 start = max(0, end - DEFAULT_BUFFER_SIZE)
                 stream.seek(start)
                 newline = stream.read(end - start).rfind(b"\n")
                 if newline >= 0:
-                    return start + newline + 1
+                    return CompleteWirePrefix(start + newline + 1)
                 end = start
-            return 0
+            return EmptyWirePrefix()
         finally:
             stream.seek(position)
 

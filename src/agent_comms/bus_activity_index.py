@@ -44,7 +44,7 @@ class BusActivityIndex(BusAppendIndex[ActivityCheckpoint]):
 
     def snapshot(self, opened: WireSnapshot,
                  parse: Callable[[Mapping[str, Any]], Iterable[ActivityFields]]) -> ActivityClocks:
-        boundary = opened.complete_boundary
+        boundary = opened.complete_prefix.boundary
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is None:
             channels, sent, offset = {}, {}, 0

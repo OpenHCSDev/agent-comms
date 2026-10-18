@@ -8,6 +8,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import BinaryIO, ClassVar, Generic, TypeVar, TYPE_CHECKING
+from abc import ABC, abstractmethod
 
 from .field_codec import FieldCodec
 from .private_path import FileRevision
@@ -15,6 +16,31 @@ from .store_files import _atomic_write_text, _store_lock
 
 if TYPE_CHECKING:
     from .wire_log import WireSnapshot
+
+
+class WirePrefix(ABC):
+    """A complete source prefix; absence has no checkpoint to publish."""
+
+    boundary: int
+
+    @abstractmethod
+    def project(self, index, opened, semantics, checkpoint): ...
+
+
+@dataclass(frozen=True)
+class EmptyWirePrefix(WirePrefix):
+    boundary: ClassVar[int] = 0
+
+    def project(self, index, opened, semantics, checkpoint):
+        return index.record_type.empty(semantics)
+
+
+@dataclass(frozen=True)
+class CompleteWirePrefix(WirePrefix):
+    boundary: int
+
+    def project(self, index, opened, semantics, checkpoint):
+        return index.record_type.from_prefix(index, opened, self.boundary, semantics, checkpoint)
 
 
 @dataclass(frozen=True)
