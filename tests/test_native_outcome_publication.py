@@ -3,6 +3,7 @@
 The verified native CLI, HTTP provider, Core turn/application, input dispositions
 and saved journal are real. Only HTTP response contents are controlled.
 """
+from agent_comms.native_package import VerifiedNativePackage
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -53,9 +54,9 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
                  "--no-extensions", "--no-skills", "--no-context-files"]
     agent = canonical_agent(wired, agent_bin=launcher, agent_args=arguments, runtime_enabled=True)
     package = pinned_native_package()
-    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, package)
+    route = PrivateNkLaunch(Path(agent._comms.root), agent.configured_root_id, VerifiedNativePackage.acquire(package))
     monkeypatch.setattr(PrivateNkLaunch, "current", classmethod(lambda cls: route))
-    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: native_pi._trusted_package(launch.native_package))
+    monkeypatch.setattr(PrivateNkLaunch, "validate", lambda launch: launch.native_package)
     updates = []
     attempted = []
 

@@ -17,7 +17,7 @@ counting. An order sent in error is retired with `withdraw`: its problem closes 
 Nothing here judges code; it refuses orders that leave a unit room to interpret,
 and refuses to let a deadline lapse silently.
 """
-import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
+import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -635,12 +635,10 @@ def replied(latest: dict | None) -> str:
     return f'; REPLIED {at} [{latest["id"]}]: {" ".join(str(latest.get("text")).split())[:160]} -- read it before pushing'
 
 
-def deadline_lines(held: list[Todo], since: float = 0.0) -> list[str]:
+def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
     """Each order that entered lateness (OVERDUE or DUE PASSED), changed it by a reply or push, or
     entered STALL after the previous poll at ``since``; a tick where nothing changed is silent."""
     now = time.time()
-    pending = [t for t in held if t.pending]
-    read = progress() if pending else {}
     late, stalled, passed = [], [], []
     for t in pending:
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
@@ -672,21 +670,14 @@ def overdue():
                  if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
         if stale:
             print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
-        for line in deadline_lines(held, since):
+        pending = [t for t in held if t.pending]
+        read = progress() if pending else {}
+        for line in deadline_lines(pending, read, since):
             print(line, flush=True)
-        # Units leave finished PRs open and wander off. An open PR naming an ordered problem that
-        # nobody has touched for 5 minutes is a stall, whatever the unit says it is doing.
-        ordered = {t.id: (t.assignment.owner, t.order.at.at, t.deadline.at) for t in held if t.pending}
-        idle_prs = []
-        for repo in (repo.github for repo in CONFIG.repos):
-            listed = subprocess.run(['gh', 'pr', 'list', '-R', repo, '--state', 'open', '--limit', '40',
-                                     '--json', 'number,title,updatedAt'], capture_output=True, text=True, timeout=60)
-            for pr in json.loads(listed.stdout or '[]'):
-                touched = calendar.timegm(time.strptime(pr['updatedAt'], '%Y-%m-%dT%H:%M:%SZ'))
-                for pid in re.findall(r'P\d+', pr['title']):
-                    # An order sent after the last touch is the push; until its deadline, OVERDUE owns the alarm.
-                    if pid in ordered and time.time() - touched > 300 and ordered[pid][1] < touched and time.time() > ordered[pid][2]:
-                        idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
+        # Units leave finished PRs open and wander off. An order's open PR that nobody has touched for
+        # 5 minutes is a stall, whatever the unit says it is doing; until its deadline, OVERDUE owns the alarm.
+        idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
+                    for t in pending if now > t.deadline.at and read[t.id].untouched(now)]
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
         for _ in HuntDue.broken(COMMS, ME, since):

@@ -56,6 +56,27 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
             origin=AgentOrigin(),
         )
 
+@pytest.fixture(scope="session")
+def native_runtime_package():
+    """Borrow this interpreter's installed artifact; source and runtime pins must agree."""
+    from importlib.metadata import distribution
+    from agent_comms import native_package
+
+    manifest = Path(distribution("agent-comms").locate_file("agent_comms/_native/pi-native.sha256")).resolve(strict=True)
+    assert manifest.read_bytes() == native_package.MANIFEST.read_bytes()
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(native_package, "MANIFEST", manifest)
+        return native_package.VerifiedNativePackage.acquire(native_package.pinned_native_package())
+
+
+@pytest.fixture(autouse=True)
+def _native_runtime_resources_are_explicit(monkeypatch, native_runtime_package):
+    """Source tests use the same reviewed native resource as their installed interpreter."""
+    from agent_comms import native_package
+
+    monkeypatch.setattr(native_package, "MANIFEST", native_runtime_package.path.parents[3] / "pi-native.sha256")
+
+
 @pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     """A developer's live managed process is not a test wire or native child."""
@@ -90,16 +111,43 @@ def private_directory():
 
 
 @pytest.fixture
-def declared_native_package(tmp_path_factory, monkeypatch) -> Path:
-    """This test's own pin and the package directory it names; nothing is prepared."""
-    import agent_comms.native_package as native_package
+def declared_native_package(tmp_path, monkeypatch):
+    """A construction-only artifact with real layout, ancestry and tree verification."""
+    from agent_comms import native_package
 
-    manifest = tmp_path_factory.mktemp("declared-stack") / native_package.MANIFEST.name
-    manifest.write_text("# a test-owned pin\n")
+    deployment = tmp_path / "native"
+    deployment.mkdir(mode=0o700)
+    package = deployment / "node_modules/@earendil-works/pi-coding-agent"
+    (package / "dist").mkdir(parents=True)
+    (package / "dist/cli.js").write_text("// This fixture never starts Node.\n")
+    manifest = tmp_path / "pin"
+    manifest.write_text(native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n")
     monkeypatch.setattr(native_package, "MANIFEST", manifest)
-    package = native_package.pinned_location()
-    package.mkdir(parents=True)
-    return package
+    pinned = native_package.pinned_location()
+    deployment.rename(pinned.parents[2])
+    return pinned
+
+
+@pytest.fixture
+def verified_native_package(declared_native_package):
+    from agent_comms.native_package import VerifiedNativePackage
+
+    return VerifiedNativePackage.acquire(declared_native_package)
+
+
+@pytest.fixture
+def configured_catalog(verified_native_package, tmp_path, monkeypatch):
+    """Unit catalogs own an explicit artifact, not the developer interpreter's runtime."""
+    from agent_comms.config_options import ConfigOptions
+    from agent_comms.native_arguments import NativeArguments
+
+    catalog = ConfigOptions(
+        NativeArguments.default_binary, NativeArguments.parse(()),
+        RestartEnvironment(native_config=tmp_path / "config", agent_directory=tmp_path / "config"),
+        verified_native_package,
+    )
+    monkeypatch.setattr(ConfigOptions, "configured", classmethod(lambda cls: catalog))
+    return catalog
 
 
 @pytest.fixture
@@ -255,7 +303,7 @@ def wired(comms: Comms) -> Comms:
 
 
 @pytest.fixture
-def selected_model(monkeypatch, tmp_path):
+def selected_model(monkeypatch, tmp_path, native_runtime_package):
     """Declare a source-test runtime; native validation and package checks stay real.
 
     Its CLI helpers must consume this Core, not an older installed console script.
@@ -279,6 +327,8 @@ def selected_model(monkeypatch, tmp_path):
         entrypoint = runtime.interpreter.with_name(name)
         entrypoint.write_text(
             f"#!{sys.executable}\nimport sys\nsys.path.insert(0, {source!r})\n"
+            "from pathlib import Path\nimport agent_comms.native_package as native_package\n"
+            f"native_package.MANIFEST = Path({str(native_runtime_package.path.parents[3] / 'pi-native.sha256')!r})\n"
             f"from {module} import main\nraise SystemExit(main())\n"
         )
         entrypoint.chmod(0o700)
@@ -315,13 +365,14 @@ def native_rpc_fixture(monkeypatch):
     original_retained = NativePiRpcLaunch.retained_managed
 
     def prepare(
-        command, arguments, *, worktree, root, environment=None, session_file=None
+        command, arguments, *, package, worktree, root, environment=None, session_file=None
     ):
         script = Path(command)
         if not script.is_file():
             return original(
                 command,
                 arguments,
+                package=package,
                 worktree=worktree,
                 root=root,
                 environment=environment,
@@ -340,9 +391,9 @@ def native_rpc_fixture(monkeypatch):
             SelectedSession.for_launch(
                 Path(worktree),
                 Path(session_file) if session_file is not None else None,
-                pinned_native_package(),
+                package,
             ),
-            Path(worktree),
+            package,
             root=Path(root), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),
         )
 
