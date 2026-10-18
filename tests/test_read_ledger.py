@@ -274,6 +274,7 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
 
 
 def test_recorded_bus_identity_is_one_member(tmp_path):
+    from agent_comms.coordination_errors import DMScopeChanged
     from agent_comms.field_codec import FieldCodec
     from agent_comms.private_path import FileIdentity, ObservedPath
     from agent_comms.read_ledger import ReadDocument
@@ -309,7 +310,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     assert not recorded.matches(ObservedPath.at(reopened.bus.log.path))
     assert message.seq not in reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 1
-    with pytest.raises(ValueError, match="bus was replaced"):
+    with pytest.raises(DMScopeChanged, match="bus was replaced"):
         reopened.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
             expected_display_basis=page.display_basis)
     fresh = reopened.views.dm_display_page("alice", worktree=str(tmp_path))
