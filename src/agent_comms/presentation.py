@@ -527,17 +527,17 @@ class BusPresentation:
     def display_view_metrics(
         self,
         source: WireSnapshot,
-        selection: DisplaySelection,
+        basis: DisplaySelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
-        The captured selection owns channel inclusion, viewer aliases and read
+        The captured basis owns channel inclusion, viewer aliases and read
         membership. None is supplied independently by the metrics caller.
         The index reads the captured complete-line cut; read and write errors propagate.
         """
-        snapshot = self.display_index(selection.require_viewer()).snapshot(source, selection.scopes)
+        snapshot = self.display_index(basis.require_viewer()).snapshot(source, basis.scopes)
         unread = source.query_page_index(lambda page: page.display_unread(
-            selection.scopes, selection.viewer_names, selection.seen, source.complete_prefix.boundary))
+            basis.scopes, basis.viewer_names, basis.seen, source.complete_prefix.boundary))
         return snapshot.activity, unread
 
 
