@@ -261,6 +261,39 @@ class PiNativeBackend(
             thread.thinking_level
         ).argv
 
+    @classmethod
+    async def run_selected(cls, claim, execution, *, model, selected_tool_mode,
+                           observe_event, following):
+        from .coordinator import Coordination
+        from .diagnostics import record_request_progress
+        from .maintenance_barrier import MaintenanceBarrier
+        from .native_startup import NativeStartup
+        from .tracked_turn import TrackedTurnSession
+
+        registry = await Coordination.run_worker(claim.bus._registry.snapshot)
+        return await TrackedTurnSession.execute(
+            execution.native_package,
+            input_id=claim.input_id,
+            prompt=claim.prompt.text,
+            context_contributions=claim.prompt.contributions,
+            worktree=Path(claim.owner.thread.worktree).absolute(),
+            session=claim.session,
+            model=model,
+            thinking_level=claim.owner.thread.thinking_level,
+            environment=claim.owner.thread.native_environment(
+                claim.bus.log.path.parent, registry, claim.owner.thread.worktree,
+            ),
+            ingress=MaintenanceBarrier(claim.bus._registry.store.path),
+            startup=NativeStartup(claim.bus.log.path.parent, measurements=claim._measurements),
+            selected_tool_mode=selected_tool_mode,
+            observe_event=observe_event,
+            request_observer=partial(record_request_progress, claim.bus.log.path.parent,
+                                     claim.owner.thread.require_turn_lease()),
+            prompt_send_boundary=claim,
+            execution=execution,
+            following=following,
+        )
+
     # -- lifecycle --------------------------------------------------------
 
     async def prepare(self, thread: Thread, *, open_native=None) -> StateData:

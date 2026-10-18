@@ -100,7 +100,8 @@ class SelectedSession:
                 raise IdentityConflict("registered participant worktree is unavailable")
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
             thread = participant.owner.thread
-            runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
+            runtime = (thread.runtime.new_location(execution.root, thread.worktree)
+                       if path is None else thread.backend.location_type(str(path)))
             return runtime.select_session(directory, execution)
 
         return await Coordination.run_worker(acquire)

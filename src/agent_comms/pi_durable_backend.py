@@ -4,6 +4,8 @@ from __future__ import annotations
 from .field_codec import FieldCodec
 import asyncio
 import fcntl
+import os
+from functools import partial
 from contextlib import ExitStack, contextmanager
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
@@ -12,7 +14,7 @@ from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, InputId, RuntimeLocation, Steers, TurnInboxItem, WhenBusy
+from .agent_backend import AgentBackend, InputContent, InputId, RuntimeLocation, Steers, TurnDelivery, TurnInbox, TurnInboxItem, WhenBusy
 from .agent_events import AgentInfo, Error, Done, OriginalInputStarted, FollowingInputStarted
 from .turn_inputs import TurnInboxReceiver
 from .image_inputs import ImageInput
@@ -29,6 +31,13 @@ from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
+from .coordinator import Coordination
+from .coordination_errors import IdentityConflict
+from .launch_runtime import RestartEnvironment
+from .native_pi import DurableContextProof, NativeContextRecord, NativePiUnavailable, NativeTurnResult
+from .native_session_reopen import NativeSessionIdentity
+from .selected_session import SelectedSession
+from .send_outcome import GrantedSend
 
 
 @dataclass(frozen=True)
@@ -60,6 +69,29 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     def storage_files(self):
         return (self,)
+
+    def select_session(self, directory, execution):
+        return DurableSelectedSession(directory, self)
+
+
+@dataclass(frozen=True)
+class DurableSelectedSession(SelectedSession):
+    location: DurableDatabase
+
+    @property
+    def path(self):
+        return self.location.session
+
+    @property
+    def session_file(self):
+        return self.location.path
+
+    def verify_start(self, actual):
+        actual.require_session(self.location.path)
+        return self.path
+
+    def require_context(self, context):
+        self.verify_start(NativeSessionIdentity(context.session_id, str(context.session_file)))
 
 
 @dataclass(kw_only=True)
@@ -156,6 +188,29 @@ class Open(HostQuery):
 @dataclass(frozen=True)
 class OpenHistory(HostQuery):
     path: str
+
+
+@dataclass(frozen=True)
+class ToolSelectionData(PiResponseData):
+    tools: tuple[str, ...]
+
+
+class GetTools(HostQuery):
+    response_payload = ToolSelectionData
+
+
+@dataclass(frozen=True)
+class SetTools(HostQuery):
+    tools: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DurableIdentityData(PiResponseData):
+    session_id: str = field(metadata={'wire_name': 'sessionId'})
+
+
+class GetIdentity(HostQuery):
+    response_payload = DurableIdentityData
 
 
 class Watch(HostQuery):
@@ -262,14 +317,35 @@ class DurableFollowingStarted(DurableInputStarted, FollowingInputStarted):
         return (self,)
 
 
+@dataclass(frozen=True)
+class DurableProofData:
+    context: NativeContextRecord
+    evidence_entry_id: str
+
+
+@dataclass(frozen=True, kw_only=True)
+class DurableDone(Done):
+    proof: DurableProofData | None = None
+
+    def selected_result(self, path):
+        if not self.ok or self.proof is None:
+            raise NativePiUnavailable('Durable turn ended without successful context evidence')
+        record = self.proof.context
+        proof = DurableContextProof(record.input_id, record.session_id, record.session_entry_id,
+            record.request_generation, record.llm_context_digest, record.committed_at_ms,
+            path, self.proof.evidence_entry_id)
+        return NativeTurnResult(self.text, proof)
+
+
 @dataclass(frozen=True, kw_only=True)
 class DurableTurnEnd(DurablePiEvent):
     text: str
     ok: bool
     reason: str | None = None
+    proof: DurableProofData | None = None
 
     def convert(self):
-        return (Done(text=self.text, ok=self.ok, reason_code=self.reason),)
+        return (DurableDone(text=self.text, ok=self.ok, reason_code=self.reason, proof=self.proof),)
 
     async def finished_turn(self, completion):
         await completion
@@ -349,7 +425,7 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
                         resources=resources.pop_all(), location=location)
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
-                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(Path.home() / '.pi/agent/auth.json')))
+                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(os.environ).native_config / 'auth.json')))
                     await child.request(Resume())
                 self.child = child
             return self.child
@@ -371,7 +447,47 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
             await self.request(thread, command)
         return await self.request(thread, GetState())
 
-    async def run_turn(self, thread, content, delivery):
+    @classmethod
+    async def run_selected(cls, claim, execution, *, model, selected_tool_mode,
+                           observe_event, following):
+        backend = execution.pi_session
+        thread = replace(claim.owner.thread, session_file=str(claim.session.path), model=model.qualified)
+        child = await backend.open(thread)
+        identity = await child.request(GetIdentity())
+        await Coordination.run_worker(partial(claim._start_once,
+            NativeSessionIdentity(identity.session_id, str(child.location.session))))
+
+        @contextmanager
+        def boundary(public_id, native_id, text):
+            if public_id is not None or native_id != claim.input_id or text != claim.prompt.text:
+                raise IdentityConflict('Durable selected write differs from its original claim')
+            yield GrantedSend()
+
+        async def unavailable_ui(request):
+            raise IdentityConflict('Durable selected turns have no UI request channel')
+
+        delivery = TurnDelivery(worktree=thread.worktree, environment={}, inbox=TurnInbox(),
+            finish_event=asyncio.Event(), send_boundary=boundary, interrupt_boundary=boundary,
+            input_started=lambda public_id, native_id, text: native_id == claim.input_id and text == claim.prompt.text,
+            request_progress=lambda *args: None, ui_request=unavailable_ui)
+        # Selected durable turns are reply-only until their tools use Core's broker.
+        # Never give an incoming bus message the unrestricted coding tool set.
+        previous_tools = await child.request(GetTools())
+        await child.request(SetTools(()))
+        result = None
+        try:
+            async for event in backend.run_turn(thread, InputContent(text=claim.prompt.text,
+                    contributions=claim.prompt.contributions), delivery, input_id=claim.input_id):
+                await observe_event(event)
+                if isinstance(event, DurableDone):
+                    result = event.selected_result(child.location.session)
+        finally:
+            await child.request(SetTools(previous_tools.tools))
+        if result is None:
+            raise NativePiUnavailable('Durable selected turn ended without a final answer')
+        return result
+
+    async def run_turn(self, thread, content, delivery, *, input_id=None):
         child = await self.open(thread)
         state = await child.request(GetState())
         yield AgentInfo(model=state.model.display_name,
@@ -384,7 +500,7 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
                 await child.request(Watch())
                 try:
                     child.forward_input(lambda: turn.forward(turn), create_task=tasks.create_task)
-                    await turn.submit(SubmitInitial(request_id=uuid4().hex,
+                    await turn.submit(SubmitInitial(request_id=input_id or uuid4().hex,
                         text=content.text, images=content.images))
                     await turn.initial_written.wait()
                     completion = asyncio.create_task(child.request(AwaitTurn()))

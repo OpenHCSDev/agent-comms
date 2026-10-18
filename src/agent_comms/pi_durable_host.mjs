@@ -1,10 +1,11 @@
 // The sole pi-durable importer. All Pi records terminate at this JSONL boundary.
 import { createInterface } from 'node:readline';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
-import { Harness, ROOT_CONVERSATION_ID, createRegistry, defineDoc, watchEvents } from '@earendil-works/pi-durable';
+import { Harness, ROOT_CONVERSATION_ID, GenerationTask, createRegistry, defineDoc, defineExtension, hook, watchEvents } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
 import { CodingTools } from '@earendil-works/pi-durable/tools';
@@ -15,6 +16,27 @@ const { estimateContext } = await import(new URL('./harness/compaction.js', impo
 const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
 let harness, root, turn, models;
 let resumed = false;
+const CoreContext = defineExtension({ name: 'core-context', hooks: [hook(GenerationTask, {
+  async beforeRequest({ messages }, api) {
+    if (!turn) return;
+    const digest = createHash('sha256').update(JSON.stringify(messages)).digest('hex');
+    const recorded = await harness.commit(async tx => {
+      const proofs = [];
+      for (const [inputId, input] of turn.inputs) {
+        if (turn.proofs.has(inputId)) continue;
+        const submission = await tx.submissionByRequest(root.id, inputId);
+        if (!submission?.entry) continue;
+        const proof = { inputId, sessionId: String(root.id), sessionEntryId: String(submission.entry),
+          requestGeneration: Number(api.taskId), llmContextDigest: digest, committedAtMs: Date.now() };
+        const evidence = await tx.appendEntry(root.id, { kind: 'core.input_context',
+          data: { context: proof, prompt: input.text } });
+        proofs.push([inputId, { context: proof, evidence_entry_id: String(evidence.id) }]);
+      }
+      return proofs;
+    }, context);
+    for (const [inputId, proof] of recorded) turn.proofs.set(inputId, proof);
+  },
+})] });
 const emit = (value) => {
   const { changes, ...update } = value;
   const frames = value.type === 'message_update'
@@ -36,6 +58,7 @@ class TurnWatch {
   constructor(stream) {
     this.stream = stream;
     this.inputs = new Map();
+    this.proofs = new Map();
     emit(stream.snapshot);
     stream.start(events => {
       for (const event of events) {
@@ -53,7 +76,7 @@ class TurnWatch {
       : request.text;
     const submission = root.submit({ type: 'input', content,
       requestId: request.requestId, whenBusy: request.whenBusy }, context);
-    this.inputs.set(request.requestId, { submission, started });
+    this.inputs.set(request.requestId, { submission, started, text: request.text });
     return { id: (await submission).id };
   }
   async wait() {
@@ -64,7 +87,8 @@ class TurnWatch {
     const failed = records.find(record => record.status !== 'done');
     const last = records.at(-1);
     const answer = last.status === 'done' ? await root.commit(tx => tx.entry(last.answer), context) : undefined;
-    emit({ type: 'durable_turn_end', ok: !failed, text: answer ? text(answer) : '', reason: failed?.reason ?? null });
+    emit({ type: 'durable_turn_end', ok: !failed, text: answer ? text(answer) : '', reason: failed?.reason ?? null,
+      proof: this.proofs.get(this.inputs.keys().next().value) ?? null });
     return ack;
   }
   async stop() { await this.stream.stop(); }
@@ -82,6 +106,7 @@ const handlers = {
     models = builtinModels({ credentials });
     const registry = createRegistry();
     registry.install(CodingTools);
+    registry.install(CoreContext);
     harness = await Harness.open(await openNodeSqliteStorage(request.path), {
       models, registry, env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd ?? request.cwd }),
       onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
@@ -90,6 +115,7 @@ const handlers = {
     if (request.provider) agent.model = { provider: request.provider, modelId: request.modelId };
     if (request.thinkingLevel) agent.thinkingLevel = request.thinkingLevel;
     root = await harness.root(context, { agent });
+    await root.configure({ extensions: { add: [CoreContext] } }, context);
     return { work: workItems(await harness.inspect(context)) };
   },
   async open_history(request) {
@@ -165,6 +191,9 @@ const handlers = {
     const model = agent.model && models.getModel(agent.model.provider, agent.model.modelId);
     return { contextUsage: { tokens: estimateContext(await root.context(context), []), contextWindow: model?.contextWindow ?? null } };
   },
+  async get_tools() { requireOpen(); return { tools: (await root.agent(context)).tools.map(tool => tool.name) }; },
+  async set_tools(request) { requireOpen(); await root.configure({ tools: request.tools }, context); return ack; },
+  async get_identity() { requireOpen(); return { sessionId: String(root.id) }; },
   async get_state() {
     requireOpen();
     const agent = await root.agent(context);

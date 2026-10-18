@@ -438,6 +438,12 @@ class AgentBackend(DeclaredFamily, affix="Backend"):
         AgentBackend.__registry__ = MappingProxyType(dict(AgentBackend.__registry__))  # type: ignore[assignment]
         AgentBackend._sealed = True
 
+    @classmethod
+    @abstractmethod
+    async def run_selected(cls, claim, execution, *, model, selected_tool_mode,
+                           observe_event, following):
+        """Run selected input through this backend's transport and proof owner."""
+
     def run_turn(self, thread: Thread, content: InputContent, delivery: TurnDelivery):
         raise BackendDeclarationError(f"{type(self).__name__} does not run turns")
 

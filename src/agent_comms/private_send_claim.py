@@ -21,18 +21,16 @@ from .coordinator import Coordination
 from .diagnostics import (
     PublicationMeasurements,
     record_acquisition_progress,
-    record_request_progress,
 )
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import SelectedModel
 from .native_input_owner import ParticipantOwner, RegistryOwner
-from .native_pi import NativeContextProof, NativePiTerminalFailure, NativeTurnResult
+from .native_pi import ContextProof, NativePiTerminalFailure, NativeTurnResult
 from .native_prompt_binding import bind_expected_prompt
 from .native_prompt_send import PromptBoundary, send_fenced_prompt
 from .native_session_reopen import NativeSessionIdentity
-from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode
 from .text_digest import TextDigest
 from .tracked_turn import (
@@ -40,7 +38,6 @@ from .tracked_turn import (
     NO_NATIVE_OBSERVER,
     NO_NATIVE_TOOLS,
     NativeObserver,
-    TrackedTurnSession,
 )
 from .turn_context import RenderedInput
 
@@ -48,6 +45,7 @@ if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .selected_session import SelectedSession
+    from .tracked_turn import TrackedTurnSession
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
 
@@ -127,13 +125,12 @@ class PrivateSendClaim(PromptBoundary):
             session=session,
         )
 
-    def verify(self, store: Coordination, context: NativeContextProof) -> None:
-        self.stage.verify(
+    def verify(self, store: Coordination, context: ContextProof) -> None:
+        context.verify_selected(self.stage,
             store,
             self.participant,
             self.input_id,
             self.token_digest,
-            context,
             wire_root_id=self.wire_root_id,
             prompt=self.prompt.text,
         )
@@ -154,32 +151,10 @@ class PrivateSendClaim(PromptBoundary):
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer keeps the single-use send token after the input is recorded.
         """
-        registry = await Coordination.run_worker(self.bus._registry.snapshot)
         try:
-            result = await TrackedTurnSession.execute(
-                execution.native_package,
-                input_id=self.input_id,
-                prompt=self.prompt.text,
-                context_contributions=self.prompt.contributions,
-                worktree=Path(self.owner.thread.worktree).absolute(),
-                session=self.session,
-                model=model,
-                thinking_level=self.owner.thread.thinking_level,
-                environment=self.owner.thread.native_environment(
-                    self.bus.log.path.parent, registry,
-                    self.owner.thread.worktree,
-                ),
-                ingress=MaintenanceBarrier(self.bus._registry.store.path),
-                startup=NativeStartup(self.bus.log.path.parent, measurements=self._measurements),
-                selected_tool_mode=selected_tool_mode,
-                observe_event=observe_event,
-                request_observer=partial(
-                    record_request_progress, self.bus.log.path.parent,
-                    self.owner.thread.require_turn_lease(),
-                ),
-                prompt_send_boundary=self,
-                execution=execution,
-                following=following,
+            result = await self.owner.thread.backend.run_selected(
+                self, execution, model=model, selected_tool_mode=selected_tool_mode,
+                observe_event=observe_event, following=following,
             )
         except NativePiTerminalFailure as error:
             def settle(store: Coordination, terminal: NativePiTerminalFailure = error):
@@ -205,8 +180,8 @@ class PrivateSendClaim(PromptBoundary):
         await Coordination.run_read_async(self.store_path, lambda store: self.verify(store, result.context))
         return result
 
-    def commit(self, store: Coordination, context: NativeContextProof) -> None:
-        self.stage.commit(store, self.participant, self.input_id, self.token_digest, context)
+    def commit(self, store: Coordination, context: ContextProof) -> None:
+        context.commit_selected(self, store)
 
     def _start_once(self, identity: NativeSessionIdentity) -> None:
         """Commit the exact grant under original fences, then release them.

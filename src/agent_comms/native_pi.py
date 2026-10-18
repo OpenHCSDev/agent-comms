@@ -7,6 +7,7 @@ publication. Verified package and send authority remain required for every turn.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import re
 import shutil
@@ -305,8 +306,46 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextProof(NativeContextRecord):
+class ContextProof(NativeContextRecord):
     session_file: Path
+
+    def verify_selected(self, stage, store, owner, input_id, token_digest, *, wire_root_id, prompt):
+        from .coordination_errors import IdentityConflict
+
+        with self.input_evidence() as evidence:
+            if not self.corroborates_input(input_id, evidence=evidence):
+                raise IdentityConflict('Live context differs from its reserved input proof')
+            with stage.bound_prompt(store, input_id, owner, wire_root_id, prompt, blocking=True) as binding:
+                if not self.matches_prompt(binding, evidence):
+                    raise IdentityConflict('Live input differs from its exact bound prompt')
+                with store.session.read():
+                    original = stage.pending_input(store, input_id, owner, token_digest)
+                    original.require_session_identity().require_context(self)
+
+    def commit_selected(self, claim, store):
+        claim.stage.commit(store, claim.participant, claim.input_id, claim.token_digest, self)
+
+    def input_evidence(self):
+        raise NotImplementedError
+
+    def matches_prompt(self, binding, evidence):
+        raise NotImplementedError
+
+    def corroborates_input(self, input_id, *, evidence=None):
+        raise NotImplementedError
+
+
+@dataclass(frozen=True, slots=True)
+class NativeContextProof(ContextProof):
+    def input_evidence(self):
+        from .native_entries import NativeEntry
+
+        return NativeEntry.open_input_evidence(self.session_file)
+
+    def matches_prompt(self, binding, evidence):
+        from .native_prompt_binding import expected_prompt_matches_journal
+
+        return expected_prompt_matches_journal(self.session_file, binding, evidence=evidence)
 
     def corroborates_input(
         self, input_id: str, *, evidence: NativeEvidenceRead | None = None
@@ -344,6 +383,41 @@ class NativeContextProof(NativeContextRecord):
                     raise NativePiUnavailable("The input has no assembled-context proof")
                 return row.corroborate(session_file, header, tracked)
 
+@dataclass(frozen=True, slots=True)
+class DurableContextProof(ContextProof):
+    evidence_entry_id: str
+
+    @contextmanager
+    def input_evidence(self):
+        path = self.session_file.resolve(strict=True)
+        if path != self.session_file:
+            raise NativePiUnavailable('Durable context database was redirected')
+        PrivateFileRole.require(path.stat())
+        with closing(sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)) as db:
+            db.execute('PRAGMA query_only=ON')
+            yield db
+
+    def corroborates_input(self, input_id, *, evidence=None):
+        if evidence is None:
+            with self.input_evidence() as db:
+                return self.corroborates_input(input_id, evidence=db)
+        row = evidence.execute('SELECT record FROM entries WHERE id=?', (self.evidence_entry_id,)).fetchone()
+        if row is None or input_id != self.input_id:
+            return False
+        entry = json.loads(row[0])
+        record = FieldCodec.decode(NativeContextRecord, entry['data']['context'])
+        return entry['kind'] == 'core.input_context' and record == NativeContextRecord(
+            self.input_id, self.session_id, self.session_entry_id, self.request_generation,
+            self.llm_context_digest, self.committed_at_ms,
+        )
+
+    def matches_prompt(self, binding, evidence):
+        from .private_sidecar import native_request_digest
+
+        row = evidence.execute('SELECT record FROM entries WHERE id=?', (self.evidence_entry_id,)).fetchone()
+        return row is not None and native_request_digest(json.loads(row[0])['data']['prompt']) == binding.expected_prompt_digest
+
+
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
 
@@ -379,7 +453,7 @@ class NativeTurnResult:
             raise IdentityConflict("successful model produced no publishable response")
 
     text: str
-    context: NativeContextProof
+    context: ContextProof
 
 
 @dataclass(frozen=True, slots=True)
