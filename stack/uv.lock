@@ -25,27 +25,20 @@ wheels = [
 name = "agent-comms"
 source = { editable = "../" }
 dependencies = [
+    { name = "agent-client-protocol" },
     { name = "aiohttp" },
     { name = "metaclass-registry" },
-    { name = "nominal-refactor-audit" },
     { name = "pydantic" },
-]
-
-[package.optional-dependencies]
-acp = [
-    { name = "agent-client-protocol" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "agent-client-protocol", marker = "extra == 'acp'", specifier = ">=0.8" },
-    { name = "agent-client-protocol", marker = "extra == 'all'", specifier = ">=0.8" },
-    { name = "agent-client-protocol", marker = "extra == 'dev'", specifier = ">=0.8" },
+    { name = "agent-client-protocol", specifier = ">=0.8" },
     { name = "aiohttp", specifier = ">=3.14" },
     { name = "black", marker = "extra == 'dev'", specifier = "==26.5.1" },
     { name = "metaclass-registry", specifier = ">=0.4.0" },
     { name = "mypy", marker = "extra == 'dev'", specifier = "==2.3.0" },
-    { name = "nominal-refactor-audit", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor.git?subdirectory=skills%2Frefactor-audit&rev=120c04fb9a0eb4afafab6d621d1c5fd421bb7552" },
+    { name = "nominal-refactor-audit", marker = "extra == 'dev'", git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor.git?subdirectory=skills%2Frefactor-audit&rev=120c04fb9a0eb4afafab6d621d1c5fd421bb7552" },
     { name = "pydantic", specifier = ">=2.13" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-asyncio", marker = "extra == 'dev'", specifier = ">=0.23" },
@@ -53,14 +46,14 @@ requires-dist = [
     { name = "pytest-xdist", marker = "extra == 'dev'", specifier = ">=3.6" },
     { name = "ruff", marker = "extra == 'dev'", specifier = "==0.16.0" },
 ]
-provides-extras = ["acp", "all", "dev"]
+provides-extras = ["dev"]
 
 [[package]]
 name = "agent-comms-stack"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
-    { name = "agent-comms", extra = ["acp"] },
+    { name = "agent-comms" },
     { name = "batrachian-toad" },
     { name = "textual", extra = ["syntax"] },
 ]
@@ -215,10 +208,10 @@ wheels = [
 [[package]]
 name = "batrachian-toad"
 version = "0.6.20"
-source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#b0d6aba4b82438ecba754739903884771ee2ce65" }
+source = { git = "https://github.com/OpenHCSDev/toad.git?branch=main#9f1d90ca4e749f8eea319b5d5cb8f682e5a9d8b4" }
 dependencies = [
     { name = "agent-client-protocol" },
-    { name = "agent-comms", extra = ["acp"] },
+    { name = "agent-comms" },
     { name = "aiosqlite" },
     { name = "bashlex" },
     { name = "click" },
@@ -364,8 +357,8 @@ wheels = [
 
 [[package]]
 name = "formbridge"
-version = "0.1.0"
-source = { registry = "https://pypi.org/simple" }
+version = "0.2.0"
+source = { git = "https://github.com/OpenHCSDev/formbridge.git?rev=ebe2fa9173428e2bd7154a0de23698757677c3c2#ebe2fa9173428e2bd7154a0de23698757677c3c2" }
 dependencies = [
     { name = "docutils" },
     { name = "metaclass-registry" },
@@ -374,10 +367,6 @@ dependencies = [
     { name = "python-introspect" },
     { name = "pyzmq" },
     { name = "zmqruntime" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/7c/42/ee83d07abb49ca79c6d889385f0dc8dcb87d8579647b7282c80dc1e2d17a/formbridge-0.1.0.tar.gz", hash = "sha256:89705201b12568427948ca30e85e5a0663c803de7f490691673184ddf17e1f58", size = 166196, upload-time = "2026-10-12T02:59:18.319Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/80/9c79e273ca0afae38256d1fc7847ab32f72b5574dfc04eced4b97ec5f19a/formbridge-0.1.0-py3-none-any.whl", hash = "sha256:22498e4433470cc4568ec19638f78260a700d67ef607e893941fe51f9c4634d3", size = 189865, upload-time = "2026-10-12T02:59:16.89Z" },
 ]
 
 [[package]]
@@ -683,11 +672,6 @@ wheels = [
 ]
 
 [[package]]
-name = "nominal-refactor-audit"
-version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/NominalRefactorAdvisor.git?subdirectory=skills%2Frefactor-audit&rev=120c04fb9a0eb4afafab6d621d1c5fd421bb7552#120c04fb9a0eb4afafab6d621d1c5fd421bb7552" }
-
-[[package]]
 name = "notify-py"
 version = "0.3.43"
 source = { registry = "https://pypi.org/simple" }
@@ -753,16 +737,12 @@ wheels = [
 
 [[package]]
 name = "objectstate"
-version = "2.1.1"
-source = { registry = "https://pypi.org/simple" }
+version = "5.0.0"
+source = { git = "https://github.com/OpenHCSDev/objectstate.git?rev=b5dd9f78b9293df145d7629f21deb89b042b9400#b5dd9f78b9293df145d7629f21deb89b042b9400" }
 dependencies = [
     { name = "dill" },
     { name = "pycodify" },
     { name = "python-introspect" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/e0/01/09c65f328378e73aa64c228e4980a9383ed89875219670e686627b52d31f/objectstate-2.1.1.tar.gz", hash = "sha256:ec68cbe3bbdbe1d9751cce777aabf2b0f154bce41084ca3efa5ae01fa4c92865", size = 207020, upload-time = "2026-10-12T02:42:42.179Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/12/cc/70fb6afd3f7cc85924d0e42b067a095a8ef36a775e94033150601eb0cc75/objectstate-2.1.1-py3-none-any.whl", hash = "sha256:abe590848e00c062266b5ed9cb2ffae4ef868c7d1ad3d2b74abacf88e09ccd1f", size = 140857, upload-time = "2026-10-12T02:42:40.991Z" },
 ]
 
 [[package]]
@@ -1044,15 +1024,15 @@ wheels = [
 
 [[package]]
 name = "python-introspect"
-version = "0.2.8"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
     { name = "metaclass-registry" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/bd/af/3e444a47e58de1cf4f1e5767b62ddbad55b69fd207960facde8566c9aa48/python_introspect-0.2.8.tar.gz", hash = "sha256:35ee71364dfaf897f4f577a8b526dc1e38afcbc2db0e33180b18bb7de09de51a", size = 58521, upload-time = "2026-10-11T19:34:25.627Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6d/71/55abd50b3f5da2560950c17de878021012f1c033618ad08187916a6f23fe/python_introspect-0.3.0.tar.gz", hash = "sha256:1b305b7976c5620b137edcb013a7a97356031d1abb0eec552a467e85633a7534", size = 62345, upload-time = "2026-10-12T21:00:11.236Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/22/4c/15f356c798be43f7b5f134ad67d56d4208b8fff2762938265d28b082307e/python_introspect-0.2.8-py3-none-any.whl", hash = "sha256:4e8ef0c50dd0dad8f300f68836cef4ecba4ffcc74a4b9d2d2624eebe03b167e4", size = 44387, upload-time = "2026-10-11T19:34:24.354Z" },
+    { url = "https://files.pythonhosted.org/packages/9e/09/59afdbb10c00e3df9ed3f537a5d657a7b1df7189b7542dc9df5ba7d0810b/python_introspect-0.3.0-py3-none-any.whl", hash = "sha256:95155269ea563a5486e0c3851c868fdf0e15065097cd894efad949c69b69b777", size = 46792, upload-time = "2026-10-12T21:00:09.755Z" },
 ]
 
 [[package]]
@@ -1154,7 +1134,7 @@ wheels = [
 [[package]]
 name = "textual"
 version = "8.2.8"
-source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#2d3aecb5106db6e0048d8b8ec21a9837f6d7f64b" }
+source = { git = "https://github.com/OpenHCSDev/textual.git?branch=main#8d88b0bac987644039d92146be2fbd97260c6c32" }
 dependencies = [
     { name = "markdown-it-py", extra = ["linkify"] },
     { name = "mdit-py-plugins" },
@@ -1538,7 +1518,7 @@ wheels = [
 [[package]]
 name = "ui-theme"
 version = "0.1.0"
-source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#47bb6b936e8c0174ffaecfd7c936f66ec091765e" }
+source = { git = "https://github.com/OpenHCSDev/ui-theme.git?branch=main#9968501ab9ffab777a0c43f2a5152eeb7d9d22b5" }
 dependencies = [
     { name = "metaclass-registry" },
     { name = "terminaltexteffects" },
@@ -1664,7 +1644,7 @@ wheels = [
 
 [[package]]
 name = "zmqruntime"
-version = "0.6.3"
+version = "0.6.5"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-types" },
@@ -1676,7 +1656,7 @@ dependencies = [
     { name = "pyzmq" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6e/5b/e0c4ab8a7673d21f06fccc208c5a6e20990ca25f79d4968eb741b131940e/zmqruntime-0.6.3.tar.gz", hash = "sha256:50939ecb7bdb59a8834e1f067367c81c6c91cc5ac8faa40583644be66e5e1661", size = 727143, upload-time = "2026-10-12T06:45:42.808Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/b8/fed21fa56ddc7ea1e9d3c517fa54b8aea81cf0e5b8ca6086d477e0bb3de8/zmqruntime-0.6.5.tar.gz", hash = "sha256:b63cb6d3bd95d522e8db4213cd74a6ccb7058dc7d16bff756e08eb6585b2101b", size = 728551, upload-time = "2026-10-12T22:22:17.485Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/1b/fa/73ba057fcf9dbb3f9d39c75c556bcf6458b98cac8acf59a0e93c60af46f5/zmqruntime-0.6.3-py3-none-any.whl", hash = "sha256:b6a3128998f58f14cecc4faa5b18c68d1677819b4e3c02eb8dff88ee89c97cf9", size = 98979, upload-time = "2026-10-12T06:45:41.665Z" },
+    { url = "https://files.pythonhosted.org/packages/69/35/428582be6777f5c8be66bdd898597246e98d2cb674c412844d982e187121/zmqruntime-0.6.5-py3-none-any.whl", hash = "sha256:f27f91c4bca10f72985743ae53e05b1557c03380438d226f2714142cd127c76d", size = 99040, upload-time = "2026-10-12T22:22:16.116Z" },
 ]
