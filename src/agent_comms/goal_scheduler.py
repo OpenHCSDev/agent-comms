@@ -28,7 +28,7 @@ from .goal_attempts import (
     StaleAttemptError,
     UnresolvedAttemptError,
 )
-from .goal_presentation import ThreadGoalExecution
+from .goal_presentation import GoalSnapshot
 from .goals import Goal, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
@@ -49,7 +49,7 @@ class GoalScheduler:
         self.comms = comms
         self.effects = effects
         self.pending_goal_origins: dict[str, str] = {}
-        self.goal_execution_signatures: dict[str, tuple[Goal | None, ThreadGoalExecution]] = {}
+        self.goal_snapshots: dict[str, GoalSnapshot] = {}
 
     def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
         self.sessions = sessions
@@ -218,18 +218,15 @@ class GoalScheduler:
         return resumed
 
     def in_standby(self, session_id: str) -> bool:
-        try:
-            _goal, execution = self.goal_execution_signatures[session_id]
-        except KeyError:
-            return False
-        return execution.standby()
+        snapshot = self.goal_snapshots.get(session_id)
+        return snapshot is not None and snapshot.execution.standby()
 
     async def sync_goal_execution(self, session_id: str, thread_name: str) -> None:
         event = await Coordination.run_worker(partial(
             self.comms.goals.goal_changed,
-            thread_name, self.goal_execution_signatures.get(session_id),
+            thread_name, self.goal_snapshots.get(session_id),
         ))
         if event is None:
             return
         await self.effects._emit_event(session_id, event)
-        self.goal_execution_signatures[session_id] = event.signature
+        self.goal_snapshots[session_id] = event.snapshot
