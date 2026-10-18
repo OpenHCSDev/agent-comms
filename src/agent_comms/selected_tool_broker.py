@@ -93,14 +93,13 @@ class SelectedToolMode(NativeToolMode):
         if not callable(self.action):
             raise TypeError("Selected tool mode requires an owner callback")
 
+    tool_names = ("selected_claimed_write",)
+
+    def extensions(self, package: Path) -> tuple[Path, ...]:
+        return (selected_extension(package),)
+
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        return (
-            "--no-builtin-tools",
-            "--tools",
-            "selected_claimed_write",
-            "-e",
-            str(selected_extension(package)),
-        )
+        return ("--no-builtin-tools", *super().launch_arguments(package))
 
     async def open_transport(self, turn, ownership) -> ToolTransport:
         return await SelectedToolSocket.open(turn, ownership, self.action)
@@ -483,11 +482,11 @@ class OwnerToolSocket(ToolTransport, Generic[Call]):
 
     @classmethod
     async def open(cls, turn, ownership, policy):
-        transport = cls(turn.launch.session.directory, os.urandom(32).hex(), policy)
+        transport = cls(turn.tool_directory, os.urandom(32).hex(), policy)
         ownership.push_async_callback(transport.close)
         await transport.start()
-        turn.launch.env["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(transport.address)
-        turn.launch.env["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = transport.token
+        turn.tool_environment["AGENT_COMMS_SELECTED_TOOL_SOCKET"] = str(transport.address)
+        turn.tool_environment["AGENT_COMMS_SELECTED_TOOL_TOKEN"] = transport.token
         return transport
 
     def bind_process(self, pid: int) -> None:

@@ -63,7 +63,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     @classmethod
     def wire_kind(cls) -> str:
         """The Pi ``type`` this member converts."""
-        return cls.require_name()
+        return cls.declared_name
 
     @classmethod
     def normalize_field(cls, target, key, value, record):
@@ -134,12 +134,11 @@ class PiEvent(PiPayload, DeclaredFamily):
         return False
 
 
-class NativePiEvent(PiEvent):
-    declared_name = None
+class NativePiEvent(PiEvent, declared_name=None):
+    pass
 
 
-class DurablePiEvent(PiEvent):
-    declared_name = None
+class DurablePiEvent(PiEvent, declared_name=None):
 
     @staticmethod
     def unowned_event(event):
@@ -278,8 +277,7 @@ class ModelRequestProgress(NativePiEvent):
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryEnd(PiEvent):
-    declared_name = None
+class RetryEnd(PiEvent, declared_name=None):
     attempt: int
 
     def __post_init__(self) -> None:
@@ -501,7 +499,7 @@ class ExtensionUiRequest(NativePiEvent):
 
     @classmethod
     def wire_kind(cls) -> str:
-        return ExtensionUiRequest.require_name()
+        return ExtensionUiRequest.declared_name
 
     @classmethod
     def wire_case(cls, wire):
@@ -682,6 +680,10 @@ class InputCommitted(NativePiEvent):
 class MessageEnd(NativePiEvent, DurablePiEvent):
     message: PiMessage = field(default_factory=AbsentMessage, metadata={"wire_name": "message"})
 
+    async def during_turn(self, turn):
+        if self.message.tool_calls:
+            turn.tool_socket.announce(self.message.parts)
+
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         for event in await self.message.apply_end(session):
             yield event
@@ -848,6 +850,16 @@ class SummarizationRetryScheduled(RetryAttemptEvent, starts=phases.Summarization
 class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPhase):
     accepts_prompt = True
 
+    async def during_turn(self, turn):
+        turn.tool_socket.tool_finished(self, turn.input_id)
+
+    def convert(self):
+        name = self.tool_name or 'tool'
+        ok = self.is_error is not True
+        return (events.ToolEnd(id=self.tool_call_id or name, name=name, ok=ok,
+            output=self.result.text(), diff=ToolDeclaration.for_name(name).result_diff(self.result, ok),
+            sent_message=self.result.sent_message(ok)),)
+
     is_error: bool | None = field(default=None, metadata={"wire_name": "isError"})
     result: PiToolResult = field(default_factory=MissingToolResult)
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
@@ -873,6 +885,9 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPha
 @dataclass(frozen=True, kw_only=True)
 class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase):
     accepts_prompt = True
+
+    async def during_turn(self, turn):
+        turn.tool_socket.tool_started(self)
 
     args: object = field(default_factory=dict, metadata={"wire_name": "args"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})

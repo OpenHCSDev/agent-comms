@@ -78,7 +78,7 @@ class ExecutableCodingCall(CodingCall):
 
     @property
     def name(self) -> str:
-        return self.tool.require_name()
+        return self.tool.declared_name
 
     def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]:
         return self.tool
@@ -199,14 +199,17 @@ class CodingToolOwner:
 class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
+    @property
+    def tool_names(self) -> tuple[str, ...]:
+        return tuple(tool.declared_name for tool in NativeExecutableTool.members_with(NativeExecutableTool))
+
+    def extensions(self, package: Path) -> tuple[Path, ...]:
         declarations = NativeExecutableTool.members_with(NativeExecutableTool)
         extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
         # The native package manifest verifies each declaration's extension bytes.
         if any(not extension.is_file() for extension in extensions):
             raise SelectedToolDenied("Native tool extension is not installed")
-        return ("--tools", ",".join(tool.require_name() for tool in declarations),
-                *(argument for extension in extensions for argument in ("-e", str(extension))))
+        return extensions
 
     async def open_transport(self, turn, ownership) -> OwnerToolSocket:
         return await CodingToolSocket.open(turn, ownership, self.owner)

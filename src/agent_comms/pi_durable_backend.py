@@ -1,12 +1,11 @@
 """Opt-in Pi Durable: existing Pi records, RPC correlation and history owners."""
 from __future__ import annotations
 
-from .field_codec import FieldCodec
 import asyncio
 import fcntl
 import os
 from functools import partial
-from contextlib import ExitStack, contextmanager
+from contextlib import AsyncExitStack, ExitStack, contextmanager
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -15,7 +14,7 @@ from uuid import uuid4
 from pydantic import JsonValue
 
 from .agent_backend import AgentBackend, InputContent, InputId, RuntimeLocation, Steers, TurnDelivery, TurnInbox, TurnInboxItem, WhenBusy
-from .agent_events import AgentInfo, Error, Done, OriginalInputStarted, FollowingInputStarted
+from .agent_events import AgentInfo, Error, Done, OriginalInputStarted, FollowingInputStarted, FollowingInputRefused
 from .turn_inputs import TurnInboxReceiver
 from .image_inputs import ImageInput
 from .maintenance_barrier import MaintenanceBarrier
@@ -26,7 +25,7 @@ from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
 from .pi_commands import Abort, GetState, PiCommand, SetModel, SetThinkingLevel
-from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
+from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd, ModelRequestProgress
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
@@ -38,6 +37,10 @@ from .native_pi import DurableContextProof, NativeContextRecord, NativePiUnavail
 from .native_session_reopen import NativeSessionIdentity
 from .selected_session import SelectedSession
 from .send_outcome import GrantedSend
+from .diagnostics import record_request_progress
+from .field_codec import FieldCodec
+from .native_tool_call import ToolTransport
+from .native_tools import NativeExecutableTool
 
 
 @dataclass(frozen=True)
@@ -169,8 +172,7 @@ class TaskFailed(DurablePiEvent):
         return (Error(self.message),)
 
 
-class HostQuery(PiCommand):
-    declared_name = None
+class HostQuery(PiCommand, declared_name=None):
     strict_response = True
 
 
@@ -191,17 +193,13 @@ class OpenHistory(HostQuery):
 
 
 @dataclass(frozen=True)
-class ToolSelectionData(PiResponseData):
+class ConfigureTools(HostQuery):
     tools: tuple[str, ...]
+    environment: dict[str, str]
 
 
-class GetTools(HostQuery):
-    response_payload = ToolSelectionData
-
-
-@dataclass(frozen=True)
-class SetTools(HostQuery):
-    tools: tuple[str, ...]
+class DurableRequestProgress(ModelRequestProgress, DurablePiEvent):
+    wire_kind = ModelRequestProgress.wire_kind
 
 
 @dataclass(frozen=True)
@@ -323,13 +321,16 @@ class DurableProofData:
     evidence_entry_id: str
 
 
+class NoSelectedAnswer:
+    def require(self):
+        raise NativePiUnavailable('Durable selected turn ended without a final answer')
+
+
 @dataclass(frozen=True, kw_only=True)
 class DurableDone(Done):
-    proof: DurableProofData | None = None
+    proof: DurableProofData
 
-    def selected_result(self, path):
-        if not self.ok or self.proof is None:
-            raise NativePiUnavailable('Durable turn ended without successful context evidence')
+    def selected_result(self, path, current):
         record = self.proof.context
         proof = DurableContextProof(record.input_id, record.session_id, record.session_entry_id,
             record.request_generation, record.llm_context_digest, record.committed_at_ms,
@@ -340,12 +341,23 @@ class DurableDone(Done):
 @dataclass(frozen=True, kw_only=True)
 class DurableTurnEnd(DurablePiEvent):
     text: str
-    ok: bool
-    reason: str | None = None
-    proof: DurableProofData | None = None
+    proof: DurableProofData
 
     def convert(self):
-        return (DurableDone(text=self.text, ok=self.ok, reason_code=self.reason, proof=self.proof),)
+        return (DurableDone(text=self.text, ok=True, proof=self.proof),)
+
+    async def finished_turn(self, completion):
+        await completion
+        return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class DurableTurnFailed(DurablePiEvent):
+    text: str
+    reason: str
+
+    def convert(self):
+        return (Error(self.reason), Done(text=self.text, ok=False, reason_code=self.reason))
 
     async def finished_turn(self, completion):
         await completion
@@ -355,10 +367,13 @@ class DurableTurnEnd(DurablePiEvent):
 class DurableTurn(TurnInboxReceiver):
     """One Core turn's ingress and its existing child, not another transport."""
 
-    def __init__(self, child, delivery, barrier):
+    def __init__(self, child, delivery, barrier, input_id, tool_socket, directory):
         self.child, self.delivery, self.barrier = child, delivery, barrier
+        self.input_id, self.tool_socket = input_id, tool_socket
+        self.tool_directory, self.tool_environment = directory, delivery.environment
         self.queue = delivery.inbox
         self.initial_written = asyncio.Event()
+        self.rejected = []
 
     async def write(self, session, *commands):
         for command in commands:
@@ -379,17 +394,11 @@ class DurableTurn(TurnInboxReceiver):
         return await completion
 
     def refuse(self, turn, input_ids):
-        raise RuntimeError('Durable input refused before submission')
+        self.rejected.extend(FollowingInputRefused(id=item.value) for item in input_ids)
 
     async def place(self, turn, item):
         return await self.submit(Submit(request_id=item.input_id.value,
             text=item.content.text, images=item.content.images, when_busy=item.when_busy))
-
-    async def send_now(self, turn, item):
-        raise ValueError('Pi Durable does not support send-now')
-
-    async def clear_queue(self, turn, item):
-        raise ValueError('Pi Durable queue withdrawal is not implemented')
 
 
 class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
@@ -408,24 +417,28 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
         return cls(runner.comms.root)
 
     @classmethod
+    def registered_location(cls, root, worktree):
+        return cls.new_location(root, worktree)
+
+    @classmethod
     def new_location(cls, root, worktree):
         return DurableDatabase(str(Path(root).absolute() / 'durable-sessions' / f'{uuid4().hex}.sqlite3'))
 
-    async def open(self, thread):
+    async def open(self, thread, *, environment=None):
         async with self.lock:
             if self.child is None:
-                location = thread.runtime.new_location(self.barrier.registry_path.parent, thread.worktree)
+                location = thread.runtime
                 path = location.session
                 path.parent.mkdir(parents=True, exist_ok=True)
                 with ExitStack() as resources:
                     lock = resources.enter_context(location.writer_lock.open('a+b'))
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
                     child = await DurableChild.start_command(('node', str(Path(__file__).with_name('pi_durable_host.mjs'))),
-                        cwd=thread.worktree, pass_fds=(lock.fileno(),), event_type=DurablePiEvent,
+                        cwd=thread.worktree, env=environment, pass_fds=(lock.fileno(),), event_type=DurablePiEvent,
                         resources=resources.pop_all(), location=location)
                 async with child.failures():
                     model = SetModel.from_name(thread.model)
-                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(os.environ).native_config / 'auth.json')))
+                    await child.request(Open(str(path), thread.worktree, model.provider, model.model_id, thread.thinking_level, str(RestartEnvironment.inherit(environment or os.environ).native_config / 'auth.json')))
                     await child.request(Resume())
                 self.child = child
             return self.child
@@ -452,10 +465,9 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
                            observe_event, following):
         backend = execution.pi_session
         thread = replace(claim.owner.thread, session_file=str(claim.session.path), model=model.qualified)
-        child = await backend.open(thread)
-        identity = await child.request(GetIdentity())
-        await Coordination.run_worker(partial(claim._start_once,
-            NativeSessionIdentity(identity.session_id, str(child.location.session))))
+        registry = await Coordination.run_worker(claim.bus._registry.snapshot)
+        environment = thread.native_environment(claim.bus.log.path.parent, registry, thread.worktree)
+        child = await backend.open(thread, environment=environment)
 
         @contextmanager
         def boundary(public_id, native_id, text):
@@ -466,47 +478,60 @@ class PiDurableBackend(PiCapabilities, Steers, AgentBackend):
         async def unavailable_ui(request):
             raise IdentityConflict('Durable selected turns have no UI request channel')
 
-        delivery = TurnDelivery(worktree=thread.worktree, environment={}, inbox=TurnInbox(),
+        delivery = TurnDelivery(worktree=thread.worktree, environment=environment, inbox=TurnInbox(),
             finish_event=asyncio.Event(), send_boundary=boundary, interrupt_boundary=boundary,
             input_started=lambda public_id, native_id, text: native_id == claim.input_id and text == claim.prompt.text,
-            request_progress=lambda *args: None, ui_request=unavailable_ui)
-        # Selected durable turns are reply-only until their tools use Core's broker.
-        # Never give an incoming bus message the unrestricted coding tool set.
-        previous_tools = await child.request(GetTools())
-        await child.request(SetTools(()))
-        result = None
-        try:
-            async for event in backend.run_turn(thread, InputContent(text=claim.prompt.text,
-                    contributions=claim.prompt.contributions), delivery, input_id=claim.input_id):
+            request_progress=partial(record_request_progress, claim.bus.log.path.parent,
+                                     claim.owner.thread.require_turn_lease()), ui_request=unavailable_ui)
+        result = NoSelectedAnswer()
+        async with AsyncExitStack() as resources:
+            turn = DurableTurn(child, delivery, backend.barrier, claim.input_id,
+                               ToolTransport(), claim.session.directory)
+            turn.tool_socket = await selected_tool_mode.open_transport(turn, resources)
+            turn.tool_socket.bind_process(child.proc.pid)
+            await child.request(ConfigureTools(selected_tool_mode.tool_names, turn.tool_environment))
+            identity = await child.request(GetIdentity())
+            await Coordination.run_worker(partial(claim._start_once,
+                NativeSessionIdentity(identity.session_id, str(child.location.session))))
+            async for event in backend._stream_turn(thread, InputContent(text=claim.prompt.text,
+                    contributions=claim.prompt.contributions), turn):
                 await observe_event(event)
-                if isinstance(event, DurableDone):
-                    result = event.selected_result(child.location.session)
-        finally:
-            await child.request(SetTools(previous_tools.tools))
-        if result is None:
-            raise NativePiUnavailable('Durable selected turn ended without a final answer')
-        return result
+                result = event.selected_result(child.location.session, result)
+            turn.tool_socket.assert_complete()
+        return result.require()
 
-    async def run_turn(self, thread, content, delivery, *, input_id=None):
-        child = await self.open(thread)
+    async def run_turn(self, thread, content, delivery):
+        child = await self.open(thread, environment=delivery.environment)
+        await child.request(ConfigureTools(tuple(tool.declared_name for tool in
+            NativeExecutableTool.members_with(NativeExecutableTool)), delivery.environment))
+        turn = DurableTurn(child, delivery, self.barrier, uuid4().hex,
+                           ToolTransport(), child.location.session.parent)
+        async for event in self._stream_turn(thread, content, turn):
+            yield event
+
+    async def _stream_turn(self, thread, content, turn):
+        child = turn.child
         state = await child.request(GetState())
         yield AgentInfo(model=state.model.display_name,
             thinking_level=thread.thinking_level, session_file=child.location.path,
             context_size=state.model.context_window)
-        turn = DurableTurn(child, delivery, self.barrier)
         self.owner = asyncio.current_task()
         try:
             async with child.failures(), child.reader.turn(), asyncio.TaskGroup() as tasks:
                 await child.request(Watch())
                 try:
                     child.forward_input(lambda: turn.forward(turn), create_task=tasks.create_task)
-                    await turn.submit(SubmitInitial(request_id=input_id or uuid4().hex,
+                    await turn.submit(SubmitInitial(request_id=turn.input_id,
                         text=content.text, images=content.images))
                     await turn.initial_written.wait()
                     completion = asyncio.create_task(child.request(AwaitTurn()))
                     try:
                         while (event := await child.reader.next_event()) is not None:
+                            event.observe_request(partial(turn.delivery.request_progress, native_process=child.proc.identity))
                             await event.during_turn(turn)
+                            for refused in turn.rejected:
+                                yield refused
+                            turn.rejected.clear()
                             for update in event.convert():
                                 yield update
                             if await event.finished_turn(completion):

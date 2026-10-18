@@ -254,7 +254,7 @@ async def test_native_closed_window_preserves_terminal_diagnostics_in_completed_
         assert isinstance(diagnostic, ProviderTransportFailureDiagnostic)
         assert diagnostic.error.code == "EOPAQUE" and diagnostic.error.message == FINAL
         assert failure.source.message.diagnostics == failure.failure.diagnostics
-        request_failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+        request_failure = RequestFailure.from_error(caught.value)
         assert request_failure.notification_published
         assert request_failure.failure == failure.failure
         assert not any(getattr(getattr(update, "content", None), "text", None) for update in updates)

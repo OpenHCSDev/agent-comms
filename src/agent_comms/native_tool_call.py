@@ -289,9 +289,19 @@ class ToolTransport:
 class NativeToolMode(ABC):
     """Owner-bound native tool policy shared by selected and normal coding turns."""
 
-    @abstractmethod
+    @property
+    def tool_names(self) -> tuple[str, ...]:
+        return ()
+
+    def extensions(self, package: Path) -> tuple[Path, ...]:
+        return ()
+
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        """Return the native tool selection and reviewed extension."""
+        """Both hosts consume the same declaration-owned tool selection."""
+        names = self.tool_names
+        return (("--tools", ",".join(names),
+                 *(argument for extension in self.extensions(package) for argument in ("-e", str(extension))))
+                if names else ("--no-tools",))
 
     @abstractmethod
     async def open_transport(self, turn, ownership) -> ToolTransport:
@@ -302,9 +312,6 @@ class NativeToolMode(ABC):
 
 
 class NoNativeTools(NativeToolMode):
-    def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        return ("--no-tools",)
-
     async def open_transport(self, turn, ownership) -> ToolTransport:
         return ToolTransport()
 

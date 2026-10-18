@@ -16,6 +16,7 @@ def one_line(text: str, limit: int) -> str:
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
+    family_discriminator: ClassVar[str] = "tool"
     acp_kind: ClassVar[str] = "other"
     label: ClassVar[str]
 
@@ -70,10 +71,9 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
 
 
 @dataclass(frozen=True)
-class UndeclaredTool(ToolDeclaration):
+class UndeclaredTool(ToolDeclaration, declared_name=None):
     """An external name is visible as supplied, without becoming a declaration."""
 
-    declared_name = None
     name: str
 
     @property

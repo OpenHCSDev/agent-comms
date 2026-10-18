@@ -2,10 +2,12 @@
 import { createInterface } from 'node:readline';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { requestOwnerTool } from './owner_tool_socket.mjs';
 import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
-import { Harness, ROOT_CONVERSATION_ID, GenerationTask, createRegistry, defineDoc, defineExtension, hook, watchEvents } from '@earendil-works/pi-durable';
+import { Harness, ROOT_CONVERSATION_ID, GenerationTask, ToolTask, createRegistry, defineDoc, defineExtension, defineTool, hook, watchEvents } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
 import { CodingTools } from '@earendil-works/pi-durable/tools';
@@ -14,7 +16,19 @@ import { CodingTools } from '@earendil-works/pi-durable/tools';
 // never reproduce the estimator in Core. This is an explicitly retained API gap.
 const { estimateContext } = await import(new URL('./harness/compaction.js', import.meta.resolve('@earendil-works/pi-durable')));
 const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
-let harness, root, turn, models;
+let harness, root, turn, models, registry;
+const comms = args => JSON.parse(execFileSync('agent-comms', args, { encoding: 'utf8', timeout: 30000 }));
+const CoreTools = defineExtension({ name: 'core-tools', hooks: [hook(ToolTask, {
+  async beforeTool(call) {
+    const path = process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
+    const token = process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
+    if (!path) return;
+    const response = await requestOwnerTool(path, Buffer.from(JSON.stringify({ token,
+      call_id: call.id, name: call.name, arguments: call.arguments }) + '\n'), 16384,
+      'Tool claim outcome UNKNOWN; inspect before retrying.');
+    if (response.ok !== true) return { block: response.error };
+  },
+})] });
 let resumed = false;
 const CoreContext = defineExtension({ name: 'core-context', hooks: [hook(GenerationTask, {
   async beforeRequest({ messages }, api) {
@@ -34,7 +48,14 @@ const CoreContext = defineExtension({ name: 'core-context', hooks: [hook(Generat
       }
       return proofs;
     }, context);
-    for (const [inputId, proof] of recorded) turn.proofs.set(inputId, proof);
+    for (const [inputId, proof] of recorded) {
+      turn.proofs.set(inputId, proof);
+      const now = Date.now();
+      emit({ type: 'model_request_progress', progress: { requestId: String(api.taskId),
+        sessionId: String(root.id), inputId, startedAtMs: now, observedAtMs: now,
+        monotonicNs: String(process.hrtime.bigint()), elapsedMs: 0, callbackMs: 0,
+        callbackCount: 0, callbackMaxMs: 0, stage: 'request_start' } });
+    }
   },
 })] });
 const emit = (value) => {
@@ -87,8 +108,13 @@ class TurnWatch {
     const failed = records.find(record => record.status !== 'done');
     const last = records.at(-1);
     const answer = last.status === 'done' ? await root.commit(tx => tx.entry(last.answer), context) : undefined;
-    emit({ type: 'durable_turn_end', ok: !failed, text: answer ? text(answer) : '', reason: failed?.reason ?? null,
-      proof: this.proofs.get(this.inputs.keys().next().value) ?? null });
+    const proof = this.proofs.get(this.inputs.keys().next().value);
+    if (failed || !proof) {
+      emit({ type: 'durable_turn_failed', text: answer ? text(answer) : '',
+        reason: failed?.reason ?? 'Durable turn ended without committed context evidence' });
+    } else {
+      emit({ type: 'durable_turn_end', text: answer ? text(answer) : '', proof });
+    }
     return ack;
   }
   async stop() { await this.stream.stop(); }
@@ -104,9 +130,10 @@ const handlers = {
       }
     }
     models = builtinModels({ credentials });
-    const registry = createRegistry();
+    registry = createRegistry();
     registry.install(CodingTools);
     registry.install(CoreContext);
+    registry.install(CoreTools);
     harness = await Harness.open(await openNodeSqliteStorage(request.path), {
       models, registry, env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd ?? request.cwd }),
       onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
@@ -115,7 +142,7 @@ const handlers = {
     if (request.provider) agent.model = { provider: request.provider, modelId: request.modelId };
     if (request.thinkingLevel) agent.thinkingLevel = request.thinkingLevel;
     root = await harness.root(context, { agent });
-    await root.configure({ extensions: { add: [CoreContext] } }, context);
+    await root.configure({ extensions: { add: [CoreContext, CoreTools] } }, context);
     return { work: workItems(await harness.inspect(context)) };
   },
   async open_history(request) {
@@ -191,8 +218,26 @@ const handlers = {
     const model = agent.model && models.getModel(agent.model.provider, agent.model.modelId);
     return { contextUsage: { tokens: estimateContext(await root.context(context), []), contextWindow: model?.contextWindow ?? null } };
   },
-  async get_tools() { requireOpen(); return { tools: (await root.agent(context)).tools.map(tool => tool.name) }; },
-  async set_tools(request) { requireOpen(); await root.configure({ tools: request.tools }, context); return ack; },
+  async configure_tools(request) {
+    requireOpen();
+    delete process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
+    delete process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
+    Object.assign(process.env, request.environment);
+    const declarations = comms(['tools']).tools;
+    const commands = defineExtension({ name: 'core-commands', tools: declarations.map(tool => defineTool({
+      name: tool.name, description: tool.description, parameters: tool.parameters,
+      async execute(args) {
+        const result = comms(['tool', '--from', process.env.AGENT_COMMS_THREAD,
+          '--tool', tool.name, '--arguments', JSON.stringify(args)]);
+        return { output: [{ type: 'text', text: JSON.stringify(result) }], details: result };
+      },
+    })) });
+    registry.install(commands);
+    await root.configure({ extensions: { add: [commands] }, tools: request.tools }, context);
+    const actual = new Set((await root.agent(context)).callable.map(tool => tool.name));
+    for (const name of request.tools) if (!actual.has(name)) throw new Error(`Durable tool is unavailable: ${name}`);
+    return ack;
+  },
   async get_identity() { requireOpen(); return { sessionId: String(root.id) }; },
   async get_state() {
     requireOpen();

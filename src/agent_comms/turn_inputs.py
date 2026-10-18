@@ -52,7 +52,16 @@ class TurnInboxReceiver(ABC):
 
     async def use_settings(self, session, item):
         await self.write(session, commands.SetModel.from_name(item.model),
-                         commands.SetThinkingLevel(level=item.thinking_level))
+                         *item.thinking_level.native_arguments(
+                             lambda level: commands.SetThinkingLevel(level=level.wire_value())))
+        return True
+
+    async def send_now(self, session, item):
+        item.refuse(self, session)
+        return True
+
+    async def clear_queue(self, session, item):
+        item.refuse(self, session)
         return True
 
 

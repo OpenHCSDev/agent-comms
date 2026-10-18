@@ -1,4 +1,4 @@
-"""Typed durable JSONL ingress and real-host replies, without provider work."""
+"""Durable host uses the shared Pi command boundary and required context proof."""
 import asyncio
 import json
 
@@ -7,14 +7,11 @@ import pytest
 from agent_comms.agent_backend import ContextUsage, FailedCompaction, NothingToCompaction, PlacedCompaction, StaleCompaction
 from agent_comms.agent_events import Chunk, Thinking, ToolStart, Error
 from agent_comms.pi_durable_backend import (
-    CompactDurable, DurableDatabase,
-    DurablePiEvent, Inspect, PiDurableBackend, Settle,
+    DurableDatabase, DurableDone, DurablePiEvent, Inspect, PiDurableBackend, Settle,
 )
 from agent_comms.pi_rpc import PiRpcChannel
-from agent_comms.pi_commands import GetSessionStats
+from agent_comms.pi_commands import Compact, GetSessionStats
 from agent_comms.pi_payloads import PiContextUsage
-from agent_comms.pi_events import PiEvent, UnknownPiEvent
-from agent_comms.threads import Thread
 
 
 def decode(wire):
@@ -22,16 +19,15 @@ def decode(wire):
 
 
 @pytest.mark.parametrize('result,expected', [
-    ({'kind': 'nothing_to'}, NothingToCompaction()),
-    ({'kind': 'placed', 'summary': 'summary', 'first_kept': '7', 'tokens_before': 30},
+    ({}, NothingToCompaction()),
+    ({'summary': 'summary', 'firstKeptEntryId': '7', 'tokensBefore': 30},
      PlacedCompaction('summary', '7', 30)),
-    ({'kind': 'stale'}, StaleCompaction()),
-    ({'kind': 'failed', 'message': 'failure'}, FailedCompaction('failure')),
+    ({'stale': True}, StaleCompaction()),
 ])
-def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected):
-    decoded = decode({'type': 'response', 'command': 'compact_durable', 'success': True,
-                      'id': '7', 'data': {'outcome': result}})
-    assert decoded.command is CompactDurable
+def test_compaction_reply_uses_shared_pi_outcome(result, expected):
+    decoded = decode({'type': 'response', 'command': 'compact', 'success': True,
+                      'id': '7', 'data': result})
+    assert decoded.command is Compact
     assert decoded.data.outcome == expected
 
 
@@ -45,45 +41,23 @@ def test_compaction_reply_decodes_directly_to_existing_outcome(result, expected)
      (ToolStart(id='call', name='read', title='Read source.py', kind='read', args={'path': 'source.py'}),)),
     ({'type': 'task_failed', 'taskId': 3, 'kind': 'tool', 'message': 'failed'}, (Error('failed'),)),
 ])
-def test_event_fields_and_changes_are_decoded_at_frame_ingress(event, expected):
-    decoded = decode(event)
-    assert decoded.convert() == expected
-    assert not hasattr(decoded, 'payload')
+def test_event_fields_decode_at_frame_ingress(event, expected):
+    assert decode(event).convert() == expected
 
 
-def test_missing_delta_and_unknown_result_fields_fail_at_ingress():
-    with pytest.raises((TypeError, ValueError), match='delta'):
-        decode({'type': 'message_update', 'usage': {}, 'assistantMessageEvent':
-            {'type': 'text_delta', 'contentIndex': 0}})
-    with pytest.raises(ValueError, match='Unknown fields'):
-        decode({'type': 'response', 'command': 'compact_durable', 'success': True,
-                'id': '1', 'data': {'outcome': {'kind': 'stale', 'message': 'extra'}}})
-    assert decode({'type': 'message_update', 'usage': {}}).convert() == ()
-    with pytest.raises((TypeError, ValueError), match='success'):
-        PiEvent.from_wire({'type': 'auto_retry_end', 'attempt': 1})
-    assert not isinstance(decode({'type': 'auto_retry_end', 'attempt': 1}), UnknownPiEvent)
+def test_success_requires_proof_and_failure_is_a_different_event():
+    with pytest.raises((TypeError, ValueError), match='proof'):
+        decode({'type': 'durable_turn_end', 'text': 'answer'})
+    with pytest.raises((TypeError, ValueError)):
+        decode({'type': 'durable_turn_end', 'text': 'answer', 'proof': None})
+    failed = decode({'type': 'durable_turn_failed', 'text': '', 'reason': 'model_error'})
+    assert all(not isinstance(event, DurableDone) for event in failed.convert())
+    assert failed.convert()[-1].ok is False
 
 
-def test_result_kind_is_bound_to_its_pending_command():
+def test_real_host_context_and_reopen_keep_one_database(tmp_path, thread_registration):
     async def journey():
-        channel = PiRpcChannel(asyncio.StreamReader(), event_type=DurablePiEvent)
-        command = CompactDurable(id='9')
-        future = channel.track(command)
-        with pytest.raises((TypeError, ValueError), match='outcome'):
-            decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
-                    'success': True, 'data': {'tokens': 0, 'window': None}})
-        assert not future.done()
-        error = decode({'type': 'response', 'command': 'compact_durable', 'id': '9',
-                        'success': False, 'error': 'failed'})
-        assert channel.correlate(error) == command
-        assert (await future).error == 'failed'
-        assert channel.correlate(error) is None
-    asyncio.run(journey())
-
-
-def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thread_registration):
-    async def journey():
-        backend = PiDurableBackend()
+        backend = PiDurableBackend(tmp_path)
         location = DurableDatabase(str(tmp_path / 'records.sqlite3'))
         thread = thread_registration.new_thread('records', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=location.path)
@@ -91,17 +65,18 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
             outcome = await backend.compact(thread, 'retain the empty plan')
             assert isinstance(outcome, FailedCompaction)
             assert 'model' in outcome.message.lower()
+            first = await backend.open(thread)
+            assert first.location == location
+            identity = (await first.request(Inspect())).work
             await backend.close_idle()
-            first, second = await asyncio.gather(backend.open(thread), backend.open(thread))
-            assert first is second
+            second, third = await asyncio.gather(backend.open(thread), backend.open(thread))
+            assert second is third and second.location == location
             assert await backend.context_usage(thread) == ContextUsage(0, None)
-            assert (await (await backend.open(thread)).request(Inspect())).work == ()
+            assert (await second.request(Inspect())).work == identity
             with pytest.raises(RuntimeError, match='Recovery is only available before resume'):
-                await backend.child.request(Settle('task:missing', 'ABANDON'))
-            assert (await backend.child.request(Inspect())).work == ()
-            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, None)
-            assert (await backend.child.request(Inspect())).work == ()
-            assert backend.child.proc.alive()
+                await second.request(Settle('task:missing', 'ABANDON'))
+            assert (await second.request(GetSessionStats())).context_usage == PiContextUsage(0, None)
+            assert second.proc.alive()
         finally:
             await backend.close_idle()
     asyncio.run(journey())

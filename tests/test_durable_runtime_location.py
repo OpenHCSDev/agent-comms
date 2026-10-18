@@ -25,6 +25,8 @@ def test_durable_thread_roundtrip_and_worker_selection(tmp_path, saved, *, threa
     assert not DurableDatabase.__abstractmethods__
     class Runner:
         persistent_backends = {}
+        class comms:
+            root = tmp_path
     runner = Runner()
     backend = TurnRunner.backend_for(runner, 'durable', restored)
     assert isinstance(backend, PiDurableBackend)
@@ -38,8 +40,7 @@ def test_location_methods_and_missing_history(tmp_path):
     assert location.read_keys() == (location.path,)
     assert location.presentation() == {'resumable': True}
     assert location.model_choice is None
-    with pytest.raises(BackendDeclarationError, match='cannot select native sessions'):
-        location.select_session(tmp_path, None)
+    assert location.select_session(tmp_path, None).location == location
     with pytest.raises(ValueError, match='forking'):
         location.require_forkable()
     source = location.history_source(tmp_path, None)
@@ -85,7 +86,7 @@ def test_real_durable_history_pages_while_writer_owns_database(tmp_path, thread_
                    cwd=Path(__file__).parents[1] / 'src/agent_comms', check=True,
                    capture_output=True, timeout=20)
     async def journey():
-        backend = PiDurableBackend()
+        backend = PiDurableBackend(tmp_path)
         thread = thread_registration.new_thread('history', frozenset(), str(tmp_path), backend=PiDurableBackend,
                         session_file=location.path)
         host = await backend.open(thread)

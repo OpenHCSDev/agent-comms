@@ -69,13 +69,13 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
 
     agent.sessions.client = Client()
     calls = []
-    classify = ACPFailure.from_error
+    classify = ACPFailure.from_detail
 
-    def once(cls, code, text, data=None, **kwargs):
+    def once(cls, code, text, **kwargs):
         calls.append(text)
-        return classify(code, text, data, **kwargs)
+        return classify(code, text, **kwargs)
 
-    monkeypatch.setattr(ACPFailure, "from_error", classmethod(once))
+    monkeypatch.setattr(ACPFailure, "from_detail", classmethod(once))
     try:
         async with asyncio.timeout(25):
             await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])

@@ -28,6 +28,7 @@ from .native_attestation import AttestationError, ObservedAttestation
 from .native_entries import NativeEntry
 from .native_pi import (
     NativeContextProof,
+    NativeEmptyAnswer,
     NativePiPromptRejected,
     NativePiUnavailable,
     NativeTurnResult,
@@ -38,7 +39,7 @@ from .native_startup import NativeStartup
 from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied, ToolTransport
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
-from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver
 from .selected_session import SelectedSession
 from .turn_context import InputContributionCoordinates
@@ -96,7 +97,13 @@ class TrackedTerminal(ABC):
     """Relate completed assistant responses to their streamed text."""
 
     def append(self, text: str) -> TrackedTerminal:
+        return self.answered(text) if text else self.empty_answer()
+
+    def answered(self, text: str) -> TrackedTerminal:
         return CompletedTrackedTerminal(text)
+
+    def empty_answer(self) -> TrackedTerminal:
+        return EmptyAnswerTrackedTerminal()
 
     def tool_round(self) -> TrackedTerminal:
         return PendingTrackedTerminal()
@@ -114,6 +121,16 @@ class TrackedTerminal(ABC):
     def require_response(self, parts: list[str]) -> str: ...
 
 
+class EmptyAnswerTrackedTerminal(TrackedTerminal):
+    """An observed empty final is a model outcome, not a missing native response."""
+
+    def notification(self, parts: list[str]) -> TrackedTerminal:
+        return self
+
+    def require_response(self, parts: list[str]) -> str:
+        raise NativeEmptyAnswer()
+
+
 class PendingTrackedTerminal(TrackedTerminal):
     def notification(self, parts):
         # A following bus message cannot answer an already completed request,
@@ -128,14 +145,17 @@ class PendingTrackedTerminal(TrackedTerminal):
 class CompletedTrackedTerminal(TrackedTerminal):
     text: str
 
-    def append(self, text):
+    def answered(self, text: str) -> TrackedTerminal:
+        return AmbiguousTrackedTerminal()
+
+    def empty_answer(self) -> TrackedTerminal:
         return AmbiguousTrackedTerminal()
 
     def later_input(self, parts):
         return AnsweredTrackedTerminal(self.text) if self.matches(parts) else PendingTrackedTerminal()
 
     def matches(self, parts: list[str]) -> bool:
-        return bool(self.text) and "".join(parts) == self.text
+        return "".join(parts) == self.text
 
     def require_response(self, parts):
         if not self.matches(parts):
@@ -149,8 +169,8 @@ class AnsweredTrackedTerminal(TrackedTerminal):
 
     text: str
 
-    def append(self, text):
-        return CompletedTrackedTerminal(text) if text else self
+    def empty_answer(self) -> TrackedTerminal:
+        return self
 
     def tool_round(self):
         return self
@@ -168,7 +188,10 @@ class AnsweredTrackedTerminal(TrackedTerminal):
 class NotificationTrackedTerminal(TrackedTerminal):
     """Notice handling cannot answer or revise the original requested task."""
 
-    def append(self, text):
+    def answered(self, text: str) -> TrackedTerminal:
+        return self
+
+    def empty_answer(self) -> TrackedTerminal:
         return self
 
     def tool_round(self):
@@ -184,11 +207,15 @@ class NotifiedTrackedTerminal(NotificationTrackedTerminal, AnsweredTrackedTermin
 
 
 class UnansweredNotifiedTrackedTerminal(NotificationTrackedTerminal, PendingTrackedTerminal):
-    pass
+    def empty_answer(self) -> TrackedTerminal:
+        return EmptyAnswerTrackedTerminal()
 
 
 class AmbiguousTrackedTerminal(PendingTrackedTerminal):
-    def append(self, text):
+    def answered(self, text: str) -> TrackedTerminal:
+        return self
+
+    def empty_answer(self) -> TrackedTerminal:
         return self
 
 
@@ -247,7 +274,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         worktree: Path,
         session: SelectedSession,
         model: SelectedModel,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         environment: Mapping[str, str] = MappingProxyType({}),
         model_wait: TurnWait = DEFAULT_MODEL_WAIT,
         prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,
@@ -327,15 +354,13 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                                 if not self.finished:
                                     await self.observe_event(event)
                             result = await self.result()
-                            # A per-input tool socket dies with this input; only a
-                            # tool-less child stays usable by the next input.
-                            self.retainable = self.tool_socket.retainable
                             return result
                         except (SelectedToolDenied, PromptSendFailure, TimeoutError, OSError) as error:
                             raise NativePiUnavailable(
                                 f"Native Pi operation failed: {type(error).__name__}: {error}"
                             ) from error
                     except NativePiUnavailable as error:
+                        self.retainable = False
                         self.prompt_state.raise_native_failure(error, self.native.attestation)
             finally:
                 # LIFO starts the measurement immediately before cleanup. No
@@ -351,6 +376,14 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if self.retainable and identity is not None and self.native_session.retain(self.native, identity):
             return
         await self.native_session.close()
+
+    @property
+    def tool_directory(self):
+        return self.launch.session.directory
+
+    @property
+    def tool_environment(self):
+        return self.launch.env
 
     async def open_transport(self, ownership: AsyncExitStack) -> None:
         self.tool_socket = await self.selected_tool_mode.open_transport(self, ownership)
@@ -548,6 +581,9 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                 proof = await self.context_proof()
             self.output.raise_if_failed(proof, self.model)
             self.tool_socket.assert_complete()
+            # An empty model completion does not make a proved, settled child unavailable.
+            # Per-input tool sockets still determine whether that child can be reused.
+            self.retainable = self.tool_socket.retainable
             response = self.terminal.require_response(self.text_parts)
             return NativeTurnResult(
                 response.strip(),

@@ -14,7 +14,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import ThinkingChoice
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
@@ -46,7 +46,7 @@ class SelectedSession:
     def tracked_attestation(self, current):
         return current
 
-    def launch_arguments(self, thinking_level: type[ThinkingLevel]) -> tuple[str, ...]:
+    def launch_arguments(self, thinking_level: type[ThinkingChoice]) -> tuple[str, ...]:
         return NativeArguments(()).with_thinking(thinking_level).argv
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
@@ -100,7 +100,7 @@ class SelectedSession:
                 raise IdentityConflict("registered participant worktree is unavailable")
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
             thread = participant.owner.thread
-            runtime = (thread.runtime.new_location(execution.root, thread.worktree)
+            runtime = (thread.runtime
                        if path is None else thread.backend.location_type(str(path)))
             return runtime.select_session(directory, execution)
 
@@ -134,7 +134,7 @@ class SavedSelectedSession(SelectedSession):
         self.identity.require_same_session(identity)
         return self.path
 
-    def launch_arguments(self, thinking_level: type[ThinkingLevel]) -> tuple[str, ...]:
+    def launch_arguments(self, thinking_level: type[ThinkingChoice]) -> tuple[str, ...]:
         try:
             self.verify_start(self.identity)
         except IdentityConflict as error:

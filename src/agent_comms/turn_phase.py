@@ -122,8 +122,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
         return self if accepted else PromptAcceptancePhase()
 
 
-class Excursion(TurnPhase):
-    declared_name = None
+class Excursion(TurnPhase, declared_name=None):
     pauses_input_clock = True
 
 

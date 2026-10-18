@@ -19,7 +19,7 @@ from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiUsage
-from .pi_vocabulary import CompactionReason, NoThinkingOverride, ThinkingLevel, UnknownCompactionReason
+from .pi_vocabulary import CompactionReason, NoThinkingOverride, ThinkingLevelField, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .tool_declaration import ToolDeclaration
 from .child_process import ProcessIdentity
@@ -41,6 +41,9 @@ if TYPE_CHECKING:
 
 class AgentEvent(ABC):
     """Identity and data for one observation made by the backend."""
+
+    def selected_result(self, path, current):
+        return current
 
     @abstractmethod
     def __init__(self) -> None:
@@ -310,7 +313,7 @@ class NativeMetadataObservation(RuntimeInfoObservation):
     model: str | None = None
     session_name: str | None = None
     session_file: str | None = None
-    thinking_level: type[ThinkingLevel] = NoThinkingOverride
+    thinking_level: ThinkingLevelField = NoThinkingOverride
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
         return replace(super().project_runtime_info(current),

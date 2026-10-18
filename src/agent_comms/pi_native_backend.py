@@ -211,7 +211,7 @@ class PiCapabilities(Compacts, ReportsContext, ConfiguresModel):
             raise ValueError('A configuration change names a model or a thinking level')
         state = await self.apply_configuration(thread, commands)
         reported = state.model.require_selection(model if model is not None else state.model.display_name)
-        return reported.display_name, FieldCodec.encode(state.thinking_level)
+        return reported.display_name, state.thinking_level.wire_value()
 
 
 class PiNativeBackend(
