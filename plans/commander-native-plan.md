@@ -23,6 +23,7 @@
 - An order closes only when the code is shaped right and the named run works in the real app (Tristan 2026-10-18). A grep closes nothing.
 - Timers drive attention. Deep problems with several past owners get a traced path and a realistic first-commit deadline instead of strike-driven reassignment, which throws context away.
 - Whoever made and checked a change merges it. No handoff exists only to review, merge or rerun a check someone already ran; review is the commander reading the diff, and one recorded run counts once (Tristan 2026-10-18: P507's finished, checked fix was handed to a second agent to merge and cost a build cycle).
+- A proof names the build it ran on. A run artifact carries the runtime ID and its Core and Toad revisions; a close is refused when that runtime does not contain the order's delivered commit, and source is judged at that commit, never in a checkout that may be behind (Tristan 2026-10-18: P504 was offered a screenshot from a build without the change; P529 was judged in a stale checkout).
 
 ## Parity matrix
 
@@ -57,6 +58,7 @@
 | 27 | Momentum prediction per unit, compared with the outcome | none | a prediction record on the order, shown on the commander page beside what happened | 6 |
 | 28 | Measured load and self-report | `capacity.py` unit count | `CommanderLoad`: look debt, judge debt, inflow, calibration, context, plus a one-word self-report calibrated against them | 7 |
 | 29 | No handoff of finished, checked work | none (scratch `order.py send` moved P507 after its fix was pushed and checked) | the transfer operation refuses an order whose current owner has a delivered commit with its check passing; that owner merges it, and the check's recorded run is reused, never rerun by another unit | 3 |
+| 30 | A proof is bound to the build it ran on | none (screenshots and logs are bare file paths) | the run record written by the build check (`tools/build_runtime.py`) carries runtime ID and Core/Toad revisions; `CommsProblemCloseTool` refuses when that runtime does not contain the order's delivered commit | 3 |
 
 **Dropped deliberately:** old verdicts and `edits.jsonl`. They judged copies of tool calls, and any old call can be judged again from the transcripts.
 
@@ -112,9 +114,9 @@ This phase removes the duplicate authority that exists today, before any new fea
 
 **Deletes:** `strikes.jsonl` writes (already moved in phase 1), the strike and verdict paths in `order.py` and `judge.py`.
 
-- The 2026-10-18 rules (matrix rows 23-25 and 29): `OrderText` requires the user-visible run that closes the order (8+ words) unless the order is declared mechanical, and closing checks against it; the transfer of a problem with two or more past owners refuses without the commander's traced `PATH:LINE`; unit wording never becomes a strike; an order whose owner already delivered a checked commit cannot be transferred, its owner merges. The 86 wording strikes in the scratch file are carried as voids in phase 8, never deleted.
+- The 2026-10-18 rules (matrix rows 23-25, 29 and 30): `OrderText` requires the user-visible run that closes the order (8+ words) unless the order is declared mechanical, and closing checks against it; the transfer of a problem with two or more past owners refuses without the commander's traced `PATH:LINE`; unit wording never becomes a strike; an order whose owner already delivered a checked commit cannot be transferred, its owner merges; a close's run artifact names its runtime, and a runtime without the delivered commit is refused. The 86 wording strikes in the scratch file are carried as voids in phase 8, never deleted.
 
-**Done when** a send-back, a missed deadline and a false completion each produce one record on the order, a second strike fires the unit in one operation, and on a copied root an order without a works line is refused while one with it closes only through `CommsProblemCloseTool` with an artifact, and transferring an order with a delivered, checked commit is refused.
+**Done when** a send-back, a missed deadline and a false completion each produce one record on the order, a second strike fires the unit in one operation, and on a copied root an order without a works line is refused while one with it closes only through `CommsProblemCloseTool` with an artifact, and transferring an order with a delivered, checked commit is refused, and a close citing a run from a build without the delivered commit is refused.
 
 ### Phase 4: the review queue
 
