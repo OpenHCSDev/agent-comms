@@ -51,11 +51,12 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
             raise ValueError(result.stderr.decode(errors="replace") or "Delivery source check failed.")
         return result.stdout.decode(errors="replace")
 
-    async def verified(self, check, deletes: OrderDeletion):
+    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> OrderDelivery:
         """The order's check and every count its deletion declares run on the delivered source."""
         for each in (check, *deletes.checks):
             await self.require_source(each)
-            result = await BoundedRun.run(("bash", "-c", each.command), cwd=each.directory, timeout=120)
+            command = ("bash", "-c", each.command)
+            result = await BoundedRun.run(command, cwd=each.directory, timeout=120)
             each.result.require(result)
         return replace(self, at=await self.delivery_time(check))
 
@@ -555,8 +556,8 @@ class OrderDeletion(DeclaredFamily, affix="Deletion"):
         if line is None:
             return NoOrderDeletion()
         if not (found := OrderDeletion.LINE.fullmatch(line.strip())):
-            raise ValueError(f"Write {OrderDeletion.label} <decision family> at PATH:LINE :: <repo> :: "
-                             "<family-wide scanner count>.")
+            raise ValueError(f"Write {OrderDeletion.label} <decision family> at PATH:LINE :: "
+                             "<repo> :: <family-wide scanner count>.")
         return FamilyDeletion(found[1], FileLine(found[2], int(found[3])),
                               OrderCheck(found[4], found[5], CountCheckResult(0)))
 
@@ -603,7 +604,8 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
-    deletes: OrderDeletion = field(default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
+    deletes: OrderDeletion = field(
+        default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
@@ -1093,7 +1095,8 @@ class DeliverTodo(TodoOperation):
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(self, delivery=asyncio.run(self.delivery.verified(current.order.check, current.order.deletes)))
+        verified = self.delivery.verified(current.order.check, current.order.deletes)
+        return replace(self, delivery=asyncio.run(verified))
 
     def apply(self, current):
         current.require_revision(self.expected_revision)
