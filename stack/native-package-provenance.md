@@ -9,12 +9,10 @@ Adaptive runtime entrypoints and publication coupling remain unfinished.
 ## One package commitment
 
 `pi-native.sha256` retains selected per-file diagnostic checks and adds one
-`# agent-comms-native-tree-v1 <digest>` commitment. Its complete bytes still
+`# agent-comms-native-tree-v1 <digest>` commitment, and names the stock release in
+one `# agent-comms-native-stock-v1 <npm spec>` line. Its complete bytes still
 select the build directory, so changing the tree pin changes the build identity.
-The current tree digest is
-`628b68df3c1cc91e6b6698eb639ff108b4835d027cc34a219087861664d01a07`;
-build directory suffix is `e9f19aa7add2a71c`. The SessionManager is
-`10ac30c15dd1b47b86fef4121c01d4b52b4a114cb9fcba6a909c04a3f5f88a7d`.
+The current commitment is that line in `pi-native.sha256`; no document repeats it.
 The update-check/all-package-spawn correction supersedes NON-CLEAN `8c6ce7`'s
 `b6d13d86…` tree; see `native-package-subprocess-correction.md` for current review
 gates. The original import-boundary candidate superseded `3585b0f`'s `7d16eb01…` tree without
@@ -43,8 +41,10 @@ regular files, then materializes independent copies (no symlinks or hardlinks)
 before applying any patch. This also prevents a copied alias redirecting a
 patch into the stock installation. The completed package is checked before its
 new directory is published. An existing changed build is refused, never repaired
-or overwritten in place. Fresh installs with different transitive dependencies
-must fail rather than borrowing approval from the matching Pi version number.
+or overwritten in place. Transitive dependency versions come from Pi's published
+`npm-shrinkwrap.json`, installed with `npm ci`, so every machine builds the same
+tree; a global install resolves them afresh and is never the source. A tree with
+other dependencies still fails rather than borrowing approval from the version.
 
 This exact artifact was built and tested on Linux x86_64. Other dependency or
 platform variants need their own reviewed commitment; there is no unpinned
