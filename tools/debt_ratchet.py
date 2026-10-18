@@ -122,7 +122,8 @@ class OccurrenceMeasure(CountedSource):
 
     @classmethod
     def count(cls, source: bytes, filename: str) -> int:
-        return sum(cls.occurrences(node) for node in cls.sites(ast.parse(source, filename), filename))
+        tree = ast.parse(source, filename)
+        return sum(cls.occurrences(node) for node in cls.sites(tree, filename))
 
     @classmethod
     def snapshot(cls, sources: list[tuple[str, bytes]]) -> dict[str, int]:
@@ -355,15 +356,15 @@ class DecoratorBinding:
     A decorator of the same name declared or imported from anywhere else marks nothing.
     """
 
-    decorator: typing.Callable[..., object]
     names: frozenset[str]
 
     @classmethod
-    def of(cls, decorator: typing.Callable[..., object], tree: ast.AST, filename: str) -> DecoratorBinding:
+    def of(cls, decorator: typing.Callable[..., object], tree: ast.AST,
+           filename: str) -> DecoratorBinding:
         owner, name = decorator.__module__, decorator.__name__
         parts = Path(filename).with_suffix("").parts
         module = parts[1:] if parts[:1] == ("src",) else parts
-        package = module[:-1] if module[-1:] != ("__init__",) else module[:-1]
+        package = module[:-1]
         names = {name} if ".".join(module) == owner else set()
         for node in ast.walk(tree):
             match node:
@@ -372,13 +373,13 @@ class DecoratorBinding:
                                  for alias in aliases if alias.name == owner)
                 case ast.ImportFrom(module=source, names=aliases, level=level):
                     base = package[:len(package) - level + 1] if level else ()
-                    resolved = ".".join((*base, *(source or "").split(".")) if source else base)
+                    resolved = ".".join((*base, source) if source else base)
                     for alias in aliases:
                         if f"{resolved}.{alias.name}" == owner:
                             names.add(f"{alias.asname or alias.name}.{name}")
                         if resolved == owner and alias.name == name:
                             names.add(alias.asname or name)
-        return cls(decorator, frozenset(names))
+        return cls(frozenset(names))
 
     def marks(self, decorator: ast.expr) -> bool:
         return ast.unparse(decorator) in self.names
