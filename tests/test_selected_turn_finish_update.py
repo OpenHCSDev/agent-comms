@@ -28,15 +28,15 @@ async def test_selected_turn_publishes_canonical_end_on_success_and_failure(
 
     class Inputs:
         def __init__(self):
-            self.backend_inboxes = {}
+            self.inboxes = {}
 
         def bind_native_turn(self, session_id, owner):
             inbox = asyncio.Queue()
-            self.backend_inboxes[session_id] = inbox
+            self.inboxes[session_id] = inbox
             return inbox
 
         async def finish_turn_inputs(self, session_id, inbox):
-            self.backend_inboxes.pop(session_id, None)
+            self.inboxes.pop(session_id, None)
             events.append("inputs-finished")
             if cleanup_failure is not None:
                 raise cleanup_failure
@@ -63,7 +63,7 @@ async def test_selected_turn_publishes_canonical_end_on_success_and_failure(
 
         async def publish_turn_state(self, session_id):
             assert session_id not in self.turn_tasks
-            assert session_id not in self.inputs.backend_inboxes
+            assert session_id not in self.inputs.inboxes
             events.append("turn-end")
 
     monkeypatch.setattr("agent_comms.turn_runner.OwnerFollowingInputs", Following)

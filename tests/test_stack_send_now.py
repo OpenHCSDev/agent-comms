@@ -329,8 +329,8 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
 
             owner.on_connect(Client())
             await owner.new_session(str(root / "project"))
-            owner.inputs.drain_tasks["project"].cancel()
-            await asyncio.gather(owner.inputs.drain_tasks["project"], return_exceptions=True)
+            owner.inputs.state("project").drain_task.cancel()
+            await asyncio.gather(owner.inputs.state("project").drain_task, return_exceptions=True)
             if surface in {"acp_goal_original", "acp_terminal_goal"}:
                 owner._comms.goals.update_goal(
                     "project",
@@ -483,7 +483,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                 assert events[-1].text == "NEW_FINAL" * (2 if surface == "priority" else 1), events
                 assert not any(isinstance(e, ae.Error) for e in events), events
             else:
-                assert not owner.inputs.queued_inputs.get("project")
+                assert not owner.inputs.state("project").queued
                 assert all(
                     row.declared_name == "started"
                     for row in stored_inputs(owner.inputs.dispositions.root).rows.values()

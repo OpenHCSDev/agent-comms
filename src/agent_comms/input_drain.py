@@ -22,7 +22,7 @@ from .acp_extension import (
     QueueProjection,
     encode_updates,
 )
-from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox
+from .agent_backend import ClearQueue, InputContent, InputId, SendNow, TurnInbox, TurnInboxItem
 from .comms import Comms
 from .coordination_errors import IdentityConflict
 from .drain_failures import DEFERRED_DRAIN_ERRORS, UNAVAILABLE_DRAIN_ERRORS, drain_failures
@@ -200,7 +200,7 @@ class FullTick:
                 if (
                     current.executing
                     or session_id in observation.effects.turns.turn_tasks
-                    or session_id in observation.backend_inboxes
+                    or observation.state(session_id).turn_open()
                 ):
                     return UnsettledTick()
                 if observation._quiescent(session_id):
@@ -283,23 +283,24 @@ class InputObservation:
         ))
 
     def _retire_observer(self, session_id: str, task: asyncio.Task[None]) -> None:
-        if self.drain_tasks.get(session_id) is task:
-            self._observation_watchers.pop(session_id, None)
+        state = self.state(session_id)
+        if state.drain_task is task:
+            state.observation_watcher = None
 
     def wake_observer(self, session_id: str) -> None:
+        state = self.state(session_id)
         # A process-local wake can carry work that did not change an input file.
-        self._repeat_private_observations.add(session_id)
-        watcher = self._observation_watchers.get(session_id)
-        if watcher is not None:
-            watcher.notify()
+        state.repeat_observation = True
+        state.notify_observer()
 
     def register_wake(self, session_id: str, task: asyncio.Task[None]) -> None:
-        self.wake_tasks[session_id] = task
+        state = self.state(session_id)
+        state.wake_task = task
 
         def finished(completed: asyncio.Task[None]) -> None:
-            if self.wake_tasks.get(session_id) is not completed:
+            if state.wake_task is not completed:
                 return
-            self.wake_tasks.pop(session_id)
+            state.wake_task = None
             # A deferred wake has not consumed its queue or assignment. The
             # maintenance witness itself wakes the observer on READY; waking
             # again now would spin on the same closed phase.
@@ -312,13 +313,14 @@ class InputObservation:
         task.add_done_callback(finished)
 
     def _repeat_observation_ready(self, session_id: str, drained: int) -> bool:
-        if drained != 0 or session_id not in self._repeat_private_observations:
+        state = self.state(session_id)
+        if drained != 0 or not state.repeat_observation:
             return False
-        if self.pending_turns.get(session_id):
+        if state.pending_turns:
             return False
         if session_id in self.effects.turns.turn_tasks:
             return False
-        return session_id not in self.backend_inboxes
+        return not state.turn_open()
 
     def _indexed_changes_for_owner(
         self, settled: SettledTick, revision: TickRevision, lookup: str,
@@ -339,11 +341,12 @@ class InputObservation:
         """Keep one background task per session pushing inbox messages live."""
         if self.closing:
             return
-        if session_id in self.drain_tasks and not self.drain_tasks[session_id].done():
+        state = self.state(session_id)
+        if state.observing():
             return
 
         task = self.runtime.background(self.observe(session_id))
-        self.drain_tasks[session_id] = task
+        state.drain_task = task
         task.add_done_callback(
             lambda completed: self._retire_observer(session_id, completed)
         )
@@ -355,16 +358,16 @@ class InputObservation:
 
     def _quiescent(self, session_id: str) -> bool:
         """No process-local work or retry is waiting on the next tick."""
-        wake = self.wake_tasks.get(session_id)
-        if session_id in self._repeat_private_observations:
+        state = self.state(session_id)
+        if state.repeat_observation:
             return False
         return (
-            session_id in self._idle_private_revisions
+            state.settled()
             and not self.effects.cursors.delivery(session_id).needs_refresh
-            and not self.pending_turns.get(session_id)
+            and not state.pending_turns
             and session_id not in self.effects.turns.turn_tasks
-            and session_id not in self.backend_inboxes
-            and (wake is None or wake.done())
+            and not state.turn_open()
+            and not state.wake_pending()
         )
 
     async def observe(self, session_id: str) -> None:
@@ -372,7 +375,7 @@ class InputObservation:
         paths = self._tick_paths()
         async with aclosing(WireWatch.observations(*paths.watch_sources)) as observations:
             async for watcher in observations:
-                self._observation_watchers[session_id] = watcher
+                self.state(session_id).observation_watcher = watcher
                 revision = await Coordination.run_worker(
                     partial(self._tick_revision, session_id)
                 )
@@ -452,7 +455,7 @@ class InputObservation:
             self.auto_wake,
             self.sessions.runtime_enabled,
             self.sessions.bindings.get(session_id),
-            session_id in self.backend_inboxes,
+            self.state(session_id).turn_open(),
             session_id in self.effects.turns.turn_tasks,
             participant,
             pending,
@@ -495,8 +498,8 @@ class InputObservation:
         and holds the current registry entry, so the settled message cut and
         this entry still stand; only this owner's coordination rows are read.
         """
-        async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
-            settled = self._idle_private_revisions.get(session_id)
+        async with self.state(session_id).lock:
+            settled = self.state(session_id).idle_revision
             if settled is None:
                 return False
             observed = await self._observe_coordination(
@@ -505,12 +508,81 @@ class InputObservation:
             return observed == settled
 
 
+@dataclass(eq=False)
+class DrainedSession:
+    """One drained session's state, from its first use until the session ends."""
+
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    drain_task: asyncio.Task[None] | None = None
+    wake_task: asyncio.Task[None] | None = None
+    observation_watcher: WireWatch | None = None
+    inbox: TurnInbox | None = None
+    queued: dict[str, QueuedInput] = field(default_factory=dict)
+    restored: dict[str, QueuedInput] = field(default_factory=dict)
+    following: dict[str, AcceptedFollowingInput] = field(default_factory=dict)
+    first_source: OriginalTurnInput | None = None
+    queue_revision: int = 0
+    pending_turns: list[ScheduledTurn] = field(default_factory=list)
+    # Only a completed, quiescent observation can suppress another scan.
+    # This revision never authorizes delivery, acceptance or a native send.
+    idle_revision: PrivateObservation | None = None
+    # A changed read or process-local wake needs a full observation.
+    # A completed stable drain consumes this pending work.
+    repeat_observation: bool = False
+
+    def producers(self) -> tuple[asyncio.Task[None], ...]:
+        return tuple(task for task in (self.drain_task, self.wake_task) if task is not None)
+
+    def retire_producers(self) -> None:
+        self.drain_task = self.wake_task = self.observation_watcher = self.idle_revision = None
+        self.repeat_observation = False
+
+    def turn_open(self) -> bool:
+        return self.inbox is not None
+
+    def turn_started(self) -> bool:
+        return self.first_source is not None
+
+    def observing(self) -> bool:
+        return self.drain_task is not None and not self.drain_task.done()
+
+    def wake_pending(self) -> bool:
+        return self.wake_task is not None and not self.wake_task.done()
+
+    def settled(self) -> bool:
+        return self.idle_revision is not None
+
+    def notify_observer(self) -> None:
+        if self.observation_watcher is not None:
+            self.observation_watcher.notify()
+
+    def open_inbox(self) -> TurnInbox:
+        if self.inbox is None:
+            self.inbox = TurnInbox()
+        return self.inbox
+
+    def to_turn(self, item: TurnInboxItem) -> None:
+        """A queue change reaches an open turn; without one the queue keeps it."""
+        if self.inbox is not None:
+            self.inbox.put_nowait(item)
+
+    def require_inbox(self) -> TurnInbox:
+        if self.inbox is None:
+            raise KeyError("Session has no running turn inbox")
+        return self.inbox
+
+    def require_first_source(self) -> OriginalTurnInput:
+        if self.first_source is None:
+            raise KeyError("Session has no started first input")
+        return self.first_source
+
+
 class InputDrain(InputObservation):
     def owns_execution(self, session_id: str, owner: Thread) -> bool:
         """An attached turn can take follow-ups; a predecessor cannot."""
         return (
             owner.turn_state.busy
-            or session_id in self.backend_inboxes
+            or self.state(session_id).turn_open()
             or session_id in self.effects.turns.turn_tasks
         )
 
@@ -526,27 +598,29 @@ class InputDrain(InputObservation):
         self.sessions = sessions
         self.runtime = runtime
         self.effects = effects
-        self.drain_tasks: dict[str, asyncio.Task[None]] = {}
-        self.backend_inboxes: dict[str, TurnInbox] = {}
-        self.queued_inputs: dict[str, dict[str, QueuedInput]] = {}
+        self.drained: dict[str, DrainedSession] = {}
         self.queue_lock = asyncio.Lock()
-        self.restored_inputs: dict[str, dict[str, QueuedInput]] = {}
-        self.queue_revisions: dict[str, int] = {}
-        self.following_sources: dict[str, dict[str, AcceptedFollowingInput]] = {}
-        self.first_sources: dict[str, OriginalTurnInput] = {}
         self.dispositions = InputDispositions(comms.root)
         self.auto_wake = auto_wake
-        self.pending_turns: dict[str, list[ScheduledTurn]] = {}
-        self.drain_locks: dict[str, asyncio.Lock] = {}
         self.closing = False
-        self.wake_tasks: dict[str, asyncio.Task[None]] = {}
-        self._observation_watchers: dict[str, WireWatch] = {}
-        # Only a completed, quiescent observation can suppress another scan.
-        # These revisions never authorize delivery, acceptance or a native send.
-        self._idle_private_revisions: dict[str, PrivateObservation] = {}
-        # A changed read or process-local wake needs a full observation.
-        # A completed stable drain consumes this pending work.
-        self._repeat_private_observations: set[str] = set()
+
+    def state(self, session_id: str) -> DrainedSession:
+        """This session's state, created on its first use."""
+        state = self.drained.get(session_id)
+        if state is None:
+            state = self.drained[session_id] = DrainedSession()
+        return state
+
+    def end_session(self, session_id: str) -> None:
+        """Ending a session drops its state, its live producers with it."""
+        state = self.drained.pop(session_id, None)
+        if state is not None:
+            for task in state.producers():
+                task.cancel()
+
+    def end_sessions(self) -> None:
+        for session_id in tuple(self.drained):
+            self.end_session(session_id)
 
     async def clear_queued_inputs(self, session_id: str) -> None:
         """Drop prompts queued against the backend for this session.
@@ -557,7 +631,8 @@ class InputDrain(InputObservation):
         async with self.queue_lock:
             retained = {}
             cleared = []
-            for key, item in self.queued_inputs.get(session_id, {}).items():
+            state = self.state(session_id)
+            for key, item in state.queued.items():
                 remaining = item.after_clear()
                 if remaining is None:
                     cleared.append(item)
@@ -567,11 +642,10 @@ class InputDrain(InputObservation):
                 await Coordination.run_worker(partial(
                     self.dispositions.clear_unbound, tuple(item.key for item in cleared),
                 ))
-            self.queued_inputs[session_id] = retained
-            inbox = self.backend_inboxes.get(session_id)
-            if inbox is not None and cleared:
-                inbox.put_nowait(ClearQueue(tuple(InputId(item.input_id) for item in cleared)))
-            self.restored_inputs.pop(session_id, None)
+            state.queued = retained
+            if cleared:
+                state.to_turn(ClearQueue(tuple(InputId(item.input_id) for item in cleared)))
+            state.restored = {}
         await self.emit_queue_state(session_id)
 
     async def queue_binding(self, session_id: str) -> QueueScope:
@@ -590,16 +664,16 @@ class InputDrain(InputObservation):
         )
 
     def next_revision(self, session_id: str) -> int:
-        revision = self.queue_revisions.get(session_id, 0) + 1
-        self.queue_revisions[session_id] = revision
-        return revision
+        state = self.state(session_id)
+        state.queue_revision += 1
+        return state.queue_revision
 
     async def queue_state(self, session_id: str) -> QueueChangedUpdate:
         """The producer owns the complete exact-ID queue projection."""
         scope = await self.queue_binding(session_id)
+        state = self.state(session_id)
         return QueueChangedUpdate(scope, self.next_revision(session_id), scope.projection(
-            tuple(self.queued_inputs.get(session_id, {}).values()),
-            tuple(self.restored_inputs.get(session_id, {}).values()),
+            tuple(state.queued.values()), tuple(state.restored.values()),
         ))
 
     async def emit_queue_state(self, session_id: str, *, client: Any = None) -> None:
@@ -623,9 +697,10 @@ class InputDrain(InputObservation):
 
     def input_keys(self, session_id: str) -> frozenset[str]:
         """Live captured source membership, never rebuilt from durable notices."""
-        original = self.first_sources.get(session_id)
+        state = self.state(session_id)
+        original = state.first_source
         following = frozenset(
-            key for source in self.following_sources.get(session_id, {}).values()
+            key for source in state.following.values()
             for key in source.keys
         )
         return following.union(original.keys) if original is not None else following
@@ -639,42 +714,43 @@ class InputDrain(InputObservation):
         keys = set(self.input_keys(session_id))
         keys.update(
             self.dispositions.bus_key(turn.origin, owner)
-            for turn in self.pending_turns.get(session_id, ())
+            for turn in self.state(session_id).pending_turns
             if turn.origin is not None
         )
         return frozenset(keys)
 
     async def drain_inbox(self, session_id: str) -> int:
         """Push undelivered messages to the client; returns count pushed."""
-        async with self.drain_locks.setdefault(session_id, asyncio.Lock()):
+        async with self.state(session_id).lock:
             return await self.drain_owned_inbox(session_id)
 
     async def _drain_private_if_changed(self, session_id: str, root_id: str) -> int:
         # The caller still validates the current private marker each time. The
         # ordinary loop still synchronizes configuration and schedules goals.
+        state = self.state(session_id)
         before = await self._observe_private_revision(session_id, root_id)
-        if self._idle_private_revisions.get(session_id) == before:
-            self._repeat_private_observations.discard(session_id)
+        if state.idle_revision == before:
+            state.repeat_observation = False
             await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
             return 0
-        self._idle_private_revisions.pop(session_id, None)
+        state.idle_revision = None
         result = await before.drain(self, session_id, root_id)
         # Never absorb a message/owner/recovery change during a suspended read,
         # or skip queued independent work after a completed native turn.
         if result == 0:
             if before == await self._observe_private_revision(session_id, root_id):
-                self._idle_private_revisions[session_id] = before
-                self._repeat_private_observations.discard(session_id)
+                state.idle_revision = before
+                state.repeat_observation = False
             else:
-                self._repeat_private_observations.add(session_id)
+                state.repeat_observation = True
         else:
-            self._repeat_private_observations.discard(session_id)
+            state.repeat_observation = False
         return result
 
     async def drain_owned_inbox(self, session_id: str) -> int:
         # The revision read below checks this root against the bus marker and
         # the checkpoint, so no separate exclusive bus read is needed here.
-        inbox = self.backend_inboxes.get(session_id)
+        inbox = self.state(session_id).inbox
         if inbox is not None:
             async with self.comms.owners.maintenance.ingress_async() as status:
                 with status.phase.send_running(None) as outcome:
@@ -697,7 +773,7 @@ class InputDrain(InputObservation):
         request: PromptRequest,
         images: tuple[Any, ...],
     ) -> PromptResponse:
-        inbox = self.backend_inboxes[session_id]
+        inbox = self.state(session_id).require_inbox()
         controller = self.runtime.controller.get()
         if controller is UNBOUND_CONTROLLER:
             controller = self.sessions.client
@@ -725,44 +801,41 @@ class InputDrain(InputObservation):
         )
 
     def require_inbox(self, session_id: str, inbox: TurnInbox) -> None:
-        if self.backend_inboxes.get(session_id) is not inbox:
+        if self.state(session_id).inbox is not inbox:
             raise InputHandoffRefused("Running turn inbox retired before input placement")
 
     def bind_native_turn(
         self, session_id: str, owner: Thread,
     ) -> TurnInbox:
         """Open the live turn inbox and capture its configured settings."""
-        inbox = self.backend_inboxes.setdefault(session_id, TurnInbox())
+        inbox = self.state(session_id).open_inbox()
         self.sessions.config.turn_started(session_id, owner)
         return inbox
 
     async def send_now(self, session_id: str) -> None:
         async with self.queue_lock:
-            inbox = self.backend_inboxes.get(session_id)
-            queued = self.queued_inputs.get(session_id, {})
-            if inbox is not None and queued:
-                inbox.put_nowait(SendNow(tuple(InputId(input_id) for input_id in queued)))
+            state = self.state(session_id)
+            if state.queued:
+                state.to_turn(SendNow(tuple(InputId(input_id) for input_id in state.queued)))
 
     async def close(self) -> None:
         """Retire input producers before their sessions and turns are closed."""
         self.closing = True
-        tasks = (*self.drain_tasks.values(), *self.wake_tasks.values())
+        tasks = tuple(task for state in self.drained.values() for task in state.producers())
         for task in tasks:
             task.cancel()
         try:
             await join_retirement(asyncio.gather(*tasks, return_exceptions=True))
         finally:
-            self.drain_tasks.clear()
-            self.wake_tasks.clear()
-            self._observation_watchers.clear()
-            self._idle_private_revisions.clear()
-            self._repeat_private_observations.clear()
+            for state in self.drained.values():
+                state.retire_producers()
 
     async def input_refused(self, session_id: str, input_id: str) -> None:
-        source = self.following_sources.get(session_id, {}).pop(input_id, None)
+        state = self.state(session_id)
+        source = state.following.pop(input_id, None)
         if source is not None:
             await self.emit_input_delivery_changed(session_id)
-        item = self.queued_inputs.get(session_id, {}).pop(input_id, None)
+        item = state.queued.pop(input_id, None)
         if item is not None:
             await item.not_started(self)
             await self.emit_queue_state(session_id)
@@ -770,7 +843,7 @@ class InputDrain(InputObservation):
     async def input_cleared(
         self, session_id: str, input_id: str, native_id: str, text: str,
     ) -> None:
-        source = self.following_sources.get(session_id, {}).get(input_id)
+        source = self.state(session_id).following.get(input_id)
         if source is not None:
             def record():
                 with _store_lock(self.comms._wire_lock_path):
@@ -789,25 +862,26 @@ class InputDrain(InputObservation):
         self, session_id: str, inbox: TurnInbox
     ) -> None:
         """Retire this turn's live capabilities; retain UNKNOWN only as notices."""
-        if self.backend_inboxes.get(session_id) is inbox:
-            self.backend_inboxes.pop(session_id, None)
+        state = self.state(session_id)
+        if state.inbox is inbox:
+            state.inbox = None
             self.sessions.config.settings_in_use.pop(session_id, None)
         while not inbox.empty():
             inbox.get_nowait()
         try:
-            original = self.first_sources.pop(session_id, None)
+            original, state.first_source = state.first_source, None
             if original is not None:
                 await Coordination.run_worker(partial(self.finish_original_inputs, original.keys))
         finally:
             # Cancellation joins the original input write before retiring loop
             # capabilities. No callback delivery is required to burn a grant or
             # retain accepted queued input for the next distinct turn.
-            self.following_sources.pop(session_id, None)
-            remaining = self.queued_inputs.pop(session_id, {})
+            state.following = {}
+            remaining, state.queued = state.queued, {}
             for item in remaining.values():
                 await item.not_started(self)
             if remaining:
-                self.restored_inputs.setdefault(session_id, {}).update(
+                state.restored.update(
                     {
                         key: restored
                         for key, item in remaining.items()

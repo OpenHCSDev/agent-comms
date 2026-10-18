@@ -53,7 +53,7 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
             field_meta=encode_request(QueuePromptRequest("later", True)),
         )
         assert not turn.done()
-        assert len(agent.inputs.queued_inputs["project"]) == 1
+        assert len(agent.inputs.state("project").queued) == 1
         await agent.prompt(
             "project",
             [{"type": "text", "text": "now"}],
@@ -68,7 +68,7 @@ async def test_queued_and_steered_followups_both_reach_the_next_boundary(tmp_pat
             if isinstance(fact, InputStartedUpdate)
         ]
         assert starts == [None, "later"]
-        assert not agent.inputs.queued_inputs.get("project")
+        assert not agent.inputs.state("project").queued
     finally:
         await agent.shutdown()
 
