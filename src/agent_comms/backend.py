@@ -42,7 +42,7 @@ from .child_process import TimedOutOutcome
 from .coordinator import Coordination
 from .diagnostics import FailureReason
 from .extension_ui import ExtensionUiSession
-from .field_codec import MalformedRecord
+from .field_codec import Id128Text, MalformedRecord
 from .image_inputs import ImageInput
 from .native_attestation import AttestationError
 from .native_child import PiSessionChild
@@ -550,7 +550,7 @@ class TurnSession:
     def prepare_launch(self) -> None:
         self.command = commands.Prompt(
             id=f"agent-comms-prompt-{secrets.token_hex(16)}",
-            input_id=secrets.token_hex(16),
+            input_id=Id128Text.mint(),
             message=self.task,
             images=self.images or None,
             context_contributions=self.context_contributions,

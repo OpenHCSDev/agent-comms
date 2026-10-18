@@ -197,7 +197,7 @@ class AbsentTriageDecisionRecord(TriageDecisionRecord, JsonShapeMember):
         return lifecycle.rejected_triage_history(execution, **source)
 
 
-class RecordedTriageText(TextRepresentation):
+class RecordedTriageText(TextRepresentation[type[SelectedTriage]]):
     """The original native SQL decision uses lowercase declared triage names."""
 
     @classmethod
@@ -205,7 +205,7 @@ class RecordedTriageText(TextRepresentation):
         return FieldCodec.encode(value, type[SelectedTriage]).lower()
 
     @classmethod
-    def from_text(cls, value: str):
+    def from_text(cls, value: str) -> type[SelectedTriage]:
         decision = FieldCodec.decode(type[SelectedTriage], value.upper())
         if value != decision.declared_name.lower():
             raise ValueError("Recorded triage requires its exact lowercase SQL spelling")

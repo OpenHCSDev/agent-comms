@@ -219,6 +219,15 @@ def write_native_manifest(root: Path) -> None:
             replacement.unlink(missing_ok=True)
 
 
+
+def _sha256_hex(value: object) -> bool:
+    """This file runs without its package, so it cannot reach field_codec.Sha256Text."""
+    try:
+        return len(value) == 64 and bytes.fromhex(value).hex() == value  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return False
+
+
 @dataclass(frozen=True)
 class NativeSource:
     """One manifest-owned deployment source and its verified snapshot bytes."""
@@ -238,9 +247,7 @@ class NativeSource:
             raise NativePackageError("Native extension source declaration is invalid")
         if not isinstance(snapshot, str) or Path(snapshot).is_absolute():
             raise NativePackageError("Native extension source declaration is invalid")
-        if not isinstance(digest, str) or len(digest) != 64:
-            raise NativePackageError("Native extension source declaration is invalid")
-        if any(character not in "0123456789abcdef" for character in digest):
+        if not _sha256_hex(digest):
             raise NativePackageError("Native extension source declaration is invalid")
         if not isinstance(byte_count, int) or isinstance(byte_count, bool):
             raise NativePackageError("Native extension source declaration is invalid")
@@ -360,7 +367,7 @@ def verify_native_package(root: Path) -> None:
         for line in MANIFEST.read_text().splitlines()
         if line.startswith(TREE_PREFIX)
     ]
-    if len(pins) != 1 or len(pins[0]) != 64 or any(c not in "0123456789abcdef" for c in pins[0]):
+    if len(pins) != 1 or not _sha256_hex(pins[0]):
         raise NativePackageError("Pinned native package tree commitment unavailable")
     if package_tree_digest(root) != pins[0]:
         raise NativePackageError("Native package tree differs from pinned artifact")

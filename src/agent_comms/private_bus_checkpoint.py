@@ -707,7 +707,7 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
             record = FieldCodec.parse(raw)
             if not isinstance(record, Mapping):
                 raise MalformedRecord("Certified initial JSON must be an object.")
-            original = CommittedDelivery.from_wire(record, root_id)
+            original = CommittedDelivery.recorded(record, root_id)
         except MalformedRecord as error:
             raise RelationViolationError("Certified initial row is invalid.") from error
         if (

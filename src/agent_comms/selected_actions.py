@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import IdentityConflict
 from .envelope_claim_transitions import ExistingFileClaim
+from .field_codec import Id128Text
 from .native_tool_call import NativeToolMode, NoNativeTools
 from .turn_context import InstructionFile
 
@@ -36,9 +37,7 @@ class SelectedAction(ABC):
         return self
 
     def operation_id(self) -> str:
-        import secrets
-
-        return secrets.token_hex(16)
+        return Id128Text.mint()
 
     def with_plan(
         self,

@@ -190,7 +190,7 @@ class RestartEnvironment(EnvironmentRecord):
         return result
 
 
-class TagListText(TextRepresentation):
+class TagListText(TextRepresentation[frozenset[str]]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, frozenset):
@@ -202,7 +202,7 @@ class TagListText(TextRepresentation):
         return frozenset(tag.strip() for tag in value.split(",") if tag.strip())
 
 
-class FlagText(TextRepresentation):
+class FlagText(TextRepresentation[bool]):
     @classmethod
     def encode(cls, value: object) -> str:
         if not isinstance(value, bool):
