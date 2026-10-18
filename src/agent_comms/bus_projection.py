@@ -170,10 +170,8 @@ class AppendProjectionStore(Generic[Checkpoint]):
     def _read_unlocked(self) -> Checkpoint | NoCheckpoint:
         try:
             return self._decode(json.loads(self.path.read_text()))
-        except FileNotFoundError:
-            return NoCheckpoint()
-        except (ValueError, TypeError, KeyError, AttributeError):
-            return NoCheckpoint()  # Damaged disposable index: rebuilt from its source.
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
+            return NoCheckpoint()  # Unreadable disposable index: rebuilt from its source.
 
     def _write_unlocked(self, text: str) -> None:
         _atomic_write_text(self.path, text, fsync_parent=self.fsync_parent)
