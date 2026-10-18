@@ -7,6 +7,7 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
+from agent_comms.thread_execution import ExternalThreadExecution
 from native_unread_fixture import completed_snapshot
 
 
@@ -62,6 +63,23 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["sender"] == 1
     with pytest.raises(ValueError, match="registered"):
         comms.views.mark_user_view_read("missing", worktree=str(tmp_path))
+
+
+def test_sessionless_cli_painted_tail_and_explicit_inbox_read_share_bus_marks(tmp_path):
+    comms = wire(tmp_path)
+    comms.registry.declare(comms.registry.new_thread(
+        'cli', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
+    ))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    comms.messaging.send('cli', viewer, 'Painted CLI reply')
+    assert comms.bus.pending_count(viewer, 'cli') == 1
+    comms.views.mark_thread_view_read('cli', worktree=str(tmp_path),
+        through=comms.transcripts.transcript_checkpoint('cli'))
+    assert comms.bus.pending_count(viewer, 'cli') == 0
+    comms.messaging.send('cli', viewer, 'Explicitly marked CLI reply')
+    assert comms.bus.pending_count(viewer, 'cli') == 1
+    comms.views.mark_user_view_read('cli', worktree=str(tmp_path))
+    assert comms.bus.pending_count(viewer, 'cli') == 0
 
 
 def bytes_read() -> int:
