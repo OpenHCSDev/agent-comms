@@ -7,7 +7,8 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
-    FieldCodec, InlineRecord, MalformedRecord, PathText, TimestampText, TextRepresentation, WireValue,
+    FieldCodec, InlineRecord, MalformedRecord, NullMember, PathText, SubclassUnion,
+    TimestampText, TextRepresentation, WireValue,
 )
 from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
@@ -76,6 +77,56 @@ def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
         FieldCodec.decode(OwnedWireRecord, {**encoded, "value": 42})
     with pytest.raises(TypeError):
         FieldCodec.decode(OwnedWireText, object())
+
+
+def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independent():
+    calls = []
+
+    class First(SubclassUnion):
+        pass
+
+    class Second(SubclassUnion):
+        pass
+
+    def declare_number(union):
+        @dataclass(frozen=True, slots=True)
+        class Number(union):
+            value: int
+
+            def to_wire(self):
+                return self.value
+
+            @classmethod
+            def from_wire(cls, data):
+                calls.append(cls)
+                return cls(FieldCodec.decode(int, data))
+
+            @classmethod
+            def schema(cls):
+                return FieldCodec.value_schema(int)
+
+        return Number
+
+    first = declare_number(First)
+    second = declare_number(Second)
+
+    @dataclass(frozen=True, slots=True)
+    class Text(OwnedWireText, First):
+        pass
+
+    @dataclass(frozen=True, slots=True)
+    class Empty(NullMember, First):
+        pass
+
+    assert type(FieldCodec.decode(First, 7)) is first
+    assert type(FieldCodec.decode(Second, 8)) is second
+    assert calls == [first, second]
+    assert FieldCodec.encode(first(7), First) == 7
+    assert FieldCodec.decode(First, 'text') == Text('text')
+    assert FieldCodec.decode(First, None) == Empty()
+    assert FieldCodec.value_schema(First)
+    with pytest.raises(MalformedRecord):
+        FieldCodec.decode(Second, 'text')
 
 
 def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
