@@ -10,7 +10,8 @@ from .audience_manifest import FrozenAudience
 from .wake_policy import MessageAudience
 from .coordination_tables.publications import canonical_publication_key
 from .declared_family import DeclaredFamily
-from .wake import ControlClassification, WakeDecision, resolve_wake_cohort
+from .wake import ControlClassification, resolve_wake_cohort
+from .wake_policy import WakeDecision
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 

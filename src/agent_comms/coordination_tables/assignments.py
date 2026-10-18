@@ -48,7 +48,7 @@ class WakeAssignment(CoordinatorTable, TypedTable, declared_name="wake_claims"):
 
     def require_committed_source(self, initial) -> None:
         from agent_comms.coordination_errors import IdentityConflict
-        from agent_comms.wake import WakeDecision
+        from agent_comms.wake_policy import WakeDecision
 
         if self.source != MessageReference(initial.message.seq, initial.message.message_id):
             raise IdentityConflict("wake frame does not match a committed source")
