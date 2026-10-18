@@ -1182,6 +1182,12 @@ class Todo(TypedTable):
     def pending(self):
         return self.order.pending
 
+    def late_since(self, now: float) -> float | None:
+        """When this order crossed its deadline undelivered: the moment it became late, or None
+        while it can still arrive on time or is delivered."""
+        deadline = self.deadline.recorded_at("An order deadline")
+        return deadline if self.pending and deadline < now else None
+
     @property
     def creator_identity(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.creator, self.creator_created)
