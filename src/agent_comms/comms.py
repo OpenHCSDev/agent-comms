@@ -38,13 +38,13 @@ class Comms:
         )
         self.messaging = Messaging(self.root, self.registry, self.bus)
         self.agents = AgentActivity(self.root, self.registry)
-        self.ledger = CollaborationLedger(self.root / CollaborationLedger.filename, self.registry)
+        self.ledger = CollaborationLedger.at(self.root, self.registry)
         self.owners = OwnerLifecycle(self.root, self.registry, self.bus)
         self.goals = Goals(self.root, self.registry, self.bus, self.agents)
         self.transcripts = Transcripts(self.root, self.registry, self.bus, self.messaging)
         self.threads = ThreadManagement(
             self.root, self.registry, self.bus,
-            ChannelCatalog(self.root / ChannelCatalog.filename), self.agents, self.owners, self.ledger
+            ChannelCatalog.at(self.root), self.agents, self.owners, self.ledger
         )
         self.configuration = ThreadConfiguration(self.root, self.registry, self.threads, self.agents)
         self.channels = ChannelManagement(self.root, self.registry, self.bus, self.threads)

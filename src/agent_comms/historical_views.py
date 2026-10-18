@@ -10,6 +10,7 @@ from dataclasses import dataclass, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .locked_store import RootFile
 from .channel_targets import ChannelTarget
 from .channels import Channel
 from .errors import UnregisteredThreadError
@@ -388,20 +389,20 @@ class HistoricalDisplay:
         if self.source not in archive.sources():
             raise ValueError("Historical source detached; refresh history")
         self.source.validate()
-        ReadLedger(Path(self.source.root) / ReadLedger.filename).mark_displayed(
+        ReadLedger.at(self.source.root).mark_displayed(
             self.viewer,
             self.displayed,
         )
 
 
-class HistoryArchive:
+class HistoryArchive(RootFile):
     """Ordered immutable source snapshots; never a delivery/launch authority."""
 
     filename = "history_sources.json"
 
     def __init__(self, bus_path: Path):
         self.bus_path = bus_path
-        self.path = bus_path.with_name(self.filename)
+        self.path = self.path_in(bus_path.parent)
 
     def sources(self) -> tuple[HistorySource, ...]:
         with self.read_sources() as sources:
