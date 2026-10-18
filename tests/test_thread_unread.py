@@ -9,10 +9,14 @@ import pytest
 
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
+from agent_comms.private_path import FileRevision
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 from agent_comms.transcripts import NativeTranscriptCursor
-from agent_comms.view_unread import ReplyIndex, TranscriptReadState, TranscriptReply
+from agent_comms.view_unread import (
+    BudgetSpent, IndexSlice, ReplyIndex, ReplyIndexUpdate, RevisionMoved,
+    TranscriptReadState, TranscriptReply,
+)
 from native_unread_fixture import completed_counts, completed_snapshot
 
 
@@ -30,6 +34,38 @@ def setup_thread(tmp_path):
     comms = wire(tmp_path / "wire")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset({'ci'}), str(tmp_path), session_file=str(source)))
     return comms, source
+
+
+def test_prepare_results_distinguish_budget_and_revision_without_collecting_deltas(tmp_path):
+    from multiprocessing import get_context
+    from time import monotonic
+
+    source = tmp_path / "session.jsonl"
+    append(source)
+    revision = FileRevision.capture(source)
+    index = ReplyIndex(source=str(source))
+    cancelled = get_context("spawn").Event()
+    spent = index.prepare(revision, IndexSlice(monotonic() + 10, cancelled, records_left=0))
+    assert isinstance(spent, BudgetSpent)
+
+    replacement = tmp_path / "replacement.jsonl"
+    append(replacement, content="New file")
+    replacement.replace(source)
+    moved = index.prepare(revision, IndexSlice(monotonic() + 10, cancelled))
+    assert isinstance(moved, RevisionMoved)
+
+    update = index.prepare(
+        FileRevision.capture(source), IndexSlice(monotonic() + 10, cancelled)
+    )
+    assert isinstance(update, ReplyIndexUpdate)
+    updates = []
+    for result in (spent, moved):
+        result.collect(updates)
+        assert updates == []
+    update.collect(updates)
+    assert updates == [update]
+    assert update.after.total == 1
+    assert update.after.complete
 
 
 def test_reply_counts_are_persistent_human_read_positions(tmp_path):
