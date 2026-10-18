@@ -64,13 +64,20 @@ async def scripted_owner(tmp_path, selected_model, monkeypatch):
 
 
 async def recorded_request(control, agent):
+    loop = asyncio.get_running_loop()
+    entered = loop.create_future()
+    fd = os.open(control / 'entered', os.O_RDONLY | os.O_NONBLOCK)
     try:
-        async with asyncio.timeout(120):
-            await asyncio.to_thread(lambda: (control / 'entered').read_text())
+        async with asyncio.timeout(15):
+            loop.add_reader(fd, entered.set_result, None)
+            await entered
     except TimeoutError:
         from delivery_owner_fixture import drain_diagnostic
 
         raise AssertionError(f'Scripted input never arrived: {drain_diagnostic(agent._comms, "beta")!r}') from None
+    finally:
+        loop.remove_reader(fd)
+        os.close(fd)
 
 
 def requests(control):
