@@ -222,7 +222,6 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 if TYPE_CHECKING:
     from .historical_views import HistoryArchive, HistorySource
     from .presentation import BusPresentation
-    from .bus_page_index import BusPageRow
     from .channels import Channel
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
@@ -516,7 +515,9 @@ class CoveredDMDisplayBasis(DMDisplayBasis):
     """Only fetched references become read; omitted older messages stay unread."""
 
     def validate_tail(self, through: int) -> None:
-        newest = max(sequence for item in self.displayed.conversations for sequence in item.sequences)
+        newest = max(
+            sequence for item in self.displayed.conversations for sequence in item.sequences
+        )
         if through > newest:
             raise DMPaintedBoundChanged()
 

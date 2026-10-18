@@ -13,14 +13,13 @@ from .bus_page_index import BusPageIndex
 from .messages import Message
 from .private_path import FileRevision
 from .read_basis import (
-    ChannelDisplayScope, DisplaySelection, DMDisplayBasis, DMDisplayScope,
+    ChannelDisplayScope, DisplaySelection, DMDisplayBasis,
     MessageDisplayScope, NoDisplaySelection,
 )
 from .wire_log import CurrentSnapshotOpening, WireSnapshot
 
 if TYPE_CHECKING:
     from .read_basis import HistoricalDisplay
-    from .bus_page_index import BusPageRow
 
 
 @dataclass(frozen=True, slots=True)
