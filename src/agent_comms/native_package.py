@@ -353,14 +353,22 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
             temporary.unlink(missing_ok=True)
 
 
-@dataclass(frozen=True, slots=True, init=False)
+@dataclass(frozen=True, slots=True)
 class VerifiedNativePackage:
     """The immutable artifact acquired for one process; never a readiness proof."""
 
     path: Path
 
-    def __init__(self):
-        raise TypeError("Use verify_native_package to acquire the reviewed artifact")
+    def __post_init__(self):
+        pins = [
+            line[len(TREE_PREFIX) :]
+            for line in MANIFEST.read_text().splitlines()
+            if line.startswith(TREE_PREFIX)
+        ]
+        if len(pins) != 1 or len(pins[0]) != 64 or any(c not in "0123456789abcdef" for c in pins[0]):
+            raise NativePackageError("Pinned native package tree commitment unavailable")
+        if package_tree_digest(self.path) != pins[0]:
+            raise NativePackageError("Native package tree differs from pinned artifact")
 
     @property
     def cli(self) -> Path:
@@ -387,18 +395,7 @@ class VerifiedNativePackage:
 
 def verify_native_package(root: Path) -> VerifiedNativePackage:
     """Verify the entire copied package against the repository-owned commitment."""
-    pins = [
-        line[len(TREE_PREFIX) :]
-        for line in MANIFEST.read_text().splitlines()
-        if line.startswith(TREE_PREFIX)
-    ]
-    if len(pins) != 1 or len(pins[0]) != 64 or any(c not in "0123456789abcdef" for c in pins[0]):
-        raise NativePackageError("Pinned native package tree commitment unavailable")
-    if package_tree_digest(root) != pins[0]:
-        raise NativePackageError("Native package tree differs from pinned artifact")
-    verified = object.__new__(VerifiedNativePackage)
-    object.__setattr__(verified, "path", root)
-    return verified
+    return VerifiedNativePackage(root)
 
 
 if __name__ == "__main__":

@@ -26,7 +26,7 @@ def artifact(tmp_path, monkeypatch):
 
 
 def test_acquired_artifact_owns_path_and_derived_cli(artifact):
-    with pytest.raises(TypeError, match='verify_native_package'):
+    with pytest.raises(TypeError, match="required positional argument: 'path'"):
         VerifiedNativePackage()
     verified = VerifiedNativePackage.acquire(artifact)
     assert verified.path == artifact
