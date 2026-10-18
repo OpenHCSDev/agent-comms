@@ -1,4 +1,5 @@
 """Opt-in current installed fork check using an actual retained source, localhost only."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 
 import asyncio
 import json
@@ -51,7 +52,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
     launcher = str(Path(sys.executable).with_name("pi-comms-native"))
     comms = Comms(fixture.root)
     comms.registry.declare(
-        comms.registry.new_thread('retained-parent', frozenset(), str(fixture.project), session_file=str(source), model='response-local/fixture', thinking_level='off')
+        comms.registry.new_thread('retained-parent', frozenset(), str(fixture.project), session_file=str(source), model='response-local/fixture', thinking_level=OffThinkingLevel)
     )
     attachment = CommsClient(
         comms,
@@ -80,7 +81,7 @@ async def test_current_installed_retained_fork_first_input(native_backend, monke
             comms.threads.create,
             ForkSpec.from_task(
                 name="retained-child", parent="retained-parent", project=str(fixture.project),
-                model="response-local/fixture", thinking_level="off", task="One new isolated fork diagnostic " + marker
+                model="response-local/fixture", thinking_level=OffThinkingLevel, task="One new isolated fork diagnostic " + marker
             ),
             launcher,
         )

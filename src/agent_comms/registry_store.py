@@ -18,6 +18,7 @@ from .locked_store import LockedStore
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard
 from .registry_document import RegistryDocument, RegistryEntry
+from .store_files import SharedLock
 
 
 @dataclass(frozen=True, slots=True)
@@ -128,7 +129,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         was read from, not an earlier stat taken while a write was in flight.
         A decoded revision already in this process's cache answers directly.
         """
-        with self.locked(shared=True):
+        with self.locked(mode=SharedLock()):
             self.private_guard_unlocked()
             revision = self.revision_unlocked()
             if revision[0] is None:

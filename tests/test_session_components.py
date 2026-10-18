@@ -4,6 +4,7 @@ import os
 from dataclasses import replace
 
 import pytest
+from agent_comms.pi_vocabulary import NoThinkingOverride, OffThinkingLevel
 from acp.agent.router import build_agent_router
 from acp.schema import SessionConfigSelectOption
 
@@ -118,11 +119,11 @@ def test_thread_service_tier_round_trips_legacy_rows(*, thread_registration):
 async def test_native_observation_only_initializes_unset_configuration(owner, tmp_path):
     session = await owner.new_session(str(tmp_path / "native-config"))
     thread = owner._comms.registry.require(session.session_id)
-    assert thread.thinking_level is None
+    assert thread.thinking_level is NoThinkingOverride
     assert thread.service_tier.value == "priority"
     await owner.sessions.observe_native_configuration(
         session.session_id, thread.name, events.AgentInfo(
-            model="test/two", thinking_level="high"
+            model="test/two", thinking_level=HighThinkingLevel
         )
     )
     observed = owner._comms.registry.require(thread.name)
@@ -132,11 +133,11 @@ async def test_native_observation_only_initializes_unset_configuration(owner, tm
         owner._comms.root, owner._comms.registry.snapshot(), observed.worktree
     )
     assert environment["AGENT_COMMS_SERVICE_TIER"] == "priority"
-    owner._comms.threads.set_thread_configuration(owner._comms.registry.require(thread.name), thinking_level='off')
+    owner._comms.threads.set_thread_configuration(owner._comms.registry.require(thread.name), thinking_level=OffThinkingLevel)
     before = (owner._comms.root / "registry.json").read_bytes()
     await owner.sessions.observe_native_configuration(
         session.session_id, thread.name, events.AgentInfo(
-            model="test/two", thinking_level="high"
+            model="test/two", thinking_level=HighThinkingLevel
         )
     )
     assert owner._comms.registry.require(thread.name).thinking_level is OffThinkingLevel

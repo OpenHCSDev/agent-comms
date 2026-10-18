@@ -16,7 +16,7 @@ from .errors import RelationViolationError, UnregisteredThreadError
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
 from .change_report import ChangeReport
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_identity import ThreadRole
 from .threads import Thread
 from .task_sources import TaskAttachment, NoTaskAttachment
@@ -149,7 +149,7 @@ class Messaging:
 
     def user_identity(self, worktree: str) -> Thread:
         """One durable human sender, never an executor or a tag-derived agent role."""
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             for thread in self._user_identities():
                 return thread
         # Creation is a write, with its original exclusive recheck. Observing
@@ -220,7 +220,7 @@ class Messaging:
         rejects a replaced bus, so another reader or acknowledgment loses nothing.
         """
         basis = self.bus.delivered(name, references)
-        with _store_lock(self._wire_lock_path, shared=True):
+        with _store_lock(self._wire_lock_path, mode=SharedLock()):
             self.bus.reads.mark_displayed(basis.viewer, basis)
         return basis.message_count
 

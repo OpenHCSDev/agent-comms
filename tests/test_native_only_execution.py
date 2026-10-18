@@ -39,12 +39,12 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
     forged.write_text("#!/bin/sh\necho not-native\n")
     forged.chmod(0o755)
     with pytest.raises(NativePiUnavailable, match="validated native"):
-        NativePiRpcLaunch.managed(str(forged), (), worktree=tmp_path)
+        NativePiRpcLaunch.managed(str(forged), (), root=tmp_path, worktree=tmp_path)
     assert verified == []
     launch = NativePiRpcLaunch.managed(
         "pi",
         ("--provider", "local", "--model", "fixture"),
-        worktree=tmp_path,
+        root=tmp_path, worktree=tmp_path,
         environment={"NODE_OPTIONS": "--import=/untrusted.js", "PI_WORKTREE": "/wrong"},
     )
     assert verified == [package]
@@ -63,7 +63,7 @@ def test_launcher_spelling_cannot_select_execution(tmp_path, monkeypatch):
         ("--version",),
     ):
         with pytest.raises(NativePiUnavailable):
-            NativePiRpcLaunch.managed("pi", arguments, worktree=tmp_path)
+            NativePiRpcLaunch.managed("pi", arguments, root=tmp_path, worktree=tmp_path)
 
 
 async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypatch):
@@ -114,7 +114,7 @@ async def test_actual_pinned_native_launch_preflight_without_prompt(tmp_path, mo
             "--session-dir",
             str(tmp_path / "sessions"),
         ),
-        worktree=tmp_path,
+        root=tmp_path, worktree=tmp_path,
         environment={"PI_CODING_AGENT_DIR": str(tmp_path / "agent-config")},
     )
     async with BoundedRun.session(launch.argv, cwd=launch.cwd, env=launch.env, timeout=12) as child:

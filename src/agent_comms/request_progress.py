@@ -1,5 +1,8 @@
 """Native request measurements do not permit input, confirm completion or allow retry."""
 from dataclasses import dataclass, field
+from collections.abc import Callable
+
+from .child_process import ProcessIdentity
 
 from .pi_payloads import PiModel, PiPayload
 
@@ -43,3 +46,11 @@ class RequestProgress(PiPayload):
     @property
     def label(self):
         return self.detail[:160] or "Waiting for model"
+
+
+RequestObserver = Callable[[RequestProgress, ProcessIdentity], None]
+
+
+class NoRequestObserver:
+    def __call__(self, progress: RequestProgress, process: ProcessIdentity) -> None:
+        pass

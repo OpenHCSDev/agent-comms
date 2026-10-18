@@ -1,4 +1,5 @@
 """Installed selected coding journey through real CLI/tools; localhost responses only."""
+from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
 import asyncio
@@ -71,7 +72,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
     provider = CodingProvider(seconds if outcome == "complete" else 20)
     root, root_id, comms, initial, _ = _root(tmp_path, direct=True, body="Isolated coding fixture")
     owner = comms.registry.require("beta")
-    comms.registry.register(replace(owner, model="response-local/fixture", thinking_level="off"))
+    comms.registry.register(replace(owner, model="response-local/fixture", thinking_level=OffThinkingLevel))
     config = tmp_path / "config"
     config.mkdir(mode=0o700)
     connections = set()

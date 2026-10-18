@@ -34,6 +34,7 @@ from .envelope_claim_transitions import (
 from .coordination_tables.publications import PublicationIntents
 from .errors import HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
+from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
@@ -865,7 +866,7 @@ class RecordedContextManifestSources(
         limit = cls.max_page_rows if limit is None else limit
         if not 1 <= limit <= cls.max_page_rows:
             raise ValueError("Context page row limit exceeds its source budget")
-        with _store_lock(log.path.parent / "wire", shared=True), log.certified_read() as source:
+        with _store_lock(log.path.parent / "wire", mode=SharedLock()), log.certified_read() as source:
             snapshot = registry.snapshot()
             incarnation = snapshot.require(name).incarnation
             storage = SqlStorage.for_type(ThreadIncarnation)
@@ -1303,6 +1304,27 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
     return saved
 
 
+@dataclass(frozen=True)
+class WritableCheckpoint:
+    """A writable bus's checkpoint; the lock mode chooses how its holder reads it."""
+
+    path: Path
+
+    def open_read_only(self) -> sqlite3.Connection:
+        return _connect(self.path, readonly=True)
+
+    def open_for_repair(self) -> sqlite3.Connection:
+        return _connect(self.path)
+
+    def check_final(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                    stream: BinaryIO) -> PrefixWitness:
+        return _check_final_checkpoint_read_only(bus, marker, db, stream, self.path)
+
+    def verify_with_repair(self, bus: WireLog, marker: WireMetadata, db: sqlite3.Connection,
+                           stream: BinaryIO) -> PrefixWitness:
+        return _verify_open_checkpoint_unlocked(bus, marker, db, stream, self.path)
+
+
 def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWitness:
     """The durability owner verifies its already opened source and certificate."""
     # Exclusive recovery may adopt bytes left visible by an interrupted append.
@@ -1392,7 +1414,8 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
 
 
 @contextmanager
-def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, shared: bool = False):
+def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *,
+                                       mode: LockMode = ExclusiveLock()):
     """Keep only this canonical lock's verified source/index resources open.
 
     Under the shared bus lock other readers run concurrently, so the check is
@@ -1402,11 +1425,11 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *, sh
     path = _path(bus.path)
     with ExitStack() as resources:
         try:
-            db = resources.enter_context(closing(marker.access.open_checkpoint(path, shared=shared)))
+            db = resources.enter_context(closing(marker.access.open_checkpoint(path, mode=mode)))
             stream = resources.enter_context(bus.path.open("rb"))
             if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
                 raise RelationViolationError("Claim bus is not a regular file.")
-            saved = marker.access.verify_checkpoint(bus, marker, db, stream, path, shared=shared)
+            saved = marker.access.verify_checkpoint(bus, marker, db, stream, path, mode=mode)
             db.execute("PRAGMA query_only=ON")
         except (sqlite3.Error, OSError) as error:
             raise RelationViolationError(

@@ -5,6 +5,7 @@ Core event parsing and original session journal are real. No silence timeout.
 """
 
 import asyncio
+from agent_comms.turn_watchdog import ModelWait
 import json
 from collections import deque
 from pathlib import Path
@@ -77,8 +78,8 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
 
     async def turn(text):
         return [event async for event in backend.stream_agent_events(
-            launcher, arguments, text, str(tmp_path), session_file=saved,
-            persistent_session=session, model_wait_timeout=240,
+            launcher, arguments, text, str(tmp_path), root=Path(str(tmp_path)), session_file=saved,
+            persistent_session=session, model_wait=ModelWait(240),
         )]
 
     try:

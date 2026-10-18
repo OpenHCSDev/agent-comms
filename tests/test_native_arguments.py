@@ -7,6 +7,7 @@ from pathlib import Path
 from native_proof_cases import read_proof_rows
 
 import pytest
+from agent_comms.pi_vocabulary import NoThinkingOverride, OffThinkingLevel
 
 from agent_comms.native_arguments import (
     NamedOption,
@@ -72,7 +73,7 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
     )
     assert arguments.model == "original/old/model"
     assert arguments.thinking == "high"
-    selected = arguments.with_model("response-local/fixture").with_thinking("off")
+    selected = arguments.with_model("response-local/fixture").with_thinking(OffThinkingLevel)
     assert selected.model == "response-local/fixture" and selected.thinking == "off"
     assert selected.rpc() == (
         "--offline",
@@ -87,7 +88,7 @@ def test_selection_replaces_all_occurrences_preserving_unowned_native_arguments(
         "--mode",
         "rpc",
     )
-    assert selected.with_thinking(None).thinking is None
+    assert selected.with_thinking(NoThinkingOverride).thinking is None
     assert arguments.model == "original/old/model"
     assert NativeArguments.parse(("--model", "local/fixture")).model == "local/fixture"
 

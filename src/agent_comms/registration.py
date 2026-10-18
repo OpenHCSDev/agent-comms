@@ -17,7 +17,7 @@ from .registration_change import RegistrationChange
 from .registry_document import RegistrySnapshot
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_identity import GenerationCounter, TurnId
 from .thread_status import (
     ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
@@ -78,7 +78,7 @@ class Registration:
         phase is retained from the locked document, not compared to an old view.
         Native session identity and context proof remain with their producers.
         """
-        with _store_lock(self.store.path.parent / "wire", shared=True), self.store.editing() as edit:
+        with _store_lock(self.store.path.parent / "wire", mode=SharedLock()), self.store.editing() as edit:
             change = edit.document.prepare_native_source(original, session_file)
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an

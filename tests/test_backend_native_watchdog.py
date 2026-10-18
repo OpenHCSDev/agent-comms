@@ -4,6 +4,7 @@ import asyncio
 import json
 
 import pytest
+from agent_comms.turn_watchdog import ModelWait
 
 from agent_comms import agent_events as events
 from agent_comms import backend
@@ -15,7 +16,7 @@ from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendN
 async def test_actual_native_watchdog_failure_never_replays(native_backend, outcome):
     owner = native_backend
     owner.provider.status = 503 if outcome == "failure" else 0
-    result = await owner.run("One diagnostic input", model_wait_timeout=2.0)
+    result = await owner.run("One diagnostic input", model_wait=ModelWait(2.0))
     print("native_outcome", outcome, repr(result), flush=True)
     assert isinstance(result[-1], events.Done) and not result[-1].ok, result[-1]
     assert len(owner.starts) == len(owner.saved_inputs()) == owner.provider.posts == 1
