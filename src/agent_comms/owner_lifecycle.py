@@ -319,8 +319,8 @@ class OwnerLifecycle:
         result = runtime.environment(environment)
         launch = self.launch_authority
         if launch is not None:
+            # The source owner's root is this launch's; the target derives the rest.
             launch.validate()
-            result["AGENT_COMMS_ROOT"] = str(launch.validated_root)
         return result
 
     def restart_owners(
@@ -464,12 +464,11 @@ class OwnerLifecycle:
                 NativeArguments.binary_key: agent_bin,
             }
         )
-        if private_launch is not None:
-            # The child derives the same launch from this root.
-            env["AGENT_COMMS_ROOT"] = str(private_launch.validated_root)
-        else:
-            # Ordinary roots keep their canonical child path across symlink changes.
-            env["AGENT_COMMS_ROOT"] = str(self.root.resolve())
+        # A private child derives the same launch from its validated root; ordinary
+        # roots keep their canonical child path across symlink changes.
+        env["AGENT_COMMS_ROOT"] = str(
+            self.root.resolve() if private_launch is None else private_launch.validated_root
+        )
         if thread.parent is not None:
             env["PI_PARENT_ID"] = thread.parent
         if thread.task is not None:
