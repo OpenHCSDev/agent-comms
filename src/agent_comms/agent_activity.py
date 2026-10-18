@@ -16,17 +16,21 @@ from .notification_progress import AcknowledgedProgress
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
-    from .registration import Registration
-    from .registry_document import RegistrySnapshot
     from .bus_publication import CommittedDelivery
     from .notification_progress import AssignmentProgress
     from .presentation import MessageNotification
+    from .registration import Registration
+    from .registry_document import RegistrySnapshot
 from .activity import (
-    Activity, ActivityLog, ActivityState, DrainDiagnostic, ObservedActivity,
+    Activity,
+    ActivityLog,
+    ActivityState,
+    DrainDiagnostic,
+    ObservedActivity,
 )
-from .declared_family import DeclaredFamily
-from .coordinator import Coordination
 from .audience_manifest import FrozenRecipient
+from .coordinator import Coordination
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .routing import TurnRouting
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
@@ -122,7 +126,7 @@ class AgentActivity:
         owner = snapshot.owner_identity(thread)
         participant = snapshot.threads[owner.incarnation.name]
         return self._observed(participant, owner,
-            self.activity.current(participant.name, active=participant.active_turn.executing))
+            self.activity.current(participant.name, active=participant.executing))
 
     def is_working(self, incarnation: ThreadIncarnation, snapshot: RegistrySnapshot) -> bool:
         if not incarnation.current(snapshot):
@@ -142,7 +146,7 @@ class AgentActivity:
             return {}
         events = self.activity.current_for(
             requested,
-            active=frozenset(name for name, thread in requested.items() if thread.active_turn.executing),
+            active=frozenset(name for name, thread in requested.items() if thread.executing),
         )
         return {
             name: self._observed(thread, snapshot.owner_identity(name), events[name])
@@ -238,7 +242,7 @@ class AgentActivity:
             return False
         owner = snapshot.owner_identity(thread.name)
         diagnostic = self.activity_of(thread.name, snapshot=snapshot).readiness.source_diagnostic()
-        if diagnostic is None or diagnostic.recorded_at >= thread.active_turn.started_at:
+        if diagnostic is None or diagnostic.recorded_at >= lease.record.read().started_at:
             return False
         return self._recover_drain(thread.name, owner, diagnostic)
 
@@ -252,7 +256,7 @@ class AgentActivity:
             assert lease is not None
             try:
                 phase = PreparingPhase(detail)
-                self.registry.transition_turn(lease, phase)
+                lease.record.transition(lease, phase)
                 self._record_turn_activity(leased.name, (phase,))
             except BaseException:
                 self.registry.release_turn(lease)
@@ -266,17 +270,17 @@ class AgentActivity:
 
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = self.registry.transition_turn(lease, phase)
+            effects = lease.record.transition(lease, phase)
             self._record_turn_activity(
-                lease.identity.incarnation.name, (state.active.phase for state in effects),
+                lease.identity.incarnation.name, (state.active.phase for state in effects)
             )
             return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
-            effects = self.registry.observe_native_phase(lease, phase)
+            effects = lease.record.observe_native_phase(lease, phase)
             self._record_turn_activity(
-                lease.identity.incarnation.name, (state.active.phase for state in effects),
+                lease.identity.incarnation.name, (state.active.phase for state in effects)
             )
             return effects
 

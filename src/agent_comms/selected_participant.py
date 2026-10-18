@@ -236,7 +236,7 @@ class SelectedParticipant(MroDispatch):
         # Registry compare-and-swap checks input and turn identity; never borrow another ACP
         # instance's turn or revive an owner through a registration side effect.
         try:
-            owner.thread.active_turn.require_idle()
+            owner.thread.turn_record.read().require_idle()
             thread, generation = comms.registry.lease_live_turn_with_claim(
                 owner.thread,
                 secrets.token_hex(16),
