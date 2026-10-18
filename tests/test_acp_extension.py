@@ -27,7 +27,6 @@ from agent_comms.acp_extension import (
     SelectedWriteAcceptedUpdate,
     TextRouteUpdate,
     TranscriptChangedUpdate,
-    TranscriptDraftUpdate,
     TranscriptSnapshotUpdate,
     TurnChangedUpdate,
     UnavailableCursorObservation,
@@ -85,7 +84,6 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
         TranscriptSnapshotUpdate(
             read.read(), read.identity
         ),
-        TranscriptDraftUpdate(read.identity, None),
         InputDeliveryChangedUpdate("input"),
         McpClientAcknowledgementUpdate(
             "turn", McpLiveAcknowledgement(1, "pi-mcp-client", "a" * 32, "running", "turn", ())

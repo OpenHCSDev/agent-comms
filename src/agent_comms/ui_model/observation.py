@@ -610,14 +610,32 @@ class ObserveNotifications(InterestRequest):
         return NotificationReading(self)
 
 
+class NotificationRead(ABC):
+    @abstractmethod
+    def changed(self, request: ReadNotifications, revision: WireRevision) -> bool: ...
+
+
+class NotRead(NotificationRead):
+    def changed(self, request: ReadNotifications, revision: WireRevision) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class ReadAt(NotificationRead):
+    revision: WireRevision
+
+    def changed(self, request: ReadNotifications, revision: WireRevision) -> bool:
+        return request.changed_since(revision, self.revision)
+
+
 class NotificationReading(Observation[ObserveNotifications]):
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
-        self.revisions: dict[ReadNotifications, WireRevision] = {}
+        self.read_states: dict[ReadNotifications, NotificationRead] = {}
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         for request in self.request.reads:
-            if request in self.revisions and not request.changed_since(revision, self.revisions[request]):
+            if not self.read_states.get(request, NotRead()).changed(request, revision):
                 continue
             try:
                 request.require_root(comms)
@@ -629,7 +647,7 @@ class NotificationReading(Observation[ObserveNotifications]):
                 result = NotificationsUnreadable(revision, request, UnreadableHistory.capture(error))
             else:
                 result = NotificationsObserved(revision, request, outcomes)
-            self.revisions[request] = revision
+            self.read_states[request] = ReadAt(revision)
             yield result
 
 
