@@ -422,13 +422,7 @@ class OwnerLifecycle:
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
-        for key in (
-            "PI_PROMPT",
-            "PI_PARENT_ID",
-            "PI_TASK",
-            RestartEnvironment.initial_input_key,
-        ):
-            env.pop(key, None)
+        env.pop(RestartEnvironment.initial_input_key, None)
         private_launch = self.require_launch_authority()
         if private_launch is not None:
             if agent_bin == "pi":
@@ -452,24 +446,13 @@ class OwnerLifecycle:
                     thread.name,
                     committed=True,
                 )
-        env.update(
-            {
-                RestartEnvironment.owner_key: thread.name,
-                "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
-                "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
-                "PI_WORKTREE": thread.worktree,
-                NativeArguments.binary_key: agent_bin,
-            }
-        )
+        env = thread.launch().apply(env)
+        env[NativeArguments.binary_key] = agent_bin
         # A private child derives the same launch from its validated root; ordinary
         # roots keep their canonical child path across symlink changes.
         env["AGENT_COMMS_ROOT"] = str(
             self.root.resolve() if private_launch is None else private_launch.validated_root
         )
-        if thread.parent is not None:
-            env["PI_PARENT_ID"] = thread.parent
-        if thread.task is not None:
-            env["PI_TASK"] = thread.task
         initial_input.apply_environment(env)
         if agent_args is not None:
             env[NativeArguments.arguments_key] = shlex.join(agent_args)

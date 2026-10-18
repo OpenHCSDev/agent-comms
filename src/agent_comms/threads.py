@@ -6,6 +6,7 @@ import os
 import time
 from pathlib import Path
 from dataclasses import dataclass, field, fields, replace
+from typing import TYPE_CHECKING
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
@@ -27,6 +28,9 @@ from .thread_identity import (
     TurnIdentity,
 )
 from .turn_lease import ActiveTurn, TurnFence, TurnLeaseFence, TurnState
+
+if TYPE_CHECKING:
+    from .launch_runtime import ThreadLaunch
 
 
 class _GeneratedCreationTime(float):
@@ -139,17 +143,18 @@ class Thread(ThreadProvenance):
         from .runtime_requests import ProjectRuntimeRequest
 
         project = ProjectRuntimeRequest.for_native(snapshot, self)
-        from .launch_runtime import RestartEnvironment
-
         return {
-            RestartEnvironment.owner_key: self.name,
+            **replace(self.launch(), worktree=worktree, managed=True).encode(),
             "AGENT_COMMS_ROOT": str(root),
-            "PI_PARENT_ID": self.parent or "",
-            "AGENT_COMMS_MANAGED": "1",
             SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
-            "PI_WORKTREE": worktree,
             **project.environment(root),
         }
+
+    def launch(self) -> ThreadLaunch:
+        """The launch environment this thread's owner process carries."""
+        from .launch_runtime import ThreadLaunch
+
+        return ThreadLaunch(self.name, self.worktree, frozenset(self.tags), self.parent, self.task)
 
     def __post_init__(self) -> None:
         generated = isinstance(self.created_at, _GeneratedCreationTime)
@@ -478,16 +483,15 @@ class Thread(ThreadProvenance):
 
 def current_thread(registry) -> Thread:
     """Declare the current thread from its owner launch environment."""
-    from .launch_runtime import RestartEnvironment
+    from .launch_runtime import RestartEnvironment, ThreadLaunch
 
-    name = RestartEnvironment.calling_thread()
-    tag_env = os.environ.get("PI_AGENT_TAGS") or os.environ.get("AGENT_COMMS_TAGS", "")
-    tags = frozenset(t.strip() for t in tag_env.split(",") if t.strip())
+    RestartEnvironment.calling_thread()
+    launch = ThreadLaunch.current()
     return registry.new_thread(
-        name=name,
-        tags=tags,
-        worktree=os.environ.get("PI_WORKTREE", os.getcwd()),
-        parent=os.environ.get("PI_PARENT_ID"),
-        task=os.environ.get("PI_TASK"),
+        name=launch.name,
+        tags=launch.tags,
+        worktree=launch.worktree,
+        parent=launch.parent,
+        task=launch.task,
         process_identity=ProcessIdentity.capture(os.getpid()),
     )
