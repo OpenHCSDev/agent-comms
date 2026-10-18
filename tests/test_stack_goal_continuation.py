@@ -17,6 +17,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms.goals import AbsentGoal
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
@@ -250,7 +252,7 @@ async def test_mounted_goal_continues_without_progress_tool(
                     lambda: (
                         len(attempts()) >= 2
                         or (
-                            comms.registry.require("project").goal is not None
+                            comms.registry.require("project").goal != AbsentGoal()
                             and comms.registry.require("project").goal.state.declared_name
                             == "blocked"
                         )
@@ -328,7 +330,7 @@ async def test_mounted_goal_continues_without_progress_tool(
                 release.set()
                 await until(lambda: not comms.registry.require("project").active_turn.executing)
                 await asyncio.sleep(0.4)
-                assert comms.registry.require("project").goal is None
+                assert comms.registry.require("project").goal == AbsentGoal()
                 assert len(attempts()) == 2
                 if not live and not queue_during_compact:
                     assert len(ordinary_requests) == (3 if compact_tools else 2)

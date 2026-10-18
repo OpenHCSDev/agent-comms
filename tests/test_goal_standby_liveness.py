@@ -1,5 +1,6 @@
 """Standby liveness preserves goal authority and never replays an input."""
 
+from agent_comms.goals import AbsentGoal
 from agent_comms.messages import ConversationRole, NoticeRole
 import asyncio
 import os
@@ -102,7 +103,7 @@ def _waiting(tmp_path, *, second=False):
         _thread(comms, "other", tmp_path)
         _begin(comms, "other", "other-turn")
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Review the delegated work"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     targets = ["child", "other"] if second else ["child"]
     comms.goals.update_goal(
         "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=targets)
@@ -115,7 +116,7 @@ def test_idle_target_refusal_is_side_effect_free(tmp_path):
     _thread(comms, "owner", tmp_path)
     _thread(comms, "child", tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Work"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     authoritative = ("registry.json", "goal_waits.json", "input_dispositions.sqlite3")
     before = {
         name: (comms.root / name).read_bytes() if (comms.root / name).exists() else None
@@ -353,7 +354,7 @@ def test_stopped_dependency_cannot_be_declared_live(tmp_path):
     child = comms.registry.require("child")
     comms.registry.register(replace(child, active_turn=NoTurn()), StoppedThreadStatus())
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Review"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     with pytest.raises(ValueError, match="No declared dependency is working"):
         comms.goals.update_goal(
             "owner",
@@ -448,7 +449,7 @@ async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
     native, comms, agent, child = retained_native_acp_owner
     _thread(comms, "owner", native.project)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     terminal = []
     original_emit = agent._emit_event
 
@@ -498,7 +499,7 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     goal = comms.goals.update_goal(
         owner, SetGoalAction(text="Review child work")
     )
-    assert goal is not None
+    assert goal != AbsentGoal()
     wakes = []
     monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda check: wakes.append(check.session_id))
     try:
@@ -524,7 +525,7 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(
     native, comms, agent, child = retained_native_acp_owner
     _thread(comms, "owner", native.project)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     old_settled, release_old = asyncio.Event(), asyncio.Event()
     real_emit = agent._emit_event
 
@@ -573,7 +574,7 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
     native.provider.text = "Reported" if reply else " "
     _thread(comms, "owner", native.project)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Await child"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     observed = []
     real_emit = agent._emit_event
 

@@ -16,6 +16,7 @@ from agent_comms.goal_actions import (
     StandbyGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal
+from agent_comms.goals import AbsentGoal
 from agent_comms.native_input_owner import RegistryOwner
 from agent_comms.threads import Thread
 from agent_comms.tools import CommsEditGoalTool, CommsResumeGoalTool
@@ -47,7 +48,7 @@ def test_review_and_command_refuse_replaced_or_cleared_goal(selected_goal, repla
         ))
     assert comms.registry.require("worker") == before
     assert before.goal == current
-    assert before.goal_for(original.id) is None
+    assert before.goal_for(original.id) == AbsentGoal()
 
 
 def test_failed_turn_retains_later_progress_of_same_goal(selected_goal):

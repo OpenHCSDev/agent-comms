@@ -33,7 +33,7 @@ from typing import (
 from .locked_store import RootFile
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
+from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, WireValue, compile_decoder
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -50,7 +50,10 @@ def _base_type(annotation: object) -> tuple[object, bool]:
         members = get_args(annotation)
         if types.NoneType in members and len(members) == 2:
             return next(member for member in members if member is not types.NoneType), True
-    return annotation, False
+    # A value whose own representation owns JSON null, such as a NullMember, stores NULL.
+    return annotation, isinstance(annotation, type) and issubclass(annotation, WireValue) and (
+        annotation.accepts_null
+    )
 
 
 class SqlStorage(DeclaredFamily, affix="Storage"):
@@ -224,7 +227,7 @@ class JsonStorage(SqlStorage):
             is_dataclass(annotation)
             or get_origin(annotation) in (list, tuple, dict, frozenset, Union, types.UnionType)
             or isinstance(annotation, type)
-            and issubclass(annotation, DeclaredFamily)
+            and issubclass(annotation, (DeclaredFamily, WireValue))
         )
 
     @classmethod

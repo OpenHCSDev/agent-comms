@@ -21,7 +21,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_attempts import GoalAttemptStore
 from agent_comms.goal_generation import CompletedGeneration, ReadyGeneration
-from agent_comms.goals import Goal
+from agent_comms.goals import AbsentGoal, Goal
 from agent_comms.runtime import RuntimeProxy, socket_path
 from stored_inputs import stored_inputs
 
@@ -155,7 +155,7 @@ async def exercise_retry(owner, session, native, monkeypatch, outcome):
             fact.goal.state.active
             for update in updates
             for fact in decode_updates(update.get("_meta"))
-            if isinstance(fact, GoalChangedUpdate) and fact.goal is not None
+            if isinstance(fact, GoalChangedUpdate) and fact.goal != AbsentGoal()
         )
         if outcome == "cancel":
             await proxy.request("cancel")

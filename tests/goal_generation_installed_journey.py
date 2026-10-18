@@ -18,6 +18,7 @@ import sys
 from agent_comms.comms import Comms
 from agent_comms.goal_management import Goals
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
+from agent_comms.goals import AbsentGoal
 from native_backend_fixture import native_backend_fixture
 
 
@@ -79,7 +80,7 @@ async def run(stage: Path, extension: Path):
                 view.prompt.text = f'[{stage.name}] Set your own persistent goal, then block it for my explicit Retry.'
                 view.prompt.focus()
                 await pilot.press('enter')
-                await until(lambda: comms.registry.require(session).goal is not None
+                await until(lambda: comms.registry.require(session).goal != AbsentGoal()
                             and comms.registry.require(session).goal.state.declared_name == 'blocked'
                             and not comms.registry.require(session).active_turn.executing)
                 blocked = comms.registry.require(session).goal

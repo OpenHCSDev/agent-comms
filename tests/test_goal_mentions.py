@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.goals import AbsentGoal
 from agent_comms.relationships import CollaboratingRelationshipGroup, RelationshipEdit
 from agent_comms.comms import Comms
 from agent_comms.goal_actions import (
@@ -51,7 +52,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     goal = comms.goals.update_goal(
         "owner", SetGoalAction(text="Work with @peer and @peer, not @owner or @unknown.")
     )
-    assert goal is not None
+    assert goal != AbsentGoal()
     assert goal.mention_source is not None
     source = goal.mention_source
     assert (source.goal_id, source.text_revision, source.owner_name, source.owner_created_at) == (
@@ -104,7 +105,7 @@ def test_only_exact_registered_executable_names_bind_without_alias_or_prefix(
         "owner",
         SetGoalAction(text="@peer.bad @peer/path @peer@host @Peer @other @human @owner @renamed"),
     )
-    assert goal is not None and goal.mention_source is not None
+    assert goal != AbsentGoal() and goal.mention_source is not None
     assert [(row.token, type(row)) for row in goal.mention_source.bindings] == [
         ("peer.bad", MalformedMentionBinding),
         ("peer/path", MalformedMentionBinding),
@@ -123,7 +124,7 @@ def test_over_limit_goal_mentions_fail_closed_as_a_whole(tmp_path: Path) -> None
     comms = _wire(tmp_path)
     text = "@peer " + " ".join(f"@unknown{number}" for number in range(129))
     goal = comms.goals.update_goal("owner", SetGoalAction(text=text))
-    assert goal is not None and goal.mention_source is not None
+    assert goal != AbsentGoal() and goal.mention_source is not None
     assert [(row.token, type(row)) for row in goal.mention_source.bindings] == [
         ("<goal-mentions>", LimitExceededMentionBinding)
     ]
@@ -140,7 +141,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
 ) -> None:
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer please inspect"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     comms.registry.rename("peer", "reviewer")
     renamed_rows, _ = _rows(comms, "owner")
     assert renamed_rows[0].target == "reviewer"
@@ -166,7 +167,7 @@ def test_bound_renames_follow_only_the_same_incarnation_and_name_reuse_is_stale(
 def test_owner_rename_keeps_only_the_bound_owner_incarnation(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     comms.registry.rename("owner", "renamed-owner")
     owner_rows, _ = _rows(comms, "renamed-owner")
     peer_rows, _ = _rows(comms, "peer")
@@ -183,7 +184,7 @@ def test_goal_status_edits_and_explicit_contacts_are_independent(tmp_path: Path)
     )
     original = (comms.relationships.store.path).read_bytes()
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Please consider @peer"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     rows, _ = _rows(comms, "owner")
     assert len(rows) == 1 and rows[0].sources == ("explicit", "goal_mention")
     assert manual is not None and manual.note in rows[0].detail
@@ -267,7 +268,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
         comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
     assert comms.registry.store.path.read_bytes() == before
     fresh = Comms(comms.root)
-    assert fresh.registry.require("owner").goal is None
+    assert fresh.registry.require("owner").goal == AbsentGoal()
     assert _rows(fresh, "peer")[0] == ()
     assert not fresh.relationships.store.path.exists()
 
@@ -275,7 +276,7 @@ def test_registry_write_failure_never_exposes_uncommitted_contact(
 def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     comms.owners.stop("owner")
     comms.registry.remove("owner")
     comms.registry.declare(
@@ -289,7 +290,7 @@ def test_reused_owner_incarnation_cannot_inherit_old_derived_contact(tmp_path: P
 def test_old_writer_text_change_drops_derived_links_without_erasing_goal(tmp_path: Path) -> None:
     comms = _wire(tmp_path)
     goal = comms.goals.update_goal("owner", SetGoalAction(text="@peer"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     path = comms.registry.store.path
     raw = json.loads(path.read_text())
     raw["threads"]["owner"]["goal"]["text"] = "No mention"

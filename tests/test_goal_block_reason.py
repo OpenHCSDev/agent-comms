@@ -19,7 +19,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_presentation import GoalExecution
 from agent_comms.goal_states import UnrecordedBlockGoal
-from agent_comms.goals import Goal
+from agent_comms.goals import AbsentGoal, Goal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
@@ -29,7 +29,7 @@ def _owner(tmp_path):
     comms = wire(tmp_path)
     comms.registry.declare(comms.registry.new_thread(name='worker', tags=frozenset(), worktree=str(tmp_path)))
     goal = comms.goals.update_goal("worker", SetGoalAction(text="Finish selected work"))
-    assert goal is not None
+    assert goal != AbsentGoal()
     return comms, goal
 
 

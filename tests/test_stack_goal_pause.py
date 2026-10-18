@@ -17,6 +17,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
+from agent_comms.goals import AbsentGoal
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("model_origin", [False, True])
@@ -209,7 +211,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     lambda: (
                         len(attempts()) >= (1 if model_origin else 2)
                         or (
-                            comms.registry.require("project").goal is not None
+                            comms.registry.require("project").goal != AbsentGoal()
                             and comms.registry.require("project").goal.state.declared_name
                             == "blocked"
                         )
@@ -279,7 +281,7 @@ async def test_mounted_owner_pause_preserves_success_and_explains_late_report(
                     )
                     assert result["toolName"] == "comms_set_goal" and not result["isError"]
                 await view.slash_command("/goal clear")
-                assert comms.registry.require("project").goal is None
+                assert comms.registry.require("project").goal == AbsentGoal()
                 assert app._exception is None
                 print(f"GOAL_OWNER_PAUSE_OK provider={provider} attempts={len(attempts())}")
         finally:

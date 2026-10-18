@@ -510,7 +510,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
     StandbyGoalAction,
 )
-from agent_comms.goals import Goal
+from agent_comms.goals import AbsentGoal, Goal
 from agent_comms.threads import Thread
 
 
@@ -620,7 +620,7 @@ class TestAgentTurn:
         ]
         assert len(failures) == 1 and failures[0].failure.detail == message
         goal = wired.registry.require("proj").goal
-        assert goal is not None and goal.state.declared_name == "blocked"
+        assert goal != AbsentGoal() and goal.state.declared_name == "blocked"
         assert goal.progress == "Backend turn failed; inspect local diagnostics before resuming."
         assert message not in goal.progress
         assert not wired.registry.require("proj").active_turn.executing
@@ -727,7 +727,7 @@ class TestAgentTurn:
         self._authorize_test_goal(agent, wired, original)
         await agent.turns.run_agent_turn("proj", "proj", "Continue working toward the active goal.")
         goal = wired.registry.require("proj").goal
-        assert goal is not None and goal.id == original.id
+        assert goal != AbsentGoal() and goal.id == original.id
         assert goal.state.declared_name == "blocked"
         assert "without assistant output or tool activity" in goal.progress
         assert "paused to avoid a continuation loop" not in goal.progress
@@ -787,7 +787,7 @@ class TestAgentTurn:
             await agent.turns.run_agent_turn("proj", "proj", "work")
         goal = wired.registry.require("proj").goal
         assert raced
-        assert goal is not None and goal.id == initial.id
+        assert goal != AbsentGoal() and goal.id == initial.id
         if outcome == "success":
             assert goal.state.declared_name == "blocked"
             assert "independently verified newer progress" in goal.progress
@@ -889,7 +889,7 @@ class TestAgentTurn:
         with pytest.raises(RequestError, match="Internal error"):
             await agent.turns.run_agent_turn("proj", "proj", "work")
         goal = wired.registry.require("proj").goal
-        assert goal is not None and goal.id == initial.id
+        assert goal != AbsentGoal() and goal.id == initial.id
         assert goal.state.declared_name == "blocked"
         assert goal.progress.startswith("independently verified newer progress\n\n")
         assert "inspect local diagnostics" in goal.progress
@@ -928,7 +928,7 @@ class TestAgentTurn:
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
         await agent.turns.run_agent_turn("proj", "proj", "Work toward the active goal")
         goal = wired.registry.require("proj").goal
-        assert goal is not None and goal.id == initial.id
+        assert goal != AbsentGoal() and goal.id == initial.id
         assert goal.state.declared_name == "active" and goal.progress == "Completed a verified step"
 
     async def test_goal_completion_and_provider_usage_settle_one_attempt(
@@ -1234,7 +1234,7 @@ class TestAgentTurn:
                         fact.goal.state.declared_name == "blocked"
                         for update in updates
                         for fact in facts(update.field_meta, GoalChangedUpdate)
-                        if fact.goal is not None
+                        if fact.goal != AbsentGoal()
                     )
                 )
                 await agent.turns.goals.retry_goal("proj", goal.id, blocked.revision)

@@ -25,6 +25,7 @@ from agent_comms.agent_backend import (
     WhenBusy,
 )
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.goals import AbsentGoal
 from agent_comms.pi_native_backend import PersistentPiSession, PiNativeBackend
 from agent_comms.queued_input import InitialInput
 from agent_comms.send_outcome import AuthorityChangedSend, GrantedSend
@@ -604,7 +605,7 @@ async def _mounted_send_now(
             comms = wire(root / "wire")
             await until(lambda: not view.queued_prompts and len(requests) == 3)
             goal = comms.registry.require("project").goal
-            assert goal is not None and goal.state.active, goal
+            assert goal != AbsentGoal() and goal.state.active, goal
             assert "User follow-up" in json.dumps(requests[1])
             assert "URGENT_INPUT" in json.dumps(requests[1])
             await view.slash_command("/goal clear")
