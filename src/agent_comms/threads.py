@@ -14,7 +14,7 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .thread_execution import ThreadExecution, NativeThreadExecution
 from .pi_vocabulary import (
-    SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField,
+    SERVICE_TIER_ENVIRONMENT, NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField,
 )
 from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
@@ -196,7 +196,7 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None, thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        self, *, model: str | None = None, thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
         return replace(
@@ -211,7 +211,7 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: type[ThinkingLevel],
+        self, *, model: str | None, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(

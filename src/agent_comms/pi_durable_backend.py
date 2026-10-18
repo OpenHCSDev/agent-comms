@@ -255,4 +255,4 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
             await child.request(SetThinkingLevel(level=thinking))
         state = await child.request(GetState())
         reported = state.model.require_selection(model if model is not None else state.model.display_name)
-        return reported.display_name, FieldCodec.encode(state.thinking_level)
+        return reported.display_name, state.thinking_level.wire_value()

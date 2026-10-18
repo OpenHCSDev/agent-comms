@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
 import os
 from pathlib import Path
 
@@ -29,7 +28,7 @@ class ThreadConfiguration:
             os.getpid(),
             thread.worktree,
             self.threads.resolve_thread_model(thread.name),
-            FieldCodec.encode(thread.thinking_level),
+            thread.thinking_level.wire_value(),
             thread.display_title,
             info.context_reading(),
         )

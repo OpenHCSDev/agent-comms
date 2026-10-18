@@ -14,7 +14,7 @@ class SpanAnswer(DeclaredFamily, affix="Answer"):
 
     @classmethod
     def public_title(cls) -> str:
-        return cls.require_name().replace("_", " ").title()
+        return cls.declared_name.replace("_", " ").title()
 
 
 class SpanKind(SpanAnswer):
@@ -99,12 +99,12 @@ class SpanQuestion(DeclaredFamily, affix="Question"):
 
     @classmethod
     def public_title(cls) -> str:
-        return cls.require_name().replace("_", " ").title()
+        return cls.declared_name.replace("_", " ").title()
 
     @classmethod
     def declaration(cls):
         return {"type": cls.primitive, "instructions": cls.instructions,
-                "criteria": {answer.require_name(): answer.criteria
+                "criteria": {answer.declared_name: answer.criteria
                              for answer in cls.answer_family.members_with(cls.answer_family)}}
 
     @classmethod

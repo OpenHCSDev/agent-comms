@@ -17,9 +17,8 @@ from .field_codec import FieldCodec
 from .launch_runtime import LaunchRuntime
 from .pi_vocabulary import (
     NoThinkingOverride,
+    ThinkingChoice,
     ThinkingLevel,
-    ThinkingLevelField,
-    ThinkingLevelValue,
 )
 
 
@@ -57,7 +56,7 @@ class OptionArgument(NativeArgument):
 class NamedOption(OptionArgument):
     @classmethod
     def flag(cls) -> str:
-        return "--" + cls.require_name().replace("_", "-")
+        return "--" + cls.declared_name.replace("_", "-")
 
 
 class ValueOption(OptionArgument):
@@ -129,15 +128,15 @@ class SelectedModel:
 
 @dataclass(frozen=True)
 class ThinkingArgument(NamedOption, ValueOption):
-    level: ThinkingLevelField
+    level: type[ThinkingLevel]
 
     @classmethod
     def from_text(cls, value: str) -> ThinkingArgument:
-        return cls(ThinkingLevelValue.decode(value))
+        return cls(ThinkingLevel.decode(value))
 
     @property
     def argv(self) -> tuple[str, ...]:
-        return self.flag(), ThinkingLevelValue.encode(self.level)
+        return self.flag(), self.level.wire_value()
 
 
 class SessionSelectionArgument:
@@ -282,7 +281,7 @@ class NativeArguments:
         return SelectedModel(provider, selected.removeprefix(provider + "/")).qualified
 
     @property
-    def thinking(self) -> type[ThinkingLevel]:
+    def thinking(self) -> type[ThinkingChoice]:
         return next((entry.level for entry in reversed(self.entries)
                      if isinstance(entry, ThinkingArgument)), NoThinkingOverride)
 
@@ -298,7 +297,7 @@ class NativeArguments:
             ModelArgument, *SelectedModel.decode(selected).arguments
         )
 
-    def with_thinking(self, selected: type[ThinkingLevel]) -> NativeArguments:
+    def with_thinking(self, selected: type[ThinkingChoice]) -> NativeArguments:
         return self.replace(ThinkingArgument, *selected.native_arguments(ThinkingArgument))
 
     def rpc(self) -> tuple[str, ...]:

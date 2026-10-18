@@ -86,7 +86,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     the existing registry acquires those declarations on decode or schema reads.
     """
 
-    declared_name: ClassVar[str | None]
+    declared_name: ClassVar[str]
     family_discriminator: ClassVar[str] = "kind"
     _family_root: ClassVar[type[DeclaredFamily] | None] = None
     _family_affix: ClassVar[str]
@@ -113,15 +113,8 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         return cast(type[Self], member)
 
     @classmethod
-    def require_name(cls) -> str:
-        name = cls.declared_name
-        if name is None:
-            raise ValueError(f"{cls.__name__} is an unnamed declaration.")
-        return name
-
-    @classmethod
     def names(cls) -> tuple[str, ...]:
-        return tuple(member.require_name() for member in cls.members_with(cls))
+        return tuple(member.declared_name for member in cls.members_with(cls))
 
     @classmethod
     def field_value(cls, value) -> type[Self]:

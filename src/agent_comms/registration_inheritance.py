@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from .pi_vocabulary import ThinkingLevel
+from .pi_vocabulary import ThinkingChoice
 
 
 class RegistrationInheritance[T](ABC):
@@ -45,11 +45,11 @@ class InheritPrevious[T](PredicateInheritance[T]):
         return True
 
 
-class InheritThinkingLevel(RegistrationInheritance[type[ThinkingLevel]]):
+class InheritThinkingLevel(RegistrationInheritance[type[ThinkingChoice]]):
     @classmethod
     def apply(
         cls,
-        incoming: type[ThinkingLevel],
-        previous: type[ThinkingLevel],
-    ) -> type[ThinkingLevel]:
+        incoming: type[ThinkingChoice],
+        previous: type[ThinkingChoice],
+    ) -> type[ThinkingChoice]:
         return incoming.applied(previous)
