@@ -11,6 +11,7 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.goal_actions import SetGoalAction
+from agent_comms.input_attempt import BoundUnknownInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
 from agent_comms.tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
@@ -25,18 +26,11 @@ from agent_comms.goal_waits import RecordedGoalWait
 def seed_unknown(comms, count, text):
     dispositions = InputDispositions(comms.root)
     rows = {
-        f"bus:{index}": {
-            "key": f"bus:{index}",
-            "sequence": index,
-            "owner": "b",
-            "claim_scope": index,
-            "target": "b",
-            "source_text": f"{index}: {text}",
-            "turn_id": "private-turn",
-            "native_id": "f" * 32,
-            "sent_digest": FieldCodec.encode(TextDigest.of("private-native-prompt")),
-            "kind": "bound_unknown",
-        }
+        f"bus:{index}": FieldCodec.encode(BoundUnknownInput(
+            key=f"bus:{index}", sequence=index, owner="b", claim_scope=index,
+            target="b", source_text=f"{index}: {text}", turn_id="private-turn",
+            native_id="f" * 32, sent_digest=TextDigest.of("private-native-prompt"),
+        ))
         for index in range(1, count + 1)
     }
     insert_inputs(comms.root, rows)
@@ -44,7 +38,10 @@ def seed_unknown(comms, count, text):
 
 
 @pytest.fixture
-def inbox_comms(comms):
+def inbox_comms(root):
+    from goal_owner_fixture import canonical_goal_wire
+
+    comms = canonical_goal_wire(root)
     for name in ("a", "b"):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
     return comms

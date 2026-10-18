@@ -76,13 +76,12 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         row = stored_inputs(inputs.root).lookup(key)
         assert row.origin == origin and row.source_text == command.user_text
         assert len(stored_inputs(inputs.root).rows) == 1 and list(comms.bus.full_history_page().messages) == before
-        from agent_comms.pi_commands import Prompt
+        from agent_comms.turn_context import UserFollowupSegment
         queued = agent.inputs.backend_inboxes['beta'].get_nowait()
-        queued.pop('_input_id')
-        native_prompt = Prompt.from_wire(queued)
-        assert native_prompt.message == 'User follow-up:\n' + command.user_text
-        contribution, = native_prompt.context_contributions
-        assert contribution.kind == 'user_followup'
+        assert queued.input_id.value == command.input_id
+        assert queued.content.text == 'User follow-up:\n' + command.user_text
+        contribution, = queued.content.contributions
+        assert contribution.kind is UserFollowupSegment
         assert row.context_provenance() in contribution.provenance
         native_id = "b" * 32
         sent = "User follow-up:\n" + command.user_text
@@ -94,8 +93,9 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
         terminal = stored_inputs(inputs.root).lookup(key)
         assert terminal.origin == origin
         assert terminal.has_started and terminal.source_text == command.user_text
-        facts = stored_inputs(inputs.root).compaction_material(comms.registry.require("beta"), (), None)[1]
-        assert facts[0].for_owner(comms.registry.require("beta"), comms.registry.snapshot()) == CurrentHumanInputTaskFact(terminal)
+        assert terminal.origin.retained_fact(terminal).for_owner(
+            comms.registry.require("beta"), comms.registry.snapshot()
+        ) == CurrentHumanInputTaskFact(terminal)
     finally:
         await agent.shutdown()
 
@@ -147,7 +147,7 @@ def test_historical_unknown_author_stays_neutral_and_human_scope_invalidates(tmp
 
 
 @pytest.mark.parametrize("state", [ActiveGoal(), PausedGoal(), CompletedGoal()])
-def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_path, state):
+async def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_path, state):
     comms, agent, _, _ = _owner(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     absent = capture(comms)
@@ -180,11 +180,12 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
             ownership.pop_all()
     assert stored_inputs(agent.inputs.dispositions.root).rows == {}
 
-    with _store_lock(comms._wire_lock_path):
-        with ExitStack() as ownership:
-            queued, _, _receipt = QueuedInput.capture(agent.inputs, "beta", text="Original", prompt="Original",
-                                            echo=True, images=(), controller=Client(), origin=restored, ownership=ownership)
-            ownership.pop_all()
+    async with QueuedInput.reserve(
+        agent.inputs, "beta", "beta", text="Original", prompt="Original",
+        echo=True, images=(), controller=Client(), origin=restored,
+    ) as reservation:
+        queued = reservation.item
+        reservation.release()
     assert stored_inputs(agent.inputs.dispositions.root).lookup(queued.key).origin == restored
     assert restored.applies(comms.registry.require("beta"), comms.registry.snapshot())
     current = comms.registry.require("beta")
@@ -196,7 +197,7 @@ def test_original_goal_checkpoint_survives_codec_and_refuses_changed_scope(tmp_p
         comms.registry.require("beta").require_goal_checkpoint(goal.checkpoint)
 
 
-def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tmp_path):
+async def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tmp_path):
     from agent_comms.task_sources import CorrectionTaskChange, UserTaskDrop, UserTaskSupersession
     from agent_comms.retained_task_facts import RetainedTaskFacts
     from agent_comms.threads import Thread
@@ -206,11 +207,12 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     comms.messaging.initialize_private_initial_protocol()
     origin = capture(comms)
     exact = 'Keep the original λ /source.\nNever replay UNKNOWN.'
-    with _store_lock(comms._wire_lock_path):
-        with ExitStack() as ownership:
-            queued, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                            echo=True, images=(), controller=Client(), origin=origin, ownership=ownership)
-            ownership.pop_all()
+    async with QueuedInput.reserve(
+        agent.inputs, "beta", "beta", text=exact, prompt=exact,
+        echo=True, images=(), controller=Client(), origin=origin,
+    ) as reservation:
+        queued = reservation.item
+        reservation.release()
     inputs = agent.inputs.dispositions
     row = stored_inputs(inputs.root).lookup(queued.key)
     original_inputs = inputs.path.read_bytes()
@@ -254,11 +256,12 @@ def test_direct_human_input_pin_shares_original_source_lineage_without_replay(tm
     assert inputs.path.read_bytes() == original_inputs
 
     # Same text, separately reserved original inputs never acquire one identity.
-    with _store_lock(comms._wire_lock_path):
-        with ExitStack() as ownership:
-            second, _, _receipt = QueuedInput.capture(agent.inputs, 'beta', text=exact, prompt=exact,
-                                            echo=True, images=(), controller=Client(), origin=origin, ownership=ownership)
-            ownership.pop_all()
+    async with QueuedInput.reserve(
+        agent.inputs, "beta", "beta", text=exact, prompt=exact,
+        echo=True, images=(), controller=Client(), origin=origin,
+    ) as reservation:
+        second = reservation.item
+        reservation.release()
     second_subject = stored_inputs(inputs.root).lookup(second.key).context_provenance()
     second_pin = comms.messaging.pin_input_constraint('beta', second_subject, worktree=origin.project)
     assert second_subject != subject

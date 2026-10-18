@@ -11,6 +11,7 @@ import pytest
 from agent_comms import field_codec
 from agent_comms.field_codec import FieldCodec
 from agent_comms.input_attempt import (
+    GoalInputDecision,
     BoundUnknownInput,
     InputAttempt,
     MissingInput,
@@ -99,20 +100,12 @@ def test_saved_discriminator_and_optional_notices_roundtrip_without_replay(tmp_p
     store = InputDispositions(tmp_path)
     from agent_comms.text_digest import TextDigest
 
-    saved = {
-        "key": "acp:old",
-        "sequence": None,
-        "owner": "worker",
-        "claim_scope": 1,
-        "target": "worker",
-        "source_text": "Retain me",
-        "turn_id": "turn",
-        "native_id": "a" * 32,
-        "sent_digest": FieldCodec.encode(TextDigest.of("Exact sent text")),
-        "kind": "bound_unknown",
-        "notice_dismissed": True,
-        "goal_reviews": {"goal": {"goal_revision": 7, "turn_id": "review"}},
-    }
+    saved = FieldCodec.encode(BoundUnknownInput(
+        key="acp:old", sequence=None, owner="worker", claim_scope=1,
+        target="worker", source_text="Retain me", turn_id="turn", native_id="a" * 32,
+        sent_digest=TextDigest.of("Exact sent text"), notice_dismissed=True,
+        goal_reviews={"goal": GoalInputDecision(goal_revision=7, turn_id="review")},
+    ))
     _insert_raw(store, "acp:old", saved)
     row = store.lookup("acp:old")
     assert isinstance(row, BoundUnknownInput) and not row.accepts_reservation
