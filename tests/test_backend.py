@@ -110,14 +110,15 @@ prompt_request = None
 _NATIVE_PROMPT_START = f"""\
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import answer_state, next_prompt, read_request, send
+from pi_stub_protocol import answer_state, answer_stats, next_prompt, read_request
 _raw_emit = emit
 def emit(value):
     message = value.get("message", {{}})
     if message.get("role") == "assistant":
         message.setdefault("content", [])
-    send(value, write=_raw_emit)
-answer_state({{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}})
+    _raw_emit(value)
+state_data = {{"nativeInputProofCapability": {json.dumps(CAPABILITY)}}}
+answer_state(state_data)
 prompt = next_prompt()
 emit({{"id": prompt["id"], "type": "response", "command": "prompt", "success": True}})
 emit({{"type": "message_start", "message": {{"role": "user",
@@ -473,7 +474,7 @@ for line in sys.stdin:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 import json, os, pathlib, sys, time
 from agent_comms.native_pi import CAPABILITY
 pathlib.Path({str(pid_file)!r}).write_text(str(os.getpid()))
@@ -585,7 +586,7 @@ time.sleep(60)
             f'''#!/usr/bin/env python3
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 import json, sys
 
 answer_state({{'nativeInputProofCapability':'pi-native-input-v1-live-only'}})
@@ -1126,7 +1127,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 import json, sys
 
 initial = {{"sessionId": "first", "sessionFile": "/tmp/first.jsonl",
@@ -1371,7 +1372,7 @@ echo '{"type":"response","command":"get_session_stats","success":true,"data":{"c
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 import json, sys, time
 
 answer_state({{"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
@@ -1609,25 +1610,23 @@ time.sleep(60)
         """Pi bounds its own compaction; Core's model-wait backstop does not abort it."""
         stub = _stub(
             tmp_path,
-            f"#!{sys.executable}\n"
-            + """\
+            f'''#!{sys.executable}
 import json, sys, time
 def emit(value):
     print(json.dumps(value), flush=True)
-"""
-            + _NATIVE_PROMPT_START
-            + """\
-emit({"type": "compaction_start", "reason": "threshold"})
+
+{_NATIVE_PROMPT_START}
+emit({{"type": "compaction_start", "reason": "threshold"}})
 time.sleep(0.6)
-emit({"type": "compaction_end", "reason": "threshold", "result": {"summary": "kept"},
-      "aborted": False, "willRetry": False})
-emit({"type": "message_update", "assistantMessageEvent": {"type": "text_delta", "delta": "ok"}})
-emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop",
-      "content": [{"type": "text", "text": "ok"}]}})
-emit({"type": "agent_settled"})
-emit({"type": "response", "command": "get_session_stats", "success": True,
-      "data": {"contextUsage": {}}})
-""",
+emit({{"type": "compaction_end", "reason": "threshold", "result": {{"summary": "kept"}},
+      "aborted": False, "willRetry": False}})
+emit({{"type": "message_update", "assistantMessageEvent": {{"type": "text_delta", "delta": "ok"}}}})
+emit({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop",
+      "content": [{{"type": "text", "text": "ok"}}]}}}})
+emit({{"type": "agent_settled"}})
+answer_state(state_data)
+answer_stats({{"contextUsage": {{}}}})
+''',
         )
 
         events = [
@@ -1653,10 +1652,11 @@ emit({"type": "response", "command": "get_session_stats", "success": True,
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request, answer_stats
 import json, sys, time
 
-answer_state({{"nativeInputProofCapability": "pi-native-input-v1-live-only"}})
+state_data = {{"nativeInputProofCapability": "pi-native-input-v1-live-only"}}
+answer_state(state_data)
 prompt = next_prompt()
 send({{"type": "compaction_start", "reason": "threshold"}})
 time.sleep(0.25)
@@ -1669,8 +1669,8 @@ send({{"type": "message_update", "assistantMessageEvent": {{"type": "text_delta"
 send({{"type": "message_end", "message": {{"role": "assistant", "stopReason": "stop",
       "content": [{{"type": "text", "text": "ok"}}]}}}})
 send({{"type": "agent_settled"}})
-send({{"type": "response", "command": "get_session_stats", "success": True,
-      "data": {{"contextUsage": {{}}}}}})
+answer_state(state_data)
+answer_stats({{"contextUsage": {{}}}})
 ''',
         )
         events = [
@@ -1745,8 +1745,6 @@ time.sleep(60)
                 '{"type":"message_end","message":{"role":"assistant","stopReason":"error",'
                 '"errorMessage":"provider unavailable"}}',
                 '{"type":"agent_settled"}',
-                '{"type":"response","command":"get_session_stats","success":true,"data":'
-                '{"contextUsage":{}}}',
             ]
         )
         stub = _stub(
@@ -1755,7 +1753,8 @@ time.sleep(60)
             + "import json, sys\n"
             + "def emit(value):\n    print(json.dumps(value), flush=True)\n"
             + _NATIVE_PROMPT_START
-            + f"for line in {rpc_lines!r}.splitlines():\n    emit(json.loads(line))\n",
+            + f"for line in {rpc_lines!r}.splitlines():\n    emit(json.loads(line))\n"
+            + "answer_state(state_data)\nanswer_stats({'contextUsage': {}})\n",
         )
         starts = []
 
@@ -1876,12 +1875,8 @@ emit({"type": "message_update", "assistantMessageEvent": {
     "type": "text_delta", "delta": "done after tool"}})
 emit({"type": "message_end", "message": {"role": "assistant", "stopReason": "stop"}})
 emit({"type": "agent_settled"})
-for line in sys.stdin:
-    command = read_request(line)["type"]
-    if command == "get_session_stats":
-        emit({"type": "response", "command": command, "success": True,
-              "data": {"contextUsage": {}}})
-        break
+answer_state(state_data)
+answer_stats({"contextUsage": {}})
 """,
         )
 
@@ -1986,7 +1981,7 @@ class TestNativeInputBinding:
         stub = _stub(tmp_path, f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, sys
 
@@ -1994,8 +1989,8 @@ state = read_state()
 send({{'type':'extension_ui_request', 'method':'setStatus', 'id':'startup-status',
       'statusKey':'startup', 'statusText':'Extension initialized'}})
 send({{'type':'agent_settled'}})
-send(state_response(state, {{'nativeInputProofCapability':'pi-native-input-v1-live-only'}}) | {{"id": 'unrelated-query'}})
-send(state_response(state, {{'nativeInputProofCapability':'pi-native-input-v1-live-only'}}))
+send(request_response(state, {{'nativeInputProofCapability':'pi-native-input-v1-live-only'}}) | {{"id": 'unrelated-query'}})
+send(request_response(state, {{'nativeInputProofCapability':'pi-native-input-v1-live-only'}}))
 prompt = next_prompt()
 
 send({{'type':'response','command':'prompt','id':prompt['id'],'success':True}})
@@ -2022,7 +2017,7 @@ for line in sys.stdin:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, select, sys
 
@@ -2059,7 +2054,7 @@ if select.select([sys.stdin], [], [], 0.3)[0]:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, os, signal, sys, time
 
@@ -2096,7 +2091,7 @@ while True: time.sleep(0.1)
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, os, signal, sys, time
 
@@ -2157,7 +2152,7 @@ while True: time.sleep(0.1)
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, sys
 state = read_state()
@@ -2167,7 +2162,7 @@ if case != "eof":
     data = "not-a-dict" if case == "invalid_data" else {{
         "nativeInputProofCapability":"pi-native-input-v1-live-only"
     }}
-    send(state_response(state, data) | {{"id": state["id"] if case != "wrong_id" else "foreign"}})
+    send(request_response(state, data) | {{"id": state["id"] if case != "wrong_id" else "foreign"}})
 ''',
         )
         events = [
@@ -2198,11 +2193,12 @@ if case != "eof":
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request, answer_stats
 
 import json, sys
 
-answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+state_data = {{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}
+answer_state(state_data)
 prompt = next_prompt()
 send({{"type":"response", "command":"prompt", "id":prompt["id"], "success":True}})
 send({{"type":"message_start", "message":{{"role":"user", "content":prompt["message"],
@@ -2226,8 +2222,8 @@ send({{"type":"message_end", "message":{{
     "role":"assistant", "content":[], "stopReason":"stop",
 }}}})
 send({{"type":"agent_settled"}})
-send({{"type":"response", "command":"get_session_stats", "success":True,
-       "data":{{"contextUsage":{{"tokens":33}}}}}})
+answer_state(state_data)
+answer_stats({{"contextUsage":{{"tokens":33}}}})
 ''',
         )
         queue = TurnInbox()
@@ -2254,11 +2250,12 @@ send({{"type":"response", "command":"get_session_stats", "success":True,
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request, answer_stats
 
 import json, sys
 
-answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+state_data = {{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}
+answer_state(state_data)
 prompt = next_prompt()
 send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
 send({{"type":"message_start","message":{{"role":"user", "content":prompt["message"],
@@ -2267,11 +2264,8 @@ send({{"type":"message_end","message":{{
     "role":"assistant", "content":[], "stopReason":"stop",
 }}}})
 send({{"type":"agent_settled"}})
-for line in sys.stdin:
-    request = read_request(line)
-    if request["type"] == "get_session_stats":
-        send({{"type":"response","command":"get_session_stats","success":True,"data":{{}}}})
-        break
+answer_state(state_data)
+answer_stats({{}})
 ''',
         )
         queue = TurnInbox()
@@ -2296,7 +2290,7 @@ for line in sys.stdin:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, select, sys
 
@@ -2325,7 +2319,7 @@ if select.select([sys.stdin], [], [], 0.2)[0]:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, select, sys
 state = read_state()
@@ -2368,7 +2362,7 @@ sys.exit(1)
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, select, sys, time
 state = read_state()
@@ -2427,13 +2421,13 @@ if select.select([sys.stdin], [], [], 0)[0]:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, select, sys, time
 state = read_state()
 
 time.sleep(0.12)
-send(state_response(state, {{"nativeInputProofCapability":
+send(request_response(state, {{"nativeInputProofCapability":
                   {CAPABILITY!r}, "sessionId":"saved",
                   "sessionFile":{str(session)!r}}}))
 if select.select([sys.stdin], [], [], 0.15)[0]:
@@ -2465,7 +2459,7 @@ if select.select([sys.stdin], [], [], 0.15)[0]:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, select, sys
 
@@ -2776,7 +2770,7 @@ for line in sys.stdin:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request
 
 import json, sys
 
@@ -2824,11 +2818,12 @@ send({{"type":"agent_settled"}})
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request, answer_stats
 
 import json, sys
 
-answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+state_data = {{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}
+answer_state(state_data)
 prompt = next_prompt()
 send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
 send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
@@ -2842,11 +2837,8 @@ send({{"type":"message_end","message":{{
     "role":"assistant","content":[],"stopReason":"stop",
 }}}})
 send({{"type":"agent_settled"}})
-for line in sys.stdin:
-    if read_request(line)["type"] == "get_session_stats":
-        send({{"type":"response","command":"get_session_stats","success":True,
-              "data":{{"contextUsage":{{}}}}}})
-        break
+answer_state(state_data)
+answer_stats({{"contextUsage":{{}}}})
 ''',
         )
         queue = TurnInbox()
@@ -2880,11 +2872,12 @@ for line in sys.stdin:
             f'''#!{sys.executable}
 import sys
 sys.path.insert(0, {str(Path(__file__).parent)!r})
-from pi_stub_protocol import send, answer_state, next_prompt, read_state, state_response, read_request
+from pi_stub_protocol import send, answer_state, next_prompt, read_state, request_response, read_request, answer_stats
 
 import json, pathlib, sys, time
 
-answer_state({{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+state_data = {{"nativeInputProofCapability":"pi-native-input-v1-live-only"}}
+answer_state(state_data)
 prompt = next_prompt()
 send({{"type":"response","command":"prompt","id":prompt["id"],"success":True}})
 send({{"type":"message_start","message":{{"role":"user","content":prompt["message"],
@@ -2898,11 +2891,8 @@ send({{"type":"message_end","message":{{
     "role":"assistant","content":[],"stopReason":"stop",
 }}}})
 send({{"type":"agent_settled"}})
-for line in sys.stdin:
-    if read_request(line)["type"] == "get_session_stats":
-        send({{"type":"response","command":"get_session_stats","success":True,
-              "data":{{"contextUsage":{{}}}}}})
-        break
+answer_state(state_data)
+answer_stats({{"contextUsage":{{}}}})
 ''',
         )
         queue = TurnInbox()
