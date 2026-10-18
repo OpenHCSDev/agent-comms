@@ -16,7 +16,6 @@ from acp.schema import PromptResponse
 from .acp_extension import (
     PromptRequest,
     InputDeliveryChangedUpdate,
-    InputStartedUpdate,
     QueueChangedUpdate,
     LiveQueueScope,
     QueueScope,
@@ -612,36 +611,17 @@ class InputDrain(InputObservation):
             update=(await self.queue_state(session_id)).acp_chunk(),
         )
 
-    async def emit_input_started(
-        self,
-        session_id: str,
-        text: str | None,
-        input_id: str | None = None,
-        source_scope: QueueScope = NoQueueScope(),
-        *,
-        native_id: str | None,
-        client: Any = None,
-    ) -> None:
-        scope = await self.queue_binding(session_id)
-        if not source_scope.current_for(scope):
-            scope = NoQueueScope()
-        revision = scope.start_revision(self, session_id)
-        await (client or self.runtime).session_update(
-            session_id=session_id,
-            update=InputStartedUpdate(input_id, text, scope, revision, native_id).acp_chunk(),
-        )
-
     async def emit_input_disposition(
         self, session_id: str, row: InputAttempt, client: Any = None
     ) -> None:
-        await self.emit_input_delivery_changed(session_id, input_id=row.public_id, client=client)
+        await self.emit_input_delivery_changed(session_id, public_id=row.public_id, client=client)
 
     async def emit_input_delivery_changed(
-        self, session_id: str, *, input_id: str | None = None, client: Any = None
+        self, session_id: str, *, public_id: str | None = None, client: Any = None
     ) -> None:
         await (client or self.runtime).session_update(
             session_id=session_id,
-            update=InputDeliveryChangedUpdate(input_id).acp_chunk(),
+            update=InputDeliveryChangedUpdate(public_id).acp_chunk(),
         )
 
     def input_keys(self, session_id: str) -> frozenset[str]:
@@ -781,45 +761,9 @@ class InputDrain(InputObservation):
             self._idle_private_revisions.clear()
             self._repeat_private_observations.clear()
 
-    async def input_started(
-        self,
-        session_id: str,
-        input_id: str | None,
-        source_scope: LiveQueueScope,
-    ) -> None:
-        original = self.first_sources[session_id]
-        input_id = input_id if input_id is not None else original.accepted_id
-        source = self.following_sources.get(session_id, {}).get(input_id)
-        started_keys = original.keys if input_id is None else source.keys if source else ()
-        document = await Coordination.run_worker(partial(self.dispositions.read, (*started_keys, *original.notice_keys)))
-        for key in started_keys:
-            row = document.rows.get(key)
-            if row is not None and not row.unresolved:
-                await self.emit_input_disposition(session_id, row)
-        row = document.lookup(started_keys[0] if len(started_keys) == 1 else None)
-        if input_id is None and original.notice_keys:
-            row = document.lookup(original.notice_keys[0])
-        row = row.require_started(source_scope.claimed_generation)
-        if input_id is None and original.notice_keys:
-            input_id = row.public_id
-        item = self.queued_inputs.get(session_id, {}).get(input_id or "")
-        text = await item.started(self) if item else original.notice_text if input_id == row.public_id else None
-        await self.emit_input_started(
-            session_id,
-            text,
-            input_id,
-            source_scope=source_scope,
-            native_id=row.native_id,
-        )
-        self.queued_inputs.get(session_id, {}).pop(input_id or "", None)
-        await self.emit_queue_state(session_id)
-
-    async def input_refused(self, session_id: str, input_id: str | None) -> None:
-        if input_id is None:
-            return
+    async def input_refused(self, session_id: str, input_id: str) -> None:
         source = self.following_sources.get(session_id, {}).pop(input_id, None)
         if source is not None:
-            # Native write was refused; keep the durable notice, never replay it.
             await self.emit_input_delivery_changed(session_id)
         item = self.queued_inputs.get(session_id, {}).pop(input_id, None)
         if item is not None:
