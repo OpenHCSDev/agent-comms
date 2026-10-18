@@ -12,7 +12,7 @@ from typing import ClassVar
 from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
-from agent_comms.goals import Goal
+from agent_comms.goals import AbsentGoal, Goal, ThreadGoal
 from agent_comms.goal_presentation import ThreadGoalExecution, GoalSnapshot
 
 
@@ -27,7 +27,7 @@ class OwnerGoalSnapshot(GoalSnapshot):
         """Decode the owner's ``goal_snapshot`` reply once, at the socket boundary."""
         raw_goal, raw_execution = result["goal"], result["goalExecution"]
         return cls(
-            FieldCodec.decode(Goal, raw_goal) if raw_goal is not None else None,
+            FieldCodec.decode(ThreadGoal, raw_goal),
             FieldCodec.decode(ThreadGoalExecution, raw_execution),
             decode_updates(result["_meta"]),
         )
@@ -38,11 +38,11 @@ class GoalDisplay(DeclaredFamily):
 
     @property
     @abstractmethod
-    def snapshot(self) -> Goal | None: ...
+    def snapshot(self) -> ThreadGoal: ...
 
     @property
     def visible(self) -> bool:
-        return self.snapshot is not None
+        return self.snapshot.fold(lambda goal: True, lambda: False)
 
     @abstractmethod
     def heading(self, execution: ThreadGoalExecution) -> str: ...
@@ -57,16 +57,16 @@ class GoalDisplay(DeclaredFamily):
         return str(error)
 
     @staticmethod
-    def current(goal: Goal | None) -> "GoalDisplay":
-        return NoGoal() if goal is None else ShowingGoal(goal)
+    def current(goal: ThreadGoal) -> "GoalDisplay":
+        return goal.fold(ShowingGoal, NoGoal)
 
 
 @dataclass(frozen=True)
 class NoGoal(GoalDisplay):
     can_control: ClassVar[bool] = False
     @property
-    def snapshot(self) -> None:
-        return None
+    def snapshot(self) -> AbsentGoal:
+        return AbsentGoal()
 
     def heading(self, execution: ThreadGoalExecution) -> str:
         return "No current goal"
@@ -99,11 +99,11 @@ class ShowingGoal(GoalDisplay):
 
 @dataclass(frozen=True)
 class GoalUnavailable(GoalDisplay):
-    last_confirmed: Goal | None
+    last_confirmed: ThreadGoal
     can_control: ClassVar[bool] = False
 
     @property
-    def snapshot(self) -> Goal | None:
+    def snapshot(self) -> ThreadGoal:
         return self.last_confirmed
 
     @property
@@ -112,4 +112,7 @@ class GoalUnavailable(GoalDisplay):
 
     def heading(self, execution: ThreadGoalExecution) -> str:
         # A failed read says nothing about why; the session's own state explains it.
-        return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed else "Goal state unavailable"
+        return self.last_confirmed.fold(
+            lambda goal: "Goal state unavailable · last confirmed snapshot",
+            lambda: "Goal state unavailable",
+        )

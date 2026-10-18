@@ -16,6 +16,7 @@ from .errors import RelationViolationError
 
 if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
+    from .goals import Goal
     from .input_drain import InputDrain
     from .thread_identity import OwnerIdentity
     from .turn_runner import TurnRunner
@@ -93,8 +94,10 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.active_goal
-                if goal is not None:
-                    pending = [turn for turn in pending if turn.goal_id == goal.id]
+                pending = goal.fold(
+                    lambda active: [turn for turn in pending if turn.goal_id == active.id],
+                    lambda: pending,
+                )
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -111,18 +114,24 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
                 except RequestError as error:
-                    if goal is None:
-                        raise
+
+                    def unowned() -> "Goal":
+                        raise error
+
+                    started = goal.fold(lambda active: active, unowned)
                     pending[0].require_dependency_wake(error)
-                    await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
-                        owner.name,
-                        started_goal=goal,
-                        expected_worktree=owner.worktree,
-                        diagnostic=(
-                            "Standby wake launch authority unavailable; inspect the UNKNOWN "
-                            "input before explicit Retry. No input was replayed."
-                        ),
-                    ))
+                    await Coordination.run_worker(
+                        partial(
+                            inputs.comms.goals.block_goal_after_failed_turn,
+                            owner.name,
+                            started_goal=started,
+                            expected_worktree=owner.worktree,
+                            diagnostic=(
+                                "Standby wake launch authority unavailable; inspect the UNKNOWN "
+                                "input before explicit Retry. No input was replayed."
+                            ),
+                        )
+                    )
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)

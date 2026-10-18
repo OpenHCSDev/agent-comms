@@ -16,7 +16,14 @@ from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
 from .goal_history import GoalHistoryEntry
-from .goal_waits import GoalInputReview, GoalWait, GoalWaits, NoGoalWait, StandbyReview
+from .goal_waits import (
+    GoalInputReview,
+    GoalWait,
+    GoalWaits,
+    NoGoalWait,
+    RecordedGoalWait,
+    StandbyReview,
+)
 from .registration import Registration
 from .agent_activity import AgentActivity
 
@@ -24,8 +31,9 @@ if TYPE_CHECKING:
     from .agent_events import GoalChanged
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
+    from .registry_document import RegistrySnapshot
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution, GoalWaitTarget
-from .goals import Goal
+from .goals import Goal, ThreadGoal
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
@@ -45,7 +53,7 @@ class Goals:
         self.bus = bus
         self.agents = agents
         self._wire_lock_path = root / "wire"
-        self.waits = GoalWaits.at(root)
+        self.waits: GoalWaits = GoalWaits.at(root)
         self.goal_store: GoalAttemptStore | None = None
 
     @cached_property
@@ -207,8 +215,9 @@ class Goals:
             return self.registry.goal_history(name, goal_id=goal_id)
 
     def goal_wait(self, name: str) -> GoalWait:
-        goal = self.registry.require(name).goal
-        return self.waits.for_goal(goal, self.waits.read()) if goal is not None else NoGoalWait()
+        return self.registry.require(name).goal.fold(
+            lambda goal: self.waits.for_goal(goal, self.waits.read()), NoGoalWait
+        )
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Release one stranded standby without replaying a dependency input.
@@ -223,37 +232,33 @@ class Goals:
             owner = snapshot.threads.get(canonical)
             if owner is None or self.agents.is_working(owner.incarnation, snapshot):
                 return ()
-            goal = owner.active_goal
-            if goal is None:
-                return ()
-            waits = self.waits
-            rows = waits.read()
-            wait = rows.get(goal.id)
-            if (
-                wait is None
-                or not wait.current_for(goal, owner.incarnation.require_recorded())
-            ):
-                return ()
-            closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot, self.agents)
-            if not closed:
-                return ()
-            # An unreadable bus raises to the drain loop, which records it as
-            # the owner's visible drain diagnostic; it never proves silence.
-            if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
-                return ()
-            names = ", ".join(f"@{member}" for member in closed)
-            note = (
-                f"Dependency wait group ({names}) has no independent worker. "
-                "Standby was released; inspect dependencies and continue useful work."
+            return owner.active_goal.fold(
+                lambda goal: self._release_closed_wait(snapshot, canonical, owner, goal), tuple
             )
-            progress = f"{goal.progress}\n\n{note}" if goal.progress else note
-            self.registry.register(
-                replace(owner, goal=replace(goal, progress=progress, revision=goal.revision + 1)),
-                snapshot.statuses[canonical],
-            )
-            if not waits.clear(goal.id, wait_id=wait.wait_id):
-                return ()
-            return closed
+
+    def _release_closed_wait(
+        self, snapshot: RegistrySnapshot, canonical: str, owner: Thread, goal: Goal
+    ) -> tuple[str, ...]:
+        rows = self.waits.read()
+        wait = rows.get(goal.id)
+        if wait is None or not wait.current_for(goal, owner.incarnation.require_recorded()):
+            return ()
+        closed = GoalWaits.closed_wait_group(canonical, wait.targets, rows, snapshot, self.agents)
+        if not closed:
+            return ()
+        # An unreadable bus raises to the drain loop, which records it as
+        # the owner's visible drain diagnostic; it never proves silence.
+        if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
+            return ()
+        names = ", ".join(f"@{member}" for member in closed)
+        note = (
+            f"Dependency wait group ({names}) has no independent worker. "
+            "Standby was released; inspect dependencies and continue useful work."
+        )
+        self.registry.register(replace(owner, goal=goal.noted(note)), snapshot.statuses[canonical])
+        if not self.waits.clear(goal.id, wait_id=wait.wait_id):
+            return ()
+        return closed
 
     def release_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
         """Release waits after the latest exact, still-idle child turn.
@@ -294,36 +299,44 @@ class Goals:
                 owner = snapshot.threads.get(snapshot.canonical_name(wait.owner.name))
                 if owner is None:
                     continue
-                goal = owner.active_goal
-                if (
-                    goal is None
-                    or goal.id != goal_id
-                    or not wait.current_for(goal, owner.incarnation.require_recorded())
-                    or any(
-                        self.agents.is_working(target.incarnation, snapshot)
-                        for target in wait.targets
+                released.extend(
+                    owner.active_goal.matching(goal_id).fold(
+                        lambda goal: self._release_finished_wait(
+                            snapshot, canonical, owner, goal, wait
+                        ),
+                        tuple,
                     )
-                ):
-                    continue
-                if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
-                    continue
-                diagnostic = (
-                    f"Declared dependency @{canonical} finished without a qualifying direct "
-                    "reply, and no declared dependency has an active turn. "
-                    "Standby was released; inspect messages and UNKNOWN inputs, then "
-                    "continue independent work or redelegate. No input was replayed."
                 )
-                progress = f"{goal.progress}\n\n{diagnostic}" if goal.progress else diagnostic
-                # Persist the explanation before clearing the wait. A crash
-                # between these writes leaves the active goal in standby;
-                # the periodic closed-wait check can release it later.
-                continued_goal = replace(goal, progress=progress, revision=goal.revision + 1)
-                self.registry.register(
-                    replace(owner, goal=continued_goal), snapshot.statuses[owner.name]
-                )
-                self.waits.clear(goal.id, wait_id=wait.wait_id)
-                released.append(owner.name)
             return tuple(released)
+
+    def _release_finished_wait(
+        self,
+        snapshot: RegistrySnapshot,
+        canonical: str,
+        owner: Thread,
+        goal: Goal,
+        wait: RecordedGoalWait,
+    ) -> tuple[str, ...]:
+        if not wait.current_for(goal, owner.incarnation.require_recorded()) or any(
+            self.agents.is_working(target.incarnation, snapshot) for target in wait.targets
+        ):
+            return ()
+        if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
+            return ()
+        diagnostic = (
+            f"Declared dependency @{canonical} finished without a qualifying direct "
+            "reply, and no declared dependency has an active turn. "
+            "Standby was released; inspect messages and UNKNOWN inputs, then "
+            "continue independent work or redelegate. No input was replayed."
+        )
+        # Persist the explanation before clearing the wait. A crash
+        # between these writes leaves the active goal in standby;
+        # the periodic closed-wait check can release it later.
+        self.registry.register(
+            replace(owner, goal=goal.noted(diagnostic)), snapshot.statuses[owner.name]
+        )
+        self.waits.clear(goal.id, wait_id=wait.wait_id)
+        return (owner.name,)
 
     def goal_execution(self, name: str) -> ThreadGoalExecution:
         return self._goal_snapshot(name).execution
@@ -353,9 +366,8 @@ class Goals:
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""
-        goal = self.registry.require(name).active_goal
-        return bool(
-            goal is not None and self.waits.clear(goal.id, wait_id=wait_id)
+        return self.registry.require(name).active_goal.fold(
+            lambda goal: self.waits.clear(goal.id, wait_id=wait_id), lambda: False
         )
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
@@ -367,19 +379,21 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             owner.require_registry(self.registry)
             current = self.registry.require(owner.thread.name)
-            goal = current.continuation_goal(owner.thread)
-            if goal is None:
+            return current.continuation_goal(owner.thread).fold(
+                lambda goal: self._consume_reply(current, reference, goal), lambda: False
+            )
+
+    def _consume_reply(self, current: Thread, reference: MessageReference, goal: Goal) -> bool:
+        wait = self.waits.for_goal(goal, self.waits.read())
+        if not wait.owner_matches(current.incarnation.require_recorded()):
+            return False
+        with self.bus.log.certified_read() as source:
+            original = source.delivery(reference.seq)
+            if original.message.reference != reference:
+                raise ValueError("Dependency reply source reference changed.")
+            if not wait.matches(original, current.incarnation.require_recorded()):
                 return False
-            wait = self.waits.for_goal(goal, self.waits.read())
-            if not wait.owner_matches(current.incarnation.require_recorded()):
-                return False
-            with self.bus.log.certified_read() as source:
-                original = source.delivery(reference.seq)
-                if original.message.reference != reference:
-                    raise ValueError("Dependency reply source reference changed.")
-                if not wait.matches(original, current.incarnation.require_recorded()):
-                    return False
-            return wait.consume_reply(self.waits, goal.id)
+        return wait.consume_reply(self.waits, goal.id)
 
     def update_goal(
         self,
@@ -387,7 +401,7 @@ class Goals:
         action: GoalAction,
         *,
         actor: type = RuntimeInvocable,
-    ) -> Goal | None:
+    ) -> ThreadGoal:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
@@ -403,18 +417,23 @@ class Goals:
         started_goal: Goal,
         expected_worktree: str,
         diagnostic: str,
-    ) -> Goal | None:
+    ) -> ThreadGoal:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            current = thread.goal_for(started_goal.id)
-            if thread.worktree != expected_worktree or current is None:
+            if thread.worktree != expected_worktree:
                 return thread.goal
-            blocked = current.after_failed_turn(diagnostic)
-            if blocked is current:
-                return current
+            return thread.goal_for(started_goal.id).fold(
+                lambda current: self._publish_blocked(
+                    thread, current, current.after_failed_turn(diagnostic)
+                ),
+                lambda: thread.goal,
+            )
+
+    def _publish_blocked(self, thread: Thread, current: Goal, blocked: Goal) -> Goal:
+        if blocked is not current:
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
-            return blocked
+        return blocked
 
     def block_unverified_goal_completion(
         self,
@@ -423,15 +442,12 @@ class Goals:
         expected_goal: Goal,
         expected_worktree: str,
         diagnostic: str,
-    ) -> Goal | None:
+    ) -> ThreadGoal:
         """Revoke a provisional completion after the provider turn failed."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            current = thread.goal
-            if thread.worktree != expected_worktree or current is None or current != expected_goal:
-                return current
-            blocked = current.after_unverified_completion(diagnostic)
-            if blocked is current:
-                return current
-            self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
-            return blocked
+            if thread.worktree != expected_worktree or thread.goal != expected_goal:
+                return thread.goal
+            return self._publish_blocked(
+                thread, expected_goal, expected_goal.after_unverified_completion(diagnostic)
+            )

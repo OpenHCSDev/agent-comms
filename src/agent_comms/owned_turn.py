@@ -120,8 +120,8 @@ class OwnedTurn:
                 return
         elif not wait.allows_routed_input() and not self.original_owner_input:
             return
-        if self.original_owner_input and self.original_goal_id != (
-            active_goal.id if active_goal is not None else None
+        if self.original_owner_input and self.original_goal_id != active_goal.fold(
+            lambda goal: goal.id, lambda: None
         ):
             raise RequestError.invalid_params({"reason": "input_authority_changed"})
         self.goal_permit: LaunchPermit | None = None
@@ -140,20 +140,11 @@ class OwnedTurn:
             self.lease_cleanup, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
-        active_goal = self.thread.active_goal
-        if self.autonomous_goal and active_goal is None:
+        if not self.thread.active_goal.fold(
+            lambda goal: self.original_owner_input or self._reserve_goal(permits),
+            lambda: not self.autonomous_goal,
+        ):
             return False
-        if active_goal is not None and not self.original_owner_input:
-            self.goal_permit = TurnGoalAccount.reserve(
-                owner=self.thread,
-                comms=self.runner.comms,
-                autonomous=self.autonomous_goal,
-            )
-            if self.goal_permit is None:
-                return False
-            permits.callback(
-                self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
-            )
         self.input_cleanup = AsyncExitStack()
         resources.push_async_callback(self.input_cleanup.aclose)
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
@@ -230,14 +221,25 @@ class OwnedTurn:
             self.context = self.context.prepend(ReplyRouteSegment.capture(
                 (OwnerProvenance(self.thread.incarnation, self.turn_id),), targets=response_targets))
 
+    def _reserve_goal(self, permits: ExitStack) -> bool:
+        """Reserve this turn's launch permit on the active goal; False when refused."""
+        self.goal_permit = TurnGoalAccount.reserve(
+            owner=self.thread, comms=self.runner.comms, autonomous=self.autonomous_goal
+        )
+        if self.goal_permit is None:
+            return False
+        permits.callback(
+            self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
+        )
+        return True
+
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
-        if self.original_owner_input:
-            permission = OwnerGoalPermission(self.thread.goal)
-        elif active_goal := self.thread.active_goal:
-            permission = ContinuationGoalPermission(active_goal)
-        else:
-            permission = InactiveGoalPermission()
+        permission = (
+            OwnerGoalPermission(self.thread.goal)
+            if self.original_owner_input
+            else self.thread.active_goal.fold(ContinuationGoalPermission, InactiveGoalPermission)
+        )
         if self.original_owner_input:
             source_type = OwnerOriginalInput
         elif not self.origins:

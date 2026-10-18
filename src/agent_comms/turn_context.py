@@ -14,7 +14,7 @@ from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Sha256Text
 from .message_reference import MessageReference
-from .goals import Goal
+from .goals import AbsentGoal, Goal
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
 from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
@@ -910,12 +910,17 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.active_goal if relation.relevance.grants(GoalShown) else None
+        shown = view.thread.active_goal if relation.relevance.grants(GoalShown) else AbsentGoal()
         return cls(
             view.thread.name,
             relation.relevance,
             relation.note,
-            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal is not None else None,
+            shown.fold(
+                lambda goal: goal.instructions(
+                    goal.order.todos(goals, view.thread.incarnation, goal.id)
+                ),
+                lambda: None,
+            ),
         )
 
 

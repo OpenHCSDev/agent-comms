@@ -46,7 +46,7 @@ from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
-from .goals import Goal, OrderCheck
+from .goals import Goal, OrderCheck, ThreadGoal
 from .message_reference import MessageReference
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
@@ -128,7 +128,7 @@ class ProjectSet(ToolResult):
 
 @dataclass(frozen=True)
 class GoalSet(ToolResult):
-    goal: Goal | None
+    goal: ThreadGoal
     instruction: str
 
 
@@ -139,7 +139,7 @@ class GoalProgress(ToolResult, GoalSnapshot):
 
 @dataclass(frozen=True)
 class GoalRead(ToolResult):
-    goal: Goal | None
+    goal: ThreadGoal
 
 
 @dataclass(frozen=True)
@@ -680,9 +680,8 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal_for(goal_id)
-        if current is None:
-            raise ValueError("This goal cannot be resumed; refresh its state.")
+        thread = comms.registry.require(name)
+        current = thread.goal_for(goal_id).fold(lambda goal: goal, self.unresumable)
         current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
@@ -695,9 +694,15 @@ class CommsResumeGoalTool(ThreadToolRequest):
                 progress=progress,
             ),
         )
-        if goal is None or not goal.state.active or goal.progress != progress:
+        if not goal.fold(
+            lambda resumed: resumed.state.active and resumed.progress == progress, lambda: False
+        ):
             raise ValueError("Goal changed during resume; refresh its state.")
         return GoalRead(goal)
+
+    @staticmethod
+    def unresumable() -> Goal:
+        raise ValueError("This goal cannot be resumed; refresh its state.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -781,7 +786,7 @@ class CommsOrderTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
         goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
-        return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
+        return ProblemOrdered(goal.require_set(), comms.goals.todos.get(self.order.problem))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -822,8 +827,11 @@ class CommsOrderCheckTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         todo = comms.goals.todos.get(self.problem)
         actor = comms.registry.require(caller.name).incarnation
-        changed = comms.goals.change_problem(self.problem, CorrectCheckTodo(
-            todo.revision, actor, todo.order.check, self.check, self.why), caller.name)
+        changed = comms.goals.change_problem(
+            self.problem,
+            CorrectCheckTodo(todo.revision, actor, todo.order.check, self.check, self.why),
+            caller.name,
+        )
         return TodoChanged(changed, changed.strike_count)
 
 

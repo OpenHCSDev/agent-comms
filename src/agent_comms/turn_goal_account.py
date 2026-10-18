@@ -18,12 +18,13 @@ from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import GoalAttemptError, GoalAttemptStore, LaunchPermit, StaleAttemptError
 from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
+from .goals import AbsentGoal
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goals import Goal
+    from .goals import Goal, ThreadGoal
     from .pi_payloads import PiUsage
     from .thread_identity import TurnId
     from .threads import Thread
@@ -126,20 +127,23 @@ class TurnGoalAccount:
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal = self.comms.registry.require(self.thread_name).goal
-        goal_id = goal.id if goal is not None else None
-        permit = self.originated.get(goal_id)
-        if (
-            permit is None
-            and self.permit is not None
-            and goal_id == self.permit.reservation.goal_id
-        ):
-            permit = self.permit
+        permit = goal.fold(self._permit_for, lambda: None)
         if permit is not None:
             permit.record_provider_usage(
                 self.comms.goals.open_goal_store(), str(event.response_id), event.usage.to_wire()
             )
         else:
             self.unattributed_usage.append((str(event.response_id), event.usage))
+
+    def _permit_for(self, goal: Goal):
+        permit = self.originated.get(goal.id)
+        if (
+            permit is None
+            and self.permit is not None
+            and goal.id == self.permit.reservation.goal_id
+        ):
+            return self.permit
+        return permit
 
     def tool_ended(self, event: events.ToolEnd) -> None:
         if event.ok:
@@ -148,43 +152,52 @@ class TurnGoalAccount:
             return
         with _store_lock(self.comms._wire_lock_path):
             owner = self.comms.registry.snapshot().require(self.owner.name)
-            goal = owner.goal
-            if goal is None or goal.id in self.originated:
-                return
-            store = self.comms.goals.open_goal_store()
-            self.originated[goal.id] = None
-            generation = store.require_generation(goal.id)
-            generation.lifecycle.require_ready()
-            grant = self.comms.goals.ready_goal_grant_locked(
-                owner, self.lease.claimed_generation, generation,
-            )
-            permit = store.claim_launch(
-                store.reserve(goal.id, generation.number, ready_grant=grant)
-            )
+            origin = owner.goal.fold(lambda goal: self._reserve_origin(owner, goal), lambda: None)
+        if origin is None:
+            return
+        goal_id, store, permit = origin
         self.claims.callback(permit.retire_unverified, store)
-        self.originated[goal.id] = permit
+        self.originated[goal_id] = permit
         for response_id, usage in self.unattributed_usage:
             permit.record_provider_usage(store, response_id, usage.to_wire())
         self.unattributed_usage.clear()
-        self.pending_origins[self.thread_name] = goal.id
+        self.pending_origins[self.thread_name] = goal_id
+
+    def _reserve_origin(self, owner, goal: Goal):
+        """The goal this turn set, reserved once under the wire lock."""
+        if goal.id in self.originated:
+            return None
+        store = self.comms.goals.open_goal_store()
+        self.originated[goal.id] = None
+        generation = store.require_generation(goal.id)
+        generation.lifecycle.require_ready()
+        grant = self.comms.goals.ready_goal_grant_locked(
+            owner, self.lease.claimed_generation, generation
+        )
+        return (
+            goal.id,
+            store,
+            store.claim_launch(store.reserve(goal.id, generation.number, ready_grant=grant)),
+        )
 
     def block_current(self, diagnostic: str) -> None:
         self.comms.goals.block_goal_after_failed_turn(
             self.thread_name,
-            started_goal=self.owner.goal,
+            started_goal=self.owner.require_goal(),
             expected_worktree=self.owner.worktree,
             diagnostic=diagnostic,
         )
 
-    def current_active_goal(self) -> Goal | None:
+    def current_active_goal(self) -> ThreadGoal:
         if self.permit is None:
-            return None
+            return AbsentGoal()
         owner = self.comms.registry.require(self.thread_name)
         return owner.continuation_goal(self.owner)
 
     def done(self, event: events.Done) -> None:
-        if self.current_active_goal() is None:
-            return
+        self.current_active_goal().fold(lambda goal: self._judge(event), lambda: None)
+
+    def _judge(self, event: events.Done) -> None:
         if not event.ok:
             self.block_current("Backend turn failed; inspect local diagnostics before resuming.")
         elif self.productive_tool is None and not str(event.text or "").strip():
@@ -196,14 +209,25 @@ class TurnGoalAccount:
     def settle_original(self, terminal: events.Done | None) -> None:
         if self.permit is None:
             return
-        if terminal is None and self.current_active_goal() is not None:
-            self.block_current("Backend turn ended without a result; inspect local diagnostics.")
+        if terminal is None:
+            self.current_active_goal().fold(
+                lambda goal: self.block_current(
+                    "Backend turn ended without a result; inspect local diagnostics."
+                ),
+                lambda: None,
+            )
         store = self.comms.goals.open_goal_store()
-        current = self.comms.registry.require(self.thread_name).goal_for(self.owner.goal.id)
+        permit = self.permit
+        current = self.comms.registry.require(self.thread_name).goal_for(
+            self.owner.require_goal().id
+        )
         if terminal is not None and terminal.ok:
-            if current is not None:
-                result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
-                result.dispatch_sync(current.state)
+            current.fold(
+                lambda goal: VerifiedGoalSettlement(store, permit, goal, self.turn).dispatch_sync(
+                    goal.state
+                ),
+                lambda: None,
+            )
         if self.permit.has_verified_progress(store):
             return
         snapshot = self.comms.registry.snapshot()
@@ -212,7 +236,7 @@ class TurnGoalAccount:
             observation = FailedTurnObservation.from_terminal(
                 self.permit.reservation,
                 owner=self.owner,
-                goal=self.owner.goal,
+                goal=self.owner.require_goal(),
                 lease=self.lease,
                 turn_id=self.turn.value,
                 claim_scope=self.lease.claimed_generation,
@@ -226,8 +250,10 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        if current is not None:
-            self.block_current("Goal turn ended without verified terminal progress.")
+        current.fold(
+            lambda goal: self.block_current("Goal turn ended without verified terminal progress."),
+            lambda: None,
+        )
 
     def finish(self, terminal: events.Done | None) -> None:
         """Settle all original grants once from the actual producer terminal event."""
@@ -236,9 +262,12 @@ class TurnGoalAccount:
             current = self.comms.registry.require(self.thread_name).goal_for(goal_id)
             store = self.comms.goals.open_goal_store()
             if terminal is not None and terminal.ok:
-                if current is not None:
-                    result = OriginGoalSettlement(store, permit, current, self.turn)
-                    result.dispatch_sync(current.state)
+                current.fold(
+                    lambda goal: OriginGoalSettlement(store, permit, goal, self.turn).dispatch_sync(
+                        goal.state
+                    ),
+                    lambda: None,
+                )
             if permit is None or not permit.has_verified_progress(store):
                 if permit is not None:
                     with suppress(StaleAttemptError):
@@ -253,9 +282,11 @@ class TurnGoalAccount:
                             expected_generation=generation.number,
                             attempt_id=generation.attempt_id,
                         )
-                if current is not None:
-                    FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync(
-                        current.state
-                    )
+                current.fold(
+                    lambda goal: FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(
+                        goal.state
+                    ),
+                    lambda: None,
+                )
             if self.pending_origins.get(self.thread_name) == goal_id:
                 self.pending_origins.pop(self.thread_name, None)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from collections.abc import Callable
 from typing import TYPE_CHECKING, ClassVar, Literal
 
 from abc import abstractmethod
@@ -20,7 +21,11 @@ from .goal_states import ActiveGoal, GoalState
 
 if TYPE_CHECKING:
     from .goal_management import Goals
+    from .retained_task_facts import GoalTaskFact
+    from .task_sources import TaskScope
+    from .threads import Thread
     from .todos import Todo
+    from .turn_context import GoalSegment
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -351,6 +356,10 @@ class ThreadGoal(SubclassUnion):
     def active(self) -> ThreadGoal: ...
 
     @abstractmethod
+    def fold[T](self, present: Callable[[Goal], T], absent: Callable[[], T]) -> T:
+        """The present Goal given to present, or absent's answer when no goal is held."""
+
+    @abstractmethod
     def identifies(self, goal_id: str) -> bool: ...
 
     def matching(self, goal_id: str) -> ThreadGoal:
@@ -366,26 +375,30 @@ class ThreadGoal(SubclassUnion):
         """Whether an idle thread still owes its resume turn; a goal turn is that turn."""
 
     @abstractmethod
-    def task_scope(self, project: str): ...
+    def task_scope(self, project: str) -> TaskScope: ...
 
     @abstractmethod
-    def context_segments(self, thread, goals) -> tuple: ...
+    def context_segments(self, thread: Thread, goals: Goals) -> tuple[GoalSegment, ...]: ...
 
     @abstractmethod
     def wake_view(self) -> dict[str, object] | None: ...
 
     @abstractmethod
-    def task_facts(self) -> tuple: ...
+    def task_facts(self) -> tuple[GoalTaskFact, ...]: ...
 
     @property
     @abstractmethod
     def goal_checkpoint(self) -> GoalCheckpoint: ...
 
     @abstractmethod
-    def require_replacement(self, goals, owner) -> None: ...
+    def require_replacement(self, goals: Goals, owner: ThreadIncarnation) -> None: ...
 
     @abstractmethod
     def require_set(self) -> Goal: ...
+
+    @abstractmethod
+    def require_state(self, expected: GoalState) -> None:
+        """Refuse an action that expected this goal in another state."""
 
     @abstractmethod
     def require_current(self) -> Goal: ...
@@ -402,6 +415,9 @@ class AbsentGoal(NullMember, ThreadGoal):
     def active(self) -> AbsentGoal:
         return self
 
+    def fold[T](self, present: Callable[[Goal], T], absent: Callable[[], T]) -> T:
+        return absent()
+
     def identifies(self, goal_id: str) -> bool:
         return False
 
@@ -411,25 +427,25 @@ class AbsentGoal(NullMember, ThreadGoal):
     def owes_project_resume(self, due: bool) -> bool:
         return due
 
-    def task_scope(self, project: str):
+    def task_scope(self, project: str) -> TaskScope:
         from .task_sources import TurnTaskScope
 
         return TurnTaskScope(project=project)
 
-    def context_segments(self, thread, goals) -> tuple:
+    def context_segments(self, thread: Thread, goals: Goals) -> tuple[GoalSegment, ...]:
         return ()
 
     def wake_view(self) -> None:
         return None
 
-    def task_facts(self) -> tuple:
+    def task_facts(self) -> tuple[GoalTaskFact, ...]:
         return ()
 
     @property
     def goal_checkpoint(self) -> AbsentGoalCheckpoint:
         return AbsentGoalCheckpoint()
 
-    def require_replacement(self, goals, owner) -> None:
+    def require_replacement(self, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
 
     def require_set(self) -> Goal:
@@ -437,6 +453,9 @@ class AbsentGoal(NullMember, ThreadGoal):
 
     def require_current(self) -> Goal:
         raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+
+    def require_state(self, expected: GoalState) -> None:
+        raise ValueError("This goal is no longer active; refresh its state.")
 
     def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
         return False
@@ -465,12 +484,15 @@ class Goal(ThreadGoal):
     def require_order(self, goals, owner) -> None:
         self.order.require_order(self, goals, owner)
 
-    def require_replacement(self, goals, owner) -> None:
+    def require_replacement(self, goals: Goals, owner: ThreadIncarnation) -> None:
         self.order.require_replacement(self, goals, owner)
 
     @property
     def active(self) -> ThreadGoal:
         return self if self.state.active else AbsentGoal()
+
+    def fold[T](self, present: Callable[[Goal], T], absent: Callable[[], T]) -> T:
+        return present(self)
 
     def identifies(self, goal_id: str) -> bool:
         return self.id == goal_id
@@ -481,12 +503,12 @@ class Goal(ThreadGoal):
     def owes_project_resume(self, due: bool) -> bool:
         return False
 
-    def task_scope(self, project: str):
+    def task_scope(self, project: str) -> TaskScope:
         from .task_sources import GoalTaskScope
 
         return GoalTaskScope(project=project, goal=self.checkpoint)
 
-    def context_segments(self, thread, goals) -> tuple:
+    def context_segments(self, thread: Thread, goals: Goals) -> tuple[GoalSegment, ...]:
         from .turn_context import GoalSegment
 
         return (GoalSegment.capture(thread, self, goals),)
@@ -494,7 +516,7 @@ class Goal(ThreadGoal):
     def wake_view(self) -> dict[str, object]:
         return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
 
-    def task_facts(self) -> tuple:
+    def task_facts(self) -> tuple[GoalTaskFact, ...]:
         from .retained_task_facts import GoalTaskFact
 
         return (GoalTaskFact(self),)
@@ -509,9 +531,21 @@ class Goal(ThreadGoal):
     def require_current(self) -> Goal:
         return self
 
+    def require_state(self, expected: GoalState) -> None:
+        if self.state != expected:
+            raise ValueError(self.state.activity_refusal())
+
+    def noted(self, note: str) -> Goal:
+        """This goal at its next revision, with note appended to its progress."""
+        return replace(self, progress=self._progress_with(note), revision=self.revision + 1)
+
+    def _progress_with(self, note: str) -> str:
+        return f"{self.progress}\n\n{note}" if self.progress else note
+
     def after_failed_turn(self, diagnostic: str) -> Goal:
-        progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
-        return self._failure_projection(self.state.after_failed_turn(diagnostic), progress)
+        return self._failure_projection(
+            self.state.after_failed_turn(diagnostic), self._progress_with(diagnostic)
+        )
 
     def after_unverified_completion(self, diagnostic: str) -> Goal:
         return self._failure_projection(
@@ -524,7 +558,7 @@ class Goal(ThreadGoal):
         return replace(self, state=state, progress=progress, revision=self.revision + 1)
 
     @classmethod
-    def from_wire(cls, data) -> Goal:
+    def from_wire(cls, data: object) -> Goal:
         return FieldCodec.decode_record(cls, data)
 
     @classmethod

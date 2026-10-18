@@ -24,7 +24,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
-from .goals import GoalMentionBinding
+from .goals import Goal, GoalMentionBinding
 from .locked_store import LockedStore, RootFile
 from .peer_relevance import (
     ChannelmateRelevance,
@@ -723,20 +723,20 @@ class ThreadRelationships:
             for thread in registry.threads.values()
             for executor in thread.role.executor(thread)
         ):
-            goal = owner.active_goal
-            if goal is None:
-                continue
-            source = goal.mention_source
-            # Missing historical evidence grants no contact or current-name binding.
-            if source is None:
-                continue
-            if not source.matches(goal, owner, registry):
-                continue
-            for binding in source.bindings:
-                projected, issues = binding.project(registry, owner, goal, source)
+            for projected, issues in owner.active_goal.fold(
+                lambda goal: ThreadRelationships._mention_projections(registry, owner, goal), tuple
+            ):
                 contacts.extend(projected)
                 diagnostics.extend(issues)
         return tuple(contacts), tuple(diagnostics)
+
+    @staticmethod
+    def _mention_projections(registry: RegistrySnapshot, owner: Thread, goal: Goal) -> tuple:
+        source = goal.mention_source
+        # Missing historical evidence grants no contact or current-name binding.
+        if source is None or not source.matches(goal, owner, registry):
+            return ()
+        return tuple(binding.project(registry, owner, goal, source) for binding in source.bindings)
 
     def goal_contacts(
         self, owner: str
