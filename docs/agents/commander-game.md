@@ -184,6 +184,26 @@ core-goal-retry  P398  due 14:15
   last call (14:00): on time  -> missed: prediction wrong because I did not count is_set() growth
 ```
 
+### Load: measured, not self-reported
+
+The commander's own report of its load is unreliable: on 2026-10-18 it was
+skimming (one-line "leaving that to the fork" replies, 42 unjudged edits)
+without noticing. So load is a number on the HUD, like the supply count in an
+RTS, derived from behaviour:
+
+- **Look debt:** units with new activity since their last prediction, with
+  the age of the oldest: `look debt 4 (core-goal-retry 6m, e2e 3m, ...)`.
+- **Judge debt:** unjudged edits and the age of the oldest.
+- **Inflow:** decision events per minute reaching the commander.
+- **Calibration:** share of recent predictions that came true.
+- **Context:** tokens used against the 300k compaction point.
+
+The existing `capacity.py` gate (fork when overloaded) reads these instead of
+a raw unit count. When look debt or judge debt passes its limit, the tool
+does not ask the commander how it feels; it forks a slice for the oldest debt
+and refuses new orders until the debt is back under the limit. No form to fill,
+one number to read, and the response is automatic.
+
 ## Done so far
 
 - `order.py send` requires a "Works when: <user-visible run>" line; `done`
