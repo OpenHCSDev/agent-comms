@@ -16,7 +16,7 @@ from agent_comms.pi_durable_backend import (
 
 
 async def open_host(tmp_path):
-    backend = PiDurableBackend()
+    backend = PiDurableBackend(tmp_path)
     thread = SimpleNamespace(worktree=str(tmp_path), model=None, thinking_level=None,
                              runtime=DurableDatabase(str(tmp_path / 'durable.sqlite')))
     return await backend.open(thread)
