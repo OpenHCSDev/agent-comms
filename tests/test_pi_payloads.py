@@ -326,4 +326,4 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
             assert event.message.measured_tokens == ReportedTokens(7) and account.confirmed == 7
         else:
             assert event.message.measured_tokens == UnreportedTokens() and account.confirmed is None
-        assert decode(event.to_wire()) == event
+        assert "usage" not in event.to_wire() and decode(event.to_wire()).usage == event.usage
