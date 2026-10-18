@@ -8,7 +8,6 @@ collaboration edges and thread goals remain separate authorities.
 from __future__ import annotations
 
 import calendar
-import json
 import re
 import subprocess
 import sqlite3
@@ -123,8 +122,18 @@ class PullRequest:
     merged_at: float | None = None
     updated_at: float = 0.0
 
+    @classmethod
+    def listed(cls, number: str, title: str, head: str, merge: str, merged: str, updated: str) -> Self:
+        """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
+        return cls(int(number), title, head, merge or None, _github_time(merged) if merged else None,
+                   _github_time(updated))
+
     def names(self, problem: str) -> bool:
         return re.search(rf"\b{re.escape(problem)}\b", self.title) is not None
+
+
+def _github_time(text: str) -> float:
+    return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
 
 
 class PullRequests:
@@ -141,20 +150,13 @@ class PullRequests:
     def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
         listed = subprocess.run(
             ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
-             "--json", "number,title,headRefOid,mergeCommit,mergedAt,updatedAt"),
+             "--json", "number,title,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
+             '.[] | [.number, .title, .headRefOid, .mergeCommit.oid // "", .mergedAt // "", .updatedAt]'
+             " | @tsv"),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
             raise ValueError(listed.stderr.strip() or f"gh pr list -R {repo} failed.")
-        return tuple(
-            PullRequest(pr["number"], pr["title"], pr["headRefOid"],
-                        (pr.get("mergeCommit") or {}).get("oid"),
-                        pr.get("mergedAt") and _github_time(pr["mergedAt"]),
-                        _github_time(pr["updatedAt"]))
-            for pr in json.loads(listed.stdout or "[]"))
-
-
-def _github_time(text: str) -> float:
-    return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
+        return tuple(PullRequest.listed(*line.split("\t")) for line in listed.stdout.splitlines())
 
 
 def _clock(at: float) -> str:
@@ -168,13 +170,17 @@ class ProgressSource:
     checkout: Path
     pulls: PullRequests
 
+    @property
+    def since(self) -> float:
+        return self.todo.order.at.recorded_at("An order")
+
     def requests(self, state: str) -> list[PullRequest]:
         return [pr for pr in self.pulls.listed(self.todo.repo, state) if pr.names(self.todo.id)]
 
     def commit(self, *excluded: str) -> tuple[str, float] | None:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
         log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.todo.order.at.at)}",
+            ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.since)}",
              "--format=%H %ct", "HEAD", "--not", *excluded),
             capture_output=True, text=True, timeout=30)
         if log.returncode or not log.stdout.strip():
@@ -296,7 +302,7 @@ class MergedProgress(OrderProgress):
     @classmethod
     def found(cls, source: ProgressSource) -> Self | None:
         return next((cls(pr.merge[:9]) for pr in source.requests("merged")
-                     if pr.merge and (pr.merged_at or 0) >= source.todo.order.at.at), None)
+                     if pr.merge and (pr.merged_at or 0) >= source.since), None)
 
     @property
     def line(self) -> str:

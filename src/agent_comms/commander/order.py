@@ -36,7 +36,7 @@ from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, Co
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
-                     WithdrawTodo, AssignTodo)
+                     WithdrawTodo, AssignTodo, OrderProgress, Todo)
 from . import capacity, rules, storage
 from .config import CommanderConfig, Repo
 
@@ -82,7 +82,7 @@ def open_todos(unit=None):
     return [t for t in todos() if t.state.open and t.holder and unit in (None, t.holder)]
 
 
-def progress():
+def progress() -> dict[str, OrderProgress]:
     """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
     return call(CommsTodoListTool()).progress
 
@@ -580,17 +580,18 @@ def replied(unit, since):
     return f'; REPLIED {at} [{latest["id"]}]: {" ".join(str(latest.get("text")).split())[:160]} -- read it before pushing'
 
 
-def deadline_lines(held):
+def deadline_lines(held: list[Todo]) -> list[str]:
     """Late units under OVERDUE with their progress; progress drawing no strike prints its own line.
 
     An open order whose work stopped moving prints STALL with its progress line, whatever is due."""
     now = time.time()
-    past = [t for t in held if t.pending and t.deadline.at < now]
-    read = progress() if any(t.pending for t in held) else {}
+    pending = [t for t in held if t.pending]
+    past = [t for t in pending if t.deadline.at < now]
+    read = progress() if pending else {}
     late = [f'{t.assignment.owner} (due {hhmm(t.deadline)}, order {t.order.id}, {read[t.id].line}'
             f'{replied(t.assignment.owner, t.order.at.at)})' for t in past if read[t.id].strikes]
     stalled = [f'STALL {t.id} {t.assignment.owner}: {read[t.id].line} -> push it now or reassign'
-               for t in held if t.pending and read[t.id].stalled(t.order.at.at, now)]
+               for t in pending if read[t.id].stalled(t.order.at.at, now)]
     passed = [f'DUE PASSED {t.id} {t.assignment.owner} (due {hhmm(t.deadline)}): {read[t.id].line}'
               for t in past if not read[t.id].strikes]
     alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
@@ -715,7 +716,7 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
 def due(pid: str, at: str, why: str) -> None:
     """Core moves a held order's deadline, its assignment unchanged; the reason goes on record."""
     todo = COMMS.goals.todos.get(pid)
-    if not (todo.state.open and todo.holder and todo.pending and todo.goal):
+    if not todo.pending:
         sys.exit(f'Refused: {pid} holds no pending order whose deadline could move.')
     if len(why.split()) < 8:
         sys.exit('Refused: --why says why the deadline moves (8+ words)')
