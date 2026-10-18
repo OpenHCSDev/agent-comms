@@ -911,14 +911,13 @@ def _object_entries(data: object) -> Iterable[tuple[object, object]]:
     return data.items()
 
 
-def _object_or_pair_entries(data: object) -> Iterable[tuple[object, object]] | list:
+def _object_or_pair_entries(data: object) -> Iterable[Any]:
     """Keys that are not strings travel as an array of [key, value] pairs."""
     if isinstance(data, dict):
         return data.items()
-    pairs = isinstance(data, list) and all(isinstance(pair, list) and len(pair) == 2 for pair in data)
-    if not pairs:
-        raise MalformedRecord("Expected a JSON object or an array of key-value pairs.")
-    return data
+    if isinstance(data, list) and all(isinstance(pair, list) and len(pair) == 2 for pair in data):
+        return data
+    raise MalformedRecord("Expected a JSON object or an array of key-value pairs.")
 
 
 @dataclass(frozen=True, slots=True)
