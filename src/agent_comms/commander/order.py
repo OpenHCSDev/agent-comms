@@ -397,7 +397,8 @@ def problem(text, unit, due, order_file, request):
         sys.exit('Refused: the order file needs a "Problem: NEW" line; a problem is never logged without its order')
     if len(text.split()) < 8:
         sys.exit('Refused: describe the problem (8+ words): what is wrong, what it costs')
-    pid = f'P{max([int(t.id[1:]) for t in COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation) if t.id[1:].isdigit()] + [0]) + 1}'
+    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
+    pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
         send(unit, due, order_file, request, new=(pid, text))
@@ -436,8 +437,9 @@ def board():
                      f'{hhmm(t.deadline)} | {read[t.id].line if t.id in read else "-"} | '
                      f'{"no" if t.pending else "yes, install pending"} | '
                      f'{unit and last_activity(unit) or "-"} |')
+    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
     lines += ['', '## Withdrawn orders', '',
-              *(f'- {line}' for t in COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation) for line in t.order.withdrawals(t))]
+              *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
     open(BOARD, 'w').write('\n'.join(lines) + '\n')
 
 
@@ -553,11 +555,13 @@ def hunt(where, why, sent=None):
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
     if sent:
-        todo = next((t for t in COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation) if t.order.id == sent), None) or sys.exit(
+        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        todo = next((t for t in held if t.order.id == sent), None) or sys.exit(
             f'Refused: {sent} is not an open tracked order; send it first. {HuntVerb.usage()}')
     else:
         named = set(re.findall(r'\bP\d+\b', why))
-        todo = next((t for t in COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation) if t.id in named), None) or sys.exit(
+        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        todo = next((t for t in held if t.id in named), None) or sys.exit(
             'Refused: a clean hunt is recorded on its open problem; name the P-number in --why. '
             + HuntVerb.usage())
     ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
@@ -568,7 +572,8 @@ def hunt(where, why, sent=None):
 
 
 def hunts():
-    return [h for t in COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation) for h in t.hunts]
+    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
+    return [h for t in history for h in t.hunts]
 
 
 def next_hunt():
