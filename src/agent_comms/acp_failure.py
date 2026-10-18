@@ -203,7 +203,7 @@ class RequestFailure:
         return RequestError.internal_error(self.error_data())
 
     @classmethod
-    def from_error(cls, error: RequestError):
+    def from_error(cls, error: RequestError) -> RequestFailure:
         return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
             error.code, str(error)
         )
