@@ -116,7 +116,7 @@ class CodingToolOwner:
             operation_id=operation_id,
         ))
 
-    async def admit(self, round_number: int, call: CodingCall) -> None:
+    async def allow(self, round_number: int, call: CodingCall) -> None:
         def check(store: Coordination) -> None:
             verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
             verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
@@ -191,8 +191,8 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
             raise SelectedToolDenied("Coding request is not authenticated")
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
-    async def admit(self, round_number: int, call: CodingCall) -> None:
-        await self.owner.admit(round_number, call)
+    async def allow(self, round_number: int, call: CodingCall) -> None:
+        await self.owner.allow(round_number, call)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}

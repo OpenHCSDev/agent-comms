@@ -35,7 +35,7 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     class Owner:
         input_id = secrets.token_hex(16)
 
-        async def admit(self, round_number, call) -> None:
+        async def allow(self, round_number, call) -> None:
             pass
 
     tmp_path.chmod(0o700)
@@ -92,8 +92,8 @@ def test_duplicate_call_id_in_one_tool_round_is_named_decode_failure(tmp_path: P
     class Owner:
         input_id = secrets.token_hex(16)
 
-        async def admit(self, round_number, call) -> None:
-            raise AssertionError("invalid round must not admit a call")
+        async def allow(self, round_number, call) -> None:
+            raise AssertionError("invalid round must not allow a call")
 
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
     repeated = ToolCallContent(id="duplicate", name="read", arguments={"path": "one"})

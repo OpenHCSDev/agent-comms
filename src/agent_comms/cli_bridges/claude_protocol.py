@@ -159,9 +159,44 @@ class Live(ClaudeReaderPhase):
         raise ValueError('Claude completed an item before identifying its turn')
 
 
+class ClaudeTurn(ABC):
+    """The transcript's identified turn owns item identities."""
+
+    @abstractmethod
+    def finished(self, item: str, events: tuple[TranscriptEvent, ...],
+                 phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]: ...
+
+    @abstractmethod
+    def active(self, tool_id: str, phase: ClaudeReaderPhase,
+               state: ActivityState, detail: str) -> tuple[TranscriptUpdate, ...]: ...
+
+
+class UnknownTurn(ClaudeTurn):
+    def finished(self, item: str, events: tuple[TranscriptEvent, ...],
+                 phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
+        return phase.unturned_finish()
+
+    def active(self, tool_id: str, phase: ClaudeReaderPhase,
+               state: ActivityState, detail: str) -> tuple[TranscriptUpdate, ...]:
+        return phase.unturned_finish()
+
+
+@dataclass(frozen=True)
+class KnownTurn(ClaudeTurn):
+    id: str
+
+    def finished(self, item: str, events: tuple[TranscriptEvent, ...],
+                 phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
+        return (FinishedItem(self.id, item, events),)
+
+    def active(self, tool_id: str, phase: ClaudeReaderPhase,
+               state: ActivityState, detail: str) -> tuple[TranscriptUpdate, ...]:
+        return (ActiveItem(self.id, tool_id, state, detail),)
+
+
 @dataclass
 class ClaudeSession:
-    turn: str = ''
+    turn: ClaudeTurn = field(default_factory=UnknownTurn)
     tools: dict[str, ToolCall] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
 
@@ -174,12 +209,10 @@ class ClaudeSession:
         except KeyError:
             return self.phase.missing_tool(tool_id)
         return (*self.finished(tool_id, call.finished(text, ok)),
-                ActiveItem(self.turn, tool_id, ActivityState.WORKING, ''))
+                *self.turn.active(tool_id, self.phase, ActivityState.WORKING, ''))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[TranscriptUpdate, ...]:
-        if not self.turn:
-            return self.phase.unturned_finish()
-        return (FinishedItem(self.turn, item, events),)
+        return self.turn.finished(item, events, self.phase)
 
 
 class TimedRecord(WireModel):
@@ -246,7 +279,7 @@ class RedactedThinking(AssistantBlock):
     wire_tag = 'redacted_thinking'
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return (ActiveItem(session.turn, record.uuid, ActivityState.THINKING, ''),)
+        return session.turn.active(record.uuid, session.phase, ActivityState.THINKING, '')
 
 
 class ThinkingBlock(RedactedThinking):
@@ -338,7 +371,7 @@ class ToolUse(AssistantBlock):
             arguments = arguments_type.model_validate(self.input)
             call = ToolCall(self.id, FieldCodec.encode(arguments.declaration), arguments.model_dump(), arguments.diff())
         session.started(call)
-        return (ActiveItem(session.turn, self.id, ActivityState.WORKING, call.title),)
+        return session.turn.active(self.id, session.phase, ActivityState.WORKING, call.title)
 
 
 class AssistantMessage(WireModel):
@@ -527,7 +560,7 @@ class UserRecord(ClaudeRecord, TimedRecord):
     isMeta: bool = False
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        session.turn = self.promptId
+        session.turn = KnownTurn(self.promptId)
         if self.isMeta:
             return ()
         return tuple(update for block in self.message.content for update in block.updates(self, session))

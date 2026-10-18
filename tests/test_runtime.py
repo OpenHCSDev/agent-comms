@@ -46,7 +46,7 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
     from agent_comms.acp_extension import (
         CursorAdvancedUpdate,
         CursorEnvelope,
-        CursorScope,
+        LiveCursorScope,
         EmptyCursorObservation,
         decode_updates,
         encode_updates,
@@ -55,7 +55,7 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
 
     fact = CursorAdvancedUpdate(
         CursorEnvelope(
-            CursorScope(
+            LiveCursorScope(
                 "canonical",
                 "a" * 32,
                 ClaimedIdentity(RecordedThreadIncarnation("canonical", 1000.0), 3),

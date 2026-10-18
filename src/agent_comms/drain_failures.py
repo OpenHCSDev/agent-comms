@@ -36,7 +36,10 @@ async def drain_failures(
     owner: OwnerIdentity,
 ):
     """Record and propagate failures; the observation owner waits for real change."""
-    observed = await Coordination.run_worker(partial(comms.agents.activity_of, thread))
+    snapshot = await Coordination.run_worker(comms.registry.snapshot)
+    observed = await Coordination.run_worker(partial(
+        comms.agents.activity_of, thread, snapshot=snapshot,
+    ))
 
     async def record(kind, error) -> None:
         diagnostic = kind(

@@ -1018,7 +1018,7 @@ class PrefixCertificate(CheckpointTable, TypedTable):
 
         Fresh installation and verified carry share this algorithm. Retaining
         an old required seal throughout carry makes an interrupted replacement
-        unreadable instead of admitting an unsealed full-scan fallback.
+        unreadable instead of allowing an unsealed full-scan fallback.
         """
         path = _path(bus.path)
         _directory_sync(bus.path)

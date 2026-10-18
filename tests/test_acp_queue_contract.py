@@ -15,8 +15,8 @@ from agent_comms.acp_extension import (
     InputStartedUpdate,
     QueueChangedUpdate,
     QueueItem,
-    CursorScope,
-    QueueScope,
+    LiveCursorScope,
+    LiveQueueScope,
     QueuePromptRequest,
     SteerPromptRequest,
     UnavailableQueueProjection,
@@ -197,7 +197,7 @@ async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path
         for key, text in rows.items()
     }
     state = await agent.inputs.queue_state("beta")
-    assert state.scope is not None
+    assert state.scope.matches_session("beta")
     assert isinstance(state.projection, UnavailableQueueProjection)
     assert set(agent.inputs.queued_inputs["beta"]) == set(rows)
 
@@ -216,8 +216,8 @@ def test_attachment_routing_rename_preserves_exact_executor_fences():
     from dataclasses import replace
     original = ClaimedIdentity(RecordedThreadIncarnation("old-route", 1000.0), 7)
     renamed = replace(original, incarnation=replace(original.incarnation, name="new-route"))
-    scopes = (QueueScope("official-acp-id", original, 123),
-              CursorScope("official-acp-id", "a" * 32, original, 123))
+    scopes = (LiveQueueScope("official-acp-id", original, 123),
+              LiveCursorScope("official-acp-id", "a" * 32, original, 123))
     for scope in scopes:
         assert scope.relation(replace(scope, claim_scope=renamed)).current
         assert scope.relation(replace(scope, session_id="new-route")).foreign
