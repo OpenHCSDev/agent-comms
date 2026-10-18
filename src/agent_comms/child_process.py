@@ -60,12 +60,12 @@ class ProcessIdentity:
         if self.pid <= 0 or self.start_time <= 0:
             raise ValueError("A positive PID and platform start time are required")
 
-    @classmethod
-    def capture(cls, pid: int) -> ProcessIdentity:
+    @staticmethod
+    def capture(pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
 
-    @classmethod
-    def in_group(cls, pid: int, start_time: int, pgid: int) -> ProcessIdentity:
+    @staticmethod
+    def in_group(pid: int, start_time: int, pgid: int) -> ProcessIdentity:
         return GroupLeader(pid, start_time) if pgid == pid else GroupMember(pid, start_time)
 
     def __eq__(self, other: object) -> bool:
