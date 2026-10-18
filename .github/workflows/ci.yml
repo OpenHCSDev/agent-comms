@@ -94,6 +94,12 @@ jobs:
         working-directory: extensions/pi-mcp-client
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      # Tests of the native runtime read the pinned package from stack/. The
+      # locked install above fills the npm cache that preparation reads offline.
+      - name: Prepare pinned native Pi
+        if: matrix.os == 'ubuntu-latest'
+        run: stack/bin/prepare-pi-native
+
       - name: Run tests with coverage (85% enforced on Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
