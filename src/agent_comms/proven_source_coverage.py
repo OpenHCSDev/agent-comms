@@ -31,7 +31,7 @@ from .private_bus_checkpoint import (
     PrefixWitness,
     verify_private_bus_checkpoint_unlocked,
 )
-from .wake import RecipientDecision
+from .wake_policy import RecipientDecision
 
 if TYPE_CHECKING:
     from .native_entries import NativeEvidenceScope

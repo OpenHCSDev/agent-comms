@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     from .agent_activity import RecipientActivity
     from .bus_publication import CommittedDelivery
     from .presentation import MessageNotification
-    from .wake import RecipientDecision
+    from .wake_policy import RecipientDecision
 
 
 @dataclass(frozen=True)

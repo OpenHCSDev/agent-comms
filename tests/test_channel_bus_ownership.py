@@ -40,7 +40,7 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
 def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa: F811
     import json
 
-    from agent_comms.wake import NoWakeDecision
+    from agent_comms.wake_policy import NoWakeDecision
 
     root, root_id, comms, initial, _people = _root(tmp_path, mentioned=True)
     observer = comms.registry.require("alpha")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import ClassVar
@@ -22,6 +22,60 @@ class MessageAudience(StrEnum):
     DIRECT = "direct"
     MENTIONED = "mentioned"
     COLLECTIVE = "collective"
+
+
+class NoWakeReason(StrEnum):
+    UNMENTIONED_OBSERVER = "unmentioned_observer"
+
+
+@dataclass(frozen=True, slots=True)
+class RecipientDecision(ABC):
+    recipient: str  # Stable recipient_lookup, never the mutable canonical name.
+
+    @abstractmethod
+    def wake_policy(self) -> WakePolicy: ...
+
+    @abstractmethod
+    def claim_decisions(self) -> tuple[WakeDecision, ...]: ...
+
+    @abstractmethod
+    def to_wire(self) -> dict[str, str]: ...
+
+    def initial_notification(self, recipient, *, observation):
+        return self.wake_policy().initial_state()().notification(
+            recipient, observation=observation)
+
+
+@dataclass(frozen=True, slots=True)
+class NoWakeDecision(RecipientDecision):
+    """A frozen delivered member with no recipient-specific wake or claim."""
+
+    reason: NoWakeReason = NoWakeReason.UNMENTIONED_OBSERVER
+
+    def wake_policy(self) -> WakePolicy:
+        return PassiveWake()
+
+    def claim_decisions(self) -> tuple[WakeDecision, ...]:
+        return ()
+
+    def to_wire(self) -> dict[str, str]:
+        return {"recipient_lookup": self.recipient, "no_wake": self.reason.value}
+
+
+@dataclass(frozen=True, slots=True)
+class WakeDecision(RecipientDecision):
+    audience: MessageAudience
+    wake_mode: WakePolicy
+
+    def wake_policy(self) -> WakePolicy:
+        return self.wake_mode
+
+    def claim_decisions(self) -> tuple[WakeDecision, ...]:
+        return (self,)
+
+    def to_wire(self) -> dict[str, str]:
+        return {"recipient_lookup": self.recipient, "audience": self.audience.value,
+                "wake_mode": self.wake_mode.declared_name}
 
 
 @dataclass(frozen=True)
@@ -88,8 +142,6 @@ class WakePolicy(DeclaredFamily, SourceProofRequirement, affix="Wake"):
         return "this is yours; answer the original committed message"
 
     def recipient_decision(self, recipient: str, audience: MessageAudience):
-        from .wake import WakeDecision
-
         return WakeDecision(recipient, audience, self)
 
 
@@ -111,8 +163,6 @@ class UnmentionedWake(PassiveWake):
     """A delivered observer, not even a passive claim."""
 
     def recipient_decision(self, recipient: str, audience: MessageAudience):
-        from .wake import NoWakeDecision
-
         return NoWakeDecision(recipient)
 
 

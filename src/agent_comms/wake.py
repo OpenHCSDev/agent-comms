@@ -7,15 +7,13 @@ a later bus-owned boundary must attest its durable commit before live use.
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from enum import StrEnum
 
 
 from .audience_manifest import FrozenAudience, FrozenRecipient, freeze_audience
 from .channel_targets import CommandTarget, NamedTarget
 from .messages import Message
-from .wake_policy import MessageAudience, PassiveWake, WakePolicy
+from .wake_policy import NoWakeDecision, PassiveWake, RecipientDecision
 
 
 class ControlClassification(StrEnum):
@@ -31,60 +29,6 @@ class ControlClassification(StrEnum):
     @property
     def supports_initial(self) -> bool:
         return self is self.ORDINARY
-
-
-class NoWakeReason(StrEnum):
-    UNMENTIONED_OBSERVER = "unmentioned_observer"
-
-
-@dataclass(frozen=True, slots=True)
-class RecipientDecision(ABC):
-    recipient: str  # Stable recipient_lookup, never the mutable canonical name.
-
-    @abstractmethod
-    def wake_policy(self) -> WakePolicy: ...
-
-    @abstractmethod
-    def claim_decisions(self) -> tuple[WakeDecision, ...]: ...
-
-    @abstractmethod
-    def to_wire(self) -> dict[str, str]: ...
-
-    def initial_notification(self, recipient, *, observation):
-        return self.wake_policy().initial_state()().notification(
-            recipient, observation=observation)
-
-
-@dataclass(frozen=True, slots=True)
-class NoWakeDecision(RecipientDecision):
-    """A frozen delivered member with no recipient-specific wake or claim."""
-
-    reason: NoWakeReason = NoWakeReason.UNMENTIONED_OBSERVER
-
-    def wake_policy(self) -> WakePolicy:
-        return PassiveWake()
-
-    def claim_decisions(self) -> tuple[WakeDecision, ...]:
-        return ()
-
-    def to_wire(self) -> dict[str, str]:
-        return {"recipient_lookup": self.recipient, "no_wake": self.reason.value}
-
-
-@dataclass(frozen=True, slots=True)
-class WakeDecision(RecipientDecision):
-    audience: MessageAudience
-    wake_mode: WakePolicy
-
-    def wake_policy(self) -> WakePolicy:
-        return self.wake_mode
-
-    def claim_decisions(self) -> tuple[WakeDecision, ...]:
-        return (self,)
-
-    def to_wire(self) -> dict[str, str]:
-        return {"recipient_lookup": self.recipient, "audience": self.audience.value,
-                "wake_mode": self.wake_mode.declared_name}
 
 
 def _require_stored(message: Message) -> None:

@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from .audience_manifest import FrozenAudience
     from .delivery_policy import DeliveryManifest, KeyedResponseAcknowledgement
     from .messages import Message
-    from .wake import RecipientDecision
+    from .wake_policy import RecipientDecision
 
 
 PRIVATE_WIRE_FIELD: Final = "_agent_comms_private_v1"
