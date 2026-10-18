@@ -3,11 +3,16 @@
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
+from copyreg import __newobj__
 from typing import Never
 
 
 class CoordinationError(RuntimeError):
     """Base class for fail-loud coordinator errors."""
+
+    def __reduce__(self):
+        """Keep the original cause when an observation sends this error over its pipe."""
+        return __newobj__, (type(self), *self.args), self.__dict__ | {"__cause__": self.__cause__}
 
 
 class CoordinationReadUnavailable(CoordinationError):
