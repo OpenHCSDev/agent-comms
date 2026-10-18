@@ -186,11 +186,11 @@ class FailedTurnProjection:
 
     @classmethod
     def missing_store(cls, store, goal, owner, claim_scope):
-        return cls("unavailable", store.declared_name)
+        return cls("unavailable", store.failure_reason)
 
     @classmethod
     def invalid_store(cls, store, goal, owner, claim_scope):
-        return cls("unavailable", store.declared_name)
+        return cls("unavailable", store.failure_reason)
 
     @classmethod
     def capture(cls, conn, goal, owner, claim_scope):

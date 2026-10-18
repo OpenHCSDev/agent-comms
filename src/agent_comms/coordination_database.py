@@ -79,6 +79,11 @@ DEFAULT_STORE_CONTENTION = StoreWait()
 class StoreFile(DeclaredFamily):
     """One decoded file state, with the consumer's result inside its read lifetime."""
 
+    @property
+    def failure_reason(self) -> str:
+        """Public reason spelling; an invalid file's diagnostic details stay private."""
+        return self.declared_name
+
     @contextmanager
     def observing(self, consumer, *arguments):
         with self._connection() as source:

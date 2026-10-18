@@ -361,7 +361,7 @@ class NotificationAssignment(NotificationSource):
 
     @classmethod
     def invalid_store(cls, store, sources):
-        raise ValueError(f"Channel notification status unavailable: {store.declared_name}")
+        raise ValueError(f"Channel notification status unavailable: {store.failure_reason}")
 
     @property
     def recipient(self) -> FrozenRecipient:
