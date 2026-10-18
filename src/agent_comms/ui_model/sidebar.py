@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, replace
 from typing import NoReturn
 
 from agent_comms.display_order import ChannelSort, NameChannelSort, ThreadSort
@@ -59,13 +59,12 @@ class ThreadRowModel:
         return replace(self, label=shown.label, summary=shown.summary, status=status)
 
     @classmethod
-    def of(cls, person: ThreadView, snapshot: CoordinationSnapshot | None) -> ThreadRowModel:
+    def of(cls, person: ThreadView, unread: UnreadPresentation) -> ThreadRowModel:
         presentation = person.presentation
         return cls(
             person.thread.incarnation, presentation.title, presentation.label, presentation.summary,
             presentation.status, person.thread.model,
-            (UnobservedUnread() if snapshot is None else
-             person.thread.execution.prepare_conversation(PersonUnread(person, snapshot))),
+            unread,
             person.status.active, person.thread.execution,
         )
 
@@ -98,13 +97,20 @@ class ChannelRowModel:
 
 
 class SidebarObservation(ABC):
-    snapshot: CoordinationSnapshot | None = None
-
     def require_snapshot(self) -> CoordinationSnapshot:
-        snapshot = self.snapshot
-        if snapshot is None:
-            self.unavailable()
-        return snapshot
+        self.unavailable()
+
+    def channel_order(self) -> type[ChannelSort]:
+        return NameChannelSort
+
+    def read_marker_notice(self) -> str:
+        return ""
+
+    def channel_unread(self, target: str) -> UnreadPresentation:
+        return UnobservedUnread()
+
+    def bus_unread(self, target: str) -> UnreadPresentation:
+        return UnobservedUnread()
 
     def unavailable(self) -> NoReturn:
         raise RuntimeError("Sidebar source has not been observed")
@@ -134,7 +140,22 @@ class FailedSidebar(SidebarObservation):
 
 @dataclass(frozen=True)
 class ObservedSidebar(SidebarObservation):
-    snapshot: CoordinationSnapshot = field()
+    snapshot: CoordinationSnapshot
+
+    def require_snapshot(self) -> CoordinationSnapshot:
+        return self.snapshot
+
+    def channel_order(self) -> type[ChannelSort]:
+        return self.snapshot.channel_order
+
+    def read_marker_notice(self) -> str:
+        return self.snapshot.read_marker_notice or ""
+
+    def channel_unread(self, target: str) -> UnreadPresentation:
+        return UnreadPresentation.for_channel(self.snapshot, target)
+
+    def bus_unread(self, target: str) -> UnreadPresentation:
+        return UnreadPresentation.for_bus(self.snapshot, target)
 
     def references_for(self, root):
         from ..display_references import ForeignReferences
@@ -143,13 +164,11 @@ class ObservedSidebar(SidebarObservation):
 
 
 class SidebarModel:
-    """Channels in display order and the threads they list, from one snapshot.
+    """Channels and threads derived from one observed snapshot.
 
-    ``derive`` builds every row (it may inspect process identity, so call it
-    off the UI thread); ``apply`` publishes them with the snapshot they came
-    from, which views borrow for per-target unread counts and membership.
-    Each keyed model flushes its change set once per frame through the
-    backend's scheduler.
+    ``derive`` inspects process identity off the UI thread; ``apply`` publishes
+    the resulting rows and observation. Keyed models flush changes once per
+    frame through the backend scheduler.
     """
 
     def __init__(self, schedule: Callable[[Callable[[], None]], None]):
@@ -157,31 +176,11 @@ class SidebarModel:
         self.threads: KeyedModel[str, ThreadRowModel] = KeyedModel(schedule)
         self.observation: SidebarObservation = WaitingSidebar()
 
-    @property
-    def snapshot(self) -> CoordinationSnapshot | None:
-        return self.observation.snapshot
-
-    def references_for(self, root):
-        return self.observation.references_for(root)
-
-    @property
-    def channel_order(self) -> type[ChannelSort]:
-        return self.snapshot.channel_order if self.snapshot is not None else NameChannelSort
-
-    @property
-    def read_marker_notice(self) -> str | None:
-        return self.snapshot.read_marker_notice if self.snapshot is not None else None
-
-    @property
-    def filters(self) -> tuple[bool, bool] | None:
-        """The stopped/archived filters the published rows were read with."""
-        if self.snapshot is None:
-            return None
-        return self.snapshot.show_stopped, self.snapshot.show_archived
-
     @staticmethod
     def derive(snapshot: CoordinationSnapshot) -> tuple[dict[str, ChannelRowModel], dict[str, ThreadRowModel]]:
-        threads = {name: ThreadRowModel.of(person, snapshot) for name, person in snapshot.threads.items()}
+        threads = {name: ThreadRowModel.of(
+            person, person.thread.execution.prepare_conversation(PersonUnread(person, snapshot)))
+            for name, person in snapshot.threads.items()}
         working = frozenset(name for name, row in threads.items() if row.status.working)
         channels = {name: ChannelRowModel.of(view, snapshot, working)
                     for name, view in snapshot.channels.items()}
