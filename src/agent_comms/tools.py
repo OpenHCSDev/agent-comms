@@ -334,6 +334,12 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
+class ConnectorReadable:
+    """A read tool the claude.ai connector lists and calls; a tool without it is not exposed."""
+
+    __slots__ = ()
+
+
 class ThreadToolRequest(ToolRequest[ThreadCaller]):
     """Self-relative requests declare their required caller at the shared boundary."""
 
@@ -825,7 +831,7 @@ class CommsTurnsTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadsTool(ToolRequest):
+class CommsThreadsTool(ConnectorReadable, ToolRequest):
     label = "Comms Threads"
     description = (
         "List agent threads with status and pending counts, plus this caller's "
