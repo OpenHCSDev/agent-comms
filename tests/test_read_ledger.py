@@ -314,7 +314,7 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     assert FieldCodec.decode(ReadDocument, old) == ledger.read()
     unrecorded = FieldCodec.decode(ReadDocument, {**old, "bus_identity": None})
     assert unrecorded.bus_identity == NoRecordedBus()
-    assert not unrecorded.cursor(viewer, comms.registry.snapshot(), ObservedPath.at(comms.bus.log.path))
+    assert unrecorded.cursor(viewer, comms.registry.snapshot(), ObservedPath.at(comms.bus.log.path)) == ReadCursor()
     assert comms.views.viewer_snapshot(str(tmp_path)).unread.get("alice", 0) == 0
 
     replacement = tmp_path / "restored-bus.jsonl"
@@ -323,7 +323,9 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     replacement.replace(comms.bus.log.path)
     reopened = wire(tmp_path)
     assert not recorded.matches(ObservedPath.at(reopened.bus.log.path))
-    assert message.seq not in reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
+    snapshot = reopened.registry.snapshot()
+    assert message.seq not in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(
+        ReadLedger.conversation(message, snapshot))
     assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 1
     with pytest.raises(DMScopeChanged, match="bus was replaced"):
         reopened.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
