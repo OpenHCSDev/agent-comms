@@ -867,26 +867,24 @@ class RecordedContextManifestSources(
         """Resolve only referenced predecessors and entries, decoding outside locks."""
         recorded = {row.offset: row.decode_bytes(value, prefix.root_id)
                     for row, value in captured}
-        selected = tuple(recorded)
         dependencies = {(predecessor, position)
-                        for offset in selected
-                        for position, segment in enumerate(recorded[offset].segments)
-                        for predecessor in segment.predecessors(offset)}
+                        for row, _ in captured
+                        for position, segment in enumerate(recorded[row.offset].segments)
+                        for predecessor in segment.predecessors(row.offset)}
         references = {offset for offset, _ in dependencies} - recorded.keys()
         if references:
             with log.certified_read() as source:
                 source.witness.require_read_window(prefix)
-                predecessors = tuple(row for offset in references for row in cls.select(
-                    source.connection, offset=offset))
-                captured_prior = tuple(
-                    (row, row.read_bytes(source.stream)) for row in predecessors)
+                captured_prior = tuple((row, row.read_bytes(source.stream))
+                                       for offset in references
+                                       for row in cls.select(source.connection, offset=offset))
             if {row.offset for row, _ in captured_prior} != references:
                 raise RelationViolationError("Recorded context predecessors are incomplete")
             for row, value in captured_prior:
                 if row.offset + row.length > prefix.offset:
                     raise RelationViolationError("Context predecessor exceeds its captured prefix")
                 recorded[row.offset] = row.decode_bytes(value, prefix.root_id)
-        segments = tuple(segment for offset in selected for segment in recorded[offset].segments)
+        segments = tuple(segment for row, _ in captured for segment in recorded[row.offset].segments)
         segments += tuple(recorded[offset].segments[position] for offset, position in dependencies)
         references = {reference for segment in segments for reference in segment.entries}
         entries: dict[ContextEntryReference, SegmentManifest] = {}
@@ -905,11 +903,11 @@ class RecordedContextManifestSources(
                         entries[entry.reference] = entry.manifest
             if entries.keys() != references:
                 raise RelationViolationError("Recorded context entries are incomplete")
-        for offset in selected:
-            manifest = recorded[offset]
+        for row, _ in captured:
+            manifest = recorded[row.offset]
             if any(recorded[predecessor].thread != manifest.thread
                    for segment in manifest.segments
-                   for predecessor in segment.predecessors(offset)):
+                   for predecessor in segment.predecessors(row.offset)):
                 raise RelationViolationError("Context predecessor belongs to another owner")
         return {row: CapturedWireSource(prefix.source_identity, row, value,
                                        recorded[row.offset].restore(entries, recorded))

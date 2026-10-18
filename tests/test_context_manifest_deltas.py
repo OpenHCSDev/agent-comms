@@ -1,6 +1,9 @@
 """Recorded context reuses source-bound text and transcript prefixes."""
 from dataclasses import replace
 import hashlib
+import sys
+
+from agent_comms.private_bus_checkpoint import RecordedContextManifestSources
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_session_reopen import NativeSessionIdentity
@@ -106,3 +109,36 @@ def test_request_provenance_does_not_change_immutable_entry_membership(tmp_path)
     assert len(recorded.segments[2].entries) == 2
     assert len(actual.raw) < 3000
     assert actual.value.segments[2].recorded_public_text({}) == transcript.recorded_public_text({})
+
+
+def test_forty_turns_use_direct_sources_and_fixed_transcript_keyframes(tmp_path):
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    expected = [context(owner, tmp_path, 328 + 2 * turn, turn + 1) for turn in range(40)]
+    for manifest in expected:
+        comms.bus.log.record_context(manifest)
+    with comms.bus.log.certified_read() as source:
+        prefix = source.witness
+        rows = tuple(RecordedContextManifestSources.select(
+            source.connection, thread=owner.incarnation, order_by=('offset',)))
+        captured = tuple((row, row.read_bytes(source.stream)) for row in rows)
+    for turn in (1, 32, 33, 40):
+        row, raw = captured[turn - 1]
+        result = RecordedContextManifestSources.resolve(comms.bus.log, ((row, raw),), prefix)[row]
+        assert result.value.segments[:2] == expected[turn - 1].segments[:2]
+        assert result.value.segments[2].contributors == expected[turn - 1].segments[2].contributors
+        recorded = row.decode_bytes(raw, prefix.root_id)
+        assert recorded.segments[0].previous == (None if turn == 1 else rows[0].offset)
+        assert recorded.segments[2].previous == (
+            None if turn in (1, 32) else rows[31].offset)
+    decoded = []
+    previous_profile = sys.getprofile()
+    def observe(frame, event, argument):
+        if event == 'call' and frame.f_code is RecordedContextManifestSources.decode_bytes.__code__:
+            decoded.append(frame.f_locals['self'].offset)
+    try:
+        sys.setprofile(observe)
+        RecordedContextManifestSources.resolve(comms.bus.log, (captured[-1],), prefix)
+    finally:
+        sys.setprofile(previous_profile)
+    assert len(decoded) == len(set(decoded)) == 3

@@ -1129,18 +1129,16 @@ class RecordedContextManifest:
                     offset = previous.pointer.offset
             parts.append(segment.kind.record_manifest(
                 segment, old, value, offset, recording_turn=recording_turn))
-        recorded = tuple(part for part, _ in parts)
-        entries = tuple(group for _, group in parts)
         return (
             cls(
                 manifest.thread,
                 manifest.turn,
-                tuple(recorded),
+                tuple(part for part, _ in parts),
                 manifest.counter,
                 manifest.request_id,
                 recording_turn,
             ),
-            tuple(entry for group in entries for entry in group),
+            tuple(entry for _, group in parts for entry in group),
         )
 
     def restore(self, entries: dict[ContextEntryReference, SegmentManifest],
