@@ -17,13 +17,12 @@ from .goal_states import (
     PausedGoal,
     UnrecordedBlockGoal,
 )
-from .goals import GoalDeclaration
-from .goals import Goal, GoalCheckpoint, AbsentGoalCheckpoint, PresentGoalCheckpoint
 from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
+    from .goals import Goal, GoalCheckpoint, GoalDeclaration
 
 
 class ExecutionPresentation(ABC):
@@ -207,15 +206,3 @@ class IdleGoalExecution(ThreadGoalExecution):
         pass
 
 
-@dataclass(frozen=True)
-class GoalSnapshot:
-    """A thread's current goal and its scheduling projection, read together.
-
-    The execution, when present, schedules exactly this goal.
-    """
-
-    goal: GoalDeclaration
-    execution: ThreadGoalExecution
-
-    def __post_init__(self) -> None:
-        self.execution.validate_goal(self.goal.captured)

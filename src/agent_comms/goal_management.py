@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from .goal_actions import GoalAction, GoalActionContext, RuntimeInvocable
-from .goal_attempts import Generation, GoalAttemptStore, StaleAttemptError, UnresolvedAttemptError
+from .goal_attempts import Generation, GoalAttemptError, GoalAttemptStore, NoGoalPermit, StaleAttemptError, UnresolvedAttemptError
+from acp import RequestError
 from .coordination_errors import StaleFence
 from .errors import RelationViolationError
 from .native_input_owner import GoalLaunchOwner
@@ -67,6 +68,25 @@ class Goals:
             private.mkdir(mode=0o700, exist_ok=True)
             self.goal_store = GoalAttemptStore.initialize(private)
         return self.goal_store
+
+    def reserve_turn(self, goal, *, owner, autonomous):
+        try:
+            store = self.open_goal_store()
+            claim_scope = self.registry.snapshot().claimed_generations[owner.name]
+            with _store_lock(self._wire_lock_path):
+                generation = store.require_generation(goal.id)
+                generation.lifecycle.require_ready()
+                grant = self.ready_goal_grant_locked(owner, claim_scope, generation)
+                reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
+                return store.claim_launch(reservation)
+        except GoalAttemptError as error:
+            if autonomous:
+                return NoGoalPermit()
+            raise RequestError.invalid_params({
+                "reason": "goal_attempt_unavailable",
+                "details": "The goal has no launchable attempt. Inspect its state and use "
+                           "Retry for a failed attempt; no prompt was sent to Pi.",
+            }) from error
 
     def ready_goal_grant_locked(
         self, owner: Thread, claim_scope: int, generation: Generation
@@ -202,7 +222,7 @@ class Goals:
 
     def goal_wait(self, name: str) -> GoalWait:
         goal = self.registry.require(name).goal
-        return GoalWaits.current(goal, self.waits.read())
+        return goal.active().recorded_wait(self.waits.read())
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Release one stranded standby without replaying a dependency input.
@@ -218,7 +238,7 @@ class Goals:
             if owner is None or self.agents.is_working(owner.incarnation, snapshot):
                 return ()
             rows = self.waits.read()
-            wait = GoalWaits.current_for(owner.goal, rows, owner.incarnation.require_recorded())
+            wait = owner.goal.current_wait(rows, owner.incarnation.require_recorded())
             return wait.release_closed(self, owner, snapshot, rows)
 
     def release_waits_after_terminal_turn(self, fence: FinishedTurnFence | None) -> tuple[str, ...]:
@@ -290,7 +310,7 @@ class Goals:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal
-        execution = GoalWaits.execution(goal, self.waits.read(), snapshot, self.agents)
+        execution = goal.execution(self.waits.read(), snapshot, self.agents)
         return goal, execution
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
@@ -307,7 +327,7 @@ class Goals:
             owner.require_registry(self.registry)
             current = self.registry.require(owner.thread.name)
             goal = current.continuation_goal(owner.thread)
-            wait = GoalWaits.current_for(goal, self.waits.read(), current.incarnation.require_recorded())
+            wait = goal.current_wait(self.waits.read(), current.incarnation.require_recorded())
             return wait.consume_owned_reply(self, current, reference)
 
     def update_goal(

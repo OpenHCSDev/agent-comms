@@ -30,7 +30,7 @@ from .recorded_time import EventTime
 from .todos import DeliverTodo, PendingProblemOrder
 
 if TYPE_CHECKING:
-    from .goal_presentation import GoalSnapshot
+    from .goals import GoalSnapshot
     from .goal_management import Goals
 
 
@@ -425,6 +425,10 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
 
     @abstractmethod
     def reserve(self, ctx): ...
+
+    def create_goal(self, ctx):
+        return SetGoalAction(text="Complete the assigned problems.", goal_id=self.goal_id,
+                             order=ProblemGoalOrder()).change(ctx)
 
     def change(self, ctx):
         ctx.thread.goal.require_order_slot(self.goal_id, self.problem)

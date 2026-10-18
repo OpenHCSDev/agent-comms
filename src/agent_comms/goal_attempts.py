@@ -51,6 +51,7 @@ from .goal_generation import (
 )
 from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
 from .ordinary_turn_rules import OrdinaryGoalGrantCheck
+from .goals import NoGoal
 
 
 class GoalAttemptError(RuntimeError):
@@ -356,7 +357,6 @@ class GoalPermit:
         pass
 
     def current_goal(self, account):
-        from .goals import NoGoal
         return NoGoal()
 
     def settle_original(self, account, terminal) -> None:
@@ -379,7 +379,7 @@ class GoalPermit:
         if generation is not None and generation.lifecycle.allows_resume(True):
             store.retire_goal(goal_id, expected_generation=generation.number,
                               attempt_id=generation.attempt_id)
-        account.fail_current_origin(current)
+        current.fail_origin(account)
 
 
 class NoGoalPermit(GoalPermit):
@@ -419,7 +419,7 @@ class LaunchPermit(GoalPermit):
             return
         with suppress(StaleAttemptError):
             self.reservation.fail(store, "Goal origin turn did not finish successfully.")
-        account.fail_current_origin(current)
+        current.fail_origin(account)
 
     def retire_unverified(self, store: GoalAttemptStore) -> None:
         """Release this acquired claim; settled or superseded attempts stay intact."""

@@ -17,7 +17,11 @@ from acp import RequestError
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
-from .goals import GoalDeclaration, NoGoal
+from .goals import (
+    AcceptedGoalPermission,
+    GoalDeclaration,
+    NoGoal,
+)
 from .goals import Goal
 from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
@@ -29,7 +33,6 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .store_files import _store_lock
 from .coordinator import Coordination
 from .coordination_session import ReadNativeCoordinationSession
-from .turn_goal_permission import AcceptedGoalPermission
 from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput, OwnerOriginalInput
 from .thread_identity import ClaimedIdentity
 from .threads import Thread

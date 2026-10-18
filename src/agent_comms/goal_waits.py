@@ -9,8 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
-from .goals import GoalDeclaration
-from .goals import Goal
+from .goals import Goal, GoalDeclaration, GoalWait, NoGoalWait
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore, RootFile
 from .registry_document import RegistrySnapshot
@@ -21,64 +20,6 @@ from .wire_log import WireLog
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .threads import Thread
-
-
-class GoalWait(ABC):
-    """A resolved dependency state; only RecordedGoalWait is persisted."""
-
-    @abstractmethod
-    def allows_routed_input(self) -> bool: ...
-
-    def matches_id(self, wait_id: str) -> bool:
-        return False
-
-    def owner_matches(self, owner: RecordedThreadIncarnation) -> bool:
-        return False
-
-    def matches(self, original: CommittedDelivery, owner: RecordedThreadIncarnation) -> bool:
-        return False
-
-    def review_after_seq(
-        self, goal: Goal, owner: RecordedThreadIncarnation, targets: tuple[GoalWaitTarget, ...]
-    ) -> int:
-        return goal.published_seq
-
-    def consume_dependency(self, comms, canonical: str) -> bool:
-        return True
-
-    def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
-        return False
-
-    def for_current(self, goal: GoalDeclaration, owner: RecordedThreadIncarnation) -> GoalWait:
-        return self
-
-    def dependency_targets(self) -> tuple[GoalWaitTarget, ...]:
-        return ()
-
-    def belongs_to_turn(self, turn) -> bool:
-        return False
-
-    def include_dependency(self, pending: list[str], name: str) -> None:
-        pass
-
-    def release_closed(self, goals, owner, snapshot, rows) -> tuple[str, ...]:
-        return ()
-
-    def consume_owned_reply(self, goals, owner, reference) -> bool:
-        return False
-
-    def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
-        return GoalExecution(
-            GoalExecutionState.for_domain_state(goal.state),
-            goal.id,
-            block_reason=goal.state.reason,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class NoGoalWait(GoalWait):
-    def allows_routed_input(self) -> bool:
-        return True
 
 
 @dataclass(frozen=True, slots=True)
@@ -273,26 +214,6 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
     lock_rank = 9
     filename: ClassVar[str] = "goal_waits.json"
 
-    @staticmethod
-    def current(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait]) -> GoalWait:
-        wait: GoalWait = NoGoalWait()
-        for active in goal.active().active_goals():
-            wait = rows.get(active.id, wait)
-        return wait
-
-    @classmethod
-    def current_for(cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
-                    owner: RecordedThreadIncarnation) -> GoalWait:
-        return cls.current(goal, rows).for_current(goal, owner)
-
-    @classmethod
-    def execution(cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],
-                  snapshot: RegistrySnapshot, agents: AgentActivity) -> ThreadGoalExecution:
-        execution: ThreadGoalExecution = IdleGoalExecution()
-        for recorded in goal.active_goals():
-            execution = cls.current(recorded, rows).project(recorded, snapshot, agents)
-        return execution
-
     @property
     def record_type(self) -> type[dict[str, RecordedGoalWait]]:
         return dict[str, RecordedGoalWait]
@@ -351,7 +272,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            wait = GoalWaits.current_for(thread.goal, rows, thread.incarnation.require_recorded())
+            wait = thread.goal.current_wait(rows, thread.incarnation.require_recorded())
             dependencies = targets if name == owner else wait.dependency_targets()
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
@@ -361,7 +282,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_wait = GoalWaits.current_for(peer.goal, rows, peer.incarnation.require_recorded())
+                peer_wait = peer.goal.current_wait(rows, peer.incarnation.require_recorded())
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before

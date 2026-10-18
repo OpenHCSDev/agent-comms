@@ -16,6 +16,11 @@ from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
 from .goal_attempts import GoalPermit, NoGoalPermit
+from .goals import (
+    InactiveGoalPermission,
+    OwnerGoalPermission,
+    TurnGoalPermission,
+)
 from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
@@ -28,11 +33,6 @@ from .runtime import UNBOUND_CONTROLLER
 from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
-from .turn_goal_permission import (
-    InactiveGoalPermission,
-    OwnerGoalPermission,
-    TurnGoalPermission,
-)
 from .turn_input_source import (
     CapturedInputDependency,
     NoInputDependency,

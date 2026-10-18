@@ -111,7 +111,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         input_type=DependencyOriginalInput,
                     )
                 except RequestError as error:
-                    await goal.failed_schedule(error, pending[0], inputs.comms, owner)
+                    await goal.failed_schedule(error, pending[0], inputs.comms, owner, Coordination.run_worker)
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)

@@ -1,55 +1,20 @@
-"""What a goal shows: current, absent or unavailable, as one declared family.
-
-The owner's goal snapshot reaches the UI already decoded, with the turn
-settlement the owner read alongside it.
-"""
+"""UI presentations of a decoded goal declaration."""
 
 from __future__ import annotations
 
 from abc import abstractmethod
-from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
-from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
-from agent_comms.goals import Goal, GoalDeclaration, NoGoal as NoGoalDeclaration
-from agent_comms.goal_presentation import ThreadGoalExecution, GoalSnapshot
 
-
-@dataclass(frozen=True)
-class OwnerGoalSnapshot(GoalSnapshot):
-    """The live owner's answer to a goal read: the snapshot and the turn it read with it."""
-
-    updates: tuple[AgentCommsUpdate, ...]
-
-    @classmethod
-    def from_owner(cls, result: Mapping) -> "OwnerGoalSnapshot":
-        """Decode the owner's ``goal_snapshot`` reply once, at the socket boundary."""
-        raw_goal, raw_execution = result["goal"], result["goalExecution"]
-        return cls(
-            FieldCodec.decode(GoalDeclaration, raw_goal),
-            FieldCodec.decode(ThreadGoalExecution, raw_execution),
-            decode_updates(result["_meta"]),
-        )
+if TYPE_CHECKING:
+    from agent_comms.goals import Goal
+    from agent_comms.goal_presentation import ThreadGoalExecution
 
 
 class GoalDisplay(DeclaredFamily):
     can_control: ClassVar[bool] = True
-    _shows: ClassVar[dict[type[GoalDeclaration], type[GoalDisplay]]] = {}
-
-    def __init_subclass__(cls, **kwargs) -> None:
-        super().__init_subclass__(**kwargs)
-        shown = cls.__dict__.get("shows")
-        if shown is not None:
-            if shown in GoalDisplay._shows:
-                raise TypeError(f"Duplicate goal display for {shown.__name__}")
-            GoalDisplay._shows[shown] = cls
-
-    @classmethod
-    def current(cls, goal: GoalDeclaration) -> GoalDisplay:
-        return cls._shows[type(goal)].from_declaration(goal)
 
     @property
     @abstractmethod
@@ -75,11 +40,6 @@ class GoalDisplay(DeclaredFamily):
 @dataclass(frozen=True)
 class NoGoal(GoalDisplay):
     can_control: ClassVar[bool] = False
-    shows = NoGoalDeclaration
-
-    @classmethod
-    def from_declaration(cls, goal: NoGoalDeclaration) -> NoGoal:
-        return cls()
 
     @property
     def snapshot(self) -> None:
@@ -95,11 +55,6 @@ class NoGoal(GoalDisplay):
 @dataclass(frozen=True)
 class ShowingGoal(GoalDisplay):
     goal: Goal
-    shows = Goal
-
-    @classmethod
-    def from_declaration(cls, goal: Goal) -> ShowingGoal:
-        return cls(goal)
 
     @property
     def snapshot(self) -> Goal:
@@ -133,5 +88,4 @@ class GoalUnavailable(GoalDisplay):
         return True
 
     def heading(self, execution: ThreadGoalExecution) -> str:
-        # A failed read says nothing about why; the session's own state explains it.
         return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed else "Goal state unavailable"

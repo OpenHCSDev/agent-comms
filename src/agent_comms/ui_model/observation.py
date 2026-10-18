@@ -32,7 +32,10 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar, final
 
 from acp import RequestError
 
-from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.acp_extension import AgentCommsUpdate, TranscriptDraftUpdate, TranscriptSnapshotUpdate, decode_updates
+from agent_comms.field_codec import FieldCodec
+from agent_comms.goals import GoalDeclaration, GoalSnapshot
+from agent_comms.goal_presentation import ThreadGoalExecution
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_route_counts import RouteIndexRebuilding
@@ -58,11 +61,25 @@ if TYPE_CHECKING:
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
     from agent_comms.ui_model.delivery import InputDelivery
-    from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
     from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
     from agent_comms.view_unread import ReplyIndexBatch
 
+
+
+@dataclass(frozen=True)
+class OwnerGoalSnapshot(GoalSnapshot):
+    """The goal and turn updates read together over the owner's socket."""
+
+    updates: tuple[AgentCommsUpdate, ...]
+
+    @classmethod
+    def from_owner(cls, result: Mapping):
+        return cls(
+            FieldCodec.decode(GoalDeclaration, result["goal"]),
+            FieldCodec.decode(ThreadGoalExecution, result["goalExecution"]),
+            decode_updates(result["_meta"]),
+        )
 
 
 class ObservationRequest(ABC):
@@ -473,8 +490,6 @@ class ReadOwnerGoal(OwnerRead):
     """The owner's goal snapshot and the turn it read with it."""
 
     async def read(self, owner: RuntimeConnection) -> OwnerGoalSnapshot:
-        from agent_comms.ui_model.goal import OwnerGoalSnapshot
-
         return OwnerGoalSnapshot.from_owner(await owner.request("goal_snapshot"))
 
 

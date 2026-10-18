@@ -3,22 +3,29 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from functools import partial
 from pathlib import Path
-from typing import Literal
+from functools import partial
+from typing import ClassVar, Literal
 
-from abc import abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 import re
 
 from .child_process import ExitedOutcome
 
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
+from .thread_relations import GoalDerivedContact
+from .text_digest import TextDigest
+from .ui_model.goal import NoGoal as NoGoalDisplay, ShowingGoal
 
 from .field_codec import FieldCodec, WireValue
 from .errors import RelationViolationError
 from .goal_states import ActiveGoal, GoalState
 from .goal_attempt_identity import FailureNotObserved
+from .goal_presentation import GoalExecution, GoalExecutionState, IdleGoalExecution, ThreadGoalExecution
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -44,8 +51,6 @@ class UnresolvedMention:
     peer_created_at: Literal[None] = None
 
     def project(self, registry, owner, goal, source):
-        from .relationships import GoalMentionDiagnostic
-
         return (), (
             GoalMentionDiagnostic(
                 owner.name, goal.id, source.text_revision, self.token, type(self)
@@ -97,16 +102,12 @@ class ResolvedMentionBinding(GoalMentionBinding):
         return RecordedThreadIncarnation(self.peer_name, self.peer_created_at)
 
     def project(self, registry, owner, goal, source):
-        from .relationships import GoalDerivedContact, GoalMentionDiagnostic
-
         diagnostic = GoalMentionDiagnostic(
             owner.name, goal.id, source.text_revision, self.token, "stale_incarnation"
         )
         if not self.peer.current(registry):
             return (), (diagnostic,)
         peer = registry.threads[self.peer.resolved(registry).name]
-        from .errors import RelationViolationError
-
         try:
             peer.role.require_executable()
         except RelationViolationError:
@@ -123,6 +124,15 @@ class ResolvedMentionBinding(GoalMentionBinding):
                 source.text_revision,
             ),
         ), ()
+
+
+@dataclass(frozen=True, slots=True)
+class GoalMentionDiagnostic:
+    owner: str
+    goal_id: str
+    text_revision: int
+    token: str
+    reason: type[GoalMentionBinding] | Literal["stale_incarnation"]
 
 
 class GoalMentionEvidence(WireValue):
@@ -174,8 +184,6 @@ class GoalMentionSource(GoalMentionEvidence):
         return tuple(contacts), tuple(diagnostics)
 
     def __post_init__(self) -> None:
-        from .text_digest import TextDigest
-
         GoalRevision(self.goal_id, self.text_revision)
         TextDigest(self.text_digest)
         RecordedThreadIncarnation(self.owner_name, self.owner_created_at)
@@ -186,8 +194,6 @@ class GoalMentionSource(GoalMentionEvidence):
 
     @property
     def digest(self):
-        from .text_digest import TextDigest
-
         return TextDigest(self.text_digest)
 
     @property
@@ -433,14 +439,38 @@ class GoalDeclaration(WireValue):
     def defers_following_from(self, original: GoalDeclaration) -> bool:
         return False
 
+    def display(self):
+        return NoGoalDisplay()
+
+    def task_scope(self, owner):
+        return TurnTaskScope(project=owner.worktree)
+
+    def turn_permission(self):
+        return InactiveGoalPermission()
+
     def prepare_turn(self, turn, permits) -> bool:
         return not turn.autonomous_goal
 
     def filter_scheduled(self, pending):
         return pending
 
-    async def failed_schedule(self, error, scheduled, comms, owner):
+    async def failed_schedule(self, error, scheduled, comms, owner, worker):
         raise error
+
+    def recorded_wait(self, rows):
+        return NoGoalWait()
+
+    def execution(self, rows, snapshot, agents):
+        return IdleGoalExecution()
+
+    def current_wait(self, rows, owner):
+        return self.active().recorded_wait(rows).for_current(self, owner)
+
+    def fail_origin(self, account):
+        pass
+
+    async def pause_for_cancel(self, runner, name):
+        pass
 
     def contacts(self, owner, registry):
         return (), ()
@@ -452,9 +482,7 @@ class GoalDeclaration(WireValue):
         return action.create_goal(ctx)
 
     def apply_problem_order(self, action, ctx):
-        from .goal_actions import SetGoalAction
-        return SetGoalAction(text="Complete the assigned problems.", goal_id=action.goal_id,
-                             order=ProblemGoalOrder()).change(ctx)
+        return action.create_goal(ctx)
 
     def append_progress(self, note: str) -> GoalDeclaration:
         return self
@@ -567,26 +595,44 @@ class Goal(GoalDeclaration):
     def defers_following_from(self, original: GoalDeclaration) -> bool:
         return original.permits_inactive_input()
 
-    def prepare_turn(self, turn, permits) -> bool:
-        from .turn_goal_account import TurnGoalAccount
-        turn.goal_permit = TurnGoalAccount.reserve(
-            goal=self, owner=turn.thread, comms=turn.runner.comms,
-            autonomous=turn.autonomous_goal,
-        )
-        return turn.goal_permit.start(permits, turn.runner.comms.goals.open_goal_store())
+    def recorded_wait(self, rows):
+        return rows.get(self.id, NoGoalWait())
 
-    def filter_scheduled(self, pending):
-        return [turn for turn in pending if turn.goal_id == self.id]
+    def execution(self, rows, snapshot, agents):
+        return self.active().recorded_wait(rows).project(self, snapshot, agents)
 
-    async def failed_schedule(self, error, scheduled, comms, owner):
-        from .coordinator import Coordination
+    def fail_origin(self, account):
+        account.fail_origin(self)
+
+    async def pause_for_cancel(self, runner, name):
+        await runner.pause_goal(name, self.id)
+
+    async def failed_schedule(self, error, scheduled, comms, owner, worker):
         scheduled.require_dependency_wake(error)
-        await Coordination.run_worker(partial(
+        await worker(partial(
             comms.goals.block_goal_after_failed_turn, owner.name,
             started_goal=self, expected_worktree=owner.worktree,
             diagnostic="Standby wake launch authority unavailable; inspect the UNKNOWN "
                        "input before explicit Retry. No input was replayed.",
         ))
+
+    def display(self):
+        return ShowingGoal(self)
+
+    def task_scope(self, owner):
+        return GoalTaskScope(project=owner.worktree, goal=self.checkpoint)
+
+    def turn_permission(self):
+        return ContinuationGoalPermission(self)
+
+    def prepare_turn(self, turn, permits) -> bool:
+        turn.goal_permit = turn.runner.comms.goals.reserve_turn(
+            self, owner=turn.thread, autonomous=turn.autonomous_goal,
+        )
+        return turn.goal_permit.start(permits, turn.runner.comms.goals.open_goal_store())
+
+    def filter_scheduled(self, pending):
+        return [turn for turn in pending if turn.goal_id == self.id]
 
     def contacts(self, owner, registry):
         return self.mention_source.contacts(self, owner, registry)
@@ -699,3 +745,171 @@ class Goal(GoalDeclaration):
     @property
     def summary(self) -> str:
         return f"Goal · {self.state.declared_name}: {self.text}"
+
+
+@dataclass(frozen=True)
+class GoalSnapshot:
+    """A declaration and its execution read from the same owner snapshot."""
+
+    goal: GoalDeclaration
+    execution: ThreadGoalExecution
+
+    def __post_init__(self):
+        self.execution.validate_goal(self.goal.captured)
+
+
+class GoalWait(ABC):
+    """A resolved dependency state; only recorded waits are persisted."""
+
+    @abstractmethod
+    def allows_routed_input(self) -> bool: ...
+
+    def matches_id(self, wait_id: str) -> bool:
+        return False
+
+    def owner_matches(self, owner) -> bool:
+        return False
+
+    def matches(self, original, owner) -> bool:
+        return False
+
+    def review_after_seq(self, goal, owner, targets) -> int:
+        return goal.published_seq
+
+    def consume_dependency(self, comms, canonical: str) -> bool:
+        return True
+
+    def consume_reply(self, waits, goal_id: str) -> bool:
+        return False
+
+    def for_current(self, goal, owner):
+        return self
+
+    def dependency_targets(self):
+        return ()
+
+    def belongs_to_turn(self, turn) -> bool:
+        return False
+
+    def include_dependency(self, pending, name) -> None:
+        pass
+
+    def release_closed(self, goals, owner, snapshot, rows):
+        return ()
+
+    def consume_owned_reply(self, goals, owner, reference) -> bool:
+        return False
+
+    def project(self, goal, snapshot, agents):
+        return GoalExecution(GoalExecutionState.for_domain_state(goal.state), goal.id,
+                             block_reason=goal.state.reason)
+
+
+@dataclass(frozen=True, slots=True)
+class NoGoalWait(GoalWait):
+    def allows_routed_input(self) -> bool:
+        return True
+
+
+@dataclass(frozen=True, kw_only=True)
+class TaskScope(DeclaredFamily, affix="TaskScope"):
+    project: str
+
+    def require_current(self, owner) -> None:
+        if self.project != owner.worktree:
+            raise RelationViolationError("Task project differs from its declared owner")
+        self.require_context(owner)
+
+    def require_human_context(self, owner) -> None:
+        self.require_current(owner)
+
+    def for_human(self):
+        return self
+
+    @abstractmethod
+    def require_context(self, owner) -> None: ...
+
+    @abstractmethod
+    def applies(self, owner, declaration, registry) -> bool: ...
+
+    def require_correction(self, previous, correction, registry) -> None:
+        if previous.scope != self:
+            raise RelationViolationError("Decision correction must preserve its original scope")
+
+
+@dataclass(frozen=True, kw_only=True)
+class GoalTaskScope(TaskScope):
+    goal: GoalRevision
+
+    def require_context(self, owner) -> None:
+        owner.goal.require_id(self.goal.id).require_active()
+        owner.goal.require_checkpoint(self.goal)
+
+    def applies(self, owner, declaration, registry) -> bool:
+        return owner.goal.active().task_scope(owner) == self
+
+
+@dataclass(frozen=True, kw_only=True)
+class ProjectTaskScope(TaskScope):
+    def require_context(self, owner) -> None:
+        pass
+
+    def applies(self, owner, declaration, registry) -> bool:
+        return owner.worktree == self.project
+
+
+@dataclass(frozen=True, kw_only=True)
+class TurnTaskScope(TaskScope):
+    """The enclosing declaration's original turn determines this scope."""
+
+    def require_context(self, owner) -> None:
+        if owner.goal.active().task_scope(owner) != self:
+            raise RelationViolationError("An active goal requires its revision scope")
+
+    def applies(self, owner, declaration, registry) -> bool:
+        return owner.worktree == self.project and declaration.turn_scope_matches(owner, registry)
+
+    def require_human_context(self, owner) -> None:
+        raise RelationViolationError("A USER constraint cannot borrow a model turn scope")
+
+    def for_human(self):
+        return ProjectTaskScope(project=self.project)
+
+    def require_correction(self, previous, correction, registry) -> None:
+        super().require_correction(previous, correction, registry)
+        previous.require_same_turn(correction, registry)
+
+
+class TurnGoalPermission(ABC):
+
+    @abstractmethod
+    def allows(self, current: GoalDeclaration) -> bool: ...
+
+
+@dataclass(frozen=True)
+class OwnerGoalPermission(TurnGoalPermission):
+    goal: GoalDeclaration
+
+    def allows(self, current: GoalDeclaration) -> bool:
+        return current == self.goal
+
+
+@dataclass(frozen=True)
+class ContinuationGoalPermission(TurnGoalPermission):
+    goal: Goal
+
+    def allows(self, current: GoalDeclaration) -> bool:
+        return current.permits_continuation(self.goal.id)
+
+
+class InactiveGoalPermission(TurnGoalPermission):
+    def allows(self, current: GoalDeclaration) -> bool:
+        return current.active().permits_inactive_input()
+
+
+@dataclass(frozen=True)
+class AcceptedGoalPermission(TurnGoalPermission):
+    goal_id: str | None
+
+    def allows(self, current: GoalDeclaration) -> bool:
+        return current.permits_accepted(self.goal_id)

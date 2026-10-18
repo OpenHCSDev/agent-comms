@@ -24,7 +24,8 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import UnregisteredThreadError
-from .goals import GoalMentionBinding
+from .goals import GoalMentionDiagnostic
+from .thread_relations import GoalDerivedContact, MutualThreadRelation, RelationRecord, RelationRevision
 from .locked_store import LockedStore, RootFile
 from .peer_relevance import (
     ChannelmateRelevance,
@@ -48,77 +49,6 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .presentation import ThreadView, WireRevision
     from .registration import Registration
-
-
-@dataclass(frozen=True, slots=True)
-class RelationRevision:
-    """An earlier note of a relation and when it was replaced or written."""
-
-    note: str
-    at: float
-
-
-@dataclass(frozen=True, slots=True)
-class RelationRecord:
-    """One relation as a thread reads it: who made it, when, why and how it changed."""
-
-    peer: str
-    relevance: type[PeerRelevance]
-    author: str
-    # None when the relation records no time of its own.
-    created_at: float | None
-    note: str
-    history: tuple[RelationRevision, ...]
-
-
-class MutualThreadRelation(ABC):
-    """Shared identity behavior for explicit and goal-derived mutual visibility."""
-
-    # Each relation owns the relevance its two threads have toward each other.
-    relevance: ClassVar[type[PeerRelevance]]
-    source: ClassVar[str]
-    # Why the two threads are related, in words an agent can read.
-    note: str
-
-    @abstractmethod
-    def record(self, peer: ThreadIncarnation) -> RelationRecord:
-        """Describe this relation to the thread on the other side of ``peer``."""
-
-    @property
-    @abstractmethod
-    def owner_incarnation(self) -> ThreadIncarnation: ...
-
-    @property
-    @abstractmethod
-    def peer_incarnation(self) -> ThreadIncarnation: ...
-
-    @property
-    def pair_identity(self) -> frozenset[ThreadIncarnation]:
-        return frozenset((self.owner_incarnation, self.peer_incarnation))
-
-    def incident(self, thread: Thread) -> bool:
-        return thread.incarnation in self.pair_identity
-
-    def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
-        return ()
-
-    def entry(self, identity: ThreadIncarnation, person: ThreadView | None,
-              available: bool, current: RelationshipEntry | None) -> RelationshipEntry:
-        return RelationshipEntry(
-            identity.name, "thread", person if available else None,
-            detail=f"{current.detail}\n{self.note}" if current and current.detail else self.note,
-            available=available,
-            sources=(*current.sources, self.source) if current else (self.source,),
-            goal_contacts=(*current.goal_contacts, *self.entry_goal_contacts())
-                          if current else self.entry_goal_contacts(),
-        )
-
-    def counterpart(self, thread: Thread) -> ThreadIncarnation | None:
-        if self.owner_incarnation == thread.incarnation:
-            return self.peer_incarnation
-        if self.peer_incarnation == thread.incarnation:
-            return self.owner_incarnation
-        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -196,51 +126,6 @@ class Collaboration(CollaborationRevision):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalDerivedContact(MutualThreadRelation):
-    """Mutual *visibility* only; a mention never accepts work or dispatches a wake."""
-
-    owner: str
-    owner_created_at: float
-    peer: str
-    peer_created_at: float
-    goal_id: str
-    text_revision: int
-    relevance: ClassVar[type[PeerRelevance]] = GoalContactRelevance
-    source: ClassVar[str] = "goal_mention"
-
-    def entry_goal_contacts(self) -> tuple[GoalDerivedContact, ...]:
-        return (self,)
-
-    @property
-    def note(self) -> str:
-        return (
-            f"Mentioned by {self.owner}'s goal {self.goal_id} "
-            f"text revision {self.text_revision} (awareness only)"
-        )
-
-    def record(self, peer: ThreadIncarnation) -> RelationRecord:
-        # The goal's owner wrote the mention; a mention records no time.
-        return RelationRecord(peer.name, self.relevance, self.owner, None, self.note, ())
-
-    @property
-    def owner_incarnation(self) -> ThreadIncarnation:
-        return RecordedThreadIncarnation(self.owner, self.owner_created_at)
-
-    @property
-    def peer_incarnation(self) -> ThreadIncarnation:
-        return RecordedThreadIncarnation(self.peer, self.peer_created_at)
-
-
-@dataclass(frozen=True, slots=True)
-class GoalMentionDiagnostic:
-    owner: str
-    goal_id: str
-    text_revision: int
-    token: str
-    reason: type[GoalMentionBinding] | Literal["stale_incarnation"]
-
-
-@dataclass(frozen=True, slots=True)
 class RelationshipEntry:
     target: str
     kind: str
@@ -251,6 +136,19 @@ class RelationshipEntry:
     available: bool = True
     sources: tuple[str, ...] = ()
     goal_contacts: tuple[GoalDerivedContact, ...] = ()
+
+    @classmethod
+    def from_relation(cls, relation: MutualThreadRelation, identity: ThreadIncarnation,
+                      person: ThreadView | None, available: bool,
+                      current: RelationshipEntry | None) -> RelationshipEntry:
+        return cls(
+            identity.name, "thread", person if available else None,
+            detail=f"{current.detail}\n{relation.note}" if current and current.detail else relation.note,
+            available=available,
+            sources=(*current.sources, relation.source) if current else (relation.source,),
+            goal_contacts=(*current.goal_contacts, *relation.entry_goal_contacts())
+                          if current else relation.entry_goal_contacts(),
+        )
 
     @property
     def identity(self) -> tuple[str, str]:
@@ -405,7 +303,8 @@ class CollaboratingRelationshipGroup(SortableRelationshipGroup):
                 continue
             person = context.people.get(identity.name)
             available = person is not None and person.thread.incarnation == identity
-            entries[identity] = relation.entry(identity, person, available, entries.get(identity))
+            entries[identity] = RelationshipEntry.from_relation(relation, identity, person, available,
+                                                                  entries.get(identity))
         return tuple(entries.values())
 
 

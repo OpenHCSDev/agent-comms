@@ -10,21 +10,18 @@ from contextlib import ExitStack, suppress
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
-from acp import RequestError
-
 from . import agent_events as events
 from .diagnostics import terminal_failure_reason
 from .goal_actions import BlockedGoalAction, GoalPrecondition
-from .goal_attempts import GoalAttemptError, GoalAttemptStore, GoalPermit, LaunchPermit, NoGoalPermit, StaleAttemptError
+from .goal_attempts import GoalAttemptStore, GoalPermit, LaunchPermit, NoGoalPermit, StaleAttemptError
 from .goal_failure_observation import FailedTurnObservation
-from .goals import GoalDeclaration, NoGoal
+from .goals import Goal, GoalDeclaration, NoGoal
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goals import Goal
     from .pi_payloads import PiUsage
     from .thread_identity import TurnId
     from .threads import Thread
@@ -100,31 +97,8 @@ class TurnGoalAccount:
     def __post_init__(self) -> None:
         self.permit.bind(self.originated)
 
-    def fail_current_origin(self, current: GoalDeclaration) -> None:
-        for goal in current.active_goals():
-            FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(goal.state)
-
-    @staticmethod
-    def reserve(*, goal, owner, comms, autonomous):
-        try:
-            store = comms.goals.open_goal_store()
-            claim_scope = comms.registry.snapshot().claimed_generations[owner.name]
-            with _store_lock(comms._wire_lock_path):
-                generation = store.require_generation(goal.id)
-                generation.lifecycle.require_ready()
-                grant = comms.goals.ready_goal_grant_locked(owner, claim_scope, generation)
-                reservation = store.reserve(goal.id, generation.number, ready_grant=grant)
-                return store.claim_launch(reservation)
-        except GoalAttemptError as error:
-            if autonomous:
-                return NoGoalPermit()
-            raise RequestError.invalid_params(
-                {
-                    "reason": "goal_attempt_unavailable",
-                    "details": "The goal has no launchable attempt. Inspect its state and use "
-                    "Retry for a failed attempt; no prompt was sent to Pi.",
-                }
-            ) from error
+    def fail_origin(self, goal: Goal) -> None:
+        FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(goal.state)
 
     @property
     def thread_name(self) -> str:

@@ -22,7 +22,7 @@ from .context_reading import ContextReading
 from .input_attempt import ACPInputIdText, InputAttempt
 from .input_origin import HumanInputOrigin, InputOrigin, UnattributedInputOrigin
 from .field_codec import FieldCodec, WireValue
-from .goal_presentation import GoalSnapshot
+from .goals import GoalSnapshot
 from .native_runtime_input import CurrentNativeCursor
 from .owner_protocol import IncompatibleOwner
 from .pi_payloads import McpLiveAcknowledgement

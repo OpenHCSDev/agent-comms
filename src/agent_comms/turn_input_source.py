@@ -11,9 +11,13 @@ from acp import RequestError
 
 from .agent_backend import WhenBusy
 from .channel_input_batch import InputBatch, SingleInputBatch
+from .goals import (
+    InactiveGoalPermission,
+    OwnerGoalPermission,
+    TurnGoalPermission,
+)
 from .messages import Message
 from .started_input import StartedInput
-from .turn_goal_permission import InactiveGoalPermission, OwnerGoalPermission, TurnGoalPermission
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -130,7 +134,7 @@ class OriginalTurnInput(TurnInputSource):
 
     @classmethod
     def permission(cls, turn):
-        return TurnGoalPermission.for_continuation(turn.thread.goal.active())
+        return turn.thread.goal.active().turn_permission()
 
     @property
     def keys(self) -> tuple[str, ...]:
