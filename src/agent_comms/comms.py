@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from .active_route import CommsRoute, resolve_comms_route
-from .bus_route_counts import OpenedRouteCounts
+from .bus_route_counts import CompletingRouteCounts, OpenedRouteCounts
 
 from .agent_activity import AgentActivity
 from .channel_management import ChannelManagement
@@ -73,3 +75,14 @@ def wire(
 ) -> Comms:
     """Build a Comms wire from an explicit root or the active default route."""
     return Comms(resolve_comms_route(root), projection=projection)
+
+
+@contextmanager
+def client_wire(root: Path | None) -> Iterator[Comms]:
+    """One client call: it borrows the published route until it retires and answers in full.
+
+    Only the UI yields between index units.
+    """
+    route = resolve_comms_route(root)
+    with route.hold_client_route():
+        yield Comms(route, projection=CompletingRouteCounts)
