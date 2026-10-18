@@ -7,14 +7,18 @@ import re
 import shlex
 import shutil
 import subprocess
+from collections.abc import Sequence
 from dataclasses import dataclass
 from itertools import groupby
 from pathlib import Path
-from typing import Annotated, ClassVar, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .field_codec import FieldCodec, PathText
 from .native_tool_call import SelectedToolDenied
+from .standing_rules import StandingRule
+
 if TYPE_CHECKING:
+    from .comms import Comms
     from .threads import Thread
 
 StoragePath = Annotated[Path, PathText]
@@ -31,16 +35,19 @@ class StorageRoots:
 
 @dataclass(frozen=True)
 class StorageRule:
-    floor_gib: float = 5.0
+    floor_gib: float = 5.0  # under this nothing that allocates may run
+    cleanup_gib: float = 30.0  # under this a cleanup owner is due; it does not stop builds
+    scratch_cap_gib: float = 3.0  # one unit's scratch together with its checkouts
     max_checkouts: int = 2
     volume: StoragePath = Path.home()
     scratch_base: StoragePath = Path.home() / '.cache' / 'agent-scratch'
     checkout_base: StoragePath = Path.home() / 'wt'
 
     def __post_init__(self):
-        if not all(math.isfinite(n) for n in (self.floor_gib,)):
+        limits = (self.floor_gib, self.cleanup_gib, self.scratch_cap_gib)
+        if not all(math.isfinite(n) for n in limits):
             raise ValueError("Storage limits must be finite.")
-        if min(self.floor_gib, self.max_checkouts) < 0:
+        if min(*limits, self.max_checkouts) < 0:
             raise ValueError("Storage limits cannot be negative.")
 
     @classmethod
@@ -89,13 +96,18 @@ class StorageRule:
     def free_gib(self):
         return shutil.disk_usage(self.volume).free / 2**30
 
+    def below_floor(self, free_gib: float) -> bool:
+        return free_gib < self.floor_gib
+
+    def cleanup_due(self, free_gib: float) -> bool:
+        return free_gib < self.cleanup_gib
+
     def require_quota(self, thread: Thread, *proposed: Path):
-        checkouts = tuple(dict.fromkeys((*self.checkouts_of(thread), *proposed)))
-        if len(checkouts) > self.max_checkouts + 1:
+        if UnitStorage.read(self, thread, *proposed).over_checkouts:
             self.deny(f'at most {self.max_checkouts} checkouts besides the home checkout')
 
     def require_allocation(self, thread: Thread, *proposed: Path):
-        if self.free_gib() < self.floor_gib:
+        if self.below_floor(self.free_gib()):
             self.deny(f'allocation requires {self.floor_gib:g} GiB free on {self.volume}')
         self.require_quota(thread, *proposed)
 
@@ -114,6 +126,49 @@ class StorageRule:
         return (f'StorageRule: scratch {roots.scratch}; '
                 f'{self.max_checkouts} extra checkouts; allocation floor {self.floor_gib:g} GiB. '
                 'No clones, virtualenv creation, uv sync or .artifacts writes.')
+
+    def order_text(self, unit: str, pythons: Sequence[str]) -> str:
+        """The rule as an order states it to ``unit``."""
+        home = self.checkout_base / unit
+        return (
+            f'Storage (enforced, automatic strike): your checkouts are {home}--P<n>, at most '
+            f'{self.max_checkouts} besides your home checkout {home}, removed with git worktree '
+            'remove in the same order that created them; your only scratch dir is '
+            f'{self.scratch_base / unit}/, capped at {self.scratch_cap_gib:g} GB together with '
+            f'your checkouts. Run tests with PYTHONPATH=src on the shared {" or ".join(pythons)}; '
+            'never create a venv, never uv sync, never write .artifacts, never git clone. '
+            f'Below {self.floor_gib:g} GB free on {self.volume}, no worktree, venv, build, install '
+            'or recording.'
+        )
+
+
+@dataclass(frozen=True)
+class UnitStorage(StandingRule):
+    """One unit's checkouts, derived on read from its registered worktrees; its rule judges them."""
+
+    rule: StorageRule
+    unit: str
+    checkouts: tuple[Path, ...]
+
+    @classmethod
+    def read(cls, rule: StorageRule, thread: Thread, *proposed: Path) -> UnitStorage:
+        return cls(rule, thread.name, tuple(dict.fromkeys((*rule.checkouts_of(thread), *proposed))))
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[UnitStorage, ...]:
+        todos = cls.todos(comms, commander)
+        units = sorted({todo.holder for todo in todos if todo.state.open and todo.holder})
+        registry = comms.registry
+        read = (cls.read(registry.storage_rule, registry.require(unit)) for unit in units)
+        return tuple(storage for storage in read if storage.over_checkouts)
+
+    @property
+    def over_checkouts(self) -> bool:
+        return len(self.checkouts) > self.rule.max_checkouts + 1
+
+    def line(self) -> str:
+        return (f'VIOLATION storage quota: {self.unit} holds {len(self.checkouts) - 1} checkouts besides home, '
+                f'limit {self.rule.max_checkouts} -> order the cleanup')
 
 
 class ShellProgram:

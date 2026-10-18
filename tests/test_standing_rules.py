@@ -1,6 +1,8 @@
 import importlib
 import json
 import os
+import shutil
+import subprocess
 import time
 
 import pytest
@@ -8,10 +10,12 @@ import pytest
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import BridgeDown, HuntDue, PlanIdle, StandingRule
+from agent_comms.standing_rules import BridgeDown, DiskLow, HuntDue, PlanIdle, StandingRule
+from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import CleanHunt, RecordHuntTodo, Todo
@@ -110,3 +114,30 @@ def test_the_read_tool_returns_every_members_lines(commander, standing):
     read = CommsStandingRulesTool().apply(comms, caller)
     assert read.broken == tuple(rule.line() for rule in StandingRule.broken(comms, "lead"))
     assert "HUNT DUE: read a hot path and order the fix this wake" in read.broken
+
+
+def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_path):
+    comms, _ = commander
+    create(commander, "P1")
+    home, extra = tmp_path / "wt" / "worker", tmp_path / "wt" / "worker--P1"
+    subprocess.run(["git", "init", "-q", str(home)], check=True)
+    subprocess.run(["git", "-C", str(home), "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+                    "--allow-empty", "-m", "base"], check=True)
+    subprocess.run(["git", "-C", str(home), "worktree", "add", "-q", str(extra)], check=True)
+    free = shutil.disk_usage(tmp_path).free / 2**30
+
+    def broken(member, **limits):
+        (comms.root / "storage.json").write_text(json.dumps(
+            {"volume": str(tmp_path), "checkout_base": str(tmp_path / "wt"), **limits}))
+        return member.violations(Comms(comms.root), "lead")
+
+    assert broken(UnitStorage, cleanup_gib=0, floor_gib=0, max_checkouts=1) == ()
+    assert broken(DiskLow, cleanup_gib=0, floor_gib=0, max_checkouts=1) == ()
+    over, = broken(UnitStorage, cleanup_gib=0, floor_gib=0, max_checkouts=0)
+    assert over.checkouts == (home.resolve(), extra.resolve())
+    assert over.line() == ("VIOLATION storage quota: worker holds 1 checkouts besides home, limit 0"
+                           " -> order the cleanup")
+    cleanup, = broken(DiskLow, cleanup_gib=free + 100, floor_gib=0)
+    assert "cleanup due under" in cleanup.line() and "floor" not in cleanup.line()
+    floor, = broken(DiskLow, cleanup_gib=free + 100, floor_gib=free + 50)
+    assert floor.line().endswith("floor nothing allocates) -> put a cleanup owner on it now")

@@ -16,6 +16,7 @@ from .plan_phases import PlanPhase
 
 if TYPE_CHECKING:
     from .comms import Comms
+    from .storage_rules import StorageRule
     from .todos import Todo
 
 
@@ -102,4 +103,29 @@ class PlanIdle(StandingRule):
         return (
             f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
             " -> dispatch it this wake"
+        )
+
+
+@dataclass(frozen=True)
+class DiskLow(StandingRule):
+    """Under the cleanup threshold a cleanup owner is due; under the floor nothing allocates."""
+
+    rule: StorageRule
+    free_gib: float
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        rule = comms.registry.storage_rule
+        free = rule.free_gib()
+        return (cls(rule, free),) if rule.cleanup_due(free) else ()
+
+    def line(self) -> str:
+        floor = (
+            f"; under the {self.rule.floor_gib:g} GiB floor nothing allocates"
+            if self.rule.below_floor(self.free_gib)
+            else ""
+        )
+        return (
+            f"DISK LOW: {self.rule.volume} has {self.free_gib:.1f} GiB free (cleanup due under"
+            f" {self.rule.cleanup_gib:g} GiB{floor}) -> put a cleanup owner on it now"
         )
