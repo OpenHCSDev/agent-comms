@@ -17,6 +17,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
+from agent_comms.goals import NoGoal
 from agent_comms.goal_states import ActiveGoal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
