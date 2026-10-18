@@ -96,9 +96,6 @@ class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
         if not self.may_become(nxt):
             raise ValueError(self.transition_refusal())
 
-    def require_order_slot(self) -> None:
-        raise ValueError("Finish or release the current Goal before assigning an order.")
-
     def after_order_delivery(self, pending: bool) -> GoalState:
         return self
 
@@ -277,9 +274,6 @@ class UnrecordedBlockGoal(BlockedState):
 @dataclass(frozen=True)
 class CompletedGoal(BlockingOnFailure, GoalState, FromOpenGoal):
     terminal = True
-
-    def require_order_slot(self) -> None:
-        pass
 
     def after_unverified_completion(self, diagnostic: str) -> GoalState:
         return self.after_failed_turn(diagnostic)
