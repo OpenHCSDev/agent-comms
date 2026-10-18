@@ -24,10 +24,10 @@ tmp_path = private_root_fixture
 
 
 @asynccontextmanager
-async def selected_reply(agent, *, cancelled=False):
+async def selected_reply(agent, *, error=None):
     wake = agent.inputs.wake_tasks["beta"]
     yield wake
-    with pytest.raises(asyncio.CancelledError) if cancelled else nullcontext():
+    with pytest.raises(error) if error is not None else nullcontext():
         await wake
 
 
@@ -147,7 +147,7 @@ async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatc
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        async with selected_reply(agent, cancelled=change == "cancel") as wake:
+        async with selected_reply(agent, error=asyncio.CancelledError if change == "cancel" else None) as wake:
             response = await asyncio.wait_for(
                 agent.prompt("beta", [{"type": "text", "text": "Fresh input"}]), 2
             )
@@ -268,7 +268,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
     try:
         await asyncio.wait_for(entered.wait(), 5)
-        async with selected_reply(agent):
+        async with selected_reply(agent, error=RequestError):
             response = await asyncio.wait_for(
                 agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
             )
