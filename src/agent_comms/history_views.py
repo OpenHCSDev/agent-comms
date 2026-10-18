@@ -44,7 +44,8 @@ from .exporting import (
 from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
-from .message_page import NEWEST_PAGE, MessagePage, OlderTraversal, PageBounds
+from .message_page import NEWEST_PAGE, MessagePage, PageBounds
+from .page_traversal import OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
