@@ -433,7 +433,7 @@ HUNT_ROOTS = [(str(repo.checkout), repo.source) for repo in CONFIG.repos]
 
 
 def hunt(where, why, sent=None):
-    """A hunt is a hot-path read with a verdict: file:line, what scales or repeats, and the order it became (or --clean)."""
+    """A hot-path read with a verdict; HuntVerb declares its file:line, reason and outcome."""
     path, _, line = where.rpartition(':')
     if not os.path.exists(path) or not line.isdigit() or int(line) > sum(1 for _ in open(path)):
         sys.exit(f'Refused: {where} is not a real file:line')
@@ -441,11 +441,12 @@ def hunt(where, why, sent=None):
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
     if sent:
         todo = next((t for t in open_todos() if t.order.id == sent), None) or sys.exit(
-            f'Refused: {sent} is not an open tracked order; send it first or mark the hunt --clean')
+            f'Refused: {sent} is not an open tracked order; send it first. {HuntVerb.usage()}')
     else:
         named = set(re.findall(r'\bP\d+\b', why))
         todo = next((t for t in open_todos() if t.id in named), None) or sys.exit(
-            'Refused: a clean hunt is recorded on its open problem; name the P-number in --why')
+            'Refused: a clean hunt is recorded on its open problem; name the P-number in --why. '
+            + HuntVerb.usage())
     ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
     call(CommsTodoTool(id=todo.id, operation=RecordHuntTodo(
         todo.revision, COMMS.registry.require(ME).incarnation,
@@ -538,8 +539,7 @@ def overdue():
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
         if time.time() - last_hunt() > 900:
-            print(f'HUNT DUE (none in 15 min): read {next_hunt()} for per-event or per-history work or slop, '
-                  'then order hunt FILE:LINE --why "..." [--sent ORDER] (or --clean)', flush=True)
+            print(HuntVerb.due(next_hunt()), flush=True)
         time.sleep(60)
 
 
@@ -564,8 +564,20 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
     def run(self) -> None: ...
 
     @classmethod
+    def tool(cls) -> str:
+        """The agent-comms-commander tool this verb belongs to: its module's name."""
+        return cls.__module__.rpartition('.')[2].replace('_', '-')
+
+    @classmethod
+    def usage(cls) -> str:
+        """This verb's command line, rendered by the parser its options declare."""
+        verbs = argparse.ArgumentParser(prog=cls.tool()).add_subparsers()
+        cls.add_parser(verbs)
+        return ' '.join(next(iter(verbs.choices.values())).format_usage().split()[1:])
+
+    @classmethod
     def parse(cls, argv: list[str], description: str) -> CommanderVerb:
-        parser = argparse.ArgumentParser(prog=cls.__name__.removesuffix('Verb').lower(), description=description,
+        parser = argparse.ArgumentParser(prog=cls.tool(), description=description,
                                          formatter_class=argparse.RawDescriptionHelpFormatter)
         verbs = parser.add_subparsers(dest='command', required=True)
         for member in cls.members_with(cls):
@@ -669,9 +681,17 @@ class CloseVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class HuntVerb(OrderVerb, LoadedVerb):
     help = "a hot-path read with a verdict: file:line, what scales or repeats, and the order it became"
-    where: str = option("where")
+    where: str = option("where", metavar="FILE:LINE")
     why: str = option("--why")
-    sent: str | None = option("--sent", default=None)
+    sent: str | None = option("--sent", default=None, group="outcome", metavar="ORDER",
+                              help="the open order the hunt became")
+    clean: bool = option("--clean", default=False, group="outcome",
+                         help="no order; --why names the open P-number it is recorded on")
+
+    @classmethod
+    def due(cls, where: str | None) -> str:
+        return (f'HUNT DUE (none in 15 min): read {where} for per-event or per-history work '
+                f'or slop, then {cls.usage()}')
 
     def run(self) -> None:
         hunt(self.where, self.why, self.sent)

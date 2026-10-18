@@ -1,5 +1,6 @@
 """Every commander verb parses its documented command line from its declared option() fields."""
 import importlib
+import re
 import shlex
 
 import pytest
@@ -16,7 +17,8 @@ DOCUMENTED = [
     ("order", "problem 'the text' --to worker --due 23:59 --order order.txt --disk",
      {"text": "the text", "to": "worker", "due": "23:59", "order": "order.txt", "disk": True}),
     ("order", "close P1 --works seen --artifact seen.png", {"pid": "P1", "works": "seen", "artifact": "seen.png"}),
-    ("order", "hunt a.py:1 --why why --sent abc", {"where": "a.py:1", "why": "why", "sent": "abc"}),
+    ("order", "hunt a.py:1 --why why --sent abc", {"where": "a.py:1", "why": "why", "sent": "abc", "clean": False}),
+    ("order", "hunt a.py:1 --why why --clean", {"where": "a.py:1", "why": "why", "sent": None, "clean": True}),
     ("order", "next-hunt", {}),
     ("order", "board", {}),
     ("order", "overdue", {}),
@@ -40,3 +42,16 @@ def test_every_verb_parses_its_documented_command_line(commander_script, tool, l
     verb = family.parse(shlex.split(line), "")
     assert verb.declared_name == line.split()[0]
     assert {name: getattr(verb, name) for name in fields} == fields
+
+
+def test_the_hunt_prompt_prints_a_command_line_the_hunt_parser_accepts(commander_script):
+    order, _ = commander_script
+    printed = order.HuntVerb.due("a.py").split("then ", 1)[1]
+    tool, verb, *usage = re.sub(r"\[[^]]*\]", "", printed).split()
+    assert (tool, verb) == ("order", "hunt")
+    required = " ".join(usage)
+    for outcome in re.search(r"\((.*?)\)", required).group(1).split(" | "):
+        line = re.sub(r"\(.*?\)", outcome, required)
+        argv = [verb, *(re.sub(r"^[A-Z:]+$", "x", token) for token in line.split())]
+        parsed = order.OrderVerb.parse(argv, "")
+        assert type(parsed) is order.HuntVerb and getattr(parsed, outcome.split()[0].removeprefix("--"))
