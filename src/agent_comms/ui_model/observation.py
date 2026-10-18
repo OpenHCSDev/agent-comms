@@ -26,7 +26,7 @@ import traceback
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
 from contextlib import AbstractContextManager, ExitStack
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar, final
 
@@ -543,7 +543,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         super().__init__(request)
         self.stage: SidebarReadStage = RosterSidebarRead()
         self.sent: SendState = NoSidebarSent()
-        self.published: PublishState[SidebarResult] = NoSidebarResult()
+        self.published: PublishState = NoSidebarResult()
         self.reply_completion: Future[ReplyIndexBatch] = IdleReplyPreparation.future
 
     def after_read(self, service: ObservationService) -> None:
@@ -794,21 +794,18 @@ class RevisionObserved(Observed):
     """Core's stores changed; consumers that only need to know react to this."""
 
 
-class PublishState(Generic[ResultT]):
-    def same_observation(self, current: ResultT) -> bool:
+class PublishState:
+    def same_observation(self, current: object) -> bool:
         return self == current
 
 
-class NoSidebarResult(PublishState["SidebarResult"]): pass
+class NoSidebarResult(PublishState): pass
 
 
 @dataclass(frozen=True)
-class SidebarResult(PublishState["SidebarResult"], Observed):
+class SidebarResult(PublishState, Observed):
+    revision: WireRevision = field(compare=False)
     request: ObserveSidebar
-
-    def same_observation(self, previous: SidebarResult) -> bool:
-        """Every declared answer participates; a store stat is not another answer."""
-        return replace(self, revision=previous.revision) == previous
 
     def finish_read(self, reading: SidebarReading, key: SidebarSent) -> Iterator[SidebarResult]:
         return reading.publish(self, key)
@@ -843,7 +840,7 @@ class SidebarUnreadable(SidebarResult):
     error: UnreadableHistory
 
 
-class ThreadReadResult(PublishState["ThreadReadResult"], ABC):
+class ThreadReadResult(PublishState, ABC):
     """One thread's last read, including how to compare and display its answer."""
 
     @abstractmethod
@@ -860,7 +857,7 @@ class ThreadReadResult(PublishState["ThreadReadResult"], ABC):
 class ThreadPresented(ThreadReadResult):
     presentation: ThreadPresentation
 
-    def same_observation(self, previous: ThreadReadResult) -> bool:
+    def same_observation(self, previous: object) -> bool:
         return isinstance(previous, ThreadPresented) and (
             self.presentation is previous.presentation or self.presentation.same_observation(previous.presentation))
 
