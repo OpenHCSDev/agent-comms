@@ -292,7 +292,7 @@ class HistoryViews:
         with self.bus.opened_activity() as clocks:
             return ChannelView.roster(
                 snapshot,
-                channels,
+                channels.visible(show_archived),
                 catalog.pinned_members(),
                 catalog.list_order,
                 self.agents.all_activity(
