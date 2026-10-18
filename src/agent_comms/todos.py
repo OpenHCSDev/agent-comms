@@ -275,7 +275,7 @@ class MechanicalOrderRun(OrderRun):
 class ApplicationOrderRun(OrderRun):
     text: str
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if len(self.text.split()) < 8:
             raise ValueError(f'Add "{self.label} <the user-visible closing run, 8+ words>"; '
                              'a grep never closes a problem.')
