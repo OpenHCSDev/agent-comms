@@ -174,7 +174,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
     def sender_bindings(self) -> Mapping[str, str]:
         """One lazy SQL value for this namespace, including its historical names."""
         senders = {}
-        unrecorded = []
+        unrecorded: list[str] = []
         for name, source in self.named_members():
             senders[name] = tuple(DeliveryScope.sender_lookups(
                 source.incarnation, partial(unrecorded.append, name)
