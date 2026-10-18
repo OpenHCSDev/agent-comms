@@ -313,7 +313,7 @@ def test_each_thread_role_member_owns_its_role_behaviour(
     barrier.begin(FieldCodec.decode(MaintenanceOperatorField, "operator"))
     role.require_maintenance_open(barrier, False)
     if executes:
-        with pytest.raises(RelationViolationError, match="requires READY"):
+        with pytest.raises(RelationViolationError, match="under maintenance"):
             role.require_maintenance_open(barrier, True)
     else:
         role.require_maintenance_open(barrier, True)
