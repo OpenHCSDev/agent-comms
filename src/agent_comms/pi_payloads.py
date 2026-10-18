@@ -13,6 +13,7 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
+from .agent_backend import CompactionOutcome, NothingToCompaction, PlacedCompaction
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
@@ -1047,17 +1048,26 @@ class ThinkingLevelsData(PiResponseData):
 
 @dataclass(frozen=True)
 class CompactionData(PiResponseData):
-    summary: str | None = None
+    outcome: CompactionOutcome = field(default_factory=NothingToCompaction)
     usage: PiUsage | None = None
-    first_kept_entry_id: str | None = wire_field("firstKeptEntryId")
-    tokens_before: int | None = wire_field("tokensBefore")
     estimated_tokens_after: int | None = wire_field("estimatedTokensAfter")
+
+    @classmethod
+    def normalize_wire(cls, value):
+        if 'outcome' not in value:
+            summary = value.get('summary')
+            outcome = (NothingToCompaction() if summary is None else
+                       PlacedCompaction(summary, value.get('firstKeptEntryId'), value.get('tokensBefore')))
+            value = {'outcome': FieldCodec.encode(outcome), 'usage': value.get('usage'),
+                     'estimatedTokensAfter': value.get('estimatedTokensAfter')}
+        return super().normalize_wire(value)
 
     @property
     def display_summary(self):
         from .backend import compaction_summary
 
-        return compaction_summary(self.summary) if self.summary is not None else None
+        return (compaction_summary(self.outcome.summary)
+                if isinstance(self.outcome, PlacedCompaction) else None)
 
     def charge(self, session):
         yield from session.usage.charge_compaction(self.usage)

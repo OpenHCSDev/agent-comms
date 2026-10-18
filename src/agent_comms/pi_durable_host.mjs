@@ -13,12 +13,14 @@ import { CodingTools } from '@earendil-works/pi-durable/tools';
 // never reproduce the estimator in Core. This is an explicitly retained API gap.
 const { estimateContext } = await import(new URL('./harness/compaction.js', import.meta.resolve('@earendil-works/pi-durable')));
 const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
-let harness, root, stream, models;
+let harness, root, turn, models;
 let resumed = false;
 const emit = (value) => {
   const { changes, ...update } = value;
   const frames = value.type === 'message_update'
-    ? changes.map(assistantMessageEvent => ({ ...update, assistantMessageEvent })) : [value];
+    ? changes.map(assistantMessageEvent => ({ ...update, assistantMessageEvent }))
+    : value.type === 'message_end'
+      ? (value.entry.model ?? []).map(message => ({ ...value, message })) : [value];
   for (const frame of frames) process.stdout.write(`${JSON.stringify(frame)}\n`);
 };
 const ack = Object.freeze({});
@@ -30,6 +32,43 @@ const workItems = (inspection) => [
 ];
 const text = (entry) => (entry.model ?? []).flatMap(message => typeof message.content === 'string'
   ? [message.content] : (message.content ?? []).filter(block => block.type === 'text').map(block => block.text)).join('\n');
+class TurnWatch {
+  constructor(stream) {
+    this.stream = stream;
+    this.inputs = new Map();
+    emit(stream.snapshot);
+    stream.start(events => {
+      for (const event of events) {
+        if (event.type === 'submission' && event.record.status === 'placed') {
+          const input = this.inputs.get(event.record.requestId);
+          if (input) emit(input.started);
+        }
+        emit(event);
+      }
+    });
+  }
+  async submit(request, started) {
+    const content = request.images?.length
+      ? [{ type: 'text', text: request.text }, ...request.images.map(image => ({ type: 'image', ...image }))]
+      : request.text;
+    const submission = root.submit({ type: 'input', content,
+      requestId: request.requestId, whenBusy: request.whenBusy }, context);
+    this.inputs.set(request.requestId, { submission, started });
+    return { id: (await submission).id };
+  }
+  async wait() {
+    await (await this.inputs.values().next().value.submission).wait(context);
+    await root.waitForIdle(context);
+    const records = await Promise.all([...this.inputs.values()].map(async input =>
+      (await input.submission).wait(context)));
+    const failed = records.find(record => record.status !== 'done');
+    const last = records.at(-1);
+    const answer = last.status === 'done' ? await root.commit(tx => tx.entry(last.answer), context) : undefined;
+    emit({ type: 'durable_turn_end', ok: !failed, text: answer ? text(answer) : '', reason: failed?.reason ?? null });
+    return ack;
+  }
+  async stop() { await this.stream.stop(); }
+}
 const handlers = {
   async open(request) {
     if (harness) throw new Error('Host already open');
@@ -67,17 +106,15 @@ const handlers = {
   },
   async watch() {
     requireOpen();
-    if (stream) throw new Error('A durable turn watch is already open');
-    stream = await watchEvents(harness, root.id, context);
-    emit(stream.snapshot);
-    stream.start(async events => { for (const event of events) emit(event); });
+    if (turn) throw new Error('A durable turn watch is already open');
+    turn = new TurnWatch(await watchEvents(harness, root.id, context));
     return ack;
   },
   async unwatch() {
     requireOpen();
-    if (!stream) throw new Error('No durable turn watch is open');
-    await stream.stop();
-    stream = undefined;
+    if (!turn) throw new Error('No durable turn watch is open');
+    await turn.stop();
+    turn = undefined;
     return ack;
   },
   async inspect() { requireOpen(); return { work: workItems(await harness.inspect(context)) }; },
@@ -107,9 +144,14 @@ const handlers = {
   async submit(request) {
     requireResumed();
     if (typeof request.requestId !== 'string' || !request.requestId) throw new Error('Core InputId is required as requestId');
-    const submission = await root.submit({ type: 'input', content: request.content, requestId: request.requestId, whenBusy: request.whenBusy }, context);
-    return { id: submission.id };
+    return turn.submit(request, { type: 'durable_following_started', id: request.requestId,
+      native_id: request.requestId, text: request.text });
   },
+  async submit_initial(request) {
+    requireResumed();
+    return turn.submit(request, { type: 'durable_original_started', native_id: request.requestId, text: request.text });
+  },
+  async await_turn() { requireResumed(); return turn.wait(); },
   async abort() { requireResumed(); await root.abort(context); return ack; },
   async entries(request) {
     requireOpen();
@@ -139,7 +181,7 @@ const handlers = {
     await root.configure({ thinkingLevel: request.level }, context);
     return ack;
   },
-  async compact_durable(request) {
+  async compact(request) {
     requireResumed();
     const task = await harness.waitForTask(await root.compact(request.customInstructions, context), context);
     const outcome = task.state.outcome;
@@ -151,7 +193,7 @@ const handlers = {
     return { outcome: { kind: 'placed', summary: text(entry), first_kept: String(entry.head), tokens_before: null } };
   },
   async close() {
-    if (stream) await stream.stop();
+    if (turn) await turn.stop();
     if (harness) await harness.close(context);
     harness = undefined;
     return ack;
@@ -170,5 +212,5 @@ for await (const line of lines) {
     } catch (error) { emit({ type: 'response', id: request.id, command: request.type, success: false, error: error.stack ?? String(error) }); }
   })();
 }
-if (stream) await stream.stop();
+if (turn) await turn.stop();
 if (harness) await harness.close(context);

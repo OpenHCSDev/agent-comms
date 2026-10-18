@@ -65,6 +65,7 @@ from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_execution import ThreadExecution, ExternalThreadExecution
+from .agent_backend import AgentBackend
 from .owner_lifecycle import OwnerStartResult
 from .tools import CommsStartTool, CommsStopTool, ToolRequest
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
@@ -1177,6 +1178,8 @@ class ThreadCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class RegisterCliCommand(CliCommand):
     help = "Register a thread"
+    backend: type[AgentBackend] = option('--backend', default_factory=AgentBackend.for_new_threads,
+        parser_default=FieldCodec.encode(AgentBackend.for_new_threads()), editor=ChoiceTargetField)
     name: str = option("--name")
     worktree: str = option("--worktree")
     tags: frozenset[str] = option(
@@ -1198,6 +1201,7 @@ class RegisterCliCommand(CliCommand):
             task=self.task,
             process_identity=ProcessIdentity.capture(self.pid) if self.pid > 0 else None,
             execution=self.execution,
+            backend=self.backend,
         )
         ctx.registry.declare(thread)
         return {"registered": self.name}
