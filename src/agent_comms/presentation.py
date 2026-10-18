@@ -369,7 +369,7 @@ class ChannelReadMark(ABC):
     def apply(self, presentation: BusPresentation, target: str, viewer: str) -> None:
         with _store_lock(presentation._wire_lock_path, shared=True):
             with self.reading(presentation, target, viewer) as displayed:
-                presentation.bus.reads.mark_displayed(viewer, displayed)
+                presentation.bus.reads.mark_displayed(displayed.viewer, displayed)
 
     @abstractmethod
     def reading(self, presentation: BusPresentation, target: str, viewer: str): ...
@@ -388,7 +388,7 @@ class ReadAll(ChannelReadMark):
             # Page preparation takes the bus lock, so release registry first.
             page = MessagePageRequest.every(scope).read_opened(source)
             yield presentation.bus.reads.capture(
-                viewer, page.messages, basis.registry, presentation.bus.log.path,
+                basis.require_viewer(), page.messages, basis.registry, presentation.bus.log.path,
             )
 
 
@@ -407,7 +407,7 @@ class ReadThrough(ChannelReadMark):
             if basis.scope(target) != self.expected_scope:
                 raise ValueError("Channel display changed; refresh the displayed page.")
             displayed.validate(
-                viewer, basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
+                basis.require_viewer(), basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
             )
             yield displayed.through(self.through)
 
