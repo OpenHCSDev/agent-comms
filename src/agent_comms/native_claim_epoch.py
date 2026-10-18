@@ -65,7 +65,7 @@ class UnrecordedNativeClaim(NativeClaimEpoch, JsonShapeMember):
 
     def require_release(self, acknowledgement, snapshot, current) -> None:
         current.require_local_process(acknowledgement.require_process())
-        current.active_turn.require_idle()
+        current.turn_record.read().require_idle()
         if not acknowledgement.current(snapshot, current, acknowledgement.before):
             raise RelationViolationError("Unrecorded native send has no exact stopped release")
 

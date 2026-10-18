@@ -75,5 +75,5 @@ async def drain_failures(
         raise
     else:
         current = await Coordination.run_worker(partial(comms.registry.require, thread))
-        if not current.active_turn.executing:
+        if not current.turn_record.read().executing:
             await comms.agents.recover_drain(thread, owner, observed)
