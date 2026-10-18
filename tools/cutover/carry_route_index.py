@@ -20,6 +20,13 @@ def carry(root: Path, *, apply: bool = False) -> dict:
     index = BusRouteCounts(root / "bus.jsonl")
     owners = tuple(TypedTable.members_with(RouteTable))
     with closing(CoordinationStore.read_snapshot(old)) as source:
+        expected = {name: sql for owner in owners for name, sql in owner.schema_objects().items()}
+        actual = dict(source.execute(
+            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"))
+        if actual.keys() != expected.keys() or any(
+                actual[name] != sql for name, sql in expected.items()
+                if name != RecordedRouteSourceRow.declared_name):
+            raise ValueError("Unexpected route index layout")
         source_rows = source.execute('SELECT revision,tail_digest FROM route_source').fetchall()
         if source_rows == [(None, None)]:
             recorded = []
@@ -27,6 +34,8 @@ def carry(root: Path, *, apply: bool = False) -> dict:
             recorded = RecordedRouteSourceRow.select(source)
         counts = {owner.declared_name: sum(1 for _ in owner.stream(source))
                   for owner in owners if owner is not RecordedRouteSourceRow}
+        if not recorded and any(counts.values()):
+            raise ValueError("Route rows exist without a saved source")
         with WireLog(index.bus_path)._opened_wire_snapshot(opening=CurrentSnapshotOpening()) as cut:
             for row in recorded:
                 if not row.matches_source(cut):
