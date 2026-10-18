@@ -129,8 +129,6 @@ class _IndexTable(TypedRow):
 
 
 class FileReplyCount(ABC):
-    """One file's completed count or unfinished indexing, including addition."""
-
     @abstractmethod
     def __add__(self, other: FileReplyCount) -> FileReplyCount: ...
 
