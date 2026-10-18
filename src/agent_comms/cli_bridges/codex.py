@@ -14,14 +14,14 @@ import aiohttp
 from pydantic import JsonValue
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.messages import Message
-from agent_comms.cli_protocol import Outcome, DeliveredOutcome
+from agent_comms.cli_protocol import EarlierItems, Outcome, DeliveredOutcome
 from .history import CodexHistory, OnlineHistory
-from .shared import Binding, IncomingFrame, SessionFacts, TranscriptBridge, Options, TranscriptUpdate, run_bridge
+from .shared import (Binding, EarlierPublishedPage, IncomingFrame, PublishedPage, SessionFacts,
+                     ThreadOutput, TranscriptBridge, Options, TranscriptUpdate, run_bridge)
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcReply, RpcNotification, TextInput,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
-    ItemEntry,
 )
 
 
@@ -104,15 +104,9 @@ class CodexAppServer(CodexHistory, OnlineHistory):
             async for update in self.seen(codex):
                 yield update
 
-    async def entries(self, codex: CodexConnection) -> list[ItemEntry]:
-        """Every item of the thread, newest first."""
-        entries: list[ItemEntry] = []
-        cursor = None
-        while True:
-            page = ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread, cursor=cursor)))
-            entries.extend(page.data)
-            if (cursor := page.nextCursor) is None:
-                return entries
+    async def entries(self, codex: CodexConnection) -> PublishedPage:
+        """Only the newest page; the pager requests an earlier page when it reaches it."""
+        return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread))).publication()
 
     async def seen(self, codex: CodexConnection) -> AsyncIterator[TranscriptUpdate]:
         resumed = ResumedThread.model_validate(await codex.call(ResumeThread(threadId=self.thread)))
@@ -120,9 +114,7 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         # Only completed snapshots. An active item's deltas must be assembled
         # from its actual start, not appended to an overlapping snapshot
         # fetched concurrently with those deltas.
-        for entry in reversed(await self.entries(codex)):
-            if entry.completed:
-                yield entry.publication()
+        yield await self.entries(codex)
         # Codex's own thread status says whether its newest turn still runs.
         yield resumed.thread.status.update()
 
@@ -138,19 +130,27 @@ class CodexBridge(CodexAppServer, TranscriptBridge[CodexOptions]):
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--socket', default=str(cls.SOCKET))
 
-    async def entries(self, codex: CodexConnection) -> list[ItemEntry]:
-        """A restarted bridge publishes again only the newest page."""
-        return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread))).data
-
     async def transcript(self) -> AsyncIterator[TranscriptUpdate]:
         async with CodexConnection.open(self.socket) as codex:
             async for update in self.seen(codex):
                 yield update
             stream = ItemStream(self.thread)
             async for notification in codex.notifications():
-                update = stream.receive(notification)
-                if update is not None:
+                for update in stream.receive(notification):
                     yield update
+
+    async def earlier(self, request: EarlierItems) -> None:
+        transcript = await asyncio.to_thread(self.comms.transcripts.external, self.binding.bus)
+        def pending():
+            with transcript.reading() as records:
+                return records.pending(request)
+        if not await asyncio.to_thread(pending):
+            return
+        async with CodexConnection.open(self.socket) as codex:
+            page = ItemsPage.model_validate(await codex.call(ItemsList(
+                threadId=self.thread, cursor=request.request.cursor))).publication()
+        await asyncio.to_thread(EarlierPublishedPage(page.items, page.earlier, request).publish,
+                                ThreadOutput(transcript, self.comms.agents))
 
     async def deliver(self, message: Message) -> type[Outcome]:
         async with CodexConnection.open(self.socket) as codex:
