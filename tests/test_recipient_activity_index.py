@@ -17,6 +17,7 @@ from agent_comms.goal_presentation import GoalWaitTarget
 from agent_comms.notification_assignment import NotificationAssignment
 from agent_comms.presentation import MessageNotification
 from agent_comms.read_ledger import ReadLedger
+from agent_comms.read_basis import ReadCursor
 from agent_comms.registry_provenance import RegisteredRecipient, RetiredRecipient
 from agent_comms.registry_provenance import RegistryProvenance
 from agent_comms.thread_identity import (
@@ -143,7 +144,7 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
     lookup = source.threads["old"].incarnation.lookup
     assert type(archived) is RegistryProvenance and not hasattr(archived, "by_lookup")
     ledger = ReadLedger(tmp_path / "archive-reads.json")
-    with patch.object(ReadLedger, "seen_sequences", return_value=frozenset({7})):
+    with patch.object(ReadLedger, "cursor", return_value=ReadCursor(exceptions=(7,))):
         for name in ("old", "second"):
             assert ledger.historical_displayed_recipient(
                 SimpleNamespace(seq=7), FrozenRecipient(lookup, name), archived

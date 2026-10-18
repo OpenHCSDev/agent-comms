@@ -10,6 +10,7 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
+from agent_comms.read_ledger import ReadDocument
 from agent_comms.read_basis import Conversation
 from agent_comms.registration import Registration
 from agent_comms.thread_identity import ClaimedIdentity, GenerationCounter, TurnIdentity
@@ -210,14 +211,14 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         expected_display_basis=page.display_basis,
     )
     path = comms.bus.reads.path
-    document = json.loads(path.read_text())
-    assert all(
-        isinstance(participant, list)
-        for key in document["messages"]
-        for participant in json.loads(key)[2]["participants"]
-    )
+    document = FieldCodec.decode(ReadDocument, json.loads(path.read_text()))
+    viewer_identity = comms.registry.require(viewer).incarnation
+    assert tuple(document.messages) == (viewer_identity,)
+    assert {participant for conversation in document.messages[viewer_identity]
+            for participant in conversation.participants} == {
+                viewer_identity, comms.registry.require("owner").incarnation}
     reopened = Comms(tmp_path)
-    assert message.seq in reopened.bus.reads.seen_sequences(viewer, reopened.registry.snapshot())
+    assert message.seq in reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
     next_message = reopened.messaging.send_message("owner", viewer, "new paint")
     page = reopened.views.dm_display_page("owner", worktree=str(tmp_path))
     reopened.views.mark_dm_view_read(
@@ -226,9 +227,8 @@ def test_saved_read_ledger_survives_reopen_and_new_ack(tmp_path):
         through=next_message.seq,
         expected_display_basis=page.display_basis,
     )
-    assert {message.seq, next_message.seq} <= reopened.bus.reads.seen_sequences(
-        viewer, reopened.registry.snapshot()
-    )
+    seen = reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
+    assert all(sequence in seen for sequence in (message.seq, next_message.seq))
 
 
 def test_stopped_status_changes_do_not_invent_another_owner(tmp_path):

@@ -46,7 +46,7 @@ async def test_durable_private_claim_names_each_changed_authority(
             row = NativeRuntimeInput.one(store.session._connection, input_id=claim_scope.input_id)
             binding = binding_rows(store, (claim_scope.input_id,)).get(claim_scope.input_id)
         stage = claim_scope.stage
-        expected = claim_scope.participant.coordinator_identity(stage.assignment.recipient_lookup)
+        expected = claim_scope.participant.coordinator_identity(stage.recipient_lookup)
         reservation = rules.NativeReservationCheck(
             row=row, stage=stage, owner=expected, token_digest=claim_scope.token_digest
         )
@@ -65,7 +65,8 @@ async def test_durable_private_claim_names_each_changed_authority(
             expected_claim=generation,
             process=ProcessIdentity.capture(os.getpid()),
         )
-        claim = rules.NativeClaimCheck(captured=stage.assignment, current=stage.assignment)
+        selected_claim, = stage.assignments
+        claim = rules.NativeClaimCheck(captured=selected_claim, current=selected_claim)
         for check in (registry, reservation, bound, claim):
             check.require_valid()
         cases = {
