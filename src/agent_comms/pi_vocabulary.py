@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Annotated, TYPE_CHECKING
+from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
@@ -207,11 +207,11 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
         return (argument(cls),)
 
     @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return cls
 
 
@@ -223,11 +223,11 @@ class NoThinkingOverride(ThinkingLevel):
         return ()
 
     @classmethod
-    def applied(cls, current):
+    def applied(cls, current: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return current
 
     @classmethod
-    def observed(cls, level):
+    def observed(cls, level: type[ThinkingLevel]) -> type[ThinkingLevel]:
         return level
 
 
@@ -235,15 +235,17 @@ class ThinkingLevelValue(FieldRepresentation):
     accepts_null = True
 
     @classmethod
-    def decode(cls, value):
-        return NoThinkingOverride if value is None else ThinkingLevel.decode(FieldCodec.decode(str, value))
+    def decode(cls, value: object) -> type[ThinkingLevel]:
+        if value is None:
+            return NoThinkingOverride
+        return ThinkingLevel.decode(FieldCodec.decode(str, value))
 
     @classmethod
-    def encode(cls, value):
+    def encode(cls, value: object) -> object:
         return FieldCodec.encode(value)
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type[ThinkingLevel] | None)
 
 

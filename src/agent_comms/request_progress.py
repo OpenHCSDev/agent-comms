@@ -36,7 +36,7 @@ class RequestProgress(PiPayload):
     allowed_output_tokens: int | None = field(default=None, metadata={"wire_name": "admittedOutputTokens", "wire_omit_default": True})
     minimum_output_tokens: int | None = field(default=None, metadata={"wire_name": "minimumOutputTokens", "wire_omit_default": True})
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         if min(self.started_at_ms, self.observed_at_ms, self.elapsed_ms,
                self.callback_ms, self.callback_count, self.callback_max_ms) < 0:
             raise ValueError("Invalid native request measurement")
@@ -44,7 +44,7 @@ class RequestProgress(PiPayload):
             raise ValueError("Invalid native monotonic observation")
 
     @property
-    def label(self):
+    def label(self) -> str:
         return self.detail[:160] or "Waiting for model"
 
 
@@ -54,3 +54,6 @@ RequestObserver = Callable[[RequestProgress, ProcessIdentity], None]
 class NoRequestObserver:
     def __call__(self, progress: RequestProgress, process: ProcessIdentity) -> None:
         pass
+
+
+NO_REQUEST_OBSERVER = NoRequestObserver()

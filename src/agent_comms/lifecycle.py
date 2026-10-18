@@ -7,11 +7,14 @@ into a root must never start a second registry for the same lifecycle.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import ClassVar, Self
+from typing import Self
 
 
 class LifecycleState(ABC):
-    declared_name: ClassVar[str]
+    @classmethod
+    @abstractmethod
+    def require_name(cls) -> str:
+        """Supplied by the domain's DeclaredFamily root."""
 
     @classmethod
     @abstractmethod
@@ -29,8 +32,8 @@ class LifecycleState(ABC):
     @classmethod
     def transition_table(cls) -> dict[str, frozenset[str]]:
         return {
-            member.declared_name: frozenset(
-                state.declared_name
+            member.require_name(): frozenset(
+                state.require_name()
                 for successor in member.successors()
                 for state in cls.members_with(successor)
             )
