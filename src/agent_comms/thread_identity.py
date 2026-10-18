@@ -385,6 +385,11 @@ class ThreadRole(StrEnum):
             return replace(message, role=message.role.as_notice()), []
         return message, [target]
 
+    def register_sender(self, participants, lookup: str, name: str) -> None:
+        """An executing sender is a participant; a human sender owns no turns to wake."""
+        if self.executable:
+            participants.register(lookup, name, name, committed=True)
+
     def require_executable(self) -> None:
         if not self.executable:
             raise RelationViolationError("thread role does not execute owner turns")
