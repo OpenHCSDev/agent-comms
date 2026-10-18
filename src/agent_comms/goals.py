@@ -322,6 +322,9 @@ class GoalDeclaration(SubclassUnion, RegistrationInheritance["GoalDeclaration"])
     def defers_following_to(self, current: GoalDeclaration) -> bool:
         return current.accepts_following_handoff()
 
+    def detail_contents(self) -> tuple[str, str]:
+        return "", ""
+
     def goal_display(self):
         from .ui_model import goal
         return goal.NoGoal()
@@ -421,6 +424,9 @@ class Goal(RecordMember, GoalDeclaration):
 
     def defers_following_to(self, current: GoalDeclaration) -> bool:
         return not self.state.active and super().defers_following_to(current)
+
+    def detail_contents(self) -> tuple[str, str]:
+        return self.text, self.progress
 
     def goal_display(self):
         from .ui_model.goal import ShowingGoal
