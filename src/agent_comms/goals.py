@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal
+from typing import ClassVar, Literal
 
 from abc import abstractmethod
 import re
@@ -249,6 +249,14 @@ class OrderCheck:
     def require_directory(self):
         if not Path(self.directory).is_dir():
             raise ValueError("The order check directory does not exist.")
+
+    LINE: ClassVar[re.Pattern] = re.compile(r"(\S+)\s*::\s*(.+?)\s*->\s*(\d+)")
+
+    @classmethod
+    def parse(cls, line: str) -> OrderCheck | None:
+        """The one reading of a check line, `<repo> :: <shell command> -> <integer>`; else None."""
+        found = cls.LINE.fullmatch(line.strip())
+        return found and cls(found[1], found[2], CountCheckResult(int(found[3])))
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
     def require_slot(self, goal, goal_id, problem):

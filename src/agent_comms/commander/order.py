@@ -11,13 +11,14 @@ Incompetence is not tolerated: a unit is fired from a task, not berated about it
 Two strikes on one task: the task is taken away and reassigned (`fire`). Nothing here judges
 code; it refuses orders that leave a unit room to interpret, and refuses to let a deadline lapse silently.
 """
-import argparse, calendar, json, os, re, subprocess, sys, time
+import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
 from ..change_report import FileLine
+from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..comms import Comms
@@ -26,7 +27,8 @@ from ..goals import CountCheckResult, OrderCheck
 from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
-from ..tools import CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoTool
+from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
+                     CommsTodoCreateTool, CommsTodoTool)
 from ..todos import (BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, StrikeTodo)
@@ -218,7 +220,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     fact = re.search(r'(?m)^Problems?:\s*(P\d+(?:\s*,\s*P\d+)*)\b', body)
     group = [new[0]] if new else re.findall(r'P\d+', fact[1]) if fact else []
     owner = re.search(r'(?m)^Owner:\s*(\S+):(\d+)\s*$', body)
-    check = re.search(r'(?m)^Check:\s*(\S+)\s*::\s*(.+?)\s*->\s*(\d+)\s*$', body)
+    check = (line := re.search(r'(?m)^Check:(.*)$', body)) and OrderCheck.parse(line[1])
     listed = {t.id: t for t in open_todos()}
     if not group:
         problems.append('no Problem: P<n> line; record it first with `order problem` (every order owns a listed problem)')
@@ -230,19 +232,21 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
         problems.append(f'Owner {owner[1]}:{owner[2]} does not exist; read the code and name the real owner')
     if not check:
         problems.append('no Check: <repo> :: <command> -> N; done runs it, so make it the real acceptance count')
-    elif not os.path.isdir(check[1]):
-        problems.append(f'Check repo {check[1]} is not a directory')
+    elif not os.path.isdir(check.directory):
+        problems.append(f'Check repo {check.directory} is not a directory')
     # A check that can never print its target, or a premise naming lines that do something else, wastes the order.
     # An order's check must fail now (or it proves nothing), and every absolute
     # path:line it cites must exist.
-    if check and os.path.isdir(check[1]) and not problems:
+    if check and os.path.isdir(check.directory) and not problems:
         try:
-            ran = subprocess.run(['bash', '-c', check[2]], cwd=check[1], capture_output=True, timeout=90)
+            ran = subprocess.run(['bash', '-c', check.command], cwd=check.directory, capture_output=True, timeout=90)
             if (got := CountCheckResult.printed(ran.stdout)) is None:
                 problems.append('the check printed no integer; '
                                 'use grep -c PATTERN FILE or ... | wc -l')
-            elif got == int(check[3]):
-                problems.append(f'Check already prints {check[3]} before any work: `{check[2]}` proves nothing; write a check that fails now')
+            elif got == check.result.expected:
+                problems.append(f'Check already prints {got} before any work: `{check.command}` '
+                                'proves nothing; '
+                                'write a check that fails now')
         except subprocess.TimeoutExpired:
             problems.append('Check took over 90 s; done runs it too, so make it a focused count')
     for path, line in re.findall(r'(?<![\w.])(/\S+?\.\w+):(\d+)', body):
@@ -266,7 +270,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     try:
         order = PendingProblemOrder(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
-            check=OrderCheck(check[1], check[2], CountCheckResult(int(check[3]))), edits=edits, banned=banned,
+            check=check, edits=edits, banned=banned,
             report=report[1], at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
@@ -274,7 +278,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     common = dict(order=order, goal_id=goal.id if goal else uuid4().hex, deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
-            problem=new[0], repo=Repo.of(Path(check[1])).github, text=new[1], **common)))
+            problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, **common)))
@@ -287,6 +291,36 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
         strike(unit, f'sent back on {group[0]}: {verdict}')
+
+
+def correct_check(pid: str, line: str, why: str) -> None:
+    """Core replaces a wrong check of an open order. The new check must already pass on main, so a
+    correction fixes the commander's check and never passes undelivered work: done still runs it on
+    the --sha it is given."""
+    todo = COMMS.goals.todos.get(pid)
+    if not todo.state.open or not todo.pending:
+        sys.exit(f'Refused: {pid} has no pending order')
+    if not (check := OrderCheck.parse(line)):
+        sys.exit('Refused: --check reads "<repo> :: <shell command> -> <integer>"')
+    if not os.path.isdir(check.directory):
+        sys.exit(f'Refused: check repo {check.directory} is not a directory')
+    if len(why.split()) < 8:
+        sys.exit('Refused: --why says what was wrong with the recorded check (8+ words)')
+    def git(*args: str) -> str:
+        return subprocess.run(['git', '-C', check.directory, *args],
+                              capture_output=True, text=True).stdout.strip()
+    head = git('rev-parse', 'HEAD')
+    if head != git('rev-parse', 'origin/main') or git('status', '--porcelain', '-uno'):
+        sys.exit(f'Refused: {check.directory} is not a clean checkout of origin/main; '
+                 'the corrected check runs on main')
+    try:  # the result done requires, judged on main
+        check.result.require(asyncio.run(BoundedRun.run(
+            ('bash', '-c', check.command), cwd=check.directory, timeout=90)))
+    except ValueError as failed:
+        sys.exit(f'Refused on main {head[:9]}: {failed} '
+                 'order check corrects a wrong check; it does not pass undelivered work')
+    call(CommsOrderCheckTool(problem=pid, check=check, why=why))
+    print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
 
 def say(units, body_file):
@@ -652,6 +686,17 @@ class DoneVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         done(self.pid, self.sha, self.delivered)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CheckVerb(OrderVerb, RuledVerb):
+    help = "replace an open order's wrong check with one passing on main; keeps deadline, strikes"
+    pid: str = option("pid")
+    check: str = option("--check", help='"<repo> :: <shell command> -> <integer>"')
+    why: str = option("--why", help="what was wrong with the recorded check")
+
+    def run(self) -> None:
+        correct_check(self.pid, self.check, self.why)
 
 
 @dataclass(frozen=True, kw_only=True)
