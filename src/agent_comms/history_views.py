@@ -239,15 +239,11 @@ class HistoryViews:
         return ChannelHistory(channel.name, channel.history_targets).page(self.presentation, bounds)
 
     def last_sent_timestamps(
-        self, sent: Mapping[str, float], *, registry: RegistrySnapshot,
-        names: Iterable[str] | None = None,
-    ) -> Mapping[str, float]:
-        """Map captured sender clocks through the selected registry names."""
-        selected = (sent.items() if names is None else
-                    ((alias, sent[alias]) for name in names
-                     for alias in registry.names_for(name) if alias in sent))
+        self, rows: Iterable[tuple[str, float]], *, registry: RegistrySnapshot,
+    ) -> dict[str, float]:
+        """Map each supplied sender clock through its current registry name."""
         canonical: dict[str, float] = {}
-        for sender, timestamp in selected:
+        for sender, timestamp in rows:
             name = registry.canonical_name(sender)
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
@@ -298,7 +294,7 @@ class HistoryViews:
                 self.agents.all_activity(
                     snapshot.visible_threads(visibility), snapshot=snapshot,
                 ),
-                self.last_sent_timestamps(clocks.sent, registry=snapshot),
+                self.last_sent_timestamps(clocks.sent.items(), registry=snapshot),
                 ChannelActivity.for_views(channels, clocks.channels),
                 visibility,
             )
@@ -310,8 +306,9 @@ class HistoryViews:
         channel = catalog.require_channel(name, snapshot.threads)
         registered = channel.members(ChannelMemberIndex(snapshot.threads.values()))
         with self.bus.opened_activity() as clocks:
-            sent = self.last_sent_timestamps(
-                clocks.sent, registry=snapshot, names=(thread.name for thread in registered))
+            rows = ((alias, clocks.sent[alias]) for thread in registered
+                    for alias in snapshot.names_for(thread.name) if alias in clocks.sent)
+            sent = self.last_sent_timestamps(rows, registry=snapshot)
             history = ChannelActivity.for_views(
                 {channel.name: channel}, clocks.channels)[channel.name]
             return ChannelView.capture(
@@ -370,7 +367,7 @@ class HistoryViews:
             clocks = self.bus.activity_index.snapshot(source)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(clocks.sent, registry=basis.registry), display_activity,
+                self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry), display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
