@@ -72,8 +72,8 @@ def test_configure_accepts_model_supported_level(comms, tmp_path, monkeypatch):
     result = ConfigureCliCommand(
         name="worker", thinking="high", service_tier=ServiceTier.STANDARD
     ).apply(comms)
-    assert result["thinking_level"] == "high"
-    assert result["service_tier"] == "standard"
+    assert result.thinking_level is HighThinkingLevel
+    assert result.service_tier is ServiceTier.STANDARD
     configured = comms.registry.require("worker")
     assert configured.thinking_level is HighThinkingLevel
     assert configured.service_tier.value == "standard"

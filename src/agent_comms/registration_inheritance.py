@@ -48,6 +48,8 @@ class InheritPrevious[T](PredicateInheritance[T]):
 class InheritThinkingLevel(RegistrationInheritance[type[ThinkingLevel]]):
     @classmethod
     def apply(
-        cls, incoming: type[ThinkingLevel], previous: type[ThinkingLevel],
+        cls,
+        incoming: type[ThinkingLevel],
+        previous: type[ThinkingLevel],
     ) -> type[ThinkingLevel]:
         return incoming.applied(previous)

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from abc import abstractmethod
 from enum import StrEnum
-from typing import TYPE_CHECKING, Annotated, ClassVar
+from typing import TYPE_CHECKING, Annotated
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, FieldRepresentation
@@ -204,8 +203,8 @@ class ThinkingLevel(DeclaredFamily, affix="ThinkingLevel"):
     ordinary_choice = True
 
     @classmethod
-    @abstractmethod
-    def native_arguments(cls) -> tuple[ThinkingArgument, ...]: ...
+    def native_arguments(cls) -> tuple[ThinkingArgument, ...]:
+        return (ThinkingArgument(FieldCodec.encode(cls, type[ThinkingLevel])),)
 
     @classmethod
     def launch_arguments(cls) -> tuple[str, ...]:
@@ -257,37 +256,29 @@ class ThinkingLevelValue(FieldRepresentation):
 ThinkingLevelField = Annotated[type[ThinkingLevel], ThinkingLevelValue]
 
 
-class NamedThinkingLevel:
-    declared_name: ClassVar[str]
-
-    @classmethod
-    def native_arguments(cls) -> tuple[ThinkingArgument, ...]:
-        return (ThinkingArgument(cls.declared_name),)
-
-
-class OffThinkingLevel(NamedThinkingLevel, ThinkingLevel):
+class OffThinkingLevel(ThinkingLevel):
     pass
 
 
-class MinimalThinkingLevel(NamedThinkingLevel, ThinkingLevel):
+class MinimalThinkingLevel(ThinkingLevel):
     pass
 
 
-class LowThinkingLevel(NamedThinkingLevel, ThinkingLevel):
+class LowThinkingLevel(ThinkingLevel):
     pass
 
 
-class MediumThinkingLevel(NamedThinkingLevel, ThinkingLevel):
+class MediumThinkingLevel(ThinkingLevel):
     pass
 
 
-class HighThinkingLevel(NamedThinkingLevel, ThinkingLevel):
+class HighThinkingLevel(ThinkingLevel):
     pass
 
 
-class XhighThinkingLevel(NamedThinkingLevel, ThinkingLevel):
+class XhighThinkingLevel(ThinkingLevel):
     ordinary_choice = False
 
 
-class MaxThinkingLevel(NamedThinkingLevel, ThinkingLevel):
+class MaxThinkingLevel(ThinkingLevel):
     ordinary_choice = False

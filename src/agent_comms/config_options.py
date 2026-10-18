@@ -25,6 +25,7 @@ from .comms import Comms
 from .agent_backend import UseSettings
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
 from .native_pi import NativePiUnavailable
 from .launch_runtime import RestartEnvironment
@@ -115,7 +116,7 @@ class CatalogConfigOption(ConfigOption):
             except InvalidConfigChoice as error:
                 raise NativePiUnavailable(str(error)) from error
         return SessionConfigOptionSelect(
-            id=type(self).declared_name,
+            id=FieldCodec.encode(type(self)),
             name=self.title,
             description=self.description,
             category=self.category,
@@ -194,7 +195,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     category = "thought_level"
 
     def current_value(self, thread: CatalogSelection) -> str | None:
-        return thread.thinking_level.declared_name
+        return FieldCodec.encode(thread.thinking_level)
 
     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         from .pi_commands import GetAvailableThinkingLevels
@@ -343,7 +344,7 @@ class SessionConfigOptions(ConfigOptions):
             self.agent_bin, arguments.argv, worktree=Path(thread.worktree), root=self.comms.root,
         )
         model = state.model.display_name
-        level = state.thinking_level.declared_name
+        level = FieldCodec.encode(state.thinking_level)
         if model is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         state.model.require_selection(model)
@@ -354,7 +355,7 @@ class SessionConfigOptions(ConfigOptions):
 
     @staticmethod
     def stored_settings(thread: Thread) -> UseSettings:
-        return UseSettings(thread.model, thread.thinking_level.declared_name)
+        return UseSettings(thread.model, FieldCodec.encode(thread.thinking_level))
 
     def turn_started(self, session_id: str, thread: Thread) -> None:
         self.settings_in_use.setdefault(session_id, self.stored_settings(thread))
