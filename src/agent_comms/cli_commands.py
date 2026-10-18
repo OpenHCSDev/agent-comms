@@ -730,16 +730,15 @@ class DeclaredOptions(Command):
                 options["default"] = metadata["parser_default"]
             elif metadata["parser_default_factory"] is not MISSING:
                 options["default"] = metadata["parser_default_factory"]()
-            elif declared.default is not MISSING:
-                options["default"] = declared.default
-            elif declared.default_factory is not MISSING:
-                options["default"] = declared.default_factory()
             else:
-                options["required"] = True
-            if "default" in options:
-                options["default"] = decoder.argument_text(
-                    FieldCodec.encode(options["default"], annotation)
-                )
+                default = (declared.default_factory() if declared.default_factory is not MISSING
+                           else declared.default)
+                if default is MISSING:
+                    options["required"] = True
+                else:
+                    options["default"] = decoder.argument_text(
+                        FieldCodec.encode(default, annotation)
+                    )
             if any(flag.startswith("-") for flag in metadata["flags"]):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
