@@ -100,12 +100,6 @@ class InputRefused(AgentEvent):
 
 
 @dataclass(frozen=True)
-class OriginalInputRefused(InputRefused):
-    async def apply_to(self, inputs: InputDrain, session_id: str) -> None:
-        await inputs.input_refused(session_id, OriginalStartedInput(inputs.original_sources[session_id]))
-
-
-@dataclass(frozen=True)
 class FollowingInputRefused(InputRefused):
     id: str
 

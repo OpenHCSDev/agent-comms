@@ -38,9 +38,6 @@ class StartedInput(ABC):
     @abstractmethod
     def retire(self, inputs: InputDrain, session_id: str) -> None: ...
 
-    @abstractmethod
-    async def refused(self, inputs: InputDrain, session_id: str) -> None: ...
-
     async def started(self, inputs: InputDrain, session_id: str, scope: QueueScope) -> None:
         document = await Coordination.run_worker(partial(inputs.dispositions.read, self.read_keys))
         row = self.outcome(document, scope.claimed_generation)
@@ -69,9 +66,6 @@ class OriginalStartedInput(StartedInput):
         return (*self.source.keys, *self.source.notice_keys)
 
     def outcome(self, document: InputDocument, claim_scope: int) -> InputAttempt:
-        # A grouped original must prove every captured member, not just its first.
-        for key in self.started_keys:
-            document.lookup(key).require_started(claim_scope)
         key = next(iter(self.source.notice_keys or self.started_keys), None)
         return document.lookup(key).require_started(claim_scope)
 
@@ -90,18 +84,6 @@ class OriginalStartedInput(StartedInput):
         accepted = self.source.accepted_id
         if accepted is not None:
             inputs.queued_inputs.get(session_id, {}).pop(accepted, None)
-
-    async def refused(self, inputs: InputDrain, session_id: str) -> None:
-        # Only unbound reservations become NotSent. A native binding remains
-        # UNKNOWN, and an already proved start remains started; neither replays.
-        await Coordination.run_worker(partial(inputs.finish_original_inputs, self.source.keys))
-        item = self.item(inputs, session_id)
-        self.retire(inputs, session_id)
-        if item is not None:
-            await item.not_started(inputs)
-        await inputs.emit_input_delivery_changed(session_id)
-        await inputs.emit_queue_state(session_id)
-
 
 @dataclass(frozen=True)
 class FollowingStartedInput(StartedInput):

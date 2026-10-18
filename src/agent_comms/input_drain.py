@@ -804,7 +804,7 @@ class InputDrain(InputObservation):
     ) -> None:
         await started.started(self, session_id, source_scope)
 
-    async def input_refused(self, session_id: str, started: StartedInput) -> None:
+    async def input_refused(self, session_id: str, started: FollowingStartedInput) -> None:
         await started.refused(self, session_id)
 
     async def input_cleared(
