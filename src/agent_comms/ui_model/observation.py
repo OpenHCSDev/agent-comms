@@ -530,12 +530,9 @@ class SidebarReading(Observation[ObserveSidebar]):
 
     def after_read(self, service: ObservationService) -> None:
         preparation = service.comms.views.transcript_reads.preparation
-        if preparation is None or preparation is self.preparation:
-            return
-        self.preparation = preparation
         loop = asyncio.get_running_loop()
-        preparation.add_done_callback(
-            lambda _: loop.call_soon_threadsafe(self.prepared, service)
+        self.preparation = preparation.watch(
+            self.preparation, lambda _: loop.call_soon_threadsafe(self.prepared, service)
         )
 
     def prepared(self, service: ObservationService) -> None:
