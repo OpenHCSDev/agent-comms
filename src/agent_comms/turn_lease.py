@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
-from collections.abc import Callable, Iterable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, SubclassUnion, RecordMember
+from .field_codec import NullMember, RecordMember, SubclassUnion
 from .locked_store import JsonDocument
 from .routing import TurnRouting
 from .store_files import _store_lock

@@ -328,7 +328,7 @@ class CompletionGoalAction(TransitionGoalAction):
 @dataclass(frozen=True, kw_only=True)
 class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     def before_transition(self, ctx: GoalActionContext) -> None:
-        goal = ctx.require_goal()
+        goal = ctx.thread.goal.require()
         goal.order.require_completion(goal, ctx.goals, ctx.thread.incarnation)
 
 

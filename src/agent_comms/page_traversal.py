@@ -8,7 +8,7 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec, SubclassUnion, RecordMember
+from .field_codec import FieldCodec, RecordMember, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow

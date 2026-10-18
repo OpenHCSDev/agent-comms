@@ -55,6 +55,7 @@ if TYPE_CHECKING:
     from concurrent.futures import Future
     from multiprocessing.connection import Connection
 
+    from agent_comms.acp_extension import GoalSnapshotReply
     from agent_comms.comms import Comms
     from agent_comms.history_views import RetiredViews
     from agent_comms.message_reference import MessageReference
@@ -63,7 +64,6 @@ if TYPE_CHECKING:
     from agent_comms.thread_identity import ThreadIncarnation
     from agent_comms.thread_presentation import ThreadPresentation
     from agent_comms.transcripts import TranscriptCursor, TranscriptRead, TranscriptReadIdentity
-    from agent_comms.acp_extension import GoalSnapshotReply
     from agent_comms.view_unread import ReplyIndexBatch
 
 

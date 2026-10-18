@@ -22,9 +22,12 @@ from .order import COMMS, ME, CommanderVerb, RuledVerb, hhmm
 def open_request() -> tuple[Goal, tuple[Todo, ...]] | None:
     """The commander's active Goal when it is an owner request, with the orders serving it."""
     thread = COMMS.registry.require(ME)
-    goal = thread.active_goal
-    served = None if goal is None else goal.order.serving(goal, COMMS.goals, thread.incarnation)
-    return None if goal is None or served is None else (goal, served)
+    selected = thread.goal.active()
+    if not selected.is_set():
+        return None
+    goal = selected.require()
+    served = goal.order.serving(goal, COMMS.goals, thread.incarnation)
+    return None if served is None else (goal, served)
 
 
 def stalled() -> list[str]:
@@ -47,7 +50,7 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
 
     def run(self) -> None:
         goal = COMMS.goals.update_goal(ME, SetGoalAction(text=self.text, order=RequestGoalOrder()))
-        print(goal.id if goal else "No request recorded.")
+        print(goal.require().id)
 
 
 @dataclass(frozen=True, kw_only=True)

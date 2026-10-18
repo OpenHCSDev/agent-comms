@@ -82,7 +82,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     with pytest.raises(ValueError, match="cannot be resumed"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale blocked update"}, caller=ThreadCaller("worker"))
     comms.goals.update_goal("worker", SetGoalAction(text="Replacement goal"))
-    with pytest.raises(ValueError, match="cannot be resumed"):
+    with pytest.raises(ValueError, match="goal was replaced or cleared"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller("worker"))
 
 
