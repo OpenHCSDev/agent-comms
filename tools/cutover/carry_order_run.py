@@ -44,7 +44,7 @@ def carry(root: Path, *, apply: bool) -> Counter[str]:
             for todo_id, body, saved in rows:
                 order = json.loads(saved)
                 run = declared_run(body)
-                counts[run.declared_name] += 1
+                run.tally(counts)
                 db.execute(
                     f'UPDATE "{table}" SET "order" = ? WHERE "id" = ?',
                     (json.dumps({**order, "run": FieldCodec.encode(run)}), todo_id),

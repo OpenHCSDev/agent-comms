@@ -11,6 +11,7 @@ import re
 import sqlite3
 import time
 import asyncio
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -263,6 +264,10 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
 
     @abstractmethod
     def instructions(self) -> tuple[str, ...]: ...
+
+    def tally(self, counts: Counter[str]) -> None:
+        """Count this run under its family's declared name."""
+        counts[self.declared_name] += 1
 
 
 @dataclass(frozen=True)
