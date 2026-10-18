@@ -17,7 +17,7 @@ counting. An order sent in error is retired with `withdraw`: its problem closes 
 Nothing here judges code; it refuses orders that leave a unit room to interpret,
 and refuses to let a deadline lapse silently.
 """
-import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
+import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
