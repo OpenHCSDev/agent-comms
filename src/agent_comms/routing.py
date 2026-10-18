@@ -134,6 +134,13 @@ class ScheduledTurn(ABC):
             return [], []
         return pending[0].batch(pending)
 
+    def joins(self, head: ScheduledTurn) -> bool:
+        return (
+            (self.origin.exact_reply_target if self.origin else None)
+            == (head.origin.exact_reply_target if head.origin else None)
+            and not (self.origin and self.origin.role.response_policy(self.origin).separate_turn)
+        )
+
     def batch(self, pending):
         if self.origin and self.origin.role.response_policy(self.origin).separate_turn:
             return pending[:1], pending[1:]
@@ -141,10 +148,7 @@ class ScheduledTurn(ABC):
             (
                 index
                 for index, turn in enumerate(pending)
-                if turn.input_type != self.input_type
-                or (turn.origin.exact_reply_target if turn.origin else None)
-                != (pending[0].origin.exact_reply_target if pending[0].origin else None)
-                or (turn.origin and turn.origin.role.response_policy(turn.origin).separate_turn)
+                if index and not turn.joins(self)
             ),
             len(pending),
         )

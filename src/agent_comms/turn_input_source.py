@@ -236,7 +236,7 @@ class RoutedInput(TurnInputSource):
         return wait.allows_routed_input()
 
     def allows_goal_input(self, goal: GoalDeclaration) -> bool:
-        return not self.keys or goal.permits_accepted(None)
+        return not self.keys or goal.allows_goalless()
 
 
 class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
@@ -292,6 +292,9 @@ class DependencyScheduledTurn(ScheduledTurn):
 
 
 class AutonomousScheduledTurn(ScheduledTurn):
+    def joins(self, head: ScheduledTurn) -> bool:
+        return False
+
     input_type = AutonomousOriginalInput
 
     def batch(self, pending):

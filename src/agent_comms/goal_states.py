@@ -51,6 +51,9 @@ class RuntimePause(PauseSource):
 class GoalState(DeclaredFamily, LifecycleState, affix="Goal"):
     terminal: ClassVar[bool] = False
 
+    def allows_goalless(self) -> bool:
+        return True
+
     def declaration(self, goal: Goal) -> GoalDeclaration:
         from .goals import NoGoal
         return NoGoal()
@@ -148,6 +151,9 @@ class OpenGoal(BlockingOnFailure, GoalState):
 
 @dataclass(frozen=True)
 class ActiveGoal(OpenGoal, FromOpenGoal):
+    def allows_goalless(self) -> bool:
+        return False
+
     def declaration(self, goal: Goal) -> GoalDeclaration:
         return goal
 

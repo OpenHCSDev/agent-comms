@@ -432,10 +432,13 @@ class GoalDeclaration(WireValue, TurnGoalPermission):
         return False
 
     def allows(self, current: GoalDeclaration) -> bool:
-        return current.permits_accepted(None)
+        return current.allows_goalless()
 
-    def permits_accepted(self, goal_id: str | None) -> bool:
-        return goal_id is None
+    def allows_goalless(self) -> bool:
+        return True
+
+    def permits_accepted(self, goal_id: str) -> bool:
+        return False
 
     def accepted_goal_id(self) -> str | None:
         return None
@@ -587,14 +590,17 @@ class Goal(GoalDeclaration):
     def allows(self, current: GoalDeclaration) -> bool:
         return current.permits_continuation(self.id)
 
-    def permits_accepted(self, goal_id: str | None) -> bool:
-        return self.active().accepted_goal_id() == goal_id
+    def allows_goalless(self) -> bool:
+        return self.state.allows_goalless()
+
+    def permits_accepted(self, goal_id: str) -> bool:
+        return self.active().continues(goal_id)
 
     def accepted_goal_id(self) -> str:
         return self.id
 
     def defers_following_from(self, original: GoalDeclaration) -> bool:
-        return original.permits_accepted(None)
+        return original.allows_goalless()
 
     def recorded_wait(self, rows):
         return rows.get(self.id, NoGoalWait())
