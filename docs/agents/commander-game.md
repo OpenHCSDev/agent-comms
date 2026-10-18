@@ -147,6 +147,43 @@ Commands: `look` (level 0), `look UNIT` (level 1), `look UNIT diff [FILE]` or
 Each level is a Core query over Goals, Todos, `TurnDigestRead` and git, so
 cost stays constant per unit and nothing rescans history.
 
+### Momentum: every look ends in a prediction
+
+Looking is not reading; it is predicting (Tristan 2026-10-18). For each unit
+with new activity, the commander answers three questions and writes the
+answer on the card:
+
+1. **Would I do this?** Given what the unit knew, is its last move what I
+   would have done, and why or why not? "Yes: it read the owner before
+   editing." "No: it is relabelling the PR at its deadline instead of
+   merging."
+2. **Will it land on time?** From its pace: order steps touched out of the
+   total, time used out of time allowed, and the work mix. A one-word call
+   (`on time`, `late`, `wrong way`, `stuck`) plus the reason.
+3. **What steer?** The cheapest action that changes the trajectory: name the
+   exact edit it is circling, cut a step that does not serve the works-when
+   run, unblock a dependency, or (only after tracing the path myself)
+   reassign. "None" is a valid steer when it is on time and on target.
+
+The prediction is recorded with its time. The next look shows the previous
+call beside what actually happened, so the commander's own accuracy becomes
+visible: predictions that keep being wrong mean the commander's model of
+that unit (or of the task) is wrong, and that is the thing to fix.
+
+Cost control: a full three-question prediction for units with new activity
+since the last look, a carried-over call for the rest. A unit whose
+prediction is `on time` and whose card has not changed needs no new call.
+
+Example from 2026-10-18 14:15:
+
+```
+core-goal-retry  P398  due 14:15
+  would I: no, it is editing the PR body to "not ready" at the deadline; I would merge the RecordMember deletion that is already right
+  land:    late, 2 of 4 steps, is_set() count still growing
+  steer:   commit the RecordMember work now; replace is_set() calls with methods Goal and NoGoal override
+  last call (14:00): on time  -> missed: prediction wrong because I did not count is_set() growth
+```
+
 ## Done so far
 
 - `order.py send` requires a "Works when: <user-visible run>" line; `done`
