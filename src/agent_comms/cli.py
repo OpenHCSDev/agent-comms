@@ -12,13 +12,11 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
-from contextlib import ExitStack
 from pathlib import Path
 
-from .bus_route_counts import CompletingRouteCounts
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
-from .comms import wire
+from .comms import client_wire
 from .coordination_errors import CoordinationError
 
 
@@ -50,15 +48,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     try:
-        with ExitStack() as route_guard:
-            args = build_parser().parse_args(argv)
-            command = CliCommand.decode(args.command).from_namespace(args)
-            from .active_route import resolve_comms_route
-
-            route = resolve_comms_route(Path(args.root).expanduser() if args.root else None)
-            route_guard.enter_context(route.hold_client_route())
-            # One CLI call answers in full; only the UI yields between index units.
-            comms = wire(route, projection=CompletingRouteCounts)
+        args = build_parser().parse_args(argv)
+        command = CliCommand.decode(args.command).from_namespace(args)
+        with client_wire(Path(args.root).expanduser() if args.root else None) as comms:
             return command.run(comms, sys.stdout)
     except KeyboardInterrupt:
         return 130

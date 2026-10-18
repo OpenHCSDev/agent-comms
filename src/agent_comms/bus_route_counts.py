@@ -553,17 +553,11 @@ class OpenedRouteCounts(BusRouteCounts):
             )"""
 
     def _request_bindings(self, actors):
-        senders = {}
-        unrecorded = []
-        for name, source in self.registry.named_members():
-            senders[name] = tuple(DeliveryScope.sender_lookups(
-                source.incarnation, lambda: unrecorded.append(name)
-            ))
         return {
             "targets": json.dumps({
                 actor: sorted(self.deliveries[actor].index_targets) for actor in actors
             }),
-            "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
+            **self.registry.sender_bindings,
             "through": self.source.through,
         }
 

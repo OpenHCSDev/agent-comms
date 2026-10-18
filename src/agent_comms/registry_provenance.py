@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import json
 import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from functools import cached_property, partial
+from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
 
 from .agent_activity import UnavailableRecipientActivity
 from .errors import RelationViolationError, UnregisteredThreadError
+from .routing import DeliveryScope
 from .thread_identity import ThreadIncarnation, ThreadProvenance
 
 if TYPE_CHECKING:
@@ -91,9 +95,10 @@ class RegistryNames(Generic[Member]):
         """Resolve this namespace without requiring current membership."""
         return self.aliases.get(name, name)
 
-    def reserves(self, name: str) -> bool:
-        """A canonical name or a permanent alias occupies this text."""
-        return name in self.threads or name in self.aliases
+    def taken(self, name: str, owner: str | None = None) -> bool:
+        """A canonical name or permanent alias occupies this text, and it is not one of
+        ``owner``'s own names; with no owner, any occupied text is taken."""
+        return (name in self.threads or name in self.aliases) and self.canonical_name(name) != owner
 
     @staticmethod
     def thread_slug(text: str) -> str:
@@ -108,7 +113,7 @@ class RegistryNames(Generic[Member]):
         """
         base = self.thread_slug(wanted)
         name, suffix = base, 2
-        while self.reserves(name) and self.canonical_name(name) != owner:
+        while self.taken(name, owner):
             name, suffix = f"{base}-{suffix}", suffix + 1
         return name
 
@@ -153,7 +158,7 @@ class RegistryNames(Generic[Member]):
             raise UnregisteredThreadError(f"Thread {canonical!r} is not registered.") from error
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class RegistryProvenance(RegistryNames[ThreadProvenance]):
     threads: dict[str, ThreadProvenance]
     aliases: dict[str, str]
@@ -164,6 +169,19 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
             raise RelationViolationError("Provenance name differs from its original declaration")
         if any(target not in names or alias in names for alias, target in self.aliases.items()):
             raise RelationViolationError("Provenance alias has no exclusive retained owner")
+
+    @cached_property
+    def sender_bindings(self) -> Mapping[str, str]:
+        """One lazy SQL value for this namespace, including its historical names."""
+        senders = {}
+        unrecorded: list[str] = []
+        for name, source in self.named_members():
+            senders[name] = tuple(DeliveryScope.sender_lookups(
+                source.incarnation, partial(unrecorded.append, name)
+            ))
+        return MappingProxyType({
+            "senders": json.dumps(senders), "unrecorded": json.dumps(unrecorded),
+        })
 
     def retired(self, name: str) -> bool:
         """A recorded namespace keeps no removal ledger. A name its own bus

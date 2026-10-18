@@ -107,7 +107,7 @@ def test_declared_scalar_capabilities_and_new_case_use_the_same_boundary():
     assert FieldCodec.decode(Scalars, encoded) == value
     assert FieldCodec.project(value, "status") == encoded
     assert FieldCodec.value_schema(Annotated[Path | None, PathText]) == {
-        "anyOf": [{"type": "string"}, {"type": "null"}]
+        "anyOf": [{"type": "string", "description": "agent_comms.field_codec.PathText text"}, {"type": "null"}]
     }
     assert FieldCodec.decode(Scalars, {**encoded, "path": None}).path is None
     for key in encoded:
@@ -134,6 +134,18 @@ class Choice(DeclaredFamily, affix="Choice"):
 @dataclass(frozen=True, slots=True)
 class CountChoice(Choice):
     value: int
+
+
+@pytest.mark.parametrize("annotation,data", [
+    (type[Choice], "absent"),
+    (Choice, {"kind": "absent"}),
+])
+def test_family_refusal_keeps_its_own_message_once(annotation, data):
+    with pytest.raises(MalformedRecord) as refused:
+        FieldCodec.decode(annotation, data)
+    assert str(refused.value) == "Unknown Choice name: 'absent'"
+    assert type(refused.value.__cause__) is ValueError
+    assert str(refused.value.__cause__) == str(refused.value)
 
 
 @dataclass(frozen=True)
