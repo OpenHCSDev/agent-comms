@@ -22,6 +22,7 @@ from .errors import RelationViolationError
 from .bus_projection import AppendCheckpoint
 from .private_path import FileRevision
 from .read_ledger import ReadLedger
+from .read_basis import ReadCursor
 from .store_files import SharedLock, _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 from .wire_record import WireRecord
@@ -88,7 +89,12 @@ class BusPageRow(PageIndexTable, TypedTable):
 class BusPageMetrics(TypedRow):
     last: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX({timestamp}),0))")})
     human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
-    count: int = field(metadata={"sql": Column(generated="COALESCE(SUM({seq} > ? AND {seq} NOT IN (SELECT value FROM json_each(?)) AND {sender} NOT IN (SELECT value FROM json_each(?))),0)")})
+    count: int = field(metadata={"sql": Column(generated="COALESCE(SUM({sender} NOT IN (SELECT value FROM json_each(?))),0)")})
+
+
+@dataclass(frozen=True)
+class BusPageCount(TypedRow):
+    count: int = field(metadata={"sql": Column(generated="COUNT(*)")})
 
 
 class BusPageIndex:
@@ -308,15 +314,29 @@ class BusPageIndex:
 
     def display_snapshot(self, semantics: DisplayMetricScope, before_offset: int) -> DisplaySnapshot:
         snapshot = DisplaySnapshot.empty(semantics)
-        seen, names = semantics.seen, tuple(semantics.viewer_names)
+        names = tuple(semantics.viewer_names)
         for scope in semantics.scopes:
             predicate, parameters = scope.index_predicate
             row, = BusPageRow.select(self.connection, row_type=BusPageMetrics,
                 where=f"offset < ? AND ({predicate})",
-                parameters=(seen.high_water, json.dumps(seen.exceptions), json.dumps(names), before_offset, *parameters))
+                parameters=(json.dumps(names), before_offset, *parameters))
             snapshot.activity[scope.channel] = ChannelActivity(row.last, row.human)
             snapshot.counts[scope.channel] = row.count
         return snapshot
+
+    def display_unread(self, semantics: DisplayMetricScope, seen: ReadCursor,
+                       before_offset: int) -> dict[str, int]:
+        counts = {}
+        for scope in semantics.scopes:
+            predicate, parameters = scope.index_predicate
+            row, = BusPageRow.select(self.connection, row_type=BusPageCount,
+                where=f"seq > ? AND offset < ? AND ({predicate}) "
+                      "AND sender NOT IN (SELECT value FROM json_each(?)) "
+                      "AND seq NOT IN (SELECT value FROM json_each(?))",
+                parameters=(seen.high_water, before_offset, *parameters,
+                            json.dumps(tuple(semantics.viewer_names)), json.dumps(seen.exceptions)))
+            counts[scope.channel] = row.count
+        return counts
 
 
 class EmptyBusPageIndex(BusPageIndex):
@@ -330,3 +350,6 @@ class EmptyBusPageIndex(BusPageIndex):
 
     def display_snapshot(self, semantics, boundary):
         return DisplaySnapshot.empty(semantics)
+
+    def display_unread(self, semantics, seen, before_offset):
+        return dict.fromkeys((scope.channel for scope in semantics.scopes), 0)

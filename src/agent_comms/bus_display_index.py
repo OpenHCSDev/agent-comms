@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal
 from .bus_activity_index import ChannelActivity
 from .bus_projection import AppendCheckpoint, BusAppendIndex, NoCheckpoint
 from .messages import Message
-from .read_basis import ChannelDisplayScope, ReadCursor
+from .read_basis import ChannelDisplayScope
 
 if TYPE_CHECKING:
     from .wire_log import WireSnapshot
@@ -18,10 +18,8 @@ if TYPE_CHECKING:
 class DisplayMetricScope:
     scopes: tuple[ChannelDisplayScope, ...]
     viewer_names: frozenset[str]
-    seen: ReadCursor
-
-    def unread(self, message: Message) -> bool:
-        return message.sender not in self.viewer_names and message.seq not in self.seen
+    def inbound(self, message: Message) -> bool:
+        return message.sender not in self.viewer_names
 
 @dataclass(frozen=True)
 class DisplaySnapshot:
@@ -37,21 +35,21 @@ class DisplaySnapshot:
                                dict.fromkeys((scope.channel for scope in semantics.scopes), 0))
 
     def observe(self, message: Message) -> None:
-        unread = self.semantics.unread(message)
+        inbound = self.semantics.inbound(message)
         for scope in self.semantics.scopes:
             if scope.includes(message):
                 self.activity[scope.channel] = self.activity[scope.channel].observe(message)
-                self.counts[scope.channel] += int(unread)
+                self.counts[scope.channel] += int(inbound)
 
 
 @dataclass(frozen=True)
 class DisplayCheckpoint(DisplaySnapshot, AppendCheckpoint):
-    schema: Literal[5] = field(default=5, kw_only=True)
+    schema: Literal[6] = field(default=6, kw_only=True)
 
     def __post_init__(self) -> None:
         super().__post_init__()
         if any(value < 0 for value in self.counts.values()):
-            raise ValueError("Unread projection count must be nonnegative")
+            raise ValueError("Inbound projection count must be nonnegative")
         expected = {scope.channel for scope in self.semantics.scopes}
         if self.activity.keys() != expected or self.counts.keys() != expected:
             raise ValueError("Projection metrics differ from the captured channel scope")

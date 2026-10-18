@@ -535,9 +535,11 @@ class BusPresentation:
         membership. None is supplied independently by the metrics caller.
         The index reads the captured complete-line cut; read and write errors propagate.
         """
-        semantics = DisplayMetricScope(selection.scopes, selection.viewer_names, selection.seen)
+        semantics = DisplayMetricScope(selection.scopes, selection.viewer_names)
         snapshot = self.display_index(selection.require_viewer()).snapshot(source, semantics)
-        return snapshot.activity, snapshot.counts
+        unread = source.query_page_index(lambda page: page.display_unread(
+            semantics, selection.seen, source.complete_prefix.boundary))
+        return snapshot.activity, unread
 
 
 

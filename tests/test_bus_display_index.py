@@ -10,7 +10,7 @@ from agent_comms.bus_projection import NoCheckpoint
 from agent_comms.bus_display_index import BusDisplayIndex, DisplayMetricScope, DisplaySnapshot
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
-from agent_comms.read_basis import ChannelDisplayScope, ReadCursor
+from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.wire_log import AbsentWireSnapshot, CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
 
@@ -28,7 +28,7 @@ def opened(path, *indexes):
 def semantics():
     return DisplayMetricScope(
         (ChannelDisplayScope("#team", frozenset({"#team"})),),
-        frozenset({"viewer"}), ReadCursor(),
+        frozenset({"viewer"}),
     )
 
 
