@@ -118,7 +118,7 @@ class LiveObservationInterest(ObservationInterest):
     def receive(self, request: InterestRequest, service: ObservationService) -> None:
         observation = request.observation()
         kind = type(observation)
-        self.observations[kind] = observation.for_interest(self.observations.get(kind))
+        self.observations[kind] = self.observations.get(kind, NotObserved()).for_interest(observation)
         service.observe_again()
 
     def stop(self) -> ObservationInterest:
@@ -152,17 +152,27 @@ class LiveObservationInterest(ObservationInterest):
 InterestT = TypeVar("InterestT", bound=InterestRequest)
 
 
-class Observation(ABC, Generic[InterestT]):
+class ObservationLifetime(ABC):
+    """A previous reader decides how the next interest continues its lifetime."""
+
+    @abstractmethod
+    def for_interest(self, requested: Observation) -> Observation: ...
+
+
+class NotObserved(ObservationLifetime):
+    def for_interest(self, requested: Observation) -> Observation:
+        return requested
+
+
+class Observation(ObservationLifetime, Generic[InterestT]):
     """A requested view owns its read state and yields between store operations."""
 
     def __init__(self, request: InterestT):
         self.request = request
 
-    def for_interest(self, previous: Self | None) -> Self:
-        """The requested view owns whether its read lifetime can be retained."""
-        if previous is not None:
-            return previous if previous.request == self.request else self.continue_from(previous)
-        return self
+    def for_interest(self, requested: Observation) -> Observation:
+        """Keep an unchanged reader; a changed request continues from this reader."""
+        return self if self.request == requested.request else requested.continue_from(self)
 
     def continue_from(self, previous: Self) -> Self:
         """A changed interest starts fresh unless its reader can retain useful answers."""
