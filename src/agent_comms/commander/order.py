@@ -32,7 +32,7 @@ from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
 from ..tools import CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoTool
 from ..todos import (BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
-                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
+                     OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, StrikeTodo)
 from . import storage
 from .config import CommanderConfig, Repo
@@ -54,7 +54,7 @@ def refuse(text, *families):
 
 def post(recipients, body):
     """Send one message from the commander; judge reads it back from the bus history."""
-    refuse(body, FairText)
+    refuse(body, FairText, PlainText)
     command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
     for unit in recipients:
         command += ['--to', unit]

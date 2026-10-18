@@ -1,14 +1,16 @@
 """Core owns what an order and a strike may say, for every caller."""
 import pytest
 
-from agent_comms.todos import BluntText, FairText, HierarchyText, OrderText, PlainText
+from agent_comms.todos import BluntText, FairText, HierarchyText, OrderText, PlainText, StrikeReason
 
 TEN = "the unit pushed a commit that deleted the store test file"
 
 
 @pytest.mark.parametrize(("family", "text", "accepted"), [
     (PlainText, TEN, True),
-    (PlainText, "too short to say anything", False),
+    (PlainText, "Merged the store fix", True),
+    (StrikeReason, TEN, True),
+    (StrikeReason, "too short to say anything", False),
     (PlainText, TEN + " and broke the custody of the bus", False),
     (PlainText, TEN + ' and quoted "custody" from the old order', True),
     (PlainText, TEN + " and named `lifecycle.py` in backticks", True),

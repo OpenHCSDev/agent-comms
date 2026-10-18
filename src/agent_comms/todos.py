@@ -160,9 +160,15 @@ class OrderWords(str):
 
 
 class PlainText(OrderWords):
-    """What a unit did, in the words the user uses: ten or more words and no word that hides what happened."""
+    """Prose in the words the user uses: no word that hides what happened."""
 
     REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
+    refusal = "Jargon {1} hides what happened; say it plainly."
+
+
+class StrikeReason(PlainText):
+    """What a unit did, plainly, in enough words to stand on the public record."""
+
     refusal = "Say what the unit did plainly in {}+ words; jargon {} hides what happened."
     least_words = 10
 
@@ -498,7 +504,7 @@ class StrikeTodo(TodoOperation):
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
-        PlainText(self.reason)
+        StrikeReason(self.reason)
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
