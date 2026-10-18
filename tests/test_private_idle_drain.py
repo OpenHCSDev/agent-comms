@@ -319,7 +319,7 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         assert settled <= 3
         activity_of = comms.agents.activity_of
 
-        def no_idle_activity(*_args, **_kwargs):
+        def no_idle_activity(thread, *, snapshot):
             raise AssertionError("an unchanged tick reread activity and the registry")
 
         monkeypatch.setattr(comms.agents, "activity_of", no_idle_activity)
