@@ -320,7 +320,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
                     try:
                         try:
                             await self.attest()
-                            await self.admit_prompt()
+                            await self.send_prompt()
                             while not self.finished:
                                 event = await self.next_event()
                                 async for update in self.consume_native_event(event):
@@ -462,7 +462,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             self.grant_prompt()
             yield
 
-    async def admit_prompt(self) -> None:
+    async def send_prompt(self) -> None:
         if self.prompt_send_boundary is None:
             await self.send(self.command)
         else:

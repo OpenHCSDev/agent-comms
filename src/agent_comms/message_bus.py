@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     from .threads import Thread
 
 from .publisher import Publisher
-from .wire_log import OpenedWireSnapshot, WireLog
+from .wire_log import WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
@@ -79,7 +79,7 @@ class MessageBus:
             private_claim_writes=private_claim_writes,
         )
 
-    def activity_clocks(self, source: OpenedWireSnapshot) -> ActivityClocks:
+    def activity_clocks(self, source: WireSnapshot) -> ActivityClocks:
         """Read clocks from the caller's already opened bus cut."""
         return self._activity.snapshot(source, self._bus_activity_fields)
 
@@ -106,7 +106,7 @@ class MessageBus:
     @contextmanager
     def snapshot(
         self, viewer: DisplayViewer = AnonymousViewer()
-    ) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
+    ) -> Iterator[tuple[DisplaySelection, WireSnapshot]]:
         """Keep a fixed bus, namespace and read snapshot after releasing its locks.
 
         The bus owns capture, including the committed sequence of this exact
@@ -206,7 +206,7 @@ class MessageBus:
             }
 
     def _pending_projection(
-        self, source: OpenedWireSnapshot, basis: DisplaySelection, names: Sequence[str],
+        self, source: WireSnapshot, basis: DisplaySelection, names: Sequence[str],
     ) -> Mapping[str, Mapping[str, int]]:
         """Bulk delivery counts from one original source, namespace and ledger."""
         actors = {name: basis.registry.canonical_name(name) for name in names}
@@ -215,15 +215,16 @@ class MessageBus:
             for actor in set(actors.values())
         }
         seen = {
-            actor: basis.document.cursor(
-                actor, basis.registry, source.revision.identity if source.revision else None
+            actor: source.read(
+                lambda opened: basis.document.cursor(actor, basis.registry, opened.revision.identity),
+                absent=lambda: basis.document.cursor(actor, basis.registry),
             ) for actor in deliveries
         }
         with OpenedRouteCounts(self.log.path, source, basis.registry, deliveries) as index:
             counts = index.unseen_counts(seen)
         return {name: counts[actor] for name, actor in actors.items()}
 
-    def pending_counts_opened(self, source: OpenedWireSnapshot,
+    def pending_counts_opened(self, source: WireSnapshot,
                               selection: DisplaySelection) -> Mapping[str, int]:
         """Borrow the caller's original source, namespace and sparse reads."""
         actor = selection.require_viewer()

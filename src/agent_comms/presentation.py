@@ -36,7 +36,7 @@ from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, Nam
 from .read_ledger import ReadLedger
 from .runtime_info import RuntimeInfo
 from .store_files import _store_lock
-from .wire_log import OpenedWireSnapshot, WireLog
+from .wire_log import WireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
 from .display_references import DisplayReferences
 from .thread_presentation import (
@@ -433,8 +433,8 @@ class BusPresentation:
         return index
 
     @contextmanager
-    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, OpenedWireSnapshot]]:
-        """Admit the display index before borrowing the bus-owned source cut."""
+    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, WireSnapshot]]:
+        """Check the display index before borrowing the bus-owned source cut."""
         self.display_index(viewer.name)
         with self.bus.snapshot(viewer) as selected:
             yield selected
@@ -493,7 +493,7 @@ class BusPresentation:
 
     def display_view_metrics(
         self,
-        source: OpenedWireSnapshot,
+        source: WireSnapshot,
         selection: DisplaySelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
@@ -744,6 +744,12 @@ class WireRevision:
     expiry_seconds: ClassVar[int] = 30
 
     @classmethod
+    def empty(cls) -> WireRevision:
+        """No stores have been observed yet; source groups come from their declarations."""
+        return cls(**{source.name: () for source in fields(cls) if "paths" in source.metadata},
+                   expiry_tick=0, through_seq=0)
+
+    @classmethod
     def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
         """Stat and watch the sources declared by the revision fields themselves."""
         return {source.name: paths(views) for source in fields(cls)
@@ -766,15 +772,17 @@ class WireRevision:
                         activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
         """Attribute changes using the retained observation and existing route rows."""
         earlier = previous.revision
-        names = previous.changed_since(None)
+        names = previous.results.keys()
+        readable, changed = {}, set()
+        for name, result in previous.results.items():
+            result.collect_revision_inputs(name, readable, changed)
         if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
-                or not any(view is not None for view in previous.presentations.values())):
+                or not readable):
             return frozenset(names)
-        changed = set(previous.busy)
         if self.through_seq > earlier.through_seq:
             snapshot = comms.registry.snapshot()
             with comms.bus.log._opened_wire_snapshot() as source:
-                if (source.revision,) != self.bus_log:
+                if source.changed_since(self.bus_log[0]):
                     raise StaleRevision("Wire source changed before route attribution")
                 with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
                     actors = routes.participants_between(earlier.through_seq, self.through_seq)
@@ -789,10 +797,9 @@ class WireRevision:
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
             changed.update(name for name in status_names if (view := status_batch.view(name)) is None
-                           or not view.presentation.same_status(previous.presentations.get(name)))
+                           or not previous.results[name].same_status(view.presentation))
         if self.notifications_changed_since(earlier):
-            remaining = {name: view for name, view in previous.presentations.items()
-                         if name not in changed and view is not None}
+            remaining = {name: view for name, view in readable.items() if name not in changed}
             references = tuple(dict.fromkeys(reference for view in remaining.values()
                                             for reference in (*view.incoming_references, *view.sent_references)))
             if references:

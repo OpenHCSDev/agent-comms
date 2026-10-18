@@ -7,11 +7,14 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Generic, TypeVar
+from typing import BinaryIO, ClassVar, Generic, TypeVar, TYPE_CHECKING
 
 from .field_codec import FieldCodec
 from .private_path import FileRevision
 from .store_files import _atomic_write_text, _store_lock
+
+if TYPE_CHECKING:
+    from .wire_log import OpenedWireSnapshot
 
 
 @dataclass(frozen=True)
@@ -46,7 +49,7 @@ class AppendCheckpoint:
         return {**payload, "integrity": self.payload_digest(payload)}
 
     def accepts(self, revision: FileRevision, stream: BinaryIO) -> bool:
-        if self.source.identity != revision.identity or self.offset > revision.size:
+        if not self.source.holds_cut(revision, self.offset):
             return False
         if self.offset == revision.size and self.source != revision:
             return False
@@ -131,10 +134,10 @@ class BusAppendIndex(AppendProjectionStore[Checkpoint]):
         self._held = record
 
     def capture(
-        self, prepared: Checkpoint | None, stream: BinaryIO | None,
-        revision: FileRevision | None,
+        self, prepared: Checkpoint | None, opened: OpenedWireSnapshot,
     ) -> Checkpoint | None:
-        if prepared is None or stream is None or revision is None:
+        if prepared is None:
             return None
-        self._held = prepared if prepared.accepts(revision, stream) else None
+        self._held = (prepared if opened.same_file(prepared.source.identity)
+                      and prepared.accepts(opened.revision, opened.stream) else None)
         return self._held

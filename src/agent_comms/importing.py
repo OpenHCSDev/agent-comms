@@ -499,7 +499,7 @@ class ReverseImportBuffer:
             or self.characters + len(message.body) > self.limits.characters
         ):
             # A forward ImportBuffer evicts the complete older prefix. Once one
-            # record does not fit, admitting any still-older record would create
+            # record does not fit, including any still-older record would create
             # a misleading non-contiguous history suffix.
             self.saturated = True
             return

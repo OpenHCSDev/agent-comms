@@ -19,6 +19,7 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
+from agent_comms.presentation import WireRevision
 from agent_comms.ui_model.observation import (
     ObservationProcess,
     ObserveSidebar,
@@ -31,6 +32,7 @@ from agent_comms.ui_model.observation import (
     ReadTranscript,
     SidebarUnreadable,
     ThreadsObserved,
+    ThreadUnavailable,
     UnreadableHistory,
 )
 from agent_comms.ui_model.status import OpenThreadStatus
@@ -80,10 +82,10 @@ def test_read_failure_and_thread_status_keep_the_explanation_across_the_pipe(com
     round_trip = pickle.loads(pickle.dumps(answer))
     assert str(round_trip.error) == str(answer.error)
     assert UnreadableHistory.capture(answer.error) is answer.error
-    observed = ThreadsObserved(None, {}, {"saved": answer.error}, frozenset(), frozenset({"saved"}), {})
+    observed = ThreadsObserved(WireRevision.empty(), {"saved": ThreadUnavailable(answer.error)}, frozenset({"saved"}), {})
     status = OpenThreadStatus(lambda callback: callback())
     status.observed(observed)
-    assert not status.rows.rows["saved"].available
+    assert status.rows.rows["saved"].status.details == (str(answer.error),)
     assert "unavailable_future_segment" in status.rows.rows["saved"].lines[0]
 
 
@@ -177,8 +179,8 @@ async def test_unknown_saved_member_does_not_kill_the_real_observation_process(c
                 )
                 if threads is not None:
                     break
-        assert isinstance(threads.unavailable["saved"], UnreadableHistory)
-        assert "unavailable_future_segment" in str(threads.unavailable["saved"])
+        assert isinstance(threads.results["saved"].error, UnreadableHistory)
+        assert "unavailable_future_segment" in str(threads.results["saved"].error)
         # Serve a separate, readable request using the same actual pipe/child.
         waiting = asyncio.create_task(process.read(ReadNotifications(str(comms.root), ())))
         await asyncio.sleep(0)

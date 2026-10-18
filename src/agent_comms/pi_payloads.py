@@ -688,7 +688,7 @@ class UserMessage(PiMessage):
             await session.later_input_started(event)
 
     async def apply_start(self, session, event):
-        async for update in session.admit_user_message(self, event):
+        async for update in session.accept_user_message(self, event):
             yield update
 
     def observe_start_abort(self, session, event):

@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from agent_comms.ui_model.delivery import InputDelivery
     from agent_comms.ui_model.goal import OwnerGoalSnapshot
     from agent_comms.ui_model.sidebar import ChannelRowModel, ThreadRowModel
+    from agent_comms.ui_model.status import OpenThreadStatus, ThreadStatusModel
     from agent_comms.view_unread import ReplyIndexBatch
 
 
@@ -159,7 +160,13 @@ class Observation(ABC, Generic[InterestT]):
 
     def for_interest(self, previous: Self | None) -> Self:
         """The requested view owns whether its read lifetime can be retained."""
-        return previous if previous is not None and previous.request == self.request else self
+        if previous is not None:
+            return previous if previous.request == self.request else self.continue_from(previous)
+        return self
+
+    def continue_from(self, previous: Self) -> Self:
+        """A changed interest starts fresh unless its reader can retain useful answers."""
+        return self
 
     @abstractmethod
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]: ...
@@ -643,18 +650,17 @@ class NotificationReading(Observation[ObserveNotifications]):
 class ThreadReading(Observation[ObserveThreads]):
     def __init__(self, request: ObserveThreads):
         super().__init__(request)
-        self.observed: ThreadsObserved | None = None
+        self.observed = ThreadsObserved(WireRevision.empty(), {}, frozenset(), {})
         self.initial = request.names
 
-    def for_interest(self, previous: Self | None) -> Self:
-        if previous is not None:
-            self.observed = previous.observed
-            self.initial = self.request.names - previous.request.names
-        return super().for_interest(previous)
+    def continue_from(self, previous: Self) -> Self:
+        self.observed = previous.observed
+        self.initial = self.request.names - previous.request.names
+        return self
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
-        presentations, unavailable, busy = {}, {}, set()
+        results: dict[str, ThreadReadResult] = {}
         activity = {}
         names = self.request.names
         try:
@@ -663,37 +669,32 @@ class ThreadReading(Observation[ObserveThreads]):
                 names=names, show_stopped=True, show_archived=False), snapshot=snapshot)
             activity = {name: captured[canonical] for name in names
                         if (canonical := snapshot.canonical_name(name)) in captured}
-            if previous is not None:
-                names = (revision.changed_threads(previous, comms, activity) | names - previous.changed_since(None)) & names
+            names = (revision.changed_threads(previous, comms, activity) | names - previous.results.keys()) & names
             if names:
                 batch = comms.views.thread_presentations(names)
         except UnreadableHistory.DEFERRED_READS:
-            busy.update(names)
+            results.update(dict.fromkeys(names, ThreadBusy()))
         except StoredHistoryUnreadable as error:
-            unavailable.update(dict.fromkeys(names, UnreadableHistory.capture(error)))
+            results.update(dict.fromkeys(names, ThreadUnavailable(UnreadableHistory.capture(error))))
         else:
             for name in names:
                 try:
-                    presentations[name] = batch.read(name)
+                    presentation = batch.read(name)
+                    results[name] = ThreadMissing() if presentation is None else ThreadPresented(presentation)
                 except UnreadableHistory.DEFERRED_READS:
-                    busy.add(name)
+                    results[name] = ThreadBusy()
                 except StoredHistoryUnreadable as error:
-                    unavailable[name] = UnreadableHistory.capture(error)
+                    results[name] = ThreadUnavailable(UnreadableHistory.capture(error))
                 yield None
-        if previous is not None:
-            presentations.update((name, value) for name, value in previous.presentations.items()
-                                 if name in self.request.names and name not in names)
-            unavailable.update((name, value) for name, value in previous.unavailable.items()
-                               if name in self.request.names and name not in names)
-            busy.update(previous.busy & self.request.names - names)
-        observed = ThreadsObserved(revision, presentations, unavailable, frozenset(busy), frozenset(), activity)
+        results.update((name, value) for name, value in previous.results.items()
+                       if name in self.request.names and name not in names)
+        observed = ThreadsObserved(revision, results, frozenset(), activity)
         self.observed = observed
         changed = observed.changed_since(previous) | self.initial
         self.initial = frozenset()
         if changed:
             yield replace(observed, changed=changed,
-                          presentations={name: value for name, value in presentations.items() if name in changed},
-                          unavailable={name: value for name, value in unavailable.items() if name in changed})
+                          results={name: value for name, value in results.items() if name in changed})
 
 
 class ViewReading(Observation[ObserveViews]):
@@ -805,30 +806,88 @@ class SidebarUnreadable(SidebarResult):
         """Keep this stage until its source revision changes."""
 
 
+class ThreadReadResult(ABC):
+    """One thread's last read, including how to compare and display its answer."""
+
+    @abstractmethod
+    def same_observation(self, previous: ThreadReadResult) -> bool: ...
+
+    @abstractmethod
+    def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel: ...
+
+    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+        """Supply readable values and reads that must be tried again."""
+
+    def same_status(self, presentation: ThreadPresentation) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class ThreadPresented(ThreadReadResult):
+    presentation: ThreadPresentation
+
+    def same_observation(self, previous: ThreadReadResult) -> bool:
+        return isinstance(previous, ThreadPresented) and (
+            self.presentation is previous.presentation or self.presentation.same_observation(previous.presentation))
+
+    def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
+        from agent_comms.ui_model.status import ThreadStatusModel
+        return ThreadStatusModel.known(name, self.presentation)
+
+    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+        readable[name] = self.presentation
+
+    def same_status(self, presentation: ThreadPresentation) -> bool:
+        return presentation.same_status(self.presentation)
+
+
+@dataclass(frozen=True)
+class ThreadMissing(ThreadReadResult):
+    def same_observation(self, previous: ThreadReadResult) -> bool:
+        return isinstance(previous, ThreadMissing)
+
+    def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
+        from agent_comms.ui_model.status import ThreadStatusModel
+        return ThreadStatusModel.retired(name)
+
+
+@dataclass(frozen=True)
+class ThreadUnavailable(ThreadReadResult):
+    error: UnreadableHistory
+
+    def same_observation(self, previous: ThreadReadResult) -> bool:
+        return isinstance(previous, ThreadUnavailable) and self.error == previous.error
+
+    def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
+        from agent_comms.ui_model.status import ThreadStatusModel
+        return ThreadStatusModel.unreadable(name, self.error)
+
+
+@dataclass(frozen=True)
+class ThreadBusy(ThreadReadResult):
+    def same_observation(self, previous: ThreadReadResult) -> bool:
+        return isinstance(previous, ThreadBusy)
+
+    def status_row(self, name: str, owner: OpenThreadStatus) -> ThreadStatusModel:
+        return owner.open(name)
+
+    def collect_revision_inputs(self, name: str, readable: dict[str, ThreadPresentation], retry: set[str]) -> None:
+        retry.add(name)
+
+
 @dataclass(frozen=True)
 class ThreadsObserved(Observed):
-    """Presentations of the observed threads; a busy store leaves some unread this time."""
+    """One mutually exclusive read answer per observed thread."""
 
-    presentations: Mapping[str, ThreadPresentation | None]
-    unavailable: Mapping[str, UnreadableHistory]
-    busy: frozenset[str]
+    results: Mapping[str, ThreadReadResult]
     changed: frozenset[str]
     activity: Mapping[str, ObservedActivity]
 
-    def changed_since(self, previous: ThreadsObserved | None) -> frozenset[str]:
+    def changed_since(self, previous: ThreadsObserved) -> frozenset[str]:
         """Read-state transitions and source-owned changes, independent of store churn."""
-        if previous is None:
-            return frozenset((*self.presentations, *self.unavailable, *self.busy))
-        changed = set(self.busy ^ previous.busy)
-        changed.update(self.presentations.keys() ^ previous.presentations.keys())
-        changed.update(self.unavailable.keys() ^ previous.unavailable.keys())
-        for name in self.presentations.keys() & previous.presentations.keys():
-            current, before = self.presentations[name], previous.presentations[name]
-            if current is not before and (current is None or not current.same_observation(before)):
-                changed.add(name)
-        changed.update(name for name in self.unavailable.keys() & previous.unavailable.keys()
-                       if self.unavailable[name] != previous.unavailable[name])
-        return frozenset(changed)
+        return frozenset(name for name in self.results.keys() | previous.results.keys()
+                         if name not in self.results or name not in previous.results
+                         or not self.results[name].same_observation(previous.results[name]))
 
 
 @dataclass(frozen=True)

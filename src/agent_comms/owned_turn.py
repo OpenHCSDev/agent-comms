@@ -285,7 +285,7 @@ class OwnedTurn:
         )
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
-        self.runner.inputs.original_sources[self.session_id] = self.original
+        self.runner.inputs.first_sources[self.session_id] = self.original
         self.input_cleanup.pop_all()
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)

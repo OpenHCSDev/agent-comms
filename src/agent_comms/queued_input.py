@@ -443,7 +443,7 @@ class DeliveredInput(QueuedInput):
                 if row.key not in live_keys
             }
             if not rows:
-                return 0  # No work admits no SQLite connection, let alone a writer.
+                return 0  # Without work, no SQLite connection is needed, let alone a writer.
             path = str(comms.root / "coordination.sqlite3")
             with Coordination(path, session_type=ReadNativeCoordinationSession) as store:
                 assignments = store.assignments.recoverable_unbound_deliveries(
@@ -473,7 +473,7 @@ class DeliveredInput(QueuedInput):
         """
         inbox = await inputs.effects.turns.active_backend_inbox(session_id)
         # A turn takes later inputs once its first one is in.
-        if inbox is None or session_id not in inputs.original_sources:
+        if inbox is None or session_id not in inputs.first_sources:
             return
         store_path = inputs.comms.root / "coordination.sqlite3"
         lookup = owner.incarnation.lookup

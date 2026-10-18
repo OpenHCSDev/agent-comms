@@ -866,34 +866,41 @@ class ThreadRelationships:
             if revision == self._recent_revision:
                 return self._recent, self._limited
             with self.bus.log._opened_wire_snapshot(need_sequence=False) as source:
-                revision = source.revision
-                previous = self._recent_revision
-                extended = False
-                if previous is not None and revision is not None:
-                    extended = (previous.holds_cut(revision, previous.size)
-                                and revision.size > previous.size)
-                if extended:
-                    start = max(previous.size, source.boundary - self.RECENT_BYTES)
-                    source.stream.seek(start)
-                    data = source.stream.read(source.boundary - start)
-                    contiguous = start == previous.size
-                else:
-                    data, start = source.tail_bytes(self.RECENT_BYTES)
-                    contiguous = False
-            lines = data.splitlines(keepends=True)
-            if start and not contiguous and lines:
-                lines.pop(0)  # A bounded cut may begin in a partial record.
-            messages = (self._recent if contiguous else ()) + tuple(
-                message
-                for line in lines
-                if line.endswith(b"\n") and line.strip()
-                for message in WireRecord.public_from_wire(json.loads(line)).messages()
-            )
-            limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
-            messages = messages[-self.RECENT_MESSAGES :]
-            self._recent_revision = revision
-            self._recent, self._limited = messages, limited
-            return messages, limited
+                return source.read(self._opened_recent_messages, absent=self._absent_recent_messages)
+
+    def _absent_recent_messages(self) -> tuple[tuple[Message, ...], bool]:
+        self._recent_revision = None
+        self._recent, self._limited = (), False
+        return self._recent, self._limited
+
+    def _opened_recent_messages(self, source) -> tuple[tuple[Message, ...], bool]:
+        if not source.changed_since(self._recent_revision):
+            return self._recent, self._limited
+        previous = self._recent_revision
+        if (previous is not None and source.same_file(previous.identity)
+                and previous.holds_cut(source.revision, previous.size)
+                and source.revision.size > previous.size):
+            start = max(previous.size, source.boundary - self.RECENT_BYTES)
+            source.stream.seek(start)
+            data = source.stream.read(source.boundary - start)
+            contiguous = start == previous.size
+        else:
+            data, start = source.tail_bytes(self.RECENT_BYTES)
+            contiguous = False
+        lines = data.splitlines(keepends=True)
+        if start and not contiguous and lines:
+            lines.pop(0)  # A bounded cut may begin in a partial record.
+        messages = (self._recent if contiguous else ()) + tuple(
+            message
+            for line in lines
+            if line.endswith(b"\n") and line.strip()
+            for message in WireRecord.public_from_wire(json.loads(line)).messages()
+        )
+        limited = (self._limited if contiguous else bool(start)) or len(messages) > self.RECENT_MESSAGES
+        messages = messages[-self.RECENT_MESSAGES :]
+        self._recent_revision = source.revision
+        self._recent, self._limited = messages, limited
+        return messages, limited
 
     def snapshot(self, owner: str) -> ThreadCommsSnapshot:
         # One coherent identity/metadata basis; wire payload work is bounded.

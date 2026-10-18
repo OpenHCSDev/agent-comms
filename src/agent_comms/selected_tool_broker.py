@@ -178,7 +178,7 @@ class SelectedToolEnvelope:
 def selected_extension(package: Path) -> Path:
     """Select the tool shipped inside the already verified native package.
 
-    The native deployment manifest admits this exact module. A private session
+    The native deployment manifest allows this exact module. A private session
     directory is state storage, not an extension installation root.
     """
     source = Path(package) / "dist/selected_claimed_write.mjs"
@@ -517,7 +517,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
     def decode_request(self, raw: bytes) -> Call: ...
 
     @abstractmethod
-    async def admit(self, round_number: int, call: Call) -> None: ...
+    async def allow(self, round_number: int, call: Call) -> None: ...
 
     def validate_round(self, round: NativeToolRound[Call]) -> None:
         """Apply policy-specific limits after full decode and before any state transition."""
@@ -560,7 +560,7 @@ class OwnerToolSocket(ABC, Generic[Call]):
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:
         call = self.calls.call_for(self.decode_request(raw))
-        await call.authorize(lambda: self.admit(self.calls.identity_for(call).round_number, call))
+        await call.authorize(lambda: self.allow(self.calls.identity_for(call).round_number, call))
         return {"ok": True}
 
     def failure_response(self, error: Exception) -> dict[str, object]:
@@ -683,7 +683,7 @@ class SelectedToolSocket(OwnerToolSocket[SelectedToolRequest]):
             raise SelectedToolDenied("Invalid selected tool request") from error
         return envelope.authenticate(self.token)
 
-    async def admit(self, round_number: int, call: SelectedToolRequest) -> None:
+    async def allow(self, round_number: int, call: SelectedToolRequest) -> None:
         await Coordination.run_worker(partial(self.action, call))
 
     @property

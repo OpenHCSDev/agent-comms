@@ -490,7 +490,7 @@ async def test_observed_mid_session_claim_change_invalidates_old_proof(tmp_path,
     assert proven.status == "proven"
     comms.registry.unregister("beta")
     assert await agent.inputs.drain_inbox("beta") == 0
-    assert updates[-1].status == "unavailable" and updates[-1].scope is None
+    assert updates[-1].status == "unavailable" and not updates[-1].scope.matches_session("project")
     comms.registry.heartbeat("beta")
     assert await agent.inputs.drain_inbox("beta") == 0
     renewed = updates[-1]

@@ -77,7 +77,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
             if ClosingScheduleRule().violated(self):
                 return
             async with inputs.effects.turns.turn_locks.setdefault(session_id, asyncio.Lock()):
-                # The bus may admit a channel post while an operator drains the
+                # The bus may accept a channel post while an operator drains the
                 # fleet. Keep its existing queued origin; do not start a native
                 # turn or consume it until this root's typed phase is READY.
                 hold = await Coordination.run_worker(inputs.comms.owners.maintenance.read)
