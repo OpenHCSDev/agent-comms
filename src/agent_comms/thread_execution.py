@@ -112,9 +112,7 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        if status.active and thread.process_identity.has_process:
-            return binding.native_presentation(ordinary)
-        return ordinary
+        return binding.native_presentation(ordinary)
 
     @classmethod
     def observe_recipient(cls, agents, snapshot: RegistrySnapshot, thread: Thread):
@@ -124,7 +122,7 @@ class NativeThreadExecution(ThreadExecution):
     @classmethod
     def project_activity(cls, thread: Thread, activity):
         """A running native owner displays its current turn phase."""
-        return thread.turn_state.project_activity(activity) if thread.process_identity.has_process else activity
+        return thread.process_identity.project_activity(thread.turn_state, activity)
 
 
 class ExternalThreadExecution(ThreadExecution):
@@ -142,9 +140,7 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
-        if not status.active:
-            return ordinary
-        if thread.process_identity.has_process and not thread.process_alive:
+        if status.active and not thread.process_alive:
             return replace(ordinary, marker="○", summary="CLI offline",
                            status=ordinary.status.without_work())
         return ordinary

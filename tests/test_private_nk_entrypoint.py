@@ -164,7 +164,7 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
     comms.registry.declare(
-        comms.registry.new_thread('headless', frozenset(), str(tmp_path), process_identity=None, session_file=str(saved))
+        comms.registry.new_thread('headless', frozenset(), str(tmp_path), session_file=str(saved))
     )
 
     def rejected(_package):
@@ -218,7 +218,7 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     saved.write_text('{"type":"session"}\n')
     saved.chmod(0o600)
     comms.registry.declare(
-        comms.registry.new_thread('resumable', frozenset(), str(tmp_path), process_identity=None, session_file=str(saved))
+        comms.registry.new_thread('resumable', frozenset(), str(tmp_path), session_file=str(saved))
     )
     launched: list[ParentedProcess] = []
     captured: list[dict[str, str]] = []

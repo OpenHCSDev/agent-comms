@@ -202,7 +202,7 @@ while True: time.sleep(0.01)
 
 
 def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
-    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.child_process import NoProcess, ProcessIdentity
     from agent_comms.threads import Thread
 
     comms = Comms(tmp_path / "wire")
@@ -211,7 +211,7 @@ def test_stop_before_first_worker_keeps_the_exact_owner_fence(tmp_path):
     comms.owners.stop(declared.name)
     snapshot = comms.registry.snapshot()
     assert snapshot.statuses[declared.name].stopped
-    assert snapshot.threads[declared.name].process_identity is None
+    assert snapshot.threads[declared.name].process_identity == NoProcess()
     assert comms.owners.releases.get(declared.name).current(snapshot, declared, generation)
 
     waiting = comms.registry.declare(comms.registry.new_thread('waiting', frozenset(), str(tmp_path)))

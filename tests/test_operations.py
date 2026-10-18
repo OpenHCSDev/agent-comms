@@ -260,13 +260,13 @@ class TestThreadOps:
         session_file = tmp_path / "session.jsonl"
 
         attached = wired.threads.attach_session(
-            wired.registry.require("fixer"), str(session_file), pid=123
+            wired.registry.require("fixer"), str(session_file), process=ProcessIdentity.capture(os.getpid())
         )
 
         assert attached.tags == frozenset({"auth"})
         assert attached.parent == "PR111"
         assert attached.task == "fix auth"
-        assert attached.pid == 123
+        assert attached.pid == os.getpid()
         assert attached.session_file == str(session_file.resolve())
         assert wired.registry.status("fixer").declared_name == "running"
 
@@ -279,7 +279,7 @@ class TestThreadOps:
         session_file.write_text(
             json.dumps({"type": "model_change", "provider": "test", "modelId": "saved"}) + "\n"
         )
-        attached = wired.threads.attach_session(wired.registry.require("fixer"), str(session_file))
+        attached = wired.threads.attach_session((attachment_owner := wired.registry.require("fixer")), str(session_file), process=attachment_owner.process_identity)
         assert attached.model == "test/saved"
         assert wired.registry.require("fixer").model == "test/saved"
 

@@ -175,7 +175,7 @@ async def test_saved_native_selection_survives_acp_load_and_one_new_prompt(
             assert thread.model == "response-local/fixture" and thread.thinking_level is OffThinkingLevel
             # Seed the representative saved-thread binding through the existing store.
             owner._comms.registry.register(replace(thread, auto_title_pending=False))
-            owner._comms.threads.attach_session(sid, str(native.session))
+            owner._comms.threads.attach_session((attachment_owner := owner._comms.registry.require(sid)), str(native.session), process=attachment_owner.process_identity)
             await router(
                 "session/load",
                 {"cwd": str(native.project), "sessionId": sid, "mcpServers": []},

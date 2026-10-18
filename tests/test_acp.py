@@ -349,7 +349,7 @@ class TestHandlers:
             ),
         ]
         path.write_text("".join(json.dumps(record) + "\n" for record in records))
-        agent._comms.threads.attach_session(agent._comms.registry.require("proj"), str(path))
+        agent._comms.threads.attach_session((attachment_owner := agent._comms.registry.require("proj")), str(path), process=attachment_owner.process_identity)
         sent = []
 
         class Client:
@@ -434,7 +434,7 @@ class TestHandlers:
             )
         )
         first._comms.threads.attach_session(
-            first._comms.registry.require("proj"), str(session_file), pid=os.getpid()
+            first._comms.registry.require("proj"), str(session_file), process=ProcessIdentity.capture(os.getpid())
         )
         await first.shutdown()
         assert first._comms.registry.status("proj").declared_name == "stopped"

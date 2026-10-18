@@ -501,7 +501,7 @@ class ThreadManagement:
         info = self.agents.agent_info_of(thread.name)
         return info.model_or(default)
 
-    def attach_session(self, original: Thread, source_path: str, *, process: ProcessState | None = None) -> Thread:
+    def attach_session(self, original: Thread, source_path: str, *, process: ProcessState) -> Thread:
         """Attach Pi state and retain its model once, outside the wire lock."""
         path = Path(source_path).expanduser().resolve()
         location = original.backend.location_type(str(path))
@@ -515,7 +515,7 @@ class ThreadManagement:
                 raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
                 current.initialized_native_configuration(model=saved_model, thinking_level=None),
-                process_identity=current.process_identity if process is None else process,
+                process_identity=process,
                 session_file=location.read_key,
             )
             self.registry.register(attached)

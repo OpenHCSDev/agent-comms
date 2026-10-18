@@ -209,7 +209,7 @@ def test_recorded_transcript_witness_roundtrip_keeps_original_namespace(tmp_path
     native.write_text(json.dumps({"type": "message", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "original recorded answer"}],
     }}) + "\n")
-    old.threads.attach_session(old.registry.require("alice"), str(native))
+    old.threads.attach_session((attachment_owner := old.registry.require("alice")), str(native), process=attachment_owner.process_identity)
     old.registry.rename("alice", "recorded-alice")
     replacement = replace(live.registry.require("alice"), created_at=20.0)
     live.registry.unregister("alice")

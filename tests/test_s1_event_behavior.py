@@ -369,7 +369,7 @@ async def test_actual_native_stream_reaches_current_consumer_and_settlement(
     await owner._runtime.start()
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
-    comms.threads.attach_session(comms.registry.require(name), str(native.session))
+    comms.threads.attach_session((attachment_owner := comms.registry.require(name)), str(native.session), process=attachment_owner.process_identity)
     origin = comms.messaging.send_user_message(
         name, "native acceptance", worktree=str(native.project)
     )
@@ -438,7 +438,7 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
     session = await owner.new_session(cwd=str(native.project), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     comms.threads.set_thread_configuration(comms.registry.require(name), model='response-local/fixture')
-    comms.threads.attach_session(comms.registry.require(name), str(native.session))
+    comms.threads.attach_session((attachment_owner := comms.registry.require(name)), str(native.session), process=attachment_owner.process_identity)
     observed = []
     emit = owner._emit_event
 

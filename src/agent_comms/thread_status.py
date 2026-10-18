@@ -89,7 +89,7 @@ class ActiveThreadPresence:
         raise RelationViolationError("Stop a running thread before permanently deleting it.")
 
     def allows_owner_start(self, *, process: ProcessState) -> bool:
-        return not process.has_process
+        return process.allows_owner_start()
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
         return activity.ordinary_presentation(title)

@@ -393,7 +393,7 @@ class OwnerLifecycle:
             snapshot = self.registry.snapshot()
             thread = self.registry.require(name)
             if not snapshot.statuses[thread.name].active and (
-                not thread.process_identity.has_process or thread.process_identity.matches_pid(os.getpid())
+                thread.process_identity.allows_inactive_stop()
             ):
                 return
             if snapshot.statuses[thread.name].active and thread.process_identity.matches_pid(os.getpid()):

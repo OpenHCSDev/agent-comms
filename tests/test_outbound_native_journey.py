@@ -75,7 +75,7 @@ async def test_retained_native_tool_send_uses_original_source_and_cold_acp_repla
             await client.initialize(protocol_version=1)
             created = await client.new_session(cwd=str(native.project), mcp_servers=[])
             sender = created.session_id
-            comms.threads.attach_session(sender, str(native.session))
+            comms.threads.attach_session(sender, str(native.session), process=sender.process_identity)
             await client.load_session(cwd=str(native.project), session_id=sender, mcp_servers=[])
             await snapshots.get()
             open_source = comms.transcripts.capture_page_read(sender)

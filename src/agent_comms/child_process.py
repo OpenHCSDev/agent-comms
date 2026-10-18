@@ -66,27 +66,54 @@ class ProcessState(WireValue):
     def schema(cls):
         return FieldCodec.value_schema(ProcessIdentity | NoProcess)
 
-    @property
-    @abstractmethod
-    def has_process(self) -> bool: ...
+    def to_wire(self):
+        return FieldCodec.encode_record(self)
+
+    def allows_owner_start(self) -> bool:
+        return False
+
+    def allows_inactive_stop(self) -> bool:
+        return self.matches_pid(os.getpid())
+
+    def allows_goal_observation(self, status) -> bool:
+        return status.active
+
+    def needs_maintenance_claim(self, role, status) -> bool:
+        return role.executable and status.active
+
+    def conflicts_with(self, previous: ProcessState) -> bool:
+        return self != previous
+
+    def registration_change(self, change, requested):
+        return requested.process_identity.restarted_registration(change, requested.incarnation)
+
+    def restarted_registration(self, change, incarnation):
+        return change.restarted() if incarnation != change.previous.incarnation else change
+
+    def project_activity(self, turn_state, activity):
+        return turn_state.project_activity(activity)
+
+    def attachment_process(self, previous: ProcessState) -> ProcessState:
+        return self
 
     @abstractmethod
     def require(self, message: str = "No worker process has started") -> ProcessIdentity: ...
 
-    @abstractmethod
-    def alive(self) -> bool: ...
+    def alive(self) -> bool:
+        return Platform.current().matches(self.require())
 
-    @abstractmethod
-    def matches_pid(self, pid: int) -> bool: ...
+    def matches_pid(self, pid: int) -> bool:
+        return self.require().pid == pid
 
-    @abstractmethod
-    def signal(self, signum: int) -> None: ...
+    def signal(self, signum: int) -> None:
+        Platform.current().send(self.require(), signum)
 
-    @abstractmethod
-    def require_release_by(self, process: ProcessIdentity) -> None: ...
+    def require_release_by(self, process: ProcessIdentity) -> None:
+        if self.require() != process:
+            raise RelationViolationError("Only the registered owner may release itself.")
 
-    @abstractmethod
-    def pid_fields(self) -> dict[str, int]: ...
+    def pid_fields(self) -> dict[str, int]:
+        return {"pid": self.require().pid}
 
 
 @dataclass(frozen=True)
@@ -103,9 +130,32 @@ class NoProcess(ProcessState):
     def schema(cls):
         return FieldCodec.value_schema(type(None))
 
-    @property
-    def has_process(self):
+    def allows_owner_start(self):
+        return True
+
+    def allows_inactive_stop(self):
+        return True
+
+    def allows_goal_observation(self, status):
         return False
+
+    def needs_maintenance_claim(self, role, status):
+        return False
+
+    def conflicts_with(self, previous):
+        return False
+
+    def registration_change(self, change, requested):
+        return change
+
+    def restarted_registration(self, change, incarnation):
+        return change
+
+    def project_activity(self, turn_state, activity):
+        return activity
+
+    def attachment_process(self, previous):
+        return previous
 
     def require(self, message="No worker process has started"):
         raise RelationViolationError(message)
@@ -137,42 +187,23 @@ class ProcessIdentity(ProcessState):
             raise ValueError("A positive PID and platform start time are required")
 
     @classmethod
+    def pid_argument(cls, value: str):
+        return FieldCodec.encode(cls.capture(int(value)))
+
+    @classmethod
     def capture(cls, pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
-
-    def alive(self) -> bool:
-        return Platform.current().matches(self)
 
     @classmethod
     def from_wire(cls, data):
         return FieldCodec.decode_record(cls, data)
 
-    def to_wire(self):
-        return FieldCodec.encode_record(self)
-
     @classmethod
     def schema(cls):
         return FieldCodec.record_schema(cls)
 
-    @property
-    def has_process(self):
-        return True
-
     def require(self, message="No worker process has started"):
         return self
-
-    def matches_pid(self, pid):
-        return self.pid == pid
-
-    def signal(self, signum):
-        Platform.current().send(self, signum)
-
-    def require_release_by(self, process):
-        if self != process:
-            raise RelationViolationError("Only the registered owner may release itself.")
-
-    def pid_fields(self):
-        return {"pid": self.pid}
 
 
 class ProcessGroups(ABC):

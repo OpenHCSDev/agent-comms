@@ -28,7 +28,7 @@ from .channels import Channel
 from .channel_targets import CommandTarget, ResolvedChannel
 from .catalog_document import CatalogDocument
 from .registry_document import RegistrySnapshot
-from .child_process import NoProcess, ProcessIdentity
+from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .command import Command
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .field_codec import FieldCodec, PathText, compile_decoder
@@ -1184,7 +1184,8 @@ class RegisterCliCommand(CliCommand):
     )
     parent: str | None = option("--parent", default=None)
     task: str | None = option("--task", default=None)
-    pid: int | None = option("--pid", default=None)
+    process: ProcessState = option("--pid", default_factory=NoProcess,
+        parser_default=NoProcess().to_wire(), type=ProcessIdentity.pid_argument)
     execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
@@ -1196,7 +1197,7 @@ class RegisterCliCommand(CliCommand):
             worktree=self.worktree,
             parent=self.parent,
             task=self.task,
-            process_identity=NoProcess() if self.pid is None else ProcessIdentity.capture(self.pid),
+            process_identity=self.process,
             execution=self.execution,
         )
         ctx.registry.declare(thread)
@@ -1244,12 +1245,14 @@ class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     help = "Attach a live Pi session to a registered thread"
     name: str = option("--name")
     session_file: str = option("--session-file")
-    pid: int | None = option("--pid", default=None)
+    process: ProcessState = option("--pid", default_factory=NoProcess,
+        parser_default=NoProcess().to_wire(), type=ProcessIdentity.pid_argument)
 
     def apply(self, ctx: Comms) -> Any:
+        current = ctx.registry.require(self.name)
         attached = ctx.threads.attach_session(
-            ctx.registry.require(self.name), self.session_file,
-            process=ProcessIdentity.capture(self.pid) if self.pid is not None else None,
+            current, self.session_file,
+            process=self.process.attachment_process(current.process_identity),
         )
         return {
             "attached": attached.name,

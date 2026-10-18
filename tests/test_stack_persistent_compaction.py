@@ -246,7 +246,7 @@ async def test_manual_compaction_keeps_the_retained_child_serving(monkeypatch):
         compact_task = None
         try:
             await owner.new_session(str(project))
-            comms.threads.attach_session(comms.registry.require("worker"), str(session))
+            comms.threads.attach_session((attachment_owner := comms.registry.require("worker")), str(session), process=attachment_owner.process_identity)
             await asyncio.wait_for(InitialInput.run(owner.inputs, "worker", "worker", "WARMUP"), 20)
             retained = owner.turns.persistent_backends["worker"].child_state.idle().child.proc
             assert retained is not None and retained.returncode is None, json.dumps(

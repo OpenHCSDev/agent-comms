@@ -5,7 +5,7 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.child_process import ProcessIdentity
+from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RegistryDocument
@@ -16,23 +16,25 @@ from agent_comms.threads import Thread
 def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     comms = wire(tmp_path)
     owner = comms.threads.claim_thread(
-        "owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()
+        "owner", tags=frozenset(), worktree=str(tmp_path), process=ProcessIdentity.capture(os.getpid())
     )
     identity = ProcessIdentity.capture(os.getpid())
     assert owner.process_identity == identity
     session = tmp_path / "session.jsonl"
     session.write_text('{"type":"session","id":"fixture"}\n')
-    attached = comms.threads.attach_session(owner, str(session))
+    attached = comms.threads.attach_session(owner, str(session), process=owner.process_identity)
     assert attached.process_identity == identity
     assert wire(tmp_path).registry.require(owner.name) == attached
-    unbound = comms.threads.attach_session(attached, str(session), pid=0)
-    assert unbound.process_identity is None and unbound.pid == 0
-    rebound = comms.threads.attach_session(unbound, str(session), pid=os.getpid())
+    unbound = comms.threads.attach_session(attached, str(session), process=NoProcess())
+    assert unbound.process_identity == NoProcess()
+    with pytest.raises(RelationViolationError, match="no owner process"):
+        _ = unbound.pid
+    rebound = comms.threads.attach_session(unbound, str(session), process=identity)
     assert rebound.process_identity == identity
     restored = RegistryDocument()
     restored.restore_stopped(comms.registry.snapshot(), (owner.name,))
     saved = restored.threads[owner.name]
-    assert saved.process_identity is None and saved.active_turn is None
+    assert saved.process_identity == NoProcess() and saved.active_turn is None
     assert saved.incarnation == owner.incarnation and saved.session_file == str(session)
 
 
@@ -78,7 +80,7 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     comms = wire(tmp_path)
     identity = ProcessIdentity.capture(os.getpid())
     owner = comms.threads.claim_thread(
-        "owner", tags=frozenset(), worktree=str(tmp_path), pid=os.getpid()
+        "owner", tags=frozenset(), worktree=str(tmp_path), process=identity
     )
     leased, _ = comms.registry.lease_local_turn(owner.name, "active-turn")
     stale = replace(identity, start_time=identity.start_time + 1)
