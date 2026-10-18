@@ -81,7 +81,7 @@ async def main():
         print('111_ORIGINAL_DECLARATIONS_9_SOURCE_SCOPED_ALIASES_RETAINED',flush=True)
         for source in sources:
             from agent_comms.catalog_store import ChannelCatalog
-            catalog=ChannelCatalog(Path(source.root)/ChannelCatalog.filename).read()
+            catalog=ChannelCatalog.at(source.root).read()
             assert '#comms' in catalog.views(source.provenance.threads)
         cli=subprocess.run([str(Path(sys.executable).with_name('agent-comms')),
             '--root',str(comms.root),'history','--channel','#comms'],

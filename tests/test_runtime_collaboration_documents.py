@@ -71,7 +71,7 @@ def test_document_readers_share_lock_and_exclude_updates(tmp_path, store_type):
 
 
 def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, thread_registration):
-    store = RuntimeInfoStore(tmp_path / RuntimeInfoStore.filename)
+    store = RuntimeInfoStore.at(tmp_path)
     saved = {
         "old": {
             "thread": "old",
@@ -96,7 +96,7 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, t
 
 @pytest.mark.parametrize("timestamp", [None, "missing", True, float("nan")])
 def test_runtime_observation_requires_original_finite_date(tmp_path, timestamp):
-    store = RuntimeInfoStore(tmp_path / RuntimeInfoStore.filename)
+    store = RuntimeInfoStore.at(tmp_path)
     row = {"thread": "undated"}
     if timestamp is not None:
         row["ts"] = timestamp
@@ -109,7 +109,7 @@ def test_runtime_observation_requires_original_finite_date(tmp_path, timestamp):
 
 
 def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path, *, thread_registration):
-    store = SharedLedger(tmp_path / SharedLedger.filename)
+    store = SharedLedger.at(tmp_path)
     saved = {
         "nested": {"old": ["old", None, True, 9, {"free": "old is prose"}]},
         "unknown-domain": {"state": "anything", "value": 1.25},
@@ -151,7 +151,7 @@ def test_authoritative_documents_keep_bytes_on_failed_publication(
 
 
 def test_complete_snapshot_replacement_does_not_decode_discarded_document(tmp_path):
-    store = SharedLedger(tmp_path / SharedLedger.filename)
+    store = SharedLedger.at(tmp_path)
     store.path.write_text("invalid discarded snapshot")
     with patch.object(LockedStore, "_read_unlocked", side_effect=AssertionError("old read")):
         store.replace({"captured": [1, 2]})

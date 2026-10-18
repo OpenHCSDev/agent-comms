@@ -7,6 +7,7 @@ from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .locked_store import RootFile
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .private_path import FileRevision
@@ -120,11 +121,11 @@ class TranscriptRouteRevision:
         )
 
 
-class TranscriptRoutes:
+class TranscriptRoutes(RootFile):
     filename = "transcript_routes.sqlite3"
 
     def __init__(self, root: Path):
-        self.database_path = root / self.filename
+        self.database_path = self.path_in(root)
         self._initialized = False
 
     def revision(self) -> TranscriptRouteRevision:
@@ -135,7 +136,7 @@ class TranscriptRoutes:
         """Retain a consistent current annotation store for attached history."""
         if not self.database_path.exists():
             return
-        target = destination / self.filename
+        target = self.path_in(destination)
         descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_RDWR, 0o600)
         os.close(descriptor)
         with (

@@ -20,6 +20,7 @@ from agent_comms.read_ledger import ReadLedger
 from agent_comms.read_basis import ReadCursor
 from agent_comms.registry_provenance import RegisteredRecipient, RetiredRecipient
 from agent_comms.registry_provenance import RegistryProvenance
+from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.thread_identity import (
     DeletedThreadIncarnation,
     RecordedThreadIncarnation,
@@ -132,10 +133,10 @@ def test_archived_duplicate_birth_keeps_names_without_selecting_an_arbitrary_own
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=birth))
     source = comms.registry.snapshot()
     with pytest.raises(RelationViolationError, match="creation identities collide"):
-        replace(source, threads={
+        RegistrySnapshot.capture(replace(comms.registry.store.read(), threads={
             **source.threads,
             "second": replace(source.threads["second"], created_at=1700.0),
-        })
+        }))
     recorded = RegistryProvenance.capture(source)
     archived = replace(recorded, threads={
         **recorded.threads,

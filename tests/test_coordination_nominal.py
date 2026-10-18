@@ -127,6 +127,10 @@ async def test_durable_turn_records_native_phases_before_completion(tmp_path, mo
 
     monkeypatch.setattr(DurableTurn, "handlers_for", observed_selection)
 
+    from agent_comms.comms import Comms
+
+    comms = Comms(tmp_path, private_initial_writes=True)
+    comms.messaging.initialize_private_initial_protocol()
     with Coordination(tmp_path / "coordination.sqlite3") as store:
         store.participants.register("owner", "owner", "owner", committed=True)
         created = store.executions.create("e", ExecutionOrigin.ACP, "owner", "owner", 1).value

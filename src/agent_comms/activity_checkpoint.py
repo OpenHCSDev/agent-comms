@@ -8,7 +8,7 @@ from typing import BinaryIO, ClassVar, Literal
 
 from .activity import Activity
 from .bus_projection import AppendCheckpoint, AppendProjectionStore
-from .locked_store import JsonDocument
+from .locked_store import JsonDocument, RootFile
 from .private_path import FileRevision
 
 
@@ -35,7 +35,7 @@ class ActivityCheckpoint(AppendCheckpoint):
 
 @dataclass(frozen=True, slots=True)
 class ActivityCheckpointStore(
-    JsonDocument[ActivityCheckpoint | None], AppendProjectionStore[ActivityCheckpoint]
+    RootFile, JsonDocument[ActivityCheckpoint | None], AppendProjectionStore[ActivityCheckpoint]
 ):
     """Keep the established activity document codec and shared prefix publisher."""
 

@@ -148,7 +148,7 @@ class HistoryViews:
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Attach preserved history without admitting any historical execution."""
         source = self.bus.history.attach(Path(source_root), source_read=source_read)
-        catalog = ChannelCatalog(Path(source.root) / ChannelCatalog.filename)
+        catalog = ChannelCatalog.at(source.root)
         incoming = catalog.read()
         source_threads = source.provenance.threads
         with _store_lock(self._wire_lock_path):
@@ -303,7 +303,7 @@ class HistoryViews:
     ) -> tuple[ThreadView, ...]:
         snapshot = self.registry.snapshot()
         return ThreadView.roster(
-            snapshot, self.agents, GoalWaits(self.root / GoalWaits.filename),
+            snapshot, self.agents, GoalWaits.at(self.root),
             show_stopped=show_stopped, show_archived=show_archived,
         )
 
@@ -341,7 +341,7 @@ class HistoryViews:
         """Read status once for only the requested rows, before their original sources."""
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
-            snapshot, self.agents, GoalWaits(self.root / GoalWaits.filename),
+            snapshot, self.agents, GoalWaits.at(self.root),
             names=names, show_stopped=True, show_archived=False,
         )
         return ThreadPresentations(
@@ -476,7 +476,7 @@ class HistoryViews:
             snapshot=snapshot,
         )
         pending = self.bus.pending_counts_all(tuple(threads))
-        waits = GoalWaits(self.root / GoalWaits.filename).read()
+        waits = GoalWaits.at(self.root).read()
         return [
             {
                 **t.to_wire(),

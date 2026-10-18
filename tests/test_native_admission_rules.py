@@ -55,7 +55,7 @@ async def test_durable_private_claim_names_each_changed_authority(
             stage=stage,
             owner=expected,
             wire_root_id=root_id,
-            prompt_digest=TextDigest(native_request_digest(claim_scope.prompt)),
+            prompt_digest=TextDigest(native_request_digest(claim_scope.prompt.text)),
         )
         current, generation = comms.registry.live_owner_with_claim(owner.name)
         registry = rules.GoalRegistryClaimCheck(

@@ -45,7 +45,7 @@ class Goals:
         self.bus = bus
         self.agents = agents
         self._wire_lock_path = root / "wire"
-        self.waits = GoalWaits(root / GoalWaits.filename)
+        self.waits = GoalWaits.at(root)
         self.goal_store: GoalAttemptStore | None = None
 
     @cached_property

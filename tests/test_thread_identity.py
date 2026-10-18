@@ -120,10 +120,10 @@ def test_restored_active_turn_has_no_claim_authority(tmp_path, revocation):
 def test_read_ledger_roundtrip_preserves_historical_identity(tmp_path, *, thread_registration):
     registry = registry_with_owner(tmp_path)
     owner = registry.require("owner")
-    old = {"target": "", "participants": [["owner", owner.created_at]]}
-    conversation = Conversation.from_wire(old)
+    original = {"target": "", "participants": [FieldCodec.encode(owner.incarnation)]}
+    conversation = FieldCodec.decode(Conversation, original)
     assert conversation.participants == (owner.incarnation,)
-    assert Conversation.from_wire(conversation.to_wire()) == conversation
+    assert FieldCodec.decode(Conversation, FieldCodec.encode(conversation)) == conversation
     registry.lease_local_turn("owner", "new")
     assert conversation.current(registry.snapshot())
     registry.release_turn(registry.require("owner").turn_lease)[0]
