@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import time
 from abc import abstractmethod
+from collections import defaultdict
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -13,6 +15,27 @@ from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import MembershipChange
+from .threads import Thread
+
+
+class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
+    """Executable threads indexed once for one roster, including empty tags."""
+
+    __slots__ = ("threads",)
+
+    def __init__(self, threads: Iterable[Thread]):
+        by_tag: dict[str, list[Thread]] = defaultdict(list)
+        executable = []
+        for thread in threads:
+            if thread.role.executable:
+                executable.append(thread)
+                for tag in thread.tags:
+                    by_tag[tag].append(thread)
+        self.threads = tuple(executable)
+        super().__init__((tag, tuple(members)) for tag, members in by_tag.items())
+
+    def __missing__(self, tag: str) -> tuple[Thread, ...]:
+        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +74,9 @@ class Channel(DeclaredFamily, affix="Channel"):
 
     @abstractmethod
     def matches(self, tags: frozenset[str]) -> bool: ...
+
+    @abstractmethod
+    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]: ...
 
     @property
     @abstractmethod
@@ -100,6 +126,22 @@ class Channel(DeclaredFamily, affix="Channel"):
         return FieldCodec.encode(self)
 
 
+class Channels(dict[str, Channel]):
+    """The captured declarations select the channels shown by a roster."""
+
+    def visible(self, show_archived: bool) -> Iterator[Channel]:
+        return (channel for channel in self.values() if show_archived or not channel.archived)
+
+
+class PredicateChannel:
+    """Builtins and saved predicates select from the index's executable set."""
+
+    __slots__ = ()
+
+    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
+        return tuple(thread for thread in index.threads if self.matches(thread.tags))
+
+
 class GroupedChannel:
     """Tag and saved-view declarations share editable presentation metadata."""
 
@@ -145,7 +187,7 @@ class MembershipChannel:
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class BuiltinChannelView(MembershipChannel, Channel):
+class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel):
     builtin: BuiltinChannel
 
     def validate_declaration(self) -> None:
@@ -192,7 +234,7 @@ class BuiltinChannelView(MembershipChannel, Channel):
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SavedViewChannel(GroupedChannel, Channel):
+class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
     view: SavedView
 
     def validate_declaration(self) -> None:
@@ -226,6 +268,9 @@ class SavedViewChannel(GroupedChannel, Channel):
 
 @dataclass(frozen=True, slots=True)
 class TagChannel(GroupedChannel, MembershipChannel, Channel):
+    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
+        return index[self.name.removeprefix("#")]
+
     def validate_declaration(self) -> None:
         Tag.validate(self.name.removeprefix("#"))
         if self.tags != frozenset({self.name.removeprefix("#")}):

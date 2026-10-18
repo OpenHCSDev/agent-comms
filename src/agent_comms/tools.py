@@ -518,7 +518,7 @@ class CommsGoalTool(ThreadToolRequest):
         goal, execution = comms.goals.goal_snapshot(name)
         return {
             "goal": goal.to_wire() if goal else None,
-            "goal_execution": execution.to_wire() if execution else None,
+            "goal_execution": execution.to_wire(),
         }
 
 

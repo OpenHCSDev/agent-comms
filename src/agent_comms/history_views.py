@@ -297,7 +297,7 @@ class HistoryViews:
         with self.bus.opened_activity() as clocks:
             return ChannelView.roster(
                 snapshot,
-                channels,
+                channels.visible(show_archived),
                 catalog.pinned_members(),
                 catalog.list_order,
                 self.agents.all_activity(
@@ -476,10 +476,7 @@ class HistoryViews:
                 "status": snapshot.statuses[name].declared_name,
                 "is_fork": t.is_fork,
                 "pending": pending[name],
-                "goal_execution": (
-                    execution.to_wire()
-                    if (execution := GoalWaits.execution(t.goal, waits, snapshot, self.agents)) else None
-                ),
+                "goal_execution": GoalWaits.execution(t.goal, waits, snapshot, self.agents).to_wire(),
                 "activity": activities[name].state.value if name in activities else "idle",
                 "activity_detail": activities[name].detail if name in activities else "",
             }
@@ -494,7 +491,7 @@ class HistoryViews:
             "is_fork": t.is_fork,
         }
         execution = self.goals.goal_execution(name)
-        detail["goal_execution"] = execution.to_wire() if execution else None
+        detail["goal_execution"] = execution.to_wire()
         if include_pending:
             detail["pending"] = self.bus.pending_count(name)
         return detail

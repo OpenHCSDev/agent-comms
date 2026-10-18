@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
-from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
+from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
 from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore, RootFile
@@ -247,10 +247,10 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
     def execution(
         cls, goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
         agents: AgentActivity,
-    ) -> GoalExecution | None:
-        """Project an optional thread goal from its resolved wait state."""
+    ) -> ThreadGoalExecution:
+        """Resolve absence once beside the goal/wait acquisition."""
         if goal is None:
-            return None
+            return IdleGoalExecution()
         return cls.for_goal(goal, rows).project(goal, snapshot, agents)
 
     @staticmethod

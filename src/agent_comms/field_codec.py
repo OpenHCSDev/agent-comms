@@ -301,34 +301,7 @@ class FieldCodec(Sealed):
         if kind is float and math.isfinite(value):
             return value
         if is_dataclass(value) and not isinstance(value, type):
-            hints = cls._types(type(value))
-            result = (
-                {value.family_discriminator: value.declared_name}
-                if isinstance(value, DeclaredFamily)
-                else {}
-            )
-            result.update(
-                (key, cls.encode(getattr(value, field.name), hints[field.name]))
-                for field, key in cls.record_fields(type(value))
-                if not (
-                    field.metadata.get("wire_omit_default")
-                    and getattr(value, field.name)
-                    == (
-                        field.default
-                        if field.default is not MISSING
-                        else (
-                            field.default_factory()
-                            if field.default_factory is not MISSING
-                            else MISSING
-                        )
-                    )
-                )
-            )
-            result.update(
-                (member.wire_name, cls.encode(getattr(value, name)))
-                for name, member in cls._projections(type(value), "wire").items()
-            )
-            return result
+            return cls.encode_record(value)
         if isinstance(value, type) and issubclass(value, DeclaredFamily):
             return value.declared_name
         if isinstance(value, Enum):
@@ -348,6 +321,38 @@ class FieldCodec(Sealed):
                 return {key: cls.encode(item, value_type) for key, item in value.items()}
             return [[cls.encode(key, key_type), cls.encode(item, value_type)] for key, item in value.items()]
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+
+    @classmethod
+    def encode_record(cls, value: object) -> dict[str, Any]:
+        """Encode declared fields, including inside a custom wire representation."""
+        hints = cls._types(type(value))
+        result = (
+            {value.family_discriminator: value.declared_name}
+            if isinstance(value, DeclaredFamily) else {}
+        )
+        result.update(
+            (key, cls.encode(getattr(value, field.name), hints[field.name]))
+            for field, key in cls.record_fields(type(value))
+            if not (
+                field.metadata.get("wire_omit_default")
+                and getattr(value, field.name) == (
+                    field.default if field.default is not MISSING else (
+                        field.default_factory()
+                        if field.default_factory is not MISSING else MISSING
+                    )
+                )
+            )
+        )
+        result.update(
+            (member.wire_name, cls.encode(getattr(value, name)))
+            for name, member in cls._projections(type(value), "wire").items()
+        )
+        return result
+
+    @classmethod
+    def decode_record(cls, target: type[T], data: object) -> T:
+        """Decode declared fields without reentering the record's wire representation."""
+        return cast(T, _RecordDecoder(target).decode(data))
 
     @classmethod
     def decode(cls, target: type[T], data: object) -> T:
