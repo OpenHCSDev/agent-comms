@@ -13,7 +13,7 @@ from contextlib import closing
 from dataclasses import replace
 
 from cutover.carry import CarryChain
-from cutover.carry_todo_verdicts import TodoVerdicts
+from cutover.carry_todo_corrections import TodoCorrections
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
@@ -766,6 +766,7 @@ def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
         db.execute('ALTER TABLE todo DROP COLUMN verdicts')
+        db.execute('ALTER TABLE todo DROP COLUMN corrections')
         db.commit()
     with (closing(CoordinationStore.read_snapshot(path)) as db,
           pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"')):
@@ -773,17 +774,25 @@ def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
     repo = Path(__file__).parents[1]
     steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
     assert list(steps).index('carry_todo_verdicts') > list(steps).index('carry_problem_goals')
-    held = tmp_path / 'held'
-    held.mkdir()
-    archive = subprocess.run(['git', '-C', str(repo), 'archive', steps['carry_problem_goals'].revision,
-                              'src', 'tools'], capture_output=True, check=True).stdout
-    subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
-    ran = subprocess.run([sys.executable, '-m', 'cutover.carry_problem_goals', str(comms.root)],
-                         capture_output=True, text=True, cwd=held,
-                         env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
-    assert ran.returncode == 0, ran.stderr
-    assert json.loads(ran.stdout.splitlines()[-1])['changed'] == 2
-    assert TodoVerdicts.carry(comms.root, apply=True).changed == 3
+    for name, changed in (('carry_problem_goals', 2), ('carry_todo_verdicts', 3)):
+        held = tmp_path / name
+        held.mkdir()
+        archive = subprocess.run(['git', '-C', str(repo), 'archive', steps[name].revision,
+                                  'src', 'tools'], capture_output=True, check=True).stdout
+        subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
+        ran = subprocess.run([sys.executable, '-c',
+                              'import importlib, pathlib, sys; '
+                              'from cutover.carry import Carry; '
+                              'm=importlib.import_module(\"cutover.\"+sys.argv[1]); '
+                              'c=next(v for v in vars(m).values() if isinstance(v,type) '
+                              'and issubclass(v,Carry) and v.__module__==m.__name__); '
+                              'import json; print(json.dumps({\"changed\":c.carry(pathlib.Path(sys.argv[2]),apply=True).changed}))',
+                              name, str(comms.root)],
+                             capture_output=True, text=True, cwd=held,
+                             env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
+        assert ran.returncode == 0, ran.stderr
+        assert json.loads(ran.stdout.splitlines()[-1])['changed'] == changed
+    assert TodoCorrections.carry(comms.root, apply=True).changed == 3
     with closing(CoordinationStore.read_snapshot(path)) as db:
         assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
 
