@@ -18,6 +18,7 @@ from agent_comms.selected_tool_broker import (
     record_selected_terminal,
 )
 from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_session import SelectedSession
 from agent_comms.native_arguments import ModelArgument, ProviderArgument
 
@@ -111,6 +112,7 @@ send({'type':'agent_settled'})
         prompt="Selected request",
         worktree=tmp_path,
         session=SelectedSession(tmp_path / "sessions"),
+        pi_session=PersistentPiSession(),
         selected_tool_mode=SelectedToolMode(owner_action),
         model_wait_timeout=15,
         provider=native_launch_settings.value(ProviderArgument),

@@ -207,6 +207,7 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
             input_id=INPUT_ID,
             prompt="Never disclose input ID",
             worktree=tmp_path,
+            pi_session=PersistentPiSession(),
             session=(SelectedSession(selected) if existing is None else SavedSelectedSession(
                 selected, identity=NativeSessionIdentity("sid", str(existing))
             )),
@@ -1174,7 +1175,7 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
         "SECRET provider response including prompt data", context, "provider", "model",
         ModelRequestFailed("SECRET provider response including prompt data"),
     )
-    assert failed.public_message == "provider/model: provider request failed."
+    assert failed.public_message == "provider/model: request failed."
     assert "SECRET" not in failed.public_message
     usage = NativePiTerminalFailure(
         "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol",
