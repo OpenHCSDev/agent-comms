@@ -13,7 +13,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
-from agent_comms.message_page import OlderTraversal, PageBounds
+from agent_comms.message_page import PageBounds
+from agent_comms.page_traversal import OlderTraversal
 from test_private_human_ingress import _root
 
 

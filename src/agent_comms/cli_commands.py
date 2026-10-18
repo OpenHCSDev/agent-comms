@@ -58,7 +58,8 @@ from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportLimits, ImportedSessionMetadata, ThreadImported
-from .message_page import HistoryCursor, OlderTraversal, PageBounds
+from .message_page import PageBounds
+from .page_traversal import OlderTraversal, PageCursor
 from .schema_report import StoreSchemaReport, StoreSchemaReports
 from .shared_ledger import LedgerDocument
 from .tool_caller import ToolCaller
@@ -559,7 +560,7 @@ class ActiveStatusResult(CliResult):
 @dataclass(frozen=True)
 class HistoryPageResult(CliResult):
     messages: tuple[Message, ...]
-    before: int | HistoryCursor | None
+    before: PageCursor | None
     has_older: bool
 
     def encoded(self) -> object:
@@ -1267,14 +1268,12 @@ class HistoryCliCommand(CliCommand):
     everything: bool = option("--everything", help="Every message scope (the default)", default=False)
     me: str | None = option("--as", help="DM participant; required with --with", default=None)
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
-    before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
+    before: PageCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
         if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
             raise ValueError("history takes at most one of --with, --channel, --everything")
-        cursor = self.before  # DeclaredOptions decoded the JSON at the CLI boundary.
-        traversal = (OlderTraversal(cursor.sequence, cursor.source)
-                     if isinstance(cursor, HistoryCursor) else OlderTraversal(cursor))
+        traversal = self.before.older() if self.before is not None else OlderTraversal()
         bounds = PageBounds(traversal, self.limit)
         if self.with_thread:
             page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)

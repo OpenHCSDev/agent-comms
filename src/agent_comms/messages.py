@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Type
+from typing import ClassVar, Type
 
 from .channel_targets import CommandTarget
 from .change_report import FileLine, ChangeReport
@@ -24,8 +24,7 @@ from .thread_identity import AgentThreadRole, ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
 
-if TYPE_CHECKING:
-    from .message_page import HistoryCursor
+from .page_traversal import LiveCursor, PageCursor
 
 
 class SendableMessageKind:
@@ -401,8 +400,8 @@ class Message:
         CommandTarget.named(self.target).validate(self)
 
     @property
-    def view_cursor(self) -> int | HistoryCursor:
-        return self.seq
+    def view_cursor(self) -> PageCursor:
+        return LiveCursor(self.seq)
 
     @property
     def view_key(self) -> tuple[str, int]:

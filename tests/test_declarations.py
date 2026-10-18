@@ -24,7 +24,8 @@ from agent_comms.runtime_info import AgentRuntimeInfo, RuntimeInfoStore
 from agent_comms.shared_ledger import SharedLedger
 from agent_comms.thread_status import DeletingThreadStatus, RunningThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread, current_thread
-from agent_comms.message_page import OlderTraversal, PageBounds
+from agent_comms.message_page import PageBounds
+from agent_comms.page_traversal import OlderTraversal
 
 
 @pytest.mark.skipif(os.name == "nt", reason="private POSIX ownership unavailable on Windows")

@@ -14,7 +14,8 @@ from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
-from agent_comms.message_page import NewerTraversal, OlderTraversal, PageBounds
+from agent_comms.message_page import PageBounds
+from agent_comms.page_traversal import OlderTraversal
 
 
 @pytest.mark.parametrize('exists', [False, True])
@@ -52,10 +53,7 @@ def collect(comms, method, *args, **kwargs):
     for _ in range(40):
         if not page.has_older:
             return result
-        cursor = page.oldest_cursor
-        traversal = (OlderTraversal(cursor.sequence, cursor.source)
-                     if isinstance(cursor, HistoryCursor) else OlderTraversal(cursor))
-        page = getattr(comms.views, method)(*args, bounds=PageBounds(traversal, 3), **kwargs)
+        page = getattr(comms.views, method)(*args, bounds=PageBounds(page.oldest_cursor.older(), 3), **kwargs)
         result[0:0] = page.messages
     raise AssertionError("paging did not terminate")
 
@@ -92,9 +90,7 @@ def test_all_history_backward_and_forward(migrated, method, args, reader):
     forward = []
     cursor = HistoryCursor(source.key, 0)
     for _ in range(40):
-        traversal = (NewerTraversal(cursor.sequence, cursor.source)
-                     if isinstance(cursor, HistoryCursor) else NewerTraversal(cursor))
-        page = getattr(live.views, method)(*args, bounds=PageBounds(traversal, 2), **scope)
+        page = getattr(live.views, method)(*args, bounds=PageBounds(cursor.newer(), 2), **scope)
         forward.extend(page.messages)
         if not page.has_newer:
             break

@@ -17,7 +17,8 @@ from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
-from agent_comms.message_page import NewerTraversal, OlderTraversal, PageBounds
+from agent_comms.message_page import PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
 
 
 def populated(tmp_path):

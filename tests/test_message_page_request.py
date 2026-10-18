@@ -4,9 +4,8 @@ from dataclasses import dataclass
 import pytest
 
 from agent_comms.comms import wire
-from agent_comms.message_page import (
-    MessagePageRequest, NewerTraversal, OlderTraversal, PageBounds,
-)
+from agent_comms.message_page import MessagePageRequest, PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
 from agent_comms.read_basis import MessageDisplayScope
 from agent_comms.threads import Thread
 

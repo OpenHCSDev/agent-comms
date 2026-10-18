@@ -2,9 +2,7 @@
 
 from agent_comms.comms import Comms
 from agent_comms.historical_views import HistoryView
-from agent_comms.message_page import (
-    HistoryCursor, MessagePageRequest, NewerTraversal, OlderTraversal, PageBounds,
-)
+from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.threads import Thread
 
@@ -34,18 +32,13 @@ def test_new_history_case_owns_both_source_interpretations_without_reader_dispat
     assert [m.body for m in page.messages] == ["current 1", "current 2"]
     backwards = list(page.messages)
     while page.has_older:
-        cursor = page.oldest_cursor
-        traversal = (OlderTraversal(cursor.sequence, cursor.source)
-                     if isinstance(cursor, HistoryCursor) else OlderTraversal(cursor))
-        page = view.page(current.views.presentation, PageBounds(traversal, 2))
+        page = view.page(current.views.presentation, PageBounds(page.oldest_cursor.older(), 2))
         backwards[0:0] = page.messages
     assert len(backwards) == 6
     forward = []
     cursor = backwards[0].view_cursor
     while True:
-        traversal = (NewerTraversal(cursor.sequence, cursor.source)
-                     if isinstance(cursor, HistoryCursor) else NewerTraversal(cursor))
-        page = view.page(current.views.presentation, PageBounds(traversal, 2))
+        page = view.page(current.views.presentation, PageBounds(cursor.newer(), 2))
         forward.extend(page.messages)
         if not page.has_newer:
             break
