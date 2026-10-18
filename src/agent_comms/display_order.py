@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
-from .channel_targets import BuiltinChannel
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
@@ -60,7 +59,8 @@ class LastMessageThreadSort(ThreadSort, declared_name="last_message_sent"):
 
     @staticmethod
     def sent_timestamps(views: HistoryViews) -> dict[str, float]:
-        return views.last_sent_timestamps(views.bus.activity_clocks().sent)
+        with views.bus.opened_activity() as clocks:
+            return views.last_sent_timestamps(clocks.sent)
 
 
 class CreatedThreadSort(ThreadSort, declared_name="created_at"):
@@ -84,11 +84,7 @@ class ChannelSort(DisplayOrder, DeclaredFamily, affix="ChannelSort"):
 
     @classmethod
     def key(cls, view: ChannelView) -> tuple[int, int, float, float, str]:
-        builtins = tuple(BuiltinChannel)
-        builtin = view.channel.builtin
-        if builtin is not None:
-            return not view.channel.pinned, builtins.index(builtin), 0, 0, view.channel.name
-        return not view.channel.pinned, len(builtins), *cls.sort_fields(view)
+        return view.channel.sort_key(cls, view)
 
     @classmethod
     def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[ChannelSort]:

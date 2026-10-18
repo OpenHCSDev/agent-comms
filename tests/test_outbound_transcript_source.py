@@ -62,7 +62,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
         owner, 'NativePiUnavailable', 'Original outcome uncertain', recorded_at=1.0
     )
     assert comms.agents.set_drain_diagnostic('beta', owner, diagnostic)
-    notice = next(item for item in comms.views.thread_presentation('sender').notifications
+    notice = next(item for item in comms.views.thread_presentations(('sender',)).require('sender').notifications
                   if item.recipient=='beta')
     assert type(notice.state) is SentProgress
     assert notice.state.detail == ''
@@ -73,7 +73,7 @@ def test_saved_notification_does_not_mix_owner_drain_readiness(tmp_path, direct)
     foreign = replace(diagnostic,owner=replace(owner,generation=owner.generation+1))
     activity = comms.agents.activity_of('beta').source_event()
     comms.agents.activity.emit(replace(activity,diagnostic=foreign))
-    current = next(item for item in comms.views.thread_presentation('sender').notifications
+    current = next(item for item in comms.views.thread_presentations(('sender',)).require('sender').notifications
                    if item.recipient=='beta')
     assert type(current.state) is SentProgress
 
@@ -207,7 +207,7 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     sender_page = before.read()
     target = comms.registry.require("beta")
     lookup = RecordedThreadIncarnation("fixture", target.created_at).lookup
-    receipts = comms.views.thread_presentation("sender").notifications
+    receipts = comms.views.thread_presentations(("sender",)).require("sender").notifications
     beta = next(item for item in receipts if item.recipient_identity.recipient_lookup == lookup)
     assert beta.message.reference == message.reference
     assert type(beta.state) is SentProgress
@@ -233,8 +233,8 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
                 "body": f"Later original {index}",
             }, caller=NoThreadCaller(),
         )
-    open_sender = comms.views.thread_presentation("sender")
-    open_recipient = comms.views.thread_presentation("beta")
+    open_sender = comms.views.thread_presentations(("sender",)).require("sender")
+    open_recipient = comms.views.thread_presentations(("beta",)).require("beta")
     assert all(item.message.reference != message.reference for item in open_sender.notifications)
     before = comms.transcripts.capture_page_read("sender")
     sender_page = before.read()
@@ -256,8 +256,8 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     assert after.identity.wire_frontier == before.identity.wire_frontier
     assert after.read() == sender_page
     assert comms.bus.log.path.read_bytes() == wire_before
-    sender = comms.views.thread_presentation("sender")
-    recipient = comms.views.thread_presentation("beta")
+    sender = comms.views.thread_presentations(("sender",)).require("sender")
+    recipient = comms.views.thread_presentations(("beta",)).require("beta")
     assert sender.notifications == open_sender.notifications
     assert recipient.notifications == open_recipient.notifications
     assert sender.read_identity != open_sender.read_identity
@@ -318,7 +318,7 @@ def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, mo
         return verify(log, shared=shared)
 
     monkeypatch.setattr(WireLog, "verify_before_read_unlocked", observed)
-    view = comms.views.thread_presentation("beta")
+    view = comms.views.thread_presentations(("beta",)).require("beta")
     assert len(barriers) == 1
     assert view.read_identity.wire_frontier.sequence == initial.message.seq
     assert view.notifications[0].message.reference == initial.message.reference
@@ -327,7 +327,7 @@ def test_open_thread_shares_original_notification_and_frontier_read(tmp_path, mo
 
 def test_published_source_binding_keeps_exact_original_request(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
-    identity = comms.views.thread_presentation("beta").read_identity
+    identity = comms.views.thread_presentations(("beta",)).require("beta").read_identity
     assert comms.transcripts.bind_page_read("beta", identity).identity is identity
     with pytest.raises(StaleRevision, match="original thread"):
         comms.transcripts.bind_page_read("alpha", identity)
@@ -394,7 +394,7 @@ def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatc
         return saved(connection)
 
     monkeypatch.setattr(checkpoint, "_saved", observed)
-    view = comms.views.thread_presentation("beta")
+    view = comms.views.thread_presentations(("beta",)).require("beta")
     assert len(reads) == 1
     assert view.notifications[0].message.reference == initial.message.reference
 
@@ -420,7 +420,7 @@ def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # no
         RelationViolationError,
         match=r"^Private bus checkpoint verification is unavailable; durability is UNKNOWN\.$",
     ):
-        comms.views.thread_presentation("beta")
+        comms.views.thread_presentations(("beta",)).require("beta")
 
 
 def test_bus_guard_preserves_the_callers_original_failure(tmp_path):  # noqa: F811

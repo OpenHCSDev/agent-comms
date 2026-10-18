@@ -129,11 +129,11 @@ def test_cli_keeps_whitespace_formatting_but_uses_activity_bound(comms):
     assert "\n" not in activity.detail and "\t" not in activity.detail
     output.status(ActivityState.WORKING, "  short:\n\ttext  ")
     assert comms.agents.activity_of(thread.name).detail == "short: text"
-    shown = comms.views.require_thread_presentation(thread.name)
+    shown = comms.views.thread_presentations((thread.name,)).require(thread.name)
     assert shown.status.working
     assert shown.summary == "Working · short: text"
     assert shown.marker == "⌛"
     attention = replace(shown, status=shown.status.with_attention())
     assert ExternalThreadExecution.presentation(thread, comms.registry.snapshot().status(thread.name), attention, attention.binding) == attention
     output.status(ActivityState.IDLE)
-    assert not comms.views.require_thread_presentation(thread.name).status.working
+    assert not comms.views.thread_presentations((thread.name,)).require(thread.name).status.working

@@ -122,7 +122,7 @@ class TestToolCatalog:
         for index in range(6):
             comms.messaging.send_message("recipient", "sender", f"incoming {index}")
 
-        presentation = comms.views.thread_presentation("sender")
+        presentation = comms.views.thread_presentations(("sender",)).require("sender")
         assert all(row.message.reference != sent.reference for row in presentation.notifications)
         assert [row.message.reference for row in presentation.sent_notifications] == [sent.reference]
 

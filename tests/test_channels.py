@@ -7,7 +7,8 @@ import pytest
 from agent_comms import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import ActivityState
-from agent_comms.channels import AllOfMatch, AnyOfMatch, Channel, SavedView, ViewKind, ViewPredicate
+from agent_comms.channel_targets import BuiltinChannel
+from agent_comms.channels import AllOfMatch, AnyOfMatch, TagChannel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
@@ -463,9 +464,9 @@ def test_invalid_filters_and_reserved_channels(tmp_path):
         with pytest.raises(ValueError):
             comms.channels.create_tag(name)
     with pytest.raises(ValueError):
-        Channel("empty")
+        TagChannel("empty")
     with pytest.raises(ValueError):
-        Channel("#team", frozenset({"api", "ui"}))
+        TagChannel("#team", frozenset({"api", "ui"}))
 
 
 def test_none_membership_and_independent_channel_order(tmp_path):
@@ -498,11 +499,10 @@ def test_channel_list_order_is_persistent_and_independent_of_viewer(tmp_path):
     comms.channels.update_tags("b", add=frozenset({"zeta"}))
 
     def names(client):
-        return [
-            view.channel.name
-            for view in client.views.channel_views()
-            if view.channel.builtin is None
-        ]
+        ordered = [view.channel.name for view in client.views.channel_views()]
+        prefix = [builtin.value for builtin in BuiltinChannel]
+        assert ordered[:len(prefix)] == prefix
+        return ordered[len(prefix):]
 
     comms.channels.set_channel_order(CreatedChannelSort)
     created_names = names(wire(tmp_path))
@@ -539,7 +539,8 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     joined = list(comms.views.channel_history_page("#api").messages)
     assert len(joined) == 1 and joined[0].membership.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].starts_turn
-    assert "moving" not in comms.views.last_sent_timestamps(comms.bus.activity_clocks().sent)
+    with comms.bus.opened_activity() as clocks:
+        assert "moving" not in comms.views.last_sent_timestamps(clocks.sent)
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
     assert len(list(comms.views.channel_history_page("#api").messages)) == 2

@@ -277,7 +277,7 @@ async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
                 "agent_comms.native_entries.NativeEntry.read_evidence",
                 forbid_native_evidence,
             )
-            sender_view = comms.views.thread_presentation("sender")
+            sender_view = comms.views.thread_presentations(("sender",)).require("sender")
             assert sender_view is not None
             sent_read = next(
                 outcome for outcome in sender_view.sent_notifications
