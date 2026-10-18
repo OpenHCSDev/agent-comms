@@ -44,7 +44,7 @@ class TestCliSuccess:
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
         code, out = cli(
             tmp_path,
-            "invoke",
+            "tool",
             "--tool",
             "comms_threads",
             "--arguments",
@@ -125,7 +125,8 @@ class TestCliSuccess:
 
     def test_rename_self_uses_declared_caller(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")
-        code, out = cli(tmp_path, "rename-self", "--from", "a", "--to", "renamed")
+        code, out = cli(tmp_path, "tool", "--tool", "comms_rename_self", "--from", "a",
+                        "--arguments", '{"new_name":"renamed"}')
         assert code == 0
         assert out == {"previous": "a", "current": "renamed", "changed": True}
         _, detail = cli(tmp_path, "thread", "--name", "a")
@@ -166,7 +167,7 @@ class TestCliFailClosed:
         assert code == 1 and "no native prompt transport" in out["error"]
 
     def test_generic_invocation_rejects_non_object_arguments(self, cli, tmp_path):
-        code, out = cli(tmp_path, "invoke", "--tool", "comms_threads", "--arguments", "[]")
+        code, out = cli(tmp_path, "tool", "--tool", "comms_threads", "--arguments", "[]")
         assert code == 1 and "JSON object" in out["error"]
 
     def test_unknown_sender_is_error_exit_code(self, cli, tmp_path):

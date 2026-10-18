@@ -64,9 +64,11 @@ from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
-from .thread_execution import ThreadExecution, ExternalThreadExecution
+from .thread_execution import (
+    ArchiveOwnerControl, ExternalThreadExecution, NativeOwnerCommand,
+    OwnerLifecycleControl, StartOwnerControl, ThreadCommandAvailability, ThreadExecution,
+)
 from .owner_lifecycle import OwnerStartResult
-from .tools import CommsStartTool, CommsStopTool, ToolRequest
 from .channel_management import TagDisposition, KeepThreadsTagDisposition, TagChangeResult
 
 
@@ -83,7 +85,7 @@ def _duration_seconds(value: str) -> float:
 def _json_object(value: str) -> dict[str, Any]:
     result = json.loads(value)
     if not isinstance(result, dict):
-        raise ValueError("invoke --arguments must be a JSON object")
+        raise ValueError("--arguments must be a JSON object")
     return result
 
 
@@ -381,7 +383,7 @@ class ThreadPinnedResult:
 
 
 @dataclass(frozen=True, kw_only=True)
-class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
+class CliCommand(DeclaredFamily, Command, affix="CliCommand", discovery_package="agent_comms"):
     help: ClassVar[str]
     multiple_targets: ClassVar[bool] = False
 
@@ -671,16 +673,6 @@ class CliCommand(DeclaredFamily, Command, affix="CliCommand"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ToolsCliCommand(CliCommand):
-    help = "Emit the shared adapter tool catalog"
-
-    def apply(self, ctx: Comms) -> Any:
-        from .tools import tool_catalog
-
-        return {"tools": tool_catalog()}
-
-
-@dataclass(frozen=True, kw_only=True)
 class ImportingCliCommand(CliCommand):
     """Where an imported thread works and how much of its source conversation it keeps."""
     worktree: str | None = option(
@@ -745,29 +737,6 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
         return {"imported": [
             self.imported(ctx, ClaudeTranscript(path), self.prefix + path.stem.removeprefix("agent-"))
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())]}
-
-
-@dataclass(frozen=True, kw_only=True)
-class InvokeCliCommand(CliCommand):
-    help = "Invoke one declared adapter tool, as --from THREAD when given"
-    caller: str | None = option(
-        "--from", default=None, help="Calling thread; omit for tools that need no thread"
-    )
-    tool: str = option("--tool")
-    arguments: dict[str, Any] = option(
-        "--arguments",
-        help="Tool arguments as a JSON object",
-        default_factory=dict,
-        parser_default="{}",
-        normalize=_json_object,
-    )
-
-    def apply(self, ctx: Comms) -> Any:
-        from .tools import invoke_tool
-
-        from .tool_caller import ToolCaller
-
-        return invoke_tool(ctx, self.tool, self.arguments, caller=ToolCaller.from_actor(self.caller))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1326,14 +1295,13 @@ class ActivityCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadLifecycleCliCommand(CliCommand):
-    availability_tool: ClassVar[type[ToolRequest]]
+class ThreadLifecycleCliCommand(ThreadCommandAvailability, CliCommand):
     multiple_targets = True
     name: str = option("--name", target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        return (cls(name=thread.name),) if cls.availability_tool.available_for_thread(thread, status) else ()
+        return (cls(name=thread.name),) if cls.available_for_thread(thread, status) else ()
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog) -> tuple[Self, ...]:
@@ -1343,9 +1311,8 @@ class ThreadLifecycleCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StopCliCommand(ThreadLifecycleCliCommand):
+class StopCliCommand(NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleCliCommand):
     help = "Stop process"
-    availability_tool = CommsStopTool
 
     def apply(self, ctx: Comms) -> ThreadStoppedResult:
         ctx.owners.stop(self.name)
@@ -1404,15 +1371,14 @@ class ReleaseCliCommand(CliCommand):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ArchiveCliCommand(CliCommand):
+class ArchiveCliCommand(ArchiveOwnerControl, CliCommand):
     help = "Archive a stopped thread"
     multiple_targets = True
     name: str = option("--name", target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        from .tools import CommsArchiveTool
-        return (cls(name=thread.name),) if CommsArchiveTool.available_for_thread(thread, status) else ()
+        return (cls(name=thread.name),) if cls.available_for_thread(thread, status) else ()
 
     def apply(self, ctx: Comms) -> ThreadArchivedResult:
         ctx.threads.archive(self.name)
@@ -1428,20 +1394,6 @@ class DeleteCliCommand(CliCommand, declared_name="delete"):
         return ctx.threads.delete(self.name)
 
 
-
-
-@dataclass(frozen=True, kw_only=True)
-class RenameSelfCliCommand(CliCommand, declared_name="rename-self"):
-    help = "Rename your own running thread"
-    caller: str = option("--from")
-    new_name: str = option("--to")
-
-    def apply(self, ctx: Comms) -> Any:
-        from .tools import CommsRenameSelfTool
-        from .tool_caller import ThreadCaller
-
-        return CommsRenameSelfTool.invoke(ctx, {"new_name": self.new_name},
-                                         caller=ThreadCaller(self.caller))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1479,7 +1431,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ForkCliCommand(NewThreadCliCommand):
+class ForkCliCommand(NativeOwnerCommand, NewThreadCliCommand):
     help = "Fork a child pi thread"
     spec_type = ForkSpec
     parent: str = option("--parent", target_bound=True)
@@ -1490,9 +1442,8 @@ class ForkCliCommand(NewThreadCliCommand):
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
-        from .tools import CommsForkTool
         return (cls(name='', parent=thread.name, tags=thread.tags, project=thread.worktree,
-                    model=thread.model, thinking_level=thread.thinking_level),) if CommsForkTool.available_for_thread(thread, status) else ()
+                    model=thread.model, thinking_level=thread.thinking_level),) if cls.available_for_thread(thread, status) else ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1647,9 +1598,8 @@ class TargetActionCliCommand(CliCommand, declared_name='target-action'):
 
 
 @dataclass(frozen=True, kw_only=True)
-class StartCliCommand(ThreadLifecycleCliCommand):
+class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliCommand):
     help = 'Start thread'
-    availability_tool = CommsStartTool
 
     @classmethod
     def reconnect_targets(cls, result: OwnerStartResult | TargetBatchResult) -> tuple[str, ...]:
