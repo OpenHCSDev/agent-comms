@@ -33,19 +33,19 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     before = stored_inputs(ledger.root).unknown(frozenset({"owner"}))
     files = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
     overview = comms.goals.input_delivery("owner", awaiting_keys=awaiting)
-    assert [row["inputId"] for row in overview["inputs"]] == ["bus:2", "bus:8", "ui"]
-    assert overview["historicalCount"] == 2
-    assert overview["dismissedHistoricalCount"] == 0
-    assert overview["historicalInputs"] == []
+    assert [row.input_id for row in overview.inputs] == ["bus:2", "bus:8", "ui"]
+    assert overview.historical_count == 2
+    assert overview.dismissed_historical_count == 0
+    assert overview.historical_inputs == ()
     assert {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()} == files
     detail = comms.goals.input_delivery("owner", include_history=True, awaiting_keys=awaiting)
-    assert [r["inputId"] for r in detail["historicalInputs"]] == ["bus:1", "bus:7"]
-    assert not any(r["noticeDismissed"] for r in detail["historicalInputs"])
+    assert [r.input_id for r in detail.historical_inputs] == ["bus:1", "bus:7"]
+    assert not any(r.notice_dismissed for r in detail.historical_inputs)
     comms.registry.rename("owner", "renamed")
     assert comms.goals.input_delivery("renamed", awaiting_keys=awaiting) == overview
     result = comms.goals.dismiss_historical_inputs("renamed", awaiting_keys=awaiting)
-    assert result["historicalCount"] == 0 and result["dismissedHistoricalCount"] == 2
-    assert result["inputs"] == overview["inputs"]
+    assert result.historical_count == 0 and result.dismissed_historical_count == 2
+    assert result.inputs == overview.inputs
     assert not stored_inputs(ledger.root).rows["bus:3"].notice_dismissed
     assert (
         tuple(
@@ -56,18 +56,18 @@ def test_history_clear_is_notice_only_and_survives_rename_and_reopen(tmp_path):
     )
     reopened = wire(tmp_path)
     assert reopened.goals.input_delivery("renamed", awaiting_keys=awaiting) == result
-    assert reopened.goals.unresolved_inputs("renamed") == [r.public() for r in before]
+    assert reopened.goals.unresolved_inputs("renamed") == tuple(r.shown() for r in before)
     assert all(
-        r["noticeDismissed"]
+        r.notice_dismissed
         for r in reopened.goals.input_delivery(
             "renamed", include_history=True, awaiting_keys=awaiting
-        )["historicalInputs"]
+        ).historical_inputs
     )
     assert reopened.goals.dismiss_historical_inputs("renamed", awaiting_keys=awaiting) == result
     assert ledger.bind("bus:7", claim_scope=1, turn_id="t2", native_id="b" * 32, text="Text bus:7")
     assert "bus:7" not in [
-        r["inputId"]
-        for r in reopened.goals.input_delivery("renamed", awaiting_keys=awaiting)["inputs"]
+        r.input_id
+        for r in reopened.goals.input_delivery("renamed", awaiting_keys=awaiting).inputs
     ]
     assert stored_inputs(ledger.root).rows["bus:7"].native_id == "b" * 32
 
@@ -78,10 +78,10 @@ def test_no_owner_queue_observation_never_dismisses_inputs(tmp_path):
     ledger = InputDispositions(tmp_path)
     ledger.record("bus:1", seq=1, owner="owner", claim_scope=1, target="owner", text="Hello")
     before = ledger.path.read_bytes()
-    assert comms.goals.dismiss_historical_inputs("owner")["historicalCount"] == 0
-    assert len(comms.goals.input_delivery("owner")["inputs"]) == 1
+    assert comms.goals.dismiss_historical_inputs("owner").historical_count == 0
+    assert len(comms.goals.input_delivery("owner").inputs) == 1
     assert ledger.path.read_bytes() == before
-    assert comms.goals.input_delivery("owner")["currentScope"] == "unobserved"
+    assert comms.goals.input_delivery("owner").current_scope == "unobserved"
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")

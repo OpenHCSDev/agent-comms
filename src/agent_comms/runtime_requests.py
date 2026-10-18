@@ -91,7 +91,7 @@ class ResultRuntimeRequest(RuntimeRequest):
         await ctx.send({"result": await self.result(ctx)})
 
     @abstractmethod
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]: ...
+    async def result(self, ctx: RuntimeRequestContext) -> object: ...
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -242,22 +242,23 @@ class CompactRuntimeRequest(ResultRuntimeRequest):
 class InputDispositionsRuntimeRequest(ResultRuntimeRequest):
     include_history: bool = False
 
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
-        return await Coordination.run_worker(partial(ctx.server.agent._comms.goals.input_delivery,
+    async def result(self, ctx: RuntimeRequestContext) -> object:
+        return FieldCodec.encode(await Coordination.run_worker(partial(
+            ctx.server.agent._comms.goals.input_delivery,
             ctx.name,
             include_history=self.include_history,
             awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id),
-        ))
+        )))
 
 
 @dataclass(frozen=True, kw_only=True)
 class DismissHistoricalInputsRuntimeRequest(ResultRuntimeRequest):
-    async def result(self, ctx: RuntimeRequestContext) -> dict[str, Any]:
+    async def result(self, ctx: RuntimeRequestContext) -> object:
         result = await Coordination.run_worker(partial(ctx.server.agent._comms.goals.dismiss_historical_inputs,
             ctx.name, awaiting_keys=await ctx.server.agent.inputs.awaiting_input_keys(ctx.session_id)
         ))
         await ctx.server.agent.inputs.emit_input_delivery_changed(ctx.session_id)
-        return result
+        return FieldCodec.encode(result)
 
 
 @dataclass(frozen=True, kw_only=True)

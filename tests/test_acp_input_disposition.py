@@ -74,7 +74,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         assert not owner.inputs.pending_turns and not owner.turns.turn_state(session).busy
         assert any(isinstance(fact, InputDeliveryChangedUpdate)
                    for update in updates.rows for fact in decode_updates(update.get("_meta")))
-        assert Comms(native.root).goals.unresolved_inputs(session) == [row.public() for row in rows]
+        assert Comms(native.root).goals.unresolved_inputs(session) == tuple(row.shown() for row in rows)
     assert native.session.read_bytes() == saved and native.provider.posts == 0
 
 

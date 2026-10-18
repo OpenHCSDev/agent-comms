@@ -219,7 +219,7 @@ async def test_native_repeated_inbox_keeps_unknown_backlog_out_of_context(monkey
                 "messages": [],
                 "acknowledged": 0,
                 "unresolved_inputs": [
-                    row.public() for row in stored_inputs(agent.inputs.dispositions.root).rows.values()
+                    FieldCodec.encode(row.shown()) for row in stored_inputs(agent.inputs.dispositions.root).rows.values()
                 ],
             }
             assert 900_000 < len(json.dumps(full_result, indent=2).encode()) < 1_100_000

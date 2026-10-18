@@ -43,6 +43,8 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_history import RecordedGoalRevision
+from .goal_waits import StandbyReview, StandbyReviewSummary
+from .input_attempt import UnresolvedInput
 from .goal_presentation import ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, OrderCheck
@@ -214,13 +216,13 @@ class InboxRead(ToolResult):
     """An oversized read names its snapshot file and counts in place of the arrays."""
     messages: tuple[Message, ...]
     acknowledged: int
-    unresolved_inputs: tuple[dict[str, JsonValue], ...]
+    unresolved_inputs: tuple[UnresolvedInput, ...]
     complete: bool | None = _omitted_when_absent()
     ack_deferred: bool | None = _omitted_when_absent(wire_name="ackDeferred")
     counts: dict[str, int] | None = _omitted_when_absent()
     result_file: str | None = _omitted_when_absent()
     instruction: str | None = _omitted_when_absent()
-    standby_review: dict[str, JsonValue] | None = _omitted_when_absent()
+    standby_review: StandbyReview | StandbyReviewSummary | None = _omitted_when_absent()
 
 
 @dataclass(frozen=True)
@@ -309,7 +311,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     @classmethod
     def invoke(
         cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
-    ) -> dict[str, JsonValue]:
+    ) -> JsonValue:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
             raise ValueError("Unknown tool argument: tool")
@@ -348,8 +350,8 @@ def _tag_set(value: str) -> frozenset[str]:
 
 def _bounded_inbox_response(
     messages: tuple[Message, ...],
-    unresolved: tuple[dict[str, JsonValue], ...],
-    review: dict[str, JsonValue] | None,
+    unresolved: tuple[UnresolvedInput, ...],
+    review: StandbyReview | None,
     result_file: str,
     *,
     ack: bool,
@@ -371,22 +373,8 @@ def _bounded_inbox_response(
         ),
     )
     if review is not None:
-        review_summary = {
-            "complete": False,
-            "counts": {
-                key: len(review[key])
-                for key in ("messages", "already_reviewed_inputs", "excluded_inputs")
-            },
-        }
-        bounded = replace(bounded, standby_review=review_summary)
-        candidate = replace(bounded, standby_review={
-            **review_summary,
-            "goal_id": review["goal_id"],
-            "wait_for": review["wait_for"],
-            "messages": review["messages"],
-            "reviewed_inputs": review["reviewed_inputs"],
-            "messages_complete": True,
-        })
+        bounded = replace(bounded, standby_review=review.summary())
+        candidate = replace(bounded, standby_review=review.eligible_summary())
         if len(serialize_tool_output(candidate).encode("utf-8")) <= MAX_INLINE_OUTPUT_BYTES:
             return candidate
     return bounded
@@ -1207,7 +1195,7 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
         parser_default="{}", normalize=_json_object)
 
-    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
+    def apply(self, ctx: Comms) -> JsonValue:
         return invoke_tool(ctx, self.tool, self.arguments,
                            caller=ToolCaller.from_actor(self.caller))
 
@@ -1232,7 +1220,7 @@ def context_tool_catalog(context: str) -> list[dict[str, object]]:
 
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
-) -> dict[str, JsonValue]:
+) -> JsonValue:
     return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
 
 
@@ -1243,7 +1231,7 @@ def invoke_context_tool(
     subject: str,
     actor: str | None,
     arguments: Mapping[str, object] | None = None,
-) -> dict[str, JsonValue]:
+) -> JsonValue:
     tool = ToolRequest.decode(name)
     if tool.context is None:
         raise ValueError(f"Tool {name!r} is not a context action.")

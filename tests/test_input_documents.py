@@ -221,7 +221,7 @@ def test_distinct_lifecycle_and_missing_state_never_supply_sent_evidence(tmp_pat
     assert isinstance(unsent, NotSentInput) and unsent.unresolved
     assert not unsent.accepts_reservation
     assert not store.bind("acp:input", claim_scope=4, turn_id="new", native_id="b" * 32, text="keep")
-    assert unsent.public()["status"] == "not_sent"
+    assert unsent.shown().status == "not_sent"
     assert "unknown" not in InputAttempt.names()
     with pytest.raises(ValueError, match="document key"):
         InputDocument(rows={"missing": missing})
