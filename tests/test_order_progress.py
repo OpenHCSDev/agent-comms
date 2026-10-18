@@ -118,8 +118,8 @@ def test_unread_github_is_said_and_still_draws_a_strike(checkout):
 
 def test_board_and_overdue_print_a_merged_order_as_done_not_late(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
-    comms, _ = commander
-    monkeypatch.setattr(comms.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    # worker's P1 checkout, on the branch its merged PR came from.
+    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
     unit = tmp_path / 'wt' / 'worker--P1'
     unit.mkdir(parents=True)
     git(unit, 'init', '-q', '-b', 'fix/p1')

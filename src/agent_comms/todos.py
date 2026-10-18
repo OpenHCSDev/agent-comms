@@ -155,8 +155,8 @@ class OrderBranch(DeclaredFamily, affix="Branch"):
 
     @classmethod
     def checked_out(cls, checkout: Path) -> OrderBranch:
-        named = subprocess.run(("git", "-C", str(checkout), "symbolic-ref", "--short", "-q", "HEAD"),
-                               capture_output=True, text=True, timeout=30)
+        named = subprocess.run(("git", "-C", str(checkout), "symbolic-ref", "--short", "-q",
+                                "HEAD"), capture_output=True, text=True, timeout=30)
         return NoOrderBranch() if named.returncode else CheckedOutBranch(named.stdout.strip())
 
     @abstractmethod
@@ -226,7 +226,7 @@ class ProgressSource:
         return OrderBranch.checked_out(self.checkout)
 
     def requests(self, state: str) -> list[PullRequest]:
-        """PRs from the order's branch touched since the order; an older one served an earlier order."""
+        """PRs from the order's branch touched since the order; older ones served an earlier one."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state)
                 if self.branch.carries(pr) and pr.updated_at >= self.since]
 
