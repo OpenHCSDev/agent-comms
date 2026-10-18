@@ -75,10 +75,7 @@ class ProviderArgument(NamedOption, ValueArgument):
 
 
 class ModelArgument(NamedOption, ValueArgument):
-    def qualified(self, provider: str | None) -> str:
-        if provider is None:
-            return self.value
-        return SelectedModel(provider, self.value.removeprefix(provider + "/")).qualified
+    pass
 
 
 @dataclass(frozen=True)
@@ -253,10 +250,11 @@ class NativeArguments:
 
     @property
     def model(self) -> str | None:
-        selected = next(
-            (entry for entry in reversed(self.entries) if isinstance(entry, ModelArgument)), None
-        )
-        return selected.qualified(self.value(ProviderArgument)) if selected is not None else None
+        selected = self.value(ModelArgument)
+        provider = self.value(ProviderArgument)
+        if selected is None or provider is None:
+            return selected
+        return SelectedModel(provider, selected.removeprefix(provider + "/")).qualified
 
     @property
     def thinking(self) -> str | None:
