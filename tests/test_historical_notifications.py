@@ -17,7 +17,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
 from agent_comms.read_basis import HistoricalDisplay
 from agent_comms.read_ledger import ReadLedger
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import FullWake
 
@@ -29,7 +29,7 @@ def archived_notification(tmp_path, *, thread_registration):
     old, live = Comms(tmp_path / "old"), Comms(tmp_path / "live")
     for comms in (old, live):
         comms.registry.declare(thread_registration.new_thread('sender', frozenset(), str(tmp_path), created_at=10.0))
-        comms.registry.declare(thread_registration.new_thread('reader', frozenset(), str(tmp_path), created_at=11.0, role=ThreadRole.AGENT if comms is old else ThreadRole.USER))
+        comms.registry.declare(thread_registration.new_thread('reader', frozenset(), str(tmp_path), created_at=11.0, role=AgentThreadRole if comms is old else UserThreadRole))
         comms.registry.declare(thread_registration.new_thread('agent', frozenset(), str(tmp_path), created_at=12.0 if comms is old else 212.0))
     root_id = old.messaging.initialize_private_initial_protocol()
     messages = (

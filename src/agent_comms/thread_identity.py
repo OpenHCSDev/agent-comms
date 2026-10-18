@@ -9,20 +9,25 @@ from __future__ import annotations
 import hashlib
 import math
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
 from dataclasses import dataclass, field, fields, replace
-from enum import StrEnum
 from functools import cached_property
 from typing import TYPE_CHECKING, Callable, ClassVar, TypeVar
 
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
 from .cli_options import JsonFlagRecord
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, WireValue
+from .response_policy import CollectivePolicy, InformationalPolicy, ResponsePolicy
 
 if TYPE_CHECKING:
     from .child_process import ProcessIdentity
+    from .maintenance_barrier import MaintenanceBarrier
+    from .messages import Message
     from .participant_store import ParticipantStore
+    from .read_ledger import ReadDocument, ReadLedger
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
 
@@ -373,30 +378,190 @@ class GenerationCounter:
         self.generations[new] = self.generations.pop(old)
 
 
-class ThreadRole(StrEnum):
-    AGENT = "agent"
-    USER = "user"
+class ThreadRole(DeclaredFamily, affix="ThreadRole"):
+    """Whether a thread executes turns is the member's type; its wire name is its spelling."""
 
-    @property
-    def executable(self) -> bool:
-        return self is self.AGENT
+    origin_label: ClassVar[str]
 
-    def initial_delivery(self, message, target):
-        if not self.executable:
-            return replace(message, role=message.role.as_notice()), []
+    @classmethod
+    @abstractmethod
+    def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]: ...
+
+    @classmethod
+    @abstractmethod
+    def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
+        """An executing sender is a participant; a human sender owns no turns to wake."""
+
+    @classmethod
+    @abstractmethod
+    def require_executable(cls, refusal: Exception) -> None: ...
+
+    @classmethod
+    @abstractmethod
+    def require_user(cls, refusal: Exception) -> None: ...
+
+    @classmethod
+    @abstractmethod
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        """The item when its thread executes turns, else nothing."""
+
+    @classmethod
+    @abstractmethod
+    def human[T](cls, item: T) -> tuple[T, ...]:
+        """The item when its thread is a human reader, else nothing."""
+
+    @classmethod
+    @abstractmethod
+    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
+        """An owner claim waits for open maintenance; a human claims no owner."""
+
+    @classmethod
+    @abstractmethod
+    def displayed_recipient_effect(
+        cls, reads: ReadLedger, message: Message, thread: Thread,
+        snapshot: RegistryProvenance, document: ReadDocument | None,
+    ) -> object:
+        """Only a human recipient's display records a read."""
+
+    @classmethod
+    @abstractmethod
+    def page_human_sender(cls) -> bool:
+        """The bus page row's stored human-sender column."""
+
+    @classmethod
+    @abstractmethod
+    def channel_policy(cls) -> ResponsePolicy: ...
+
+    @classmethod
+    @abstractmethod
+    def reply_target(cls, message: Message) -> str | None:
+        """An external sender may receive an automatic live reply."""
+
+    @classmethod
+    @abstractmethod
+    def last_user_input(cls, previous: float, timestamp: float) -> float: ...
+
+    @classmethod
+    @abstractmethod
+    def user_task_facts(cls, message: Message) -> Iterable[object]: ...
+
+
+class AgentThreadRole(ThreadRole):
+    origin_label = "external agent"
+
+    @classmethod
+    def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]:
         return message, [target]
 
-    def register_sender(self, participants: ParticipantStore, lookup: str, name: str) -> None:
-        """An executing sender is a participant; a human sender owns no turns to wake."""
-        if self.executable:
-            participants.register(lookup, name, name, committed=True)
+    @classmethod
+    def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
+        participants.register(lookup, name, name, committed=True)
 
-    def require_executable(self) -> None:
-        if not self.executable:
-            raise RelationViolationError("thread role does not execute owner turns")
+    @classmethod
+    def require_executable(cls, refusal: Exception) -> None:
+        """An agent executes owner turns."""
 
-    def require_user(self) -> None:
-        if self is not self.USER:
-            raise RelationViolationError("A user correction requires the original human sender")
+    @classmethod
+    def require_user(cls, refusal: Exception) -> None:
+        raise refusal
+
+    @classmethod
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        return (item,)
+
+    @classmethod
+    def human[T](cls, item: T) -> tuple[T, ...]:
+        return ()
+
+    @classmethod
+    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
+        if claims_owner:
+            barrier.assert_open_unlocked()
+
+    @classmethod
+    def displayed_recipient_effect(
+        cls, reads: ReadLedger, message: Message, thread: Thread,
+        snapshot: RegistryProvenance, document: ReadDocument | None,
+    ) -> object:
+        return ()
+
+    @classmethod
+    def page_human_sender(cls) -> bool:
+        return False
+
+    @classmethod
+    def channel_policy(cls) -> ResponsePolicy:
+        return InformationalPolicy.instance()
+
+    @classmethod
+    def reply_target(cls, message: Message) -> str | None:
+        return None
+
+    @classmethod
+    def last_user_input(cls, previous: float, timestamp: float) -> float:
+        return previous
+
+    @classmethod
+    def user_task_facts(cls, message: Message) -> Iterable[object]:
+        return ()
+
+
+class UserThreadRole(ThreadRole):
+    origin_label = "human"
+
+    @classmethod
+    def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]:
+        return replace(message, role=message.role.as_notice()), []
+
+    @classmethod
+    def register_sender(cls, participants: ParticipantStore, lookup: str, name: str) -> None:
+        """A human sender owns no turns to wake."""
+
+    @classmethod
+    def require_executable(cls, refusal: Exception) -> None:
+        raise refusal
+
+    @classmethod
+    def require_user(cls, refusal: Exception) -> None:
+        """A user is the original human sender."""
+
+    @classmethod
+    def executor[T](cls, item: T) -> tuple[T, ...]:
+        return ()
+
+    @classmethod
+    def human[T](cls, item: T) -> tuple[T, ...]:
+        return (item,)
+
+    @classmethod
+    def require_maintenance_open(cls, barrier: MaintenanceBarrier, claims_owner: bool) -> None:
+        """A human claims no owner, so maintenance never gates its registration."""
+
+    @classmethod
+    def displayed_recipient_effect(
+        cls, reads: ReadLedger, message: Message, thread: Thread,
+        snapshot: RegistryProvenance, document: ReadDocument | None,
+    ) -> object:
+        return reads._displayed_recipient(message, thread, snapshot, document=document)
+
+    @classmethod
+    def page_human_sender(cls) -> bool:
+        return True
+
+    @classmethod
+    def channel_policy(cls) -> ResponsePolicy:
+        return CollectivePolicy.instance()
+
+    @classmethod
+    def reply_target(cls, message: Message) -> str | None:
+        return message.exact_reply_target
+
+    @classmethod
+    def last_user_input(cls, previous: float, timestamp: float) -> float:
+        return max(previous, timestamp)
+
+    @classmethod
+    def user_task_facts(cls, message: Message) -> Iterable[object]:
+        return message.task.user_task_facts(message)
 
 

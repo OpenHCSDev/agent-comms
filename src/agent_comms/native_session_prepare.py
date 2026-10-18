@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import aclosing
 from pathlib import Path
 from functools import partial
@@ -52,7 +52,7 @@ class NativeSessionPreparation(backend.TurnSession):
     """Share native launch/attestation with turns; retain an idle child, send no prompt."""
     prompt_type = PreparedSession
 
-    async def finish_result(self) -> AsyncIterator[events.AgentEvent]:
+    def finish_result(self) -> Iterable[events.AgentEvent]:
         if not self.native_session.child_state.retained:
             self.prompt_state.raise_native_failure(
                 NativePiUnavailable(
@@ -60,8 +60,7 @@ class NativeSessionPreparation(backend.TurnSession):
                 ),
                 self.native.attestation,
             )
-        if False:
-            yield
+        return ()
 
     @classmethod
     async def open(

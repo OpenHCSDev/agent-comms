@@ -9,7 +9,7 @@ from agent_comms.mentions import MentionCandidate, ThreadMention
 from agent_comms.messages import Message, AlertKind, InfoKind
 from agent_comms.response_policy import CollectivePolicy, InformationalPolicy, MentionedOnlyPolicy
 from agent_comms.routing import ScheduledTurn
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.threads import Thread
 
 
@@ -100,8 +100,8 @@ def test_channel_response_eligibility_is_typed_and_unknown_mentions_are_collecti
 @pytest.mark.parametrize(
     ("sender_role", "unmentioned_policy"),
     (
-        (ThreadRole.USER, CollectivePolicy.instance()),
-        (ThreadRole.AGENT, InformationalPolicy.instance()),
+        (UserThreadRole, CollectivePolicy.instance()),
+        (AgentThreadRole, InformationalPolicy.instance()),
     ),
 )
 def test_unmentioned_channel_policy_uses_typed_sender_role(sender_role, unmentioned_policy):

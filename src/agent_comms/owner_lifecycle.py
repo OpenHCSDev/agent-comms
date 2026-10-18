@@ -243,8 +243,9 @@ class OwnerLifecycle:
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
-            if not thread.role.executable:
-                raise RelationViolationError("A human participant cannot become an executor.")
+            thread.role.require_executable(
+                RelationViolationError("A human participant cannot become an executor.")
+            )
             if thread.process_alive:
                 return thread
             owned = replace(thread, process_identity=identity, active_turn=None)
@@ -259,8 +260,10 @@ class OwnerLifecycle:
             self.maintenance.assert_open_unlocked()
             thread = self.registry.require(name)
             thread.execution.require_native()
-            if not thread.role.executable or not self.registry.status(thread.name).active:
-                raise RelationViolationError("Explicit start is required for a stopped agent.")
+            refusal = RelationViolationError("Explicit start is required for a stopped agent.")
+            thread.role.require_executable(refusal)
+            if not self.registry.status(thread.name).active:
+                raise refusal
             return (
                 thread
                 if thread.process_alive
@@ -276,8 +279,10 @@ class OwnerLifecycle:
             thread = self.registry.require(name)
             thread.execution.require_native()
             status = self.registry.status(thread.name)
-            if not thread.role.executable or not status.visible:
-                raise RelationViolationError("Only visible agent threads can be started.")
+            refusal = RelationViolationError("Only visible agent threads can be started.")
+            thread.role.require_executable(refusal)
+            if not status.visible:
+                raise refusal
             if thread.process_alive:
                 if not status.active:
                     raise RelationViolationError("Stopped owner has not exited yet.")
@@ -422,13 +427,7 @@ class OwnerLifecycle:
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
-        for key in (
-            "PI_PROMPT",
-            "PI_PARENT_ID",
-            "PI_TASK",
-            RestartEnvironment.initial_input_key,
-        ):
-            env.pop(key, None)
+        env.pop(RestartEnvironment.initial_input_key, None)
         private_launch = self.require_launch_authority()
         if private_launch is not None:
             if agent_bin == "pi":
@@ -452,24 +451,13 @@ class OwnerLifecycle:
                     thread.name,
                     committed=True,
                 )
-        env.update(
-            {
-                RestartEnvironment.owner_key: thread.name,
-                "PI_AGENT_TAGS": ",".join(sorted(thread.tags)),
-                "AGENT_COMMS_TAGS": ",".join(sorted(thread.tags)),
-                "PI_WORKTREE": thread.worktree,
-                NativeArguments.binary_key: agent_bin,
-            }
-        )
+        env = thread.launch().apply(env)
+        env[NativeArguments.binary_key] = agent_bin
         # A private child derives the same launch from its validated root; ordinary
         # roots keep their canonical child path across symlink changes.
         env["AGENT_COMMS_ROOT"] = str(
             self.root.resolve() if private_launch is None else private_launch.validated_root
         )
-        if thread.parent is not None:
-            env["PI_PARENT_ID"] = thread.parent
-        if thread.task is not None:
-            env["PI_TASK"] = thread.task
         initial_input.apply_environment(env)
         if agent_args is not None:
             env[NativeArguments.arguments_key] = shlex.join(agent_args)

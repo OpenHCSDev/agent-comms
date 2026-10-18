@@ -6,24 +6,16 @@ import subprocess
 from pathlib import Path
 
 from .native_arguments import NativeArguments
-from .launch_runtime import RestartEnvironment
+from .launch_runtime import ThreadLaunch
 
 
 def run_login(provider: str = "") -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
         raise ValueError("Invalid provider identifier")
     env = os.environ.copy()
-    for key in (
-        "PI_PARENT_ID",
-        "PI_TASK",
-        "PI_PROMPT",
-        "PI_WORKTREE",
-        RestartEnvironment.owner_key,
-        "AGENT_COMMS_MANAGED",
-        "AGENT_COMMS_PROJECT_SOCKET",
-        "AGENT_COMMS_PROJECT_REQUEST",
-    ):
-        env.pop(key, None)
+    ThreadLaunch.strip(env)
+    env.pop("AGENT_COMMS_PROJECT_SOCKET", None)
+    env.pop("AGENT_COMMS_PROJECT_REQUEST", None)
     env["AGENT_COMMS_LOGIN_PROVIDER"] = provider
     command = [
         NativeArguments.configured_binary(environment=env),

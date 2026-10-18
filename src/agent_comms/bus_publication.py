@@ -289,8 +289,9 @@ class AgentOrigin(InitialOrigin):
     def require_sender(
         self, message: Message, sender_thread: Thread, snapshot: RegistrySnapshot
     ) -> None:
-        if not sender_thread.role.executable:
-            raise RelationViolationError("Initial sender must be a visible registered executable.")
+        sender_thread.role.require_executable(
+            RelationViolationError("Initial sender must be a visible registered executable.")
+        )
 
     def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
         """An agent's resend is idempotent, so the source holds no precondition."""
@@ -340,7 +341,9 @@ class HumanOrigin(InitialOrigin):
         user = snapshot.threads.get(self.sender)
         if user is None:
             raise RelationViolationError("Local USER origin is no longer registered")
-        user.role.require_user()
+        user.role.require_user(
+            RelationViolationError("A user correction requires the original human sender")
+        )
         registered = (user.name, user.created_at, user.worktree)
         if registered != (self.sender, self.created_at, self.worktree):
             raise RelationViolationError("Local USER origin differs from registered identity")

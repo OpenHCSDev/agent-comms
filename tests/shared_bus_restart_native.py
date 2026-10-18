@@ -28,7 +28,7 @@ from agent_comms.messages import Message, InfoKind
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.runtime import RuntimeProxy, socket_path
 from agent_comms.threads import Thread
-from agent_comms.thread_identity import ThreadRole
+from agent_comms.thread_identity import UserThreadRole
 from agent_comms.bus_publication import HumanOrigin, AgentOrigin
 from agent_comms.coordination_tables.assignments import WakeAssignment
 from agent_comms.native_runtime_input import NativeRuntimeInput, CurrentNativeCursor
@@ -150,7 +150,7 @@ async def configured_pure_channel(arguments):
             'source_session_file': str(original),
             'source_session_sha256':before, 'owned_fork':fork.session_file,
             'original_task_sha256':hashlib.sha256((source.task or '').encode()).hexdigest()})
-    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=ThreadRole.USER))
+    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
     if arguments.busy_reader:
         service.registry.declare(service.registry.new_thread('history-sender', frozenset(), str(project)))
         service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
@@ -469,7 +469,7 @@ async def configured_mixed_routes(arguments):
     assert configured.model, "Configured owner has no selected model"
     stage, project, service, root_id, source_hashes = configured_stage(arguments, configured, snapshot)
     name = 'batch-receiver'
-    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=ThreadRole.USER))
+    service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
     service.registry.declare(service.registry.new_thread(name, frozenset({'team'}), str(project), model=configured.model, thinking_level=configured.thinking_level, task='Answer each original route accurately once; do not expose direct-message content to a channel.'))
     sender = service.registry.require('human')
     with _store_lock(service._wire_lock_path):
@@ -800,7 +800,7 @@ async def run(arguments):
     service.registry.declare(service.registry.new_thread('fixture-sender', frozenset(), str(project)))
     service.registry.declare(service.registry.new_thread('history-recipient', frozenset(), str(project)))
     if arguments.collective:
-        service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=ThreadRole.USER))
+        service.registry.declare(service.registry.new_thread('human', frozenset(), str(project), role=UserThreadRole))
     for index in range(arguments.registry_size):
         service.registry.declare(service.registry.new_thread(f'unrelated-{index}', frozenset(), str(project)))
     for name in names:

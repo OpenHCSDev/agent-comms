@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from .coordination_database import CoordinationStore
+from .errors import RelationViolationError
 from .coordination_tables.annotations import AnnotationRequestsRow, SpanAnnotationsRow
 from .coordination_tables.metadata import SchemaMeta
 from .typed_table import SQLiteUserVersion
@@ -129,7 +130,9 @@ class WorkingMemoryAnnotations:
             AnnotationRequestsRow.update(db, where="id=?", parameters=(original.id,), outcome=outcome)
 
     def correct(self, original: ModelLabel, answer, author, registry):
-        registry.require(author.resolved(registry).name).role.require_user()
+        registry.require(author.resolved(registry).name).role.require_user(
+            RelationViolationError("A label correction requires the original human sender")
+        )
         with self.session.transaction() as db:
             key = self.address(original.span, original.question, original.classifier)
             rows = tuple(SpanAnnotationsRow.select(db, **key))
