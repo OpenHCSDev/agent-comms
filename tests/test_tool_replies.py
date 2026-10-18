@@ -11,27 +11,25 @@ from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import OperationDelivery, PendingProblemOrder, StrikeTodo
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
+from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
-    CommsEditGoalTool, CommsForkTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
+    CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
     CommsModelTool, CommsOrderDoneTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
-    CommsProblemCloseTool, CommsQueueRestartTool, CommsRenameSelfTool, CommsRestartQueueTool,
+    CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
-    CommsStartTool, CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
+    CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
     CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool,
-    CommsWorkBranchesTool, ToolRequest,
+    CommsWorkBranchesTool, LiveOwnerTool, ToolRequest,
 )
 from agent_comms.work_branches import WorkBranches
 
-# Their replies need a launched native owner or restart watcher; test_start and
-# test_restart_queue invoke them against real processes.
-LIVE_OWNER_TOOLS = {CommsForkTool, CommsQueueRestartTool, CommsStartTool}
-
 
 def scenario(comms: Comms, project, monkeypatch):
-    """One call per declared tool, ordered so that each call meets its preconditions."""
+    """One call per declared tool but the live-owner tools, which test_start and
+    test_restart_queue invoke against real processes; ordered so each call meets its preconditions."""
     lead, worker, nobody = ThreadCaller("lead"), ThreadCaller("worker"), NoThreadCaller()
     for created, name in enumerate(("lead", "worker", "idle"), 1):
         comms.registry.declare(
@@ -110,9 +108,15 @@ def result_type(tool: type[ToolRequest]) -> type:
 
 
 def test_every_tool_reply_decodes_as_its_declared_result(comms, tmp_path, monkeypatch):
-    invoked = set(LIVE_OWNER_TOOLS)
+    invoked = set()
     for tool, arguments, caller in scenario(comms, tmp_path, monkeypatch):
         reply = tool.invoke(comms, arguments, caller=caller)
         assert FieldCodec.encode(FieldCodec.decode(result_type(tool), reply)) == reply, tool.declared_name
         invoked.add(tool)
-    assert invoked == set(ToolRequest.members_with(ToolRequest))
+    assert invoked == {tool for tool in ToolRequest.members_with(ToolRequest)
+                       if not issubclass(tool, LiveOwnerTool)}
+
+
+def test_every_tool_declares_a_tool_result():
+    for tool in ToolRequest.members_with(ToolRequest):
+        assert issubclass(result_type(tool), ToolResult), tool.declared_name

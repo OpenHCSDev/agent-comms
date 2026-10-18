@@ -10,13 +10,14 @@ from .thread_execution import ConversationPreparation
 from .thread_identity import ThreadIncarnation
 from .external_transcript import ExternalTranscript
 from .transcript_events import TurnDigest
+from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .threads import Thread
 
 
 @dataclass(frozen=True)
-class ThreadTurns:
+class ThreadTurns(ToolResult):
     thread: ThreadIncarnation
     turns: tuple[TurnDigest, ...]
 

@@ -158,6 +158,7 @@ class TestToolCatalog:
 def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms, monkeypatch):
     from dataclasses import dataclass
 
+    from agent_comms.tool_result import ToolResult
     from agent_comms.tools import SubjectBinding, ToolRequest, tool_field
 
     from agent_comms.tool_declaration import ToolDeclaration
@@ -165,7 +166,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
     monkeypatch.setattr(ToolDeclaration, "__registry__", dict(ToolDeclaration.__registry__))
 
     @dataclass(frozen=True)
-    class InboxInspected:
+    class InboxInspected(ToolResult):
         count: int
         bodies: tuple[str, ...]
 

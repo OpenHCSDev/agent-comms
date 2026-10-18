@@ -9,6 +9,7 @@ from pydantic import JsonValue
 
 from .launch_runtime import CallingThreadUnavailable
 from .presentation import MessageNotification
+from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -16,7 +17,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class ThreadListing:
+class ThreadListing(ToolResult):
     threads: tuple[dict[str, JsonValue], ...]
     sent_notifications: tuple[MessageNotification, ...]
 
@@ -28,7 +29,7 @@ class ToolCaller(ABC):
         return ThreadCaller(actor) if actor else NoThreadCaller()
 
     @abstractmethod
-    def invoke(self, request: ToolRequest, comms: Comms) -> object: ...
+    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult: ...
 
     @abstractmethod
     def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing: ...
@@ -42,7 +43,7 @@ class ToolCaller(ABC):
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
-    def invoke(self, request: ToolRequest, comms: Comms) -> object:
+    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
 
     def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:
@@ -64,7 +65,7 @@ class NoThreadCaller(ToolCaller):
 class ThreadCaller(ToolCaller):
     name: str
 
-    def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> object:
+    def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
         return request.apply(comms, self)
 
     def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:

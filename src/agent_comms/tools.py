@@ -60,6 +60,7 @@ from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .tool_result import ToolResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -83,7 +84,7 @@ def _omitted_when_absent(default=None, **metadata):
 
 
 @dataclass(frozen=True)
-class ModelChanged:
+class ModelChanged(ToolResult):
     thread: str
     model: str | None
     thinking_level: ThinkingLevelField
@@ -91,30 +92,30 @@ class ModelChanged:
 
 
 @dataclass(frozen=True)
-class ChannelOrderSet:
+class ChannelOrderSet(ToolResult):
     order: type[ChannelSort]
 
 
 @dataclass(frozen=True)
-class TagList:
+class TagList(ToolResult):
     tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class ThreadTags:
+class ThreadTags(ToolResult):
     thread: str
     tags: tuple[str, ...]
 
 
 @dataclass(frozen=True)
-class ChannelListing:
+class ChannelListing(ToolResult):
     channels: tuple[ChannelView, ...]
     views: tuple[SavedView, ...]
     order: type[ChannelSort]
 
 
 @dataclass(frozen=True)
-class ProjectSet:
+class ProjectSet(ToolResult):
     thread: str
     previous: str
     current: str
@@ -123,56 +124,56 @@ class ProjectSet:
 
 
 @dataclass(frozen=True)
-class GoalSet:
+class GoalSet(ToolResult):
     goal: Goal | None
     instruction: str
 
 
 @dataclass(frozen=True)
-class GoalProgress:
+class GoalProgress(ToolResult):
     goal: Goal | None
     goal_execution: ThreadGoalExecution
 
 
 @dataclass(frozen=True)
-class GoalRead:
+class GoalRead(ToolResult):
     goal: Goal | None
 
 
 @dataclass(frozen=True)
-class GoalHistory:
+class GoalHistory(ToolResult):
     history: tuple[RecordedGoalRevision, ...]
 
 
 @dataclass(frozen=True)
-class TodoChanged:
+class TodoChanged(ToolResult):
     todo: Todo
     strike_count: int
 
 
 @dataclass(frozen=True)
-class TodoList:
+class TodoList(ToolResult):
     todos: tuple[Todo, ...]
 
 
 @dataclass(frozen=True)
-class ProblemOrdered:
+class ProblemOrdered(ToolResult):
     goal: Goal
     todo: Todo
 
 
 @dataclass(frozen=True)
-class ProblemClosed:
+class ProblemClosed(ToolResult):
     todo: Todo
 
 
 @dataclass(frozen=True)
-class WorkBranchList:
+class WorkBranchList(ToolResult):
     branches: tuple[WorkBranch, ...]
 
 
 @dataclass(frozen=True)
-class CollaborationEdited:
+class CollaborationEdited(ToolResult):
     collaboration: Collaboration | None
 
 
@@ -186,7 +187,7 @@ class VisibleCollaborator:
 
 
 @dataclass(frozen=True)
-class CollaborationList:
+class CollaborationList(ToolResult):
     """Goal-derived collaborators and unresolved mentions appear only when present."""
     collaborations: tuple[Collaboration, ...]
     visible_collaborators: tuple[VisibleCollaborator, ...] = _omitted_when_absent(())
@@ -194,7 +195,7 @@ class CollaborationList:
 
 
 @dataclass(frozen=True)
-class MessagePublished:
+class MessagePublished(ToolResult):
     """The Pi adapter decodes this reply as PublishedMessageToolDetails by its agentCommsKind."""
     id: str
     message: SentTranscript
@@ -203,13 +204,13 @@ class MessagePublished:
 
 
 @dataclass(frozen=True)
-class TaskPublished:
+class TaskPublished(ToolResult):
     reference: MessageReference
     task: TaskAttachment
 
 
 @dataclass(frozen=True)
-class InboxRead:
+class InboxRead(ToolResult):
     """An oversized read names its snapshot file and counts in place of the arrays."""
     messages: tuple[Message, ...]
     acknowledged: int
@@ -223,17 +224,17 @@ class InboxRead:
 
 
 @dataclass(frozen=True)
-class RestartQueued:
+class RestartQueued(ToolResult):
     restart: QueuedRestart
 
 
 @dataclass(frozen=True)
-class RestartAttempts:
+class RestartAttempts(ToolResult):
     restarts: tuple[QueuedRestart, ...]
 
 
 @dataclass(frozen=True)
-class RestartsCancelled:
+class RestartsCancelled(ToolResult):
     cancelled: tuple[QueuedRestart, ...]
 
 
@@ -306,7 +307,9 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return result
 
     @classmethod
-    def invoke(cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller) -> object:
+    def invoke(
+        cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
+    ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
             raise ValueError("Unknown tool argument: tool")
@@ -317,13 +320,19 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return FieldCodec.encode(caller.invoke(request, comms))
 
     @abstractmethod
-    def apply(self, comms: Comms, caller: Caller) -> object:
+    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
         """Each tool declares its own result record; invoke alone encodes it."""
 
     def apply_without_thread(
         self: ToolRequest[ToolCaller], comms: Comms, caller: NoThreadCaller
-    ) -> object:
+    ) -> ToolResult:
         return self.apply(comms, caller)
+
+
+class LiveOwnerTool:
+    """A tool whose reply needs a launched native owner or a running restart watcher."""
+
+    __slots__ = ()
 
 
 class ThreadToolRequest(ToolRequest[ThreadCaller]):
@@ -1054,7 +1063,7 @@ class CommsInboxTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsForkTool(NativeOwnerCommand, ToolRequest):
+class CommsForkTool(LiveOwnerTool, NativeOwnerCommand, ToolRequest):
     label = "Comms Fork"
     description = "Fork a child agent thread from a registered parent's persistent session."
     context = "thread"
@@ -1089,7 +1098,7 @@ class CommsStopTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsStartTool(NativeOwnerCommand, StartOwnerControl, ToolRequest):
+class CommsStartTool(LiveOwnerTool, NativeOwnerCommand, StartOwnerControl, ToolRequest):
     label = "Start Comms Thread"
     description = (
         "Start a stopped agent thread with its saved conversation and configuration. "
@@ -1106,7 +1115,7 @@ class CommsStartTool(NativeOwnerCommand, StartOwnerControl, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsQueueRestartTool(NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
+class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleControl, ToolRequest):
     label = "Queue Idle Owner Restart"
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
@@ -1180,7 +1189,7 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
         parser_default="{}", normalize=_json_object)
 
-    def apply(self, ctx: Comms) -> object:
+    def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return invoke_tool(ctx, self.tool, self.arguments,
                            caller=ToolCaller.from_actor(self.caller))
 
@@ -1205,7 +1214,7 @@ def context_tool_catalog(context: str) -> list[dict[str, object]]:
 
 def invoke_tool(
     comms: Comms, name: str, arguments: Mapping[str, object], *, caller: ToolCaller
-) -> object:
+) -> dict[str, JsonValue]:
     return ToolRequest.decode(name).invoke(comms, arguments, caller=caller)
 
 
@@ -1216,7 +1225,7 @@ def invoke_context_tool(
     subject: str,
     actor: str | None,
     arguments: Mapping[str, object] | None = None,
-) -> object:
+) -> dict[str, JsonValue]:
     tool = ToolRequest.decode(name)
     if tool.context is None:
         raise ValueError(f"Tool {name!r} is not a context action.")
