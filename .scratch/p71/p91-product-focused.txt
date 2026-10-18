@@ -1,0 +1,62 @@
+........................................................................ [ 55%]
+..............................ss........F.................               [100%]
+=================================== FAILURES ===================================
+_____ test_unavailable_projection_never_drops_or_replays_owned_rows[rows0] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-4844/test_unavailable_projection_ne0')
+rows = {'malformed': ['not text']}
+
+    @pytest.mark.parametrize(
+        "rows",
+        [
+            {"malformed": ["not text"]},
+            {str(i): "message" for i in range(33)},
+            {"long": "x" * 4097},
+        ],
+    )
+    async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
+        _, agent, created, generation = _owner(tmp_path)
+        agent.inputs.queued_inputs["beta"] = {
+            key: QueuedInput(
+                text,
+                True,
+                QueuedInputContext(AdmissionIdentity(RecordedThreadIncarnation("beta", created), generation)),
+                key,
+                text,
+            )
+            for key, text in rows.items()
+        }
+>       state = await agent.inputs.queue_state("beta")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_queue_contract.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/input_drain.py:623: in queue_state
+    return QueueChangedUpdate(scope, revision, QueueProjection.capture(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.acp_extension.QueueProjection'>
+scope = QueueScope(session_id='beta', admission=AdmissionIdentity(incarnation=RecordedThreadIncarnation(name='beta', created_at=1792200701.6035686), admission_generation=1), owner_pid=1941730)
+queued = (QueuedInput(text=['not text'], echo=True, context=QueuedInputContext(admission=AdmissionIdentity(incarnation=Recorded...6035686), admission_generation=1), goal=None), input_id='malformed', prompt=['not text'], images=(), controller=None),)
+restored = ()
+
+    @classmethod
+    def capture(
+        cls, scope: QueueScope | None, queued: tuple[QueuedInput, ...],
+        restored: tuple[QueuedInput, ...],
+    ) -> QueueProjection:
+        """Project live inputs without repairing or withdrawing their authority."""
+        if scope is None:
+            return UnavailableQueueProjection()
+        items = tuple(row for item in queued for row in item.queue_items(scope))
+        previous = tuple(row for item in restored for row in item.queue_items(scope))
+        rows = items + previous
+        try:
+>           sizes = [len(row.text.encode("utf-8")) for row in rows]
+                         ^^^^^^^^^^^^^^^
+E           AttributeError: 'list' object has no attribute 'encode'
+
+src/agent_comms/acp_extension.py:349: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_acp_queue_contract.py::test_unavailable_projection_never_drops_or_replays_owned_rows[rows0]
+1 failed, 127 passed, 2 skipped, 1 deselected in 157.75s (0:02:37)

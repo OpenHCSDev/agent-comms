@@ -1,0 +1,80 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/sqlite-tool-error/source-family/saved-native-owner0/project",
+      "created_at": 1792116221.5491858,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/sqlite-tool-error/source-family/saved-native-owner0/sessions/enrolled-e073e37df854499e8aca1d7cb253aed3.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 742143,
+        "start_time": 159185588
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": true,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "758f3cbd61614cbb9f9f1097ffbd0c9b"
+    },
+    "sender": {
+      "name": "sender",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/sqlite-tool-error/source-family/saved-native-owner0/project",
+      "created_at": 61001.0,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "stopped"
+    },
+    "sender": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "project": 1792116225.7710824,
+    "sender": 1792116225.22036
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "sender": 3
+    }
+  },
+  "admissions": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "sender": 3
+    }
+  }
+}

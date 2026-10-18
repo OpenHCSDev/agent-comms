@@ -1,0 +1,76 @@
+diff --git a/tests/test_input_disposition.py b/tests/test_input_disposition.py
+index 201f505d8..ec9d5d3e0 100644
+--- a/tests/test_input_disposition.py
++++ b/tests/test_input_disposition.py
+@@ -7,7 +7,11 @@ from pathlib import Path
+ 
+ import pytest
+ 
+-from agent_comms.input_disposition import InputDispositions
++from agent_comms.input_disposition import InputDispositions, InputDocument
++from agent_comms.input_attempt import ClearedNativeInput, ClearedUnsentInput, InputAlreadyCleared, ReservedInput
++from agent_comms.input_origin import WireInputOrigin
++from agent_comms.messages import MessageReference
++from agent_comms.pi_payloads import QueueClearedData
+ from stored_inputs import stored_inputs
+ 
+ 
+@@ -86,6 +90,58 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
+     assert comms.goals.unresolved_inputs("new-kid") == []
+ 
+ 
++def test_clear_requires_positive_native_identity_and_preserves_bound_unknown(tmp_path):
++    store = InputDispositions(tmp_path)
++    for key in ("user", "bound", "started"):
++        assert store.record(key, seq=None, owner="kid", admission=1, target="kid", text="same text")
++    assert store.bind("bound", admission=1, turn_id="turn", native_id="a" * 32, text="native text")
++    assert store.bind("started", admission=1, turn_id="turn", native_id="b" * 32, text="native text")
++    assert store.started("started", turn_id="turn", native_id="b" * 32, text="native text")
++    before = stored_inputs(tmp_path)
++    store.clear_unbound(("user", "bound", "started"))
++    after = stored_inputs(tmp_path)
++    assert isinstance(after.lookup("user"), ClearedUnsentInput)
++    assert after.lookup("bound") == before.lookup("bound")
++    assert after.lookup("started") == before.lookup("started")
++    assert after.lookup("bound").unresolved
++    assert not store.clear_native("bound", "b" * 32, "native text")
++    assert not store.clear_native("bound", "a" * 32, "wrong text")
++    assert stored_inputs(tmp_path).lookup("bound") == before.lookup("bound")
++    assert store.clear_native("bound", "a" * 32, "native text")
++    cleared = stored_inputs(tmp_path).lookup("bound")
++    assert isinstance(cleared, ClearedNativeInput)
++    assert cleared.native_id == before.lookup("bound").native_id
++    assert cleared.turn_id == "turn" and cleared.has_native_binding
++    assert cleared.public_status == "cleared" and not cleared.unresolved
++    assert not store.clear_native("started", "b" * 32, "native text")
++    for key in ("user", "bound"):
++        with pytest.raises(InputAlreadyCleared):
++            store.bind(key, admission=1, turn_id="again", native_id="c" * 32, text="same text")
++
++
++def test_withdrawn_unbound_wire_source_is_not_a_recovery_grant():
++    root = "a" * 32
++    reference = MessageReference(7, "b" * 32)
++    original = ReservedInput("bus:7", 7, "kid", 1, "kid", "original",
++                             origin=WireInputOrigin(root, reference))
++    document = InputDocument({original.key: original})
++    assert document.unbound_wire_inputs(root) == {reference: original}
++    cleared = document.transition((original.key,), lambda row: row.clear_unbound())
++    assert cleared.lookup(original.key).public_status == "cleared"
++    assert cleared.unbound_wire_inputs(root) == {}
++
++
++@pytest.mark.parametrize("returned", [(), ("a" * 32,)])
++def test_native_clear_accepts_only_the_confirmed_subset(returned):
++    assert QueueClearedData(input_ids=returned).require_requested(("a" * 32,)) == returned
++
++
++@pytest.mark.parametrize("returned", [("a" * 32, "a" * 32), ("b" * 32,)])
++def test_native_clear_rejects_duplicate_or_unrequested_ids(returned):
++    with pytest.raises(ValueError, match="duplicate or unrequested"):
++        QueueClearedData(input_ids=returned).require_requested(("a" * 32,))
++
++
+ def _cold_snapshots(root, gate, results):
+     store = InputDispositions(Path(root))
+     errors = []

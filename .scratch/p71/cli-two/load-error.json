@@ -1,0 +1,24 @@
+{
+  "code": -32602,
+  "message": "Invalid params",
+  "data": {
+    "reason": "Unable to attach to 'recipient' owner 1228919: Owner 1228919 for 'recipient' exited before attachment; request not sent. Startup output: /home/ts/wt/core-doctrine-segment/.scratch/p71/cli-two/w/diagnostics",
+    "agentCommsLoadFailure": {
+      "kind": "failed",
+      "binding": {
+        "kind": "live",
+        "owner": {
+          "incarnation": {
+            "name": "recipient",
+            "created_at": 1792191903.6164334
+          },
+          "generation": 4
+        },
+        "process": {
+          "pid": 1228919,
+          "start_time": 166754864
+        }
+      }
+    }
+  }
+}

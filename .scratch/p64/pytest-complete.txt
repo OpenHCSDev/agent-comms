@@ -1,0 +1,153 @@
+............................................FF............FFFF.......... [ 79%]
+...................                                                      [100%]
+=================================== FAILURES ===================================
+_ test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine[src/agent_comms] _
+
+repo = <test_debt_ratchet.Repository object at 0x7fb90c163890>
+
+    def test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine(repo: Repository) -> None:
+        before = repo.commit({})
+        head = repo.commit({"scope.py": '''
+    def first(value):
+        if value == "one": return 1
+        if value == "two": return 2
+        if other == "three": return 3
+        if value == "two": return 2
+        def inner(value):
+            if value == "three": return 3
+        return inner
+    async def second(value):
+        if value == "three": return 3
+    '''} )
+        status, report = repo.compare(before, head)
+        # This checks the three-arm dispatch measure's scope. The separate
+        # family measure also reports these literal comparisons.
+>       assert status == 1
+E       assert 0 == 1
+
+tests/guards/test_debt_ratchet.py:322: AssertionError
+__ test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine[src/toad] ___
+
+repo = <test_debt_ratchet.Repository object at 0x7fb90c1f1cd0>
+
+    def test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine(repo: Repository) -> None:
+        before = repo.commit({})
+        head = repo.commit({"scope.py": '''
+    def first(value):
+        if value == "one": return 1
+        if value == "two": return 2
+        if other == "three": return 3
+        if value == "two": return 2
+        def inner(value):
+            if value == "three": return 3
+        return inner
+    async def second(value):
+        if value == "three": return 3
+    '''} )
+        status, report = repo.compare(before, head)
+        # This checks the three-arm dispatch measure's scope. The separate
+        # family measure also reports these literal comparisons.
+>       assert status == 1
+E       assert 0 == 1
+
+tests/guards/test_debt_ratchet.py:322: AssertionError
+____ test_foreign_probes_and_codec_bases_use_ast_not_text[src/agent_comms] _____
+
+repo = <test_debt_ratchet.Repository object at 0x7fb90c1f2630>
+
+    def test_foreign_probes_and_codec_bases_use_ast_not_text(repo: Repository) -> None:
+        base = repo.commit({})
+        head = repo.commit({"boundary.py": """
+    class Owned:
+        def inspect(self, other):
+            local = self.value is None
+            local_truth = not self.value
+            foreign = other.value is not None
+            foreign_truth = not other.value
+            nested = self.other.value is None
+            text = 'not other.value'
+    class LocalCodec(package.FieldCodec):
+        pass
+    class OwnedCodec:
+        pass
+    """})
+        status, report = repo.compare(base, head)
+        assert status == 1
+>       assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 2
+E       assert 3 == 2
+
+tests/guards/test_debt_ratchet.py:363: AssertionError
+________ test_foreign_probes_and_codec_bases_use_ast_not_text[src/toad] ________
+
+repo = <test_debt_ratchet.Repository object at 0x7fb90c1f3050>
+
+    def test_foreign_probes_and_codec_bases_use_ast_not_text(repo: Repository) -> None:
+        base = repo.commit({})
+        head = repo.commit({"boundary.py": """
+    class Owned:
+        def inspect(self, other):
+            local = self.value is None
+            local_truth = not self.value
+            foreign = other.value is not None
+            foreign_truth = not other.value
+            nested = self.other.value is None
+            text = 'not other.value'
+    class LocalCodec(package.FieldCodec):
+        pass
+    class OwnedCodec:
+        pass
+    """})
+        status, report = repo.compare(base, head)
+        assert status == 1
+>       assert report["head"][f"ForeignAbsenceProbe:{repo.root}/boundary.py"] == 2
+E       assert 3 == 2
+
+tests/guards/test_debt_ratchet.py:363: AssertionError
+_______ test_connection_boolean_is_not_an_absence_probe[src/agent_comms] _______
+
+repo = <test_debt_ratchet.Repository object at 0x7fb90c1f3ef0>
+
+    def test_connection_boolean_is_not_an_absence_probe(repo: Repository) -> None:
+        base = repo.commit({})
+        boolean = repo.commit({"connection.py": """
+    from multiprocessing.connection import Connection
+    
+    class Reader:
+        connection: Connection
+    
+        def readable(self):
+            return not self.connection.closed
+    """})
+        status, report = repo.compare(base, boolean)
+>       assert status == 0
+E       assert 1 == 0
+
+tests/guards/test_debt_ratchet.py:379: AssertionError
+__________ test_connection_boolean_is_not_an_absence_probe[src/toad] ___________
+
+repo = <test_debt_ratchet.Repository object at 0x7fb90c1f2930>
+
+    def test_connection_boolean_is_not_an_absence_probe(repo: Repository) -> None:
+        base = repo.commit({})
+        boolean = repo.commit({"connection.py": """
+    from multiprocessing.connection import Connection
+    
+    class Reader:
+        connection: Connection
+    
+        def readable(self):
+            return not self.connection.closed
+    """})
+        status, report = repo.compare(base, boolean)
+>       assert status == 0
+E       assert 1 == 0
+
+tests/guards/test_debt_ratchet.py:379: AssertionError
+=========================== short test summary info ============================
+FAILED tests/guards/test_debt_ratchet.py::test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine[src/agent_comms]
+FAILED tests/guards/test_debt_ratchet.py::test_dispatch_scopes_subjects_and_repeated_cases_do_not_combine[src/toad]
+FAILED tests/guards/test_debt_ratchet.py::test_foreign_probes_and_codec_bases_use_ast_not_text[src/agent_comms]
+FAILED tests/guards/test_debt_ratchet.py::test_foreign_probes_and_codec_bases_use_ast_not_text[src/toad]
+FAILED tests/guards/test_debt_ratchet.py::test_connection_boolean_is_not_an_absence_probe[src/agent_comms]
+FAILED tests/guards/test_debt_ratchet.py::test_connection_boolean_is_not_an_absence_probe[src/toad]
+6 failed, 85 passed in 199.68s (0:03:19)

@@ -1,0 +1,36 @@
+{
+  "modules": 309,
+  "omissions": [],
+  "sites": [
+    [
+      "src/agent_comms/native_pi.py",
+      649,
+      "ClassDef",
+      "PrivateEvidenceRead"
+    ],
+    [
+      "src/agent_comms/native_pi.py",
+      679,
+      "FunctionDef",
+      "_capture_append"
+    ],
+    [
+      "src/agent_comms/native_pi.py",
+      713,
+      "FunctionDef",
+      "rows"
+    ],
+    [
+      "src/agent_comms/native_pi.py",
+      729,
+      "FunctionDef",
+      "verify_snapshot"
+    ],
+    [
+      "src/agent_comms/transcript_receipts.py",
+      219,
+      "FunctionDef",
+      "rows"
+    ]
+  ]
+}

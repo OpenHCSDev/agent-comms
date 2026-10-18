@@ -1,0 +1,52 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/sqlite-tool-error/installed-final/saved-native-owner1/project",
+      "created_at": 1792119452.283274,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/sqlite-tool-error/installed-final/saved-native-owner1/sessions/enrolled-5fb76b72f28748758628871727f2e21a.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 913548,
+        "start_time": 159508041
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": true,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "0f7d454d68374a3a857e0bc0c9efcec8"
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "stopped"
+    }
+  },
+  "last_seen": {
+    "project": 1792119455.3607707
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 3,
+    "generations": {
+      "project": 3
+    }
+  },
+  "admissions": {
+    "counter": 3,
+    "generations": {
+      "project": 3
+    }
+  }
+}

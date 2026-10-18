@@ -1,0 +1,138 @@
+{
+  "core_sha": "82c2d6ce8e6aa98babecd902ed86e97363cdd5d1",
+  "gates_failing_on_rejected_heads": 5,
+  "proofs": [
+    {
+      "measure": "FunctionLocalImport",
+      "repo": "/home/ts/wt/core-doctrine-segment",
+      "base": "979bb0f04aac02c1fb6fd97a0d5b9baffcbebd03",
+      "head": "7d0f27397a4d0ab2e0b6b3ddc3afefc7f3102433",
+      "exit_code": 1,
+      "own_gate_failed": true,
+      "evidence": [
+        {
+          "path": "src/agent_comms/agent_activity.py",
+          "before": 1,
+          "after": 3,
+          "new_line_matches": 0
+        },
+        {
+          "path": "src/agent_comms/external_transcript.py",
+          "before": 0,
+          "after": 1,
+          "new_line_matches": 0
+        },
+        {
+          "path": "src/agent_comms/goals.py",
+          "before": 5,
+          "after": 6,
+          "new_line_matches": 0
+        },
+        {
+          "path": "src/agent_comms/native_transcript.py",
+          "before": 4,
+          "after": 5,
+          "new_line_matches": 0
+        },
+        {
+          "path": "src/agent_comms/thread_execution.py",
+          "before": 4,
+          "after": 8,
+          "new_line_matches": 0
+        },
+        {
+          "path": "src/agent_comms/turn_lease.py",
+          "before": 0,
+          "after": 1,
+          "new_line_matches": 0
+        }
+      ],
+      "output": "/home/ts/wt/core-doctrine-segment/.scratch/p64/proof-FunctionLocalImport.json"
+    },
+    {
+      "measure": "ForeignFieldSpellings",
+      "repo": "/home/ts/wt/core-doctrine-segment",
+      "base": "8728ed6dc7e533d28f0bab28b77e9ebfb2719414",
+      "head": "9a6f3544a7a0095304fb8cf69e902b28264326dd",
+      "exit_code": 1,
+      "own_gate_failed": true,
+      "evidence": [
+        {
+          "path": "src/agent_comms/tool_declaration.py",
+          "before": 0,
+          "after": 1,
+          "new_line_matches": 0
+        }
+      ],
+      "output": "/home/ts/wt/core-doctrine-segment/.scratch/p64/proof-ForeignFieldSpellings.json"
+    },
+    {
+      "measure": "BannedVocabulary",
+      "repo": "/home/ts/wt/core-doctrine-segment",
+      "base": "dc06d874b396fd3089304ed8efa31c1a0405a33f",
+      "head": "3adfdaa6d120aba360dcac00714e801263eaf5c1",
+      "exit_code": 1,
+      "own_gate_failed": false,
+      "evidence": [],
+      "output": "/home/ts/wt/core-doctrine-segment/.scratch/p64/proof-BannedVocabulary.json"
+    },
+    {
+      "measure": "FrozenFieldWrite",
+      "repo": "/home/ts/wt/core-doctrine-segment",
+      "base": "cdbe8e9033b9fa2abfc68bc01238913b33822ce5",
+      "head": "f83053f6a5e36ee7b0e6dfb51f99728788962b4b",
+      "exit_code": 1,
+      "own_gate_failed": true,
+      "evidence": [
+        {
+          "path": "src/agent_comms/native_settings.py",
+          "before": 0,
+          "after": 2,
+          "new_line_matches": 2
+        }
+      ],
+      "output": "/home/ts/wt/core-doctrine-segment/.scratch/p64/proof-FrozenFieldWrite.json"
+    },
+    {
+      "measure": "LiteralGetattr",
+      "repo": "/home/ts/wt/core-doctrine-segment",
+      "base": "6090de486dd30dac870848e75c77ee70d42d24a8",
+      "head": "1a62c4e1640be0cd2b8c7914eb88ae1cd9a555dc",
+      "exit_code": 1,
+      "own_gate_failed": true,
+      "evidence": [
+        {
+          "path": "src/agent_comms/locked_store.py",
+          "before": 0,
+          "after": 1,
+          "new_line_matches": 0
+        },
+        {
+          "path": "src/agent_comms/mro_dispatch.py",
+          "before": 0,
+          "after": 1,
+          "new_line_matches": 0
+        }
+      ],
+      "output": "/home/ts/wt/core-doctrine-segment/.scratch/p64/proof-LiteralGetattr.json"
+    },
+    {
+      "measure": "BroadExceptDefault",
+      "repo": "/home/ts/wt/toad-live",
+      "base": "d84c4df109d5795519d35daf97c887c0b52baf16",
+      "head": "652cd9924d99b75c6ea74f2799d595100a95879b",
+      "exit_code": 1,
+      "own_gate_failed": true,
+      "evidence": [
+        {
+          "path": "src/toad/history.py",
+          "before": 0,
+          "after": 2,
+          "new_line_matches": 0
+        }
+      ],
+      "output": "/home/ts/wt/core-doctrine-segment/.scratch/p64/proof-BroadExceptDefault.json"
+    }
+  ],
+  "scope": "AST shape checks; historical witness does not by itself prove a behavioral defect."
+}

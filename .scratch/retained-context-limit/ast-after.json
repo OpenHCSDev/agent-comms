@@ -1,0 +1,7206 @@
+{
+  "root": "/home/ts/wt/core-doctrine-segment/stack/.pi-native-9c0c2e944684da56/node_modules/@earendil-works/pi-coding-agent",
+  "parsed_candidate_modules": 40,
+  "relevant_modules": 9,
+  "parse_omissions": [],
+  "modules": [
+    {
+      "path": "dist/core/agent-session.js",
+      "declarations": [
+        {
+          "kind": "FunctionDeclaration",
+          "name": "parseSkillBlock",
+          "line": 49
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "match",
+          "line": 50
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "withoutDeletedHeaders",
+          "line": 63
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "estimateMessagesTokens",
+          "line": 68
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tokens",
+          "line": 69
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 70
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "workInProgressLines",
+          "line": 81
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 85
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "stated",
+          "line": 89
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "index",
+          "line": 90
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 91
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "blocks",
+          "line": 93
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "text",
+          "line": 98
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "matches",
+          "line": 102
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "dirty",
+          "line": 105
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "childProcess",
+          "line": 107
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "lines",
+          "line": 116
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "line",
+          "line": 118
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "AgentSession",
+          "line": 132
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "agent",
+          "line": 133
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "sessionManager",
+          "line": 134
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "settingsManager",
+          "line": 135
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_scopedModels",
+          "line": 136
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_unsubscribeAgent",
+          "line": 138
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_eventListeners",
+          "line": 139
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_isAgentRunActive",
+          "line": 140
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_idleWaitPromise",
+          "line": 141
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_resolveIdleWait",
+          "line": 142
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_steeringMessages",
+          "line": 144
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_followUpMessages",
+          "line": 146
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_nativeInputClaims",
+          "line": 148
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_awaitingNativeInputIds",
+          "line": 149
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_nativeRun",
+          "line": 150
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_pendingNextTurnMessages",
+          "line": 152
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_pendingCustomMessages",
+          "line": 154
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_compactionAbortController",
+          "line": 156
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_autoCompactionAbortController",
+          "line": 157
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_overflowRecoveryAttempted",
+          "line": 158
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_branchSummaryAbortController",
+          "line": 160
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_retryAbortController",
+          "line": 162
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_retryAttempt",
+          "line": 163
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_bashAbortControllers",
+          "line": 165
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_pendingBashMessages",
+          "line": 166
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionRunner",
+          "line": 168
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_turnIndex",
+          "line": 169
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_resourceLoader",
+          "line": 170
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_customTools",
+          "line": 171
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_baseToolDefinitions",
+          "line": 172
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_cwd",
+          "line": 173
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionRunnerRef",
+          "line": 174
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_initialActiveToolNames",
+          "line": 175
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_allowedToolNames",
+          "line": 176
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_excludedToolNames",
+          "line": 177
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_baseToolsOverride",
+          "line": 178
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_sessionStartEvent",
+          "line": 179
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionUIContext",
+          "line": 180
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionMode",
+          "line": 181
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionCommandContextActions",
+          "line": 182
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionAbortHandler",
+          "line": 183
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionShutdownHandler",
+          "line": 184
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionErrorListener",
+          "line": 185
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_extensionErrorUnsubscriber",
+          "line": 186
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_modelRuntime",
+          "line": 187
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_toolRegistry",
+          "line": 189
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_toolDefinitions",
+          "line": 190
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_toolPromptSnippets",
+          "line": 191
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_toolPromptGuidelines",
+          "line": 192
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_baseSystemPrompt",
+          "line": 194
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_baseSystemPromptOptions",
+          "line": 195
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_systemPromptOverride",
+          "line": 196
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "source",
+          "line": 220
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_nativeProofPath",
+          "line": 230
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "file",
+          "line": 231
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_loadNativeInputState",
+          "line": 238
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 241
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ inputId, inputDigest }",
+          "line": 242
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_claimNativeInput",
+          "line": 255
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "digest",
+          "line": 261
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previous",
+          "line": 262
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_releaseUnqueuedNativeInput",
+          "line": 271
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "steering",
+          "line": 278
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "followUp",
+          "line": 279
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_commitNativeContext",
+          "line": 285
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tracked",
+          "line": 286
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "seen",
+          "line": 287
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 288
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "inputId",
+          "line": 290
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 295
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "claimedDigest",
+          "line": 296
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "inputId",
+          "line": 307
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "digest",
+          "line": 311
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "generation",
+          "line": 313
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "contributors",
+          "line": 315
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ inputId, sessionEntryId }",
+          "line": 316
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "claim",
+          "line": 317
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_getRequiredRequestAuth",
+          "line": 334
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 335
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 339
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "cause",
+          "line": 340
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "requestModel",
+          "line": 347
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "isOAuth",
+          "line": 355
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_getSummarizationRequestAuth",
+          "line": 363
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 368
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "requestModel",
+          "line": 371
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_installAgentToolHooks",
+          "line": 391
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "runner",
+          "line": 393
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "err",
+          "line": 405
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "runner",
+          "line": 413
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "hookResult",
+          "line": 414
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "content",
+          "line": 426
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "normalizedContent",
+          "line": 428
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_compactBeforeNextAssistantResponse",
+          "line": 442
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "model",
+          "line": 443
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "settings",
+          "line": 444
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_installAgentNextTurnRefresh",
+          "line": 456
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousPrepareNextTurnWithContext",
+          "line": 457
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "context",
+          "line": 462
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousSnapshot",
+          "line": 463
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nextContext",
+          "line": 464
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_emit",
+          "line": 481
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "l",
+          "line": 482
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_emitQueueUpdate",
+          "line": 486
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "update",
+          "line": 487
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_emitNativePresentation",
+          "line": 495
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "listener",
+          "line": 499
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_emitSessionCompactFailed",
+          "line": 503
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_getIdleWaitPromise",
+          "line": 508
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_resolveIdleWaitIfIdle",
+          "line": 516
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "resolve",
+          "line": 520
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_emitAgentSettled",
+          "line": 525
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_lastAssistantMessage",
+          "line": 536
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "_handleAgentEvent",
+          "line": 538
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messageText",
+          "line": 545
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "steeringIndex",
+          "line": 548
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "followUpIndex",
+          "line": 557
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "claimedDigest",
+          "line": 589
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entryId",
+          "line": 595
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "durableId",
+          "line": 597
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "assistantMsg",
+          "line": 610
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_willRetryAfterAgentEnd",
+          "line": 635
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "settings",
+          "line": 637
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 641
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 642
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_findLastAssistantMessage",
+          "line": 650
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 651
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 652
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 653
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_replaceMessageInPlace",
+          "line": 660
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "targetRecord",
+          "line": 668
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "key",
+          "line": 669
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_emitExtensionEvent",
+          "line": 675
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 684
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 692
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 702
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 709
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 717
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "replacement",
+          "line": 721
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "normalized",
+          "line": 725
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 740
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 749
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionEvent",
+          "line": 759
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "subscribe",
+          "line": 774
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "index",
+          "line": 778
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_disconnectFromAgent",
+          "line": 785
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "dispose",
+          "line": 795
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getActiveToolNames",
+          "line": 847
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getAllTools",
+          "line": 853
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getToolDefinition",
+          "line": 862
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setActiveToolsByName",
+          "line": 871
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tools",
+          "line": 872
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "validToolNames",
+          "line": 873
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "name",
+          "line": 874
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tool",
+          "line": 875
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setScopedModels",
+          "line": 921
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_normalizePromptSnippet",
+          "line": 928
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "oneLine",
+          "line": 931
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_normalizePromptGuidelines",
+          "line": 937
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "unique",
+          "line": 941
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "guideline",
+          "line": 942
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "normalized",
+          "line": 943
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_rebuildSystemPrompt",
+          "line": 950
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "validToolNames",
+          "line": 951
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolSnippets",
+          "line": 952
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "promptGuidelines",
+          "line": 953
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "name",
+          "line": 954
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "snippet",
+          "line": 955
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolGuidelines",
+          "line": 959
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "loaderSystemPrompt",
+          "line": 964
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "loaderAppendSystemPrompt",
+          "line": 965
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "appendSystemPrompt",
+          "line": 966
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "loadedSkills",
+          "line": 967
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "loadedContextFiles",
+          "line": 968
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "layer",
+          "line": 980
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_startNativeRun",
+          "line": 989
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_runAgentPrompt",
+          "line": 994
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "originalStream",
+          "line": 999
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "originalStopAfterTurn",
+          "line": 1000
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "boundedStream",
+          "line": 1001
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "stopAfterTurn",
+          "line": 1003
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "continuation",
+          "line": 1012
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "interruptSteering",
+          "line": 1032
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "pending",
+          "line": 1037
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_handlePostAgentRun",
+          "line": 1045
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "interruptedIds",
+          "line": 1048
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "selected",
+          "line": 1050
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 1062
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "overflow",
+          "line": 1074
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "prompt",
+          "line": 1110
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "expandPromptTemplates",
+          "line": 1111
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "preflightResult",
+          "line": 1112
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 1113
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "freshNativeClaim",
+          "line": 1116
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "preflightAccepted",
+          "line": 1117
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "releaseUncommittedClaim",
+          "line": 1118
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "replay",
+          "line": 1127
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "handled",
+          "line": 1141
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentText",
+          "line": 1153
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentImages",
+          "line": 1154
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "inputResult",
+          "line": 1156
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "expandedText",
+          "line": 1171
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "hasConfiguredAuth",
+          "line": 1198
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "isOAuth",
+          "line": 1201
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "lastAssistant",
+          "line": 1211
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "userContent",
+          "line": 1218
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 1230
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 1235
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 1238
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 1261
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 1275
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_tryExecuteExtensionCommand",
+          "line": 1284
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "spaceIndex",
+          "line": 1286
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "commandName",
+          "line": 1287
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "args",
+          "line": 1288
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "command",
+          "line": 1289
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "ctx",
+          "line": 1293
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "err",
+          "line": 1298
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_expandSkillCommand",
+          "line": 1313
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "spaceIndex",
+          "line": 1316
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "skillName",
+          "line": 1317
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "args",
+          "line": 1318
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "skill",
+          "line": 1319
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "content",
+          "line": 1323
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "body",
+          "line": 1324
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "skillBlock",
+          "line": 1325
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "err",
+          "line": 1328
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "steer",
+          "line": 1346
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "expandedText",
+          "line": 1355
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 1359
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "followUp",
+          "line": 1373
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "expandedText",
+          "line": 1380
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 1384
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_queueSteer",
+          "line": 1392
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "content",
+          "line": 1393
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 1400
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "coreQueued",
+          "line": 1402
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_queueFollowUp",
+          "line": 1416
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "content",
+          "line": 1417
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 1421
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "coreQueued",
+          "line": 1423
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_throwIfExtensionCommand",
+          "line": 1437
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "spaceIndex",
+          "line": 1438
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "commandName",
+          "line": 1439
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "command",
+          "line": 1440
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "sendCustomMessage",
+          "line": 1458
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "appMessage",
+          "line": 1459
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_appendCustomMessage",
+          "line": 1493
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_flushPendingCustomMessages",
+          "line": 1503
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "pending",
+          "line": 1506
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "appMessage",
+          "line": 1508
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "sendUserMessage",
+          "line": 1520
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "text",
+          "line": 1522
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "images",
+          "line": 1523
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "textParts",
+          "line": 1528
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "part",
+          "line": 1530
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "clearQueue",
+          "line": 1554
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "steering",
+          "line": 1555
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "followUp",
+          "line": 1556
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "removed",
+          "line": 1557
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "removedIds",
+          "line": 1558
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "item",
+          "line": 1560
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSteeringMessages",
+          "line": 1576
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFollowUpMessages",
+          "line": 1580
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "abort",
+          "line": 1589
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "waitForIdle",
+          "line": 1597
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_emitModelSelect",
+          "line": 1606
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setModel",
+          "line": 1622
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousModel",
+          "line": 1626
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "thinkingLevel",
+          "line": 1627
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_addPersistedDefaultToNonEmptyScope",
+          "line": 1640
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "enabledModels",
+          "line": 1646
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "modelReference",
+          "line": 1649
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "cycleModel",
+          "line": 1660
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_cycleScopedModel",
+          "line": 1666
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "availableIds",
+          "line": 1667
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "scopedModels",
+          "line": 1668
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentModel",
+          "line": 1671
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentIndex",
+          "line": 1672
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "len",
+          "line": 1675
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nextIndex",
+          "line": 1676
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "next",
+          "line": 1677
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "thinkingLevel",
+          "line": 1678
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_cycleAvailableModel",
+          "line": 1695
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "availableModels",
+          "line": 1696
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentModel",
+          "line": 1699
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentIndex",
+          "line": 1700
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "len",
+          "line": 1703
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nextIndex",
+          "line": 1704
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nextModel",
+          "line": 1705
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "thinkingLevel",
+          "line": 1706
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setThinkingLevel",
+          "line": 1728
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "availableLevels",
+          "line": 1729
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "effectiveLevel",
+          "line": 1730
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousLevel",
+          "line": 1732
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "isChanging",
+          "line": 1733
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "cycleThinkingLevel",
+          "line": 1752
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "levels",
+          "line": 1755
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentIndex",
+          "line": 1756
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nextIndex",
+          "line": 1757
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nextLevel",
+          "line": 1758
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getAvailableThinkingLevels",
+          "line": 1766
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "supportsThinking",
+          "line": 1774
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_getThinkingLevelForModelSwitch",
+          "line": 1777
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "perModel",
+          "line": 1783
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_clampThinkingLevel",
+          "line": 1790
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "syncQueueModesFromSettings",
+          "line": 1796
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setSteeringMode",
+          "line": 1804
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFollowUpMode",
+          "line": 1812
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_runDefaultCompaction",
+          "line": 1820
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 1822
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_clearManualCompactionState",
+          "line": 1826
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "reloadContextMessages",
+          "line": 1831
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_reloadContextAfterCompaction",
+          "line": 1835
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "estimatedTokensAfter",
+          "line": 1837
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "saved",
+          "line": 1838
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "compact",
+          "line": 1861
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "fromExtension",
+          "line": 1865
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ model: requestModel, apiKey, headers, env }",
+          "line": 1870
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "pathEntries",
+          "line": 1871
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "settings",
+          "line": 1872
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "preparation",
+          "line": 1873
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "lastEntry",
+          "line": 1876
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionCompaction",
+          "line": 1882
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 1884
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summary",
+          "line": 1901
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "firstKeptEntryId",
+          "line": 1902
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tokensBefore",
+          "line": 1903
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usage",
+          "line": 1904
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "details",
+          "line": 1905
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 1916
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "estimatedTokensAfter",
+          "line": 1927
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "compactionResult",
+          "line": 1928
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 1947
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 1948
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "aborted",
+          "line": 1949
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "errorMessage",
+          "line": 1950
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "abortCompaction",
+          "line": 1976
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "abortBranchSummary",
+          "line": 1983
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_checkCompaction",
+          "line": 2007
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "settings",
+          "line": 2008
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "contextWindow",
+          "line": 2014
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "sameModel",
+          "line": 2019
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "compactionEntry",
+          "line": 2023
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "assistantIsFromBeforeCompaction",
+          "line": 2024
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "contextOverflow",
+          "line": 2031
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "recoverableLength",
+          "line": 2032
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "willRetry",
+          "line": 2034
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "errorMessage",
+          "line": 2041
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 2064
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "contextTokens",
+          "line": 2074
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "directContextTokens",
+          "line": 2075
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 2077
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "estimate",
+          "line": 2078
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usageMsg",
+          "line": 2085
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_runAutoCompaction",
+          "line": 2112
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "settings",
+          "line": 2113
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "started",
+          "line": 2114
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "fromExtension",
+          "line": 2115
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ model: requestModel, apiKey, headers, env }",
+          "line": 2120
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "pathEntries",
+          "line": 2121
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "preparation",
+          "line": 2122
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionCompaction",
+          "line": 2129
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionResult",
+          "line": 2131
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summary",
+          "line": 2161
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "firstKeptEntryId",
+          "line": 2162
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tokensBefore",
+          "line": 2163
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usage",
+          "line": 2164
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "details",
+          "line": 2165
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "compactResult",
+          "line": 2176
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "estimatedTokensAfter",
+          "line": 2200
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 2201
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 2211
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "lastMsg",
+          "line": 2212
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 2226
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "errorMessage",
+          "line": 2227
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "formattedErrorMessage",
+          "line": 2229
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setAutoCompactionEnabled",
+          "line": 2258
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "bindExtensions",
+          "line": 2265
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "extendResourcesFromExtensions",
+          "line": 2288
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ skillPaths, promptPaths, themePaths }",
+          "line": 2292
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionPaths",
+          "line": 2296
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "buildExtensionResourcePaths",
+          "line": 2305
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "source",
+          "line": 2307
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "baseDir",
+          "line": 2308
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getExtensionSourceLabel",
+          "line": 2320
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "base",
+          "line": 2324
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "name",
+          "line": 2325
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_applyExtensionBindings",
+          "line": 2328
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_refreshCurrentModelFromRegistry",
+          "line": 2336
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentModel",
+          "line": 2337
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "refreshedModel",
+          "line": 2341
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_bindExtensionCore",
+          "line": 2347
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "getCommands",
+          "line": 2348
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionCommands",
+          "line": 2349
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "templates",
+          "line": 2355
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "skills",
+          "line": 2361
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entryId",
+          "line": 2389
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 2390
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 2438
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 2441
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "err",
+          "line": 2442
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_refreshToolRegistry",
+          "line": 2464
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousRegistryNames",
+          "line": 2465
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousActiveToolNames",
+          "line": 2466
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "allowedToolNames",
+          "line": 2467
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "excludedToolNames",
+          "line": 2468
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "isAllowedTool",
+          "line": 2469
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "registeredTools",
+          "line": 2470
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "allCustomTools",
+          "line": 2471
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "definitionRegistry",
+          "line": 2478
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tool",
+          "line": 2487
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "snippet",
+          "line": 2496
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "guidelines",
+          "line": 2502
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "runner",
+          "line": 2506
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "wrappedExtensionTools",
+          "line": 2507
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "wrappedBuiltInTools",
+          "line": 2508
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolRegistry",
+          "line": 2514
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tool",
+          "line": 2515
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nextActiveToolNames",
+          "line": 2519
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolName",
+          "line": 2521
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tool",
+          "line": 2528
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolName",
+          "line": 2533
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_buildRuntime",
+          "line": 2541
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "autoResizeImages",
+          "line": 2542
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "shellCommandPrefix",
+          "line": 2543
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "shellPath",
+          "line": 2544
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "baseToolDefinitions",
+          "line": 2545
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionsResult",
+          "line": 2555
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "[name, value]",
+          "line": 2557
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "defaultActiveToolNames",
+          "line": 2567
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "baseActiveToolNames",
+          "line": 2570
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "reload",
+          "line": 2576
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "oldRunner",
+          "line": 2577
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousFlagValues",
+          "line": 2578
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "hasBindings",
+          "line": 2590
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_isRetryableError",
+          "line": 2607
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_summarizationRetryCallbacks",
+          "line": 2619
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_prepareRetry",
+          "line": 2646
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "settings",
+          "line": 2647
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "delayMs",
+          "line": 2657
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 2666
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "attempt",
+          "line": 2677
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "abortRetry",
+          "line": 2695
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setAutoRetryEnabled",
+          "line": 2710
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "executeBash",
+          "line": 2725
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "abortController",
+          "line": 2726
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "prefix",
+          "line": 2729
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "shellPath",
+          "line": 2730
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "resolvedCommand",
+          "line": 2731
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 2733
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "recordBashResult",
+          "line": 2751
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "bashMessage",
+          "line": 2752
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "abortBash",
+          "line": 2778
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "abortController",
+          "line": 2779
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "_flushPendingBashMessages",
+          "line": 2795
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "bashMessage",
+          "line": 2798
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setSessionName",
+          "line": 2812
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "event",
+          "line": 2814
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "navigateTree",
+          "line": 2832
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "oldLeafId",
+          "line": 2836
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "targetEntry",
+          "line": 2845
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ entries: entriesToSummarize, commonAncestorId }",
+          "line": 2850
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "customInstructions",
+          "line": 2852
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "replaceInstructions",
+          "line": 2853
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "label",
+          "line": 2854
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "preparation",
+          "line": 2855
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "extensionSummary",
+          "line": 2868
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "fromExtension",
+          "line": 2869
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 2872
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summaryText",
+          "line": 2896
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summaryDetails",
+          "line": 2897
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summaryUsage",
+          "line": 2898
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "model",
+          "line": 2900
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ model: requestModel, apiKey, headers, env }",
+          "line": 2901
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "branchSummarySettings",
+          "line": 2902
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 2903
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "newLeafId",
+          "line": 2935
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "editorText",
+          "line": 2936
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summaryEntry",
+          "line": 2953
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summaryId",
+          "line": 2956
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "sessionContext",
+          "line": 2977
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getUserMessagesForForking",
+          "line": 2997
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entries",
+          "line": 2998
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 2999
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 3000
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "text",
+          "line": 3005
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSessionStats",
+          "line": 3017
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "userMessages",
+          "line": 3018
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "assistantMessages",
+          "line": 3019
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolResults",
+          "line": 3020
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "totalMessages",
+          "line": 3021
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolCalls",
+          "line": 3022
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usageTotals",
+          "line": 3023
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "store",
+          "line": 3024
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 3026
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getContextUsage",
+          "line": 3068
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "model",
+          "line": 3069
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "contextWindow",
+          "line": 3072
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "store",
+          "line": 3078
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "latestCompaction",
+          "line": 3079
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "hasUsage",
+          "line": 3081
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "meta",
+          "line": 3082
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "assistant",
+          "line": 3085
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "estimate",
+          "line": 3091
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "percent",
+          "line": 3092
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "exportToHtml",
+          "line": 3105
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "themeName",
+          "line": 3106
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "toolRenderer",
+          "line": 3108
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "exportToJsonl",
+          "line": 3125
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getLastAssistantText",
+          "line": 3136
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "lastAssistant",
+          "line": 3137
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 3143
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "text",
+          "line": 3151
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "content",
+          "line": 3152
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "createReplacedSessionContext",
+          "line": 3162
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "context",
+          "line": 3163
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "hasExtensionHandlers",
+          "line": 3171
+        }
+      ],
+      "imports": [
+        {
+          "line": 1,
+          "source": "import { InactiveNativeTurnRun, NativeTurnRun } from \"./turn-recovery.js\";"
+        },
+        {
+          "line": 2,
+          "source": "import { TurnContext, NativeInputClaim, SystemLayerSegment } from \"./turn-context.js\";"
+        },
+        {
+          "line": 17,
+          "source": "import { readFileSync } from \"node:fs\";"
+        },
+        {
+          "line": 18,
+          "source": "import { NativeProofJournal } from \"./native-proof-journal.js\";"
+        },
+        {
+          "line": 19,
+          "source": "import { createHash } from \"node:crypto\";"
+        },
+        {
+          "line": 20,
+          "source": "import { basename, dirname } from \"node:path\";"
+        },
+        {
+          "line": 21,
+          "source": "import { contentText } from \"@earendil-works/pi-ai\";"
+        },
+        {
+          "line": 22,
+          "source": "import { clampThinkingLevel, cleanupSessionResources, getSupportedThinkingLevels, isContextOverflow, isRecoverableLength, isRetryableAssistantError, modelsAreEqual, resetApiProviders, streamSimple, } from \"@earendil-works/pi-ai/compat\";"
+        },
+        {
+          "line": 23,
+          "source": "import { getThemeByName, theme } from \"../modes/interactive/theme/theme.js\";"
+        },
+        {
+          "line": 24,
+          "source": "import { stripFrontmatter } from \"../utils/frontmatter.js\";"
+        },
+        {
+          "line": 25,
+          "source": "import { sleep } from \"../utils/sleep.js\";"
+        },
+        {
+          "line": 26,
+          "source": "import { normalizeToolResultImages } from \"../utils/tool-result-images.js\";"
+        },
+        {
+          "line": 27,
+          "source": "import { formatNoApiKeyFoundMessage, formatNoModelSelectedMessage } from \"./auth-guidance.js\";"
+        },
+        {
+          "line": 28,
+          "source": "import { executeBashWithOperations } from \"./bash-executor.js\";"
+        },
+        {
+          "line": 29,
+          "source": "import { calculateContextTokens, collectEntriesForBranchSummary, compact, estimateContextTokens, estimateTokens, generateBranchSummary, prepareCompaction, shouldCompact, } from \"./compaction/index.js\";"
+        },
+        {
+          "line": 30,
+          "source": "import { DEFAULT_THINKING_LEVEL, THINKING_LEVEL_OPTIONS } from \"./defaults.js\";"
+        },
+        {
+          "line": 31,
+          "source": "import { exportSessionToHtml } from \"./export-html/index.js\";"
+        },
+        {
+          "line": 32,
+          "source": "import { createToolHtmlRenderer } from \"./export-html/tool-renderer.js\";"
+        },
+        {
+          "line": 33,
+          "source": "import { ExtensionRunner, wrapRegisteredTools, } from \"./extensions/index.js\";"
+        },
+        {
+          "line": 34,
+          "source": "import { emitSessionShutdownEvent } from \"./extensions/runner.js\";"
+        },
+        {
+          "line": 35,
+          "source": "import { ModelRegistry } from \"./model-registry.js\";"
+        },
+        {
+          "line": 36,
+          "source": "import { expandPromptTemplate } from \"./prompt-templates.js\";"
+        },
+        {
+          "line": 37,
+          "source": "import { exportSessionToJsonl } from \"./session-export.js\";"
+        },
+        {
+          "line": 38,
+          "source": "import { sessionEntryToContextMessages } from \"./session-manager.js\";"
+        },
+        {
+          "line": 39,
+          "source": "import { createSyntheticSourceInfo } from \"./source-info.js\";"
+        },
+        {
+          "line": 40,
+          "source": "import { buildSystemPrompt } from \"./system-prompt.js\";"
+        },
+        {
+          "line": 41,
+          "source": "import { createLocalBashOperations } from \"./tools/bash.js\";"
+        },
+        {
+          "line": 42,
+          "source": "import { createAllToolDefinitions } from \"./tools/index.js\";"
+        },
+        {
+          "line": 43,
+          "source": "import { createToolDefinitionFromAgentTool } from \"./tools/tool-definition-wrapper.js\";"
+        },
+        {
+          "line": 44,
+          "source": "import { addUsageToTotals, createUsageTotals } from \"./usage-totals.js\";"
+        }
+      ],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "shouldCompact",
+          "line": 29,
+          "category": "read",
+          "parent": "ImportSpecifier"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 444,
+          "category": "declaration",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 444,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 446,
+          "category": "read+decision",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 446,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "shouldCompact",
+          "line": 447,
+          "category": "read+decision",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 447,
+          "category": "read+decision",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 447,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 638,
+          "category": "read+decision",
+          "parent": "PrefixUnaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 638,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 1075,
+          "category": "read+decision",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 1075,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 1872,
+          "category": "declaration",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 1872,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 2008,
+          "category": "declaration",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 2008,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 2009,
+          "category": "read+decision",
+          "parent": "PrefixUnaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 2009,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 2014,
+          "category": "declaration",
+          "parent": "VariableDeclaration"
+        },
+        {
+          "name": "contextWindow",
+          "line": 2014,
+          "category": "declaration",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 2014,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 2031,
+          "category": "declaration",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "shouldCompact",
+          "line": 2097,
+          "category": "read+decision",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 2097,
+          "category": "read+decision",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 2113,
+          "category": "declaration",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 2113,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 2258,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "setCompactionEnabled",
+          "line": 2259,
+          "category": "read",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "setCompactionEnabled",
+          "line": 2259,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 2259,
+          "category": "read",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionEnabled",
+          "line": 2263,
+          "category": "read",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionEnabled",
+          "line": 2263,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 2609,
+          "category": "read+decision",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 2609,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 2648,
+          "category": "read+decision",
+          "parent": "PrefixUnaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 2648,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 2710,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 2711,
+          "category": "read",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 2911,
+          "category": "read+decision",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 2911,
+          "category": "read+decision",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 2911,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 3072,
+          "category": "declaration",
+          "parent": "VariableDeclaration"
+        },
+        {
+          "name": "contextWindow",
+          "line": 3072,
+          "category": "declaration",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 3072,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 3073,
+          "category": "read+decision",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 3089,
+          "category": "read+decision",
+          "parent": "ShorthandPropertyAssignment"
+        },
+        {
+          "name": "contextWindow",
+          "line": 3092,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 3095,
+          "category": "read",
+          "parent": "ShorthandPropertyAssignment"
+        }
+      ]
+    },
+    {
+      "path": "dist/core/compaction/branch-summarization.d.ts",
+      "declarations": [
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "BranchSummaryResult",
+          "line": 13
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "BranchSummaryDetails",
+          "line": 22
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "BranchPreparation",
+          "line": 27
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "CollectEntriesResult",
+          "line": 35
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "GenerateBranchSummaryOptions",
+          "line": 41
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "collectEntriesForBranchSummary",
+          "line": 77
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "prepareBranchEntries",
+          "line": 91
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateBranchSummary",
+          "line": 98
+        }
+      ],
+      "imports": [
+        {
+          "line": 1,
+          "source": "import type { EntryBranchRange } from \"../session-entry-store.js\";"
+        },
+        {
+          "line": 8,
+          "source": "import type { AgentMessage, StreamFn } from \"@earendil-works/pi-agent-core\";"
+        },
+        {
+          "line": 9,
+          "source": "import type { RetryCallbacks, RetryPolicy } from \"@earendil-works/pi-ai\";"
+        },
+        {
+          "line": 10,
+          "source": "import type { Model, Usage } from \"@earendil-works/pi-ai/compat\";"
+        },
+        {
+          "line": 11,
+          "source": "import type { ReadonlySessionManager, SessionEntry } from \"../session-manager.ts\";"
+        },
+        {
+          "line": 12,
+          "source": "import { type FileOperations } from \"./utils.ts\";"
+        }
+      ],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "reserveTokens",
+          "line": 57,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        }
+      ]
+    },
+    {
+      "path": "dist/core/compaction/branch-summarization.js",
+      "declarations": [
+        {
+          "kind": "FunctionDeclaration",
+          "name": "collectEntriesForBranchSummary",
+          "line": 27
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "store",
+          "line": 28
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "commonAncestorId",
+          "line": 29
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getMessageFromEntry",
+          "line": 39
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "prepareBranchEntries",
+          "line": 74
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messages",
+          "line": 75
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "fileOps",
+          "line": 76
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "totalTokens",
+          "line": 77
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 81
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "details",
+          "line": 83
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "f",
+          "line": 85
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "f",
+          "line": 90
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 97
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 98
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tokens",
+          "line": 103
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "BRANCH_SUMMARY_PREAMBLE",
+          "line": 124
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "BRANCH_SUMMARY_PROMPT",
+          "line": 128
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateBranchSummary",
+          "line": 162
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ model, apiKey, headers, env, signal, customInstructions, replaceInstructions, reserveTokens = 16384, streamFn, retry, callbacks, }",
+          "line": 163
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "contextWindow",
+          "line": 165
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tokenBudget",
+          "line": 166
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ messages, fileOps }",
+          "line": 167
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "llmMessages",
+          "line": 173
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "conversationText",
+          "line": 174
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "instructions",
+          "line": 176
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "promptText",
+          "line": 186
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summarizationMessages",
+          "line": 187
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "maxTokens",
+          "line": 194
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "context",
+          "line": 199
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "requestOptions",
+          "line": 200
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "response",
+          "line": 201
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "failure",
+          "line": 206
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summary",
+          "line": 213
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ readFiles, modifiedFiles }",
+          "line": 217
+        }
+      ],
+      "imports": [
+        {
+          "line": 1,
+          "source": "import { EntryBranchRange } from '../session-entry-store.js';"
+        },
+        {
+          "line": 8,
+          "source": "import { contentText } from \"@earendil-works/pi-ai\";"
+        },
+        {
+          "line": 9,
+          "source": "import { convertToLlm, createBranchSummaryMessage, createCompactionSummaryMessage, createCustomMessage, } from \"../messages.js\";"
+        },
+        {
+          "line": 10,
+          "source": "import { completeSummarization, estimateTokens, getSummarizationFailure } from \"./compaction.js\";"
+        },
+        {
+          "line": 11,
+          "source": "import { computeFileLists, createFileOps, extractFileOpsFromMessage, formatFileOperations, SUMMARIZATION_SYSTEM_PROMPT, serializeConversation, } from \"./utils.js\";"
+        }
+      ],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "reserveTokens",
+          "line": 163,
+          "category": "declaration",
+          "parent": "BindingElement"
+        },
+        {
+          "name": "contextWindow",
+          "line": 165,
+          "category": "declaration",
+          "parent": "VariableDeclaration"
+        },
+        {
+          "name": "contextWindow",
+          "line": 165,
+          "category": "declaration",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 165,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 166,
+          "category": "declaration",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 166,
+          "category": "declaration",
+          "parent": "BinaryExpression"
+        }
+      ]
+    },
+    {
+      "path": "dist/core/compaction/compaction.d.ts",
+      "declarations": [
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "CompactionDetails",
+          "line": 13
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "CompactionResult",
+          "line": 18
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "CompactionSettings",
+          "line": 28
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 35
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "calculateContextTokens",
+          "line": 40
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getLastAssistantUsage",
+          "line": 44
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "ContextUsageEstimate",
+          "line": 45
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "estimateContextTokens",
+          "line": 55
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "shouldCompact",
+          "line": 59
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "estimateTokens",
+          "line": 64
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "findTurnStartIndex",
+          "line": 69
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "CutPointResult",
+          "line": 70
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "findCutPoint",
+          "line": 94
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getSummarizationFailure",
+          "line": 99
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "completeSummarization",
+          "line": 107
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateSummary",
+          "line": 112
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateSummaryWithUsage",
+          "line": 114
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "CompactionPreparation",
+          "line": 118
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "prepareCompaction",
+          "line": 135
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "compact",
+          "line": 144
+        }
+      ],
+      "imports": [
+        {
+          "line": 7,
+          "source": "import type { AgentMessage, StreamFn, ThinkingLevel } from \"@earendil-works/pi-agent-core\";"
+        },
+        {
+          "line": 8,
+          "source": "import { type RetryCallbacks, type RetryPolicy } from \"@earendil-works/pi-ai\";"
+        },
+        {
+          "line": 9,
+          "source": "import type { AssistantMessage, Context, Model, SimpleStreamOptions, Usage } from \"@earendil-works/pi-ai/compat\";"
+        },
+        {
+          "line": 10,
+          "source": "import { type SessionEntry } from \"../session-manager.ts\";"
+        },
+        {
+          "line": 11,
+          "source": "import { type FileOperations } from \"./utils.ts\";"
+        }
+      ],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "enabled",
+          "line": 29,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 30,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 31,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 33,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 35,
+          "category": "declaration",
+          "parent": "VariableDeclaration"
+        },
+        {
+          "name": "shouldCompact",
+          "line": 59,
+          "category": "declaration",
+          "parent": "FunctionDeclaration"
+        },
+        {
+          "name": "contextWindow",
+          "line": 59,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 94,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 112,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 114,
+          "category": "declaration",
+          "parent": "Parameter"
+        }
+      ]
+    },
+    {
+      "path": "dist/core/compaction/compaction.js",
+      "declarations": [
+        {
+          "kind": "FunctionDeclaration",
+          "name": "extractFileOperations",
+          "line": 16
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "fileOps",
+          "line": 17
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "prevCompaction",
+          "line": 20
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "details",
+          "line": 23
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "f",
+          "line": 25
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "f",
+          "line": 29
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 35
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getMessageFromEntryForCompaction",
+          "line": 47
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "combineUsage",
+          "line": 53
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 77
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "calculateContextTokens",
+          "line": 90
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getAssistantUsage",
+          "line": 97
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "assistantMsg",
+          "line": 99
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getLastAssistantUsage",
+          "line": 112
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 113
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 114
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usage",
+          "line": 116
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getLastAssistantUsageInfo",
+          "line": 123
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 124
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usage",
+          "line": 125
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "estimateContextTokens",
+          "line": 135
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usageInfo",
+          "line": 138
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "estimated",
+          "line": 140
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "message",
+          "line": 141
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "usageTokens",
+          "line": 151
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "trailingTokens",
+          "line": 152
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 153
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "shouldCompact",
+          "line": 166
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "ESTIMATED_IMAGE_CHARS",
+          "line": 177
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "estimateTextAndImageContentChars",
+          "line": 178
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "chars",
+          "line": 182
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "block",
+          "line": 183
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "estimateTokens",
+          "line": 197
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "chars",
+          "line": 198
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "assistant",
+          "line": 205
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "block",
+          "line": 206
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "isCutPointMessage",
+          "line": 236
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "isTurnStartMessage",
+          "line": 250
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "isTurnStartEntry",
+          "line": 264
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "findValidCutPoints",
+          "line": 276
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "cutPoints",
+          "line": 277
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 278
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 279
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "findTurnStartIndex",
+          "line": 293
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 294
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "findCutPoint",
+          "line": 317
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "cutPoints",
+          "line": 318
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "accumulatedTokens",
+          "line": 323
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "cutIndex",
+          "line": 324
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 325
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "entry",
+          "line": 326
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messageTokens",
+          "line": 327
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "c",
+          "line": 334
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "prevEntry",
+          "line": 345
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "cutEntry",
+          "line": 353
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "startsTurn",
+          "line": 354
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "turnStartIndex",
+          "line": 355
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "SUMMARIZATION_PROMPT",
+          "line": 365
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "UPDATE_SUMMARIZATION_INSTRUCTIONS",
+          "line": 397
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "UPDATE_SUMMARIZATION_PROMPT",
+          "line": 433
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "getSummarizationFailure",
+          "line": 440
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "createSummarizationOptions",
+          "line": 449
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "options",
+          "line": 450
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "completeSummarization",
+          "line": 463
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "requestOptions",
+          "line": 466
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "request",
+          "line": 471
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "produce",
+          "line": 475
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "stream",
+          "line": 476
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "_event",
+          "line": 477
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateSummary",
+          "line": 487
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "buildSummarizationContext",
+          "line": 491
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateSummaryWithUsage",
+          "line": 504
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "maxTokens",
+          "line": 505
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "basePrompt",
+          "line": 507
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "llmMessages",
+          "line": 513
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "conversationText",
+          "line": 514
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "promptText",
+          "line": 516
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "completionOptions",
+          "line": 521
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "response",
+          "line": 522
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "failure",
+          "line": 523
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "textContent",
+          "line": 530
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "prepareCompaction",
+          "line": 533
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previous",
+          "line": 536
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "floor",
+          "line": 537
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "pathEntries",
+          "line": 540
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "meta",
+          "line": 541
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "contextMessages",
+          "line": 549
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "prevCompactionIndex",
+          "line": 553
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 554
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "previousSummary",
+          "line": 560
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "boundaryStart",
+          "line": 561
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "prevCompaction",
+          "line": 563
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "firstKeptEntryIndex",
+          "line": 565
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "boundaryEnd",
+          "line": 568
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tokensBefore",
+          "line": 569
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "cutPoint",
+          "line": 570
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "firstKeptEntry",
+          "line": 572
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "firstKeptEntryId",
+          "line": 576
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "historyEnd",
+          "line": 577
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "messagesToSummarize",
+          "line": 579
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 580
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 581
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "turnPrefixMessages",
+          "line": 586
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "i",
+          "line": 588
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 589
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "fileOps",
+          "line": 598
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "msg",
+          "line": 601
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "TURN_PREFIX_SUMMARIZATION_PROMPT",
+          "line": 619
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "compact",
+          "line": 641
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ firstKeptEntryId, messagesToSummarize, turnPrefixMessages, isSplitTurn, tokensBefore, previousSummary, fileOps, settings, }",
+          "line": 642
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summary",
+          "line": 644
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "summaryUsage",
+          "line": 645
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "historyText",
+          "line": 647
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "historyUsage",
+          "line": 648
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "historyResult",
+          "line": 650
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "turnPrefixResult",
+          "line": 654
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 661
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "{ readFiles, modifiedFiles }",
+          "line": 666
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "generateTurnPrefixSummary",
+          "line": 682
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "maxTokens",
+          "line": 683
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "llmMessages",
+          "line": 684
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "conversationText",
+          "line": 685
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "promptText",
+          "line": 686
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "response",
+          "line": 687
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "failure",
+          "line": 688
+        }
+      ],
+      "imports": [
+        {
+          "line": 1,
+          "source": "import { NativeRequestObservation } from \"../../../node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js\";"
+        },
+        {
+          "line": 8,
+          "source": "import { contentText, retryAssistantCall, uuidv7 } from \"@earendil-works/pi-ai\";"
+        },
+        {
+          "line": 9,
+          "source": "import { streamSimple } from \"@earendil-works/pi-ai/compat\";"
+        },
+        {
+          "line": 10,
+          "source": "import { convertToLlm } from \"../messages.js\";"
+        },
+        {
+          "line": 11,
+          "source": "import { sessionEntryToContextMessages, } from \"../session-manager.js\";"
+        },
+        {
+          "line": 12,
+          "source": "import { computeFileLists, createFileOps, extractFileOpsFromMessage, formatFileOperations, SUMMARIZATION_SYSTEM_PROMPT, serializeConversation, } from \"./utils.js\";"
+        }
+      ],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 77,
+          "category": "declaration",
+          "parent": "VariableDeclaration"
+        },
+        {
+          "name": "enabled",
+          "line": 78,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 79,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 80,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 81,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "shouldCompact",
+          "line": 166,
+          "category": "declaration",
+          "parent": "FunctionDeclaration"
+        },
+        {
+          "name": "contextWindow",
+          "line": 166,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 167,
+          "category": "read+decision",
+          "parent": "PrefixUnaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 167,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "contextWindow",
+          "line": 170,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 170,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 170,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 171,
+          "category": "read",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 171,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 317,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 332,
+          "category": "read+decision",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 487,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 488,
+          "category": "read",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 504,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 505,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 570,
+          "category": "declaration",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 570,
+          "category": "declaration",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 650,
+          "category": "declaration+decision",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 650,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 654,
+          "category": "declaration+decision",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 654,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 661,
+          "category": "declaration+decision",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 661,
+          "category": "read+decision",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 682,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 683,
+          "category": "read",
+          "parent": "BinaryExpression"
+        }
+      ]
+    },
+    {
+      "path": "dist/core/settings-manager.d.ts",
+      "declarations": [
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "CompactionSettings",
+          "line": 4
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "BranchSummarySettings",
+          "line": 9
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "ProviderRetrySettings",
+          "line": 13
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "RetrySettings",
+          "line": 18
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "TerminalSettings",
+          "line": 26
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "ImageSettings",
+          "line": 35
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "ThinkingBudgetsSettings",
+          "line": 39
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "MarkdownSettings",
+          "line": 46
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "WarningSettings",
+          "line": 50
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "Settings",
+          "line": 69
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "SettingsManagerCreateOptions",
+          "line": 123
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "SettingsStorage",
+          "line": 126
+        },
+        {
+          "kind": "InterfaceDeclaration",
+          "name": "SettingsError",
+          "line": 129
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "FileSettingsStorage",
+          "line": 134
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "globalSettingsPath",
+          "line": 135
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectSettingsPath",
+          "line": 136
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "acquireLockSyncWithRetry",
+          "line": 138
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "withLock",
+          "line": 139
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "InMemorySettingsStorage",
+          "line": 141
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "global",
+          "line": 142
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "project",
+          "line": 143
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "withLock",
+          "line": 144
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "SettingsManager",
+          "line": 146
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "storage",
+          "line": 147
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "globalSettings",
+          "line": 148
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectSettings",
+          "line": 149
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "settings",
+          "line": 150
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectTrusted",
+          "line": 151
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedFields",
+          "line": 152
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedNestedFields",
+          "line": 153
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedProjectFields",
+          "line": 154
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedProjectNestedFields",
+          "line": 155
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "globalSettingsLoadError",
+          "line": 156
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectSettingsLoadError",
+          "line": 157
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "writeQueue",
+          "line": 158
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "errors",
+          "line": 159
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "settingsPaths",
+          "line": 160
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "create",
+          "line": 163
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "fromStorage",
+          "line": 165
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "fromStorageWithPaths",
+          "line": 167
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "inMemory",
+          "line": 169
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "loadFromStorage",
+          "line": 170
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "tryLoadFromStorage",
+          "line": 171
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "migrateSettings",
+          "line": 173
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getGlobalSettings",
+          "line": 174
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getProjectSettings",
+          "line": 175
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "isProjectTrusted",
+          "line": 176
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectTrusted",
+          "line": 177
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "reload",
+          "line": 178
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "applyOverrides",
+          "line": 180
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "markModified",
+          "line": 182
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "markProjectModified",
+          "line": 184
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "assertProjectTrustedForWrite",
+          "line": 185
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "recordError",
+          "line": 186
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "clearModifiedScope",
+          "line": 187
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "enqueueWrite",
+          "line": 188
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "cloneModifiedNestedFields",
+          "line": 189
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "persistScopedSettings",
+          "line": 190
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "save",
+          "line": 191
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "saveProjectSettings",
+          "line": 192
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "updateProjectSettings",
+          "line": 193
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "flush",
+          "line": 194
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "drainErrors",
+          "line": 195
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getLastChangelogVersion",
+          "line": 196
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setLastChangelogVersion",
+          "line": 197
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSessionDir",
+          "line": 198
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultProvider",
+          "line": 199
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultModel",
+          "line": 200
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultProvider",
+          "line": 201
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultModel",
+          "line": 202
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultModelAndProvider",
+          "line": 203
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSteeringMode",
+          "line": 204
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setSteeringMode",
+          "line": 205
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFollowUpMode",
+          "line": 206
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFollowUpMode",
+          "line": 207
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getThemeSetting",
+          "line": 208
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTheme",
+          "line": 209
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTheme",
+          "line": 210
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultThinkingLevel",
+          "line": 211
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultThinkingLevel",
+          "line": 212
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getModelThinkingLevel",
+          "line": 213
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getAllModelThinkingLevels",
+          "line": 214
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setModelThinkingLevel",
+          "line": 215
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "removeModelThinkingLevel",
+          "line": 216
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTransport",
+          "line": 217
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTransport",
+          "line": 218
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionEnabled",
+          "line": 219
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setCompactionEnabled",
+          "line": 220
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionReserveTokens",
+          "line": 221
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionKeepRecentTokens",
+          "line": 222
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionSettings",
+          "line": 223
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getBranchSummarySettings",
+          "line": 229
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getBranchSummarySkipPrompt",
+          "line": 233
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getRetryEnabled",
+          "line": 234
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setRetryEnabled",
+          "line": 235
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getRetrySettings",
+          "line": 236
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getHttpIdleTimeoutMs",
+          "line": 241
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setHttpIdleTimeoutMs",
+          "line": 242
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getProviderRetrySettings",
+          "line": 243
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getWebSocketConnectTimeoutMs",
+          "line": 248
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getHideThinkingBlock",
+          "line": 249
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowCacheMissNotices",
+          "line": 250
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getExternalEditorCommand",
+          "line": 251
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setHideThinkingBlock",
+          "line": 252
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowCacheMissNotices",
+          "line": 253
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShellPath",
+          "line": 254
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShellPath",
+          "line": 255
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getQuietStartup",
+          "line": 256
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setQuietStartup",
+          "line": 257
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultProjectTrust",
+          "line": 258
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultProjectTrust",
+          "line": 259
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShellCommandPrefix",
+          "line": 260
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShellCommandPrefix",
+          "line": 261
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getNpmCommand",
+          "line": 262
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setNpmCommand",
+          "line": 263
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCollapseChangelog",
+          "line": 264
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setCollapseChangelog",
+          "line": 265
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnableInstallTelemetry",
+          "line": 266
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnableInstallTelemetry",
+          "line": 267
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnableAnalytics",
+          "line": 268
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTrackingId",
+          "line": 269
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnableAnalytics",
+          "line": 271
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getPackages",
+          "line": 272
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setPackages",
+          "line": 273
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectPackages",
+          "line": 274
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getExtensionPaths",
+          "line": 275
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setExtensionPaths",
+          "line": 276
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectExtensionPaths",
+          "line": 277
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSkillPaths",
+          "line": 278
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setSkillPaths",
+          "line": 279
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectSkillPaths",
+          "line": 280
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getPromptTemplatePaths",
+          "line": 281
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setPromptTemplatePaths",
+          "line": 282
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectPromptTemplatePaths",
+          "line": 283
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getThemePaths",
+          "line": 284
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setThemePaths",
+          "line": 285
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectThemePaths",
+          "line": 286
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnableSkillCommands",
+          "line": 287
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnableSkillCommands",
+          "line": 288
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getThinkingBudgets",
+          "line": 289
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTerminalCapabilityOverrides",
+          "line": 290
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowImages",
+          "line": 291
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowImages",
+          "line": 292
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getImageWidthCells",
+          "line": 293
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setImageWidthCells",
+          "line": 294
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getClearOnShrink",
+          "line": 295
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setClearOnShrink",
+          "line": 296
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowTerminalProgress",
+          "line": 297
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowTerminalProgress",
+          "line": 298
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTuiMode",
+          "line": 299
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTuiMode",
+          "line": 300
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFullscreenExitOutput",
+          "line": 301
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFullscreenExitOutput",
+          "line": 302
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFullscreenScrollbar",
+          "line": 303
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFullscreenScrollbar",
+          "line": 304
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFullscreenCopyOnSelect",
+          "line": 305
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFullscreenCopyOnSelect",
+          "line": 306
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getImageAutoResize",
+          "line": 307
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setImageAutoResize",
+          "line": 308
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getBlockImages",
+          "line": 309
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setBlockImages",
+          "line": 310
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnabledModels",
+          "line": 311
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultTools",
+          "line": 312
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnabledModels",
+          "line": 313
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDoubleEscapeAction",
+          "line": 314
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDoubleEscapeAction",
+          "line": 315
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTreeFilterMode",
+          "line": 316
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTreeFilterMode",
+          "line": 317
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowHardwareCursor",
+          "line": 318
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowHardwareCursor",
+          "line": 319
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEditorPaddingX",
+          "line": 320
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEditorPaddingX",
+          "line": 321
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getOutputPad",
+          "line": 322
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setOutputPad",
+          "line": 323
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getAutocompleteMaxVisible",
+          "line": 324
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setAutocompleteMaxVisible",
+          "line": 325
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCodeBlockIndent",
+          "line": 326
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getMermaidRenderingMode",
+          "line": 327
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setMermaidRenderingMode",
+          "line": 328
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getWarnings",
+          "line": 329
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setWarnings",
+          "line": 330
+        }
+      ],
+      "imports": [
+        {
+          "line": 1,
+          "source": "import type { ThinkingLevel } from \"@earendil-works/pi-agent-core\";"
+        },
+        {
+          "line": 2,
+          "source": "import type { Transport } from \"@earendil-works/pi-ai\";"
+        },
+        {
+          "line": 3,
+          "source": "import type { TuiMode as RendererTuiMode, ScrollViewScrollbar, TerminalCapabilities } from \"@earendil-works/pi-tui\";"
+        }
+      ],
+      "inheritance": [
+        {
+          "class": "FileSettingsStorage",
+          "heritage": [
+            "implements SettingsStorage"
+          ],
+          "line": 134
+        },
+        {
+          "class": "InMemorySettingsStorage",
+          "heritage": [
+            "implements SettingsStorage"
+          ],
+          "line": 141
+        }
+      ],
+      "references": [
+        {
+          "name": "enabled",
+          "line": 5,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 6,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 7,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 10,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "enabled",
+          "line": 19,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "getCompactionEnabled",
+          "line": 219,
+          "category": "declaration",
+          "parent": "MethodDeclaration"
+        },
+        {
+          "name": "setCompactionEnabled",
+          "line": 220,
+          "category": "declaration",
+          "parent": "MethodDeclaration"
+        },
+        {
+          "name": "enabled",
+          "line": 220,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 223,
+          "category": "declaration",
+          "parent": "MethodDeclaration"
+        },
+        {
+          "name": "enabled",
+          "line": 224,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 225,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 226,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 227,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 230,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "enabled",
+          "line": 235,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 237,
+          "category": "declaration",
+          "parent": "PropertySignature"
+        },
+        {
+          "name": "enabled",
+          "line": 267,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 271,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 288,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 296,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 298,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 306,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 308,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 319,
+          "category": "declaration",
+          "parent": "Parameter"
+        }
+      ]
+    },
+    {
+      "path": "dist/core/settings-manager.js",
+      "declarations": [
+        {
+          "kind": "FunctionDeclaration",
+          "name": "isMergeableObject",
+          "line": 10
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "deepMergeObjects",
+          "line": 13
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "result",
+          "line": 14
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "key",
+          "line": 15
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "overrideValue",
+          "line": 16
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "baseValue",
+          "line": 20
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "deepMergeSettings",
+          "line": 29
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "parseTimeoutSetting",
+          "line": 32
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "timeoutMs",
+          "line": 33
+        },
+        {
+          "kind": "FunctionDeclaration",
+          "name": "toSettingsError",
+          "line": 42
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "FileSettingsStorage",
+          "line": 49
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "globalSettingsPath",
+          "line": 50
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectSettingsPath",
+          "line": 51
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "resolvedCwd",
+          "line": 53
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "resolvedAgentDir",
+          "line": 54
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "acquireLockSyncWithRetry",
+          "line": 58
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "maxAttempts",
+          "line": 59
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "delayMs",
+          "line": 60
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "lastError",
+          "line": 61
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "attempt",
+          "line": 62
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 66
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "code",
+          "line": 67
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "start",
+          "line": 74
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "withLock",
+          "line": 82
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "path",
+          "line": 83
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "dir",
+          "line": 84
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "release",
+          "line": 85
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "fileExists",
+          "line": 88
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "current",
+          "line": 92
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "next",
+          "line": 93
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "InMemorySettingsStorage",
+          "line": 112
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "global",
+          "line": 113
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "project",
+          "line": 114
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "withLock",
+          "line": 115
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "current",
+          "line": 116
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "next",
+          "line": 117
+        },
+        {
+          "kind": "ClassDeclaration",
+          "name": "SettingsManager",
+          "line": 128
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "storage",
+          "line": 129
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "globalSettings",
+          "line": 130
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectSettings",
+          "line": 131
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "settings",
+          "line": 132
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectTrusted",
+          "line": 133
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedFields",
+          "line": 134
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedNestedFields",
+          "line": 135
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedProjectFields",
+          "line": 136
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "modifiedProjectNestedFields",
+          "line": 137
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "globalSettingsLoadError",
+          "line": 138
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "projectSettingsLoadError",
+          "line": 139
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "writeQueue",
+          "line": 140
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "errors",
+          "line": 141
+        },
+        {
+          "kind": "PropertyDeclaration",
+          "name": "settingsPaths",
+          "line": 142
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "create",
+          "line": 155
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "resolvedCwd",
+          "line": 156
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "resolvedAgentDir",
+          "line": 157
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "storage",
+          "line": 158
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "fromStorage",
+          "line": 165
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "fromStorageWithPaths",
+          "line": 169
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "projectTrusted",
+          "line": 170
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "globalLoad",
+          "line": 171
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "projectLoad",
+          "line": 172
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "initialErrors",
+          "line": 173
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "inMemory",
+          "line": 183
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "storage",
+          "line": 184
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "initialSettings",
+          "line": 185
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "loadFromStorage",
+          "line": 189
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "content",
+          "line": 193
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "settings",
+          "line": 201
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "tryLoadFromStorage",
+          "line": 204
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "error",
+          "line": 208
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "migrateSettings",
+          "line": 213
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "skillsSettings",
+          "line": 229
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "retrySettings",
+          "line": 245
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "providerSettings",
+          "line": 246
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getGlobalSettings",
+          "line": 260
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getProjectSettings",
+          "line": 263
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "isProjectTrusted",
+          "line": 266
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectTrusted",
+          "line": 269
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "projectLoad",
+          "line": 282
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "reload",
+          "line": 290
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "globalLoad",
+          "line": 292
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "projectLoad",
+          "line": 305
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "applyOverrides",
+          "line": 317
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "markModified",
+          "line": 321
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "markProjectModified",
+          "line": 331
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "assertProjectTrustedForWrite",
+          "line": 340
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "recordError",
+          "line": 345
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "clearModifiedScope",
+          "line": 348
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "enqueueWrite",
+          "line": 357
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "cloneModifiedNestedFields",
+          "line": 370
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "snapshot",
+          "line": 371
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "[key, value]",
+          "line": 372
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "persistScopedSettings",
+          "line": 377
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "currentFileSettings",
+          "line": 379
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "mergedSettings",
+          "line": 382
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "field",
+          "line": 383
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "value",
+          "line": 384
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nestedModified",
+          "line": 386
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "baseNested",
+          "line": 387
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "inMemoryNested",
+          "line": 388
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "mergedNested",
+          "line": 389
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "nestedKey",
+          "line": 390
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "save",
+          "line": 402
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "snapshotGlobalSettings",
+          "line": 407
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "modifiedFields",
+          "line": 408
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "modifiedNestedFields",
+          "line": 409
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "saveProjectSettings",
+          "line": 414
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "snapshotProjectSettings",
+          "line": 421
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "modifiedFields",
+          "line": 422
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "modifiedNestedFields",
+          "line": 423
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "updateProjectSettings",
+          "line": 428
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "projectSettings",
+          "line": 430
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "flush",
+          "line": 435
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "drainErrors",
+          "line": 438
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "drained",
+          "line": 439
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getLastChangelogVersion",
+          "line": 443
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setLastChangelogVersion",
+          "line": 446
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSessionDir",
+          "line": 451
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "sessionDir",
+          "line": 452
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultProvider",
+          "line": 455
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultModel",
+          "line": 458
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultProvider",
+          "line": 461
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultModel",
+          "line": 466
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultModelAndProvider",
+          "line": 471
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSteeringMode",
+          "line": 478
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setSteeringMode",
+          "line": 481
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFollowUpMode",
+          "line": 486
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFollowUpMode",
+          "line": 489
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getThemeSetting",
+          "line": 494
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "value",
+          "line": 495
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTheme",
+          "line": 500
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "theme",
+          "line": 501
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTheme",
+          "line": 504
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultThinkingLevel",
+          "line": 509
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultThinkingLevel",
+          "line": 512
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getModelThinkingLevel",
+          "line": 517
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getAllModelThinkingLevels",
+          "line": 520
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setModelThinkingLevel",
+          "line": 523
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "removeModelThinkingLevel",
+          "line": 531
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTransport",
+          "line": 541
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTransport",
+          "line": 544
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionEnabled",
+          "line": 549
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setCompactionEnabled",
+          "line": 552
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionReserveTokens",
+          "line": 560
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionKeepRecentTokens",
+          "line": 563
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCompactionSettings",
+          "line": 566
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getBranchSummarySettings",
+          "line": 574
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getBranchSummarySkipPrompt",
+          "line": 580
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getRetryEnabled",
+          "line": 583
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setRetryEnabled",
+          "line": 586
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getRetrySettings",
+          "line": 594
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getHttpIdleTimeoutMs",
+          "line": 601
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setHttpIdleTimeoutMs",
+          "line": 604
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getProviderRetrySettings",
+          "line": 612
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getWebSocketConnectTimeoutMs",
+          "line": 619
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getHideThinkingBlock",
+          "line": 622
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowCacheMissNotices",
+          "line": 625
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getExternalEditorCommand",
+          "line": 628
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "configuredEditor",
+          "line": 629
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "environmentEditor",
+          "line": 633
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setHideThinkingBlock",
+          "line": 639
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowCacheMissNotices",
+          "line": 644
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShellPath",
+          "line": 649
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "shellPath",
+          "line": 650
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShellPath",
+          "line": 653
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getQuietStartup",
+          "line": 658
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setQuietStartup",
+          "line": 661
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultProjectTrust",
+          "line": 666
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "value",
+          "line": 667
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDefaultProjectTrust",
+          "line": 670
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShellCommandPrefix",
+          "line": 675
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShellCommandPrefix",
+          "line": 678
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getNpmCommand",
+          "line": 683
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setNpmCommand",
+          "line": 686
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCollapseChangelog",
+          "line": 691
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setCollapseChangelog",
+          "line": 694
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnableInstallTelemetry",
+          "line": 699
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnableInstallTelemetry",
+          "line": 702
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnableAnalytics",
+          "line": 707
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTrackingId",
+          "line": 710
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnableAnalytics",
+          "line": 714
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getPackages",
+          "line": 723
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setPackages",
+          "line": 726
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectPackages",
+          "line": 731
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getExtensionPaths",
+          "line": 736
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setExtensionPaths",
+          "line": 739
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectExtensionPaths",
+          "line": 744
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getSkillPaths",
+          "line": 749
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setSkillPaths",
+          "line": 752
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectSkillPaths",
+          "line": 757
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getPromptTemplatePaths",
+          "line": 762
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setPromptTemplatePaths",
+          "line": 765
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectPromptTemplatePaths",
+          "line": 770
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getThemePaths",
+          "line": 775
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setThemePaths",
+          "line": 778
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setProjectThemePaths",
+          "line": 783
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnableSkillCommands",
+          "line": 788
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnableSkillCommands",
+          "line": 791
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getThinkingBudgets",
+          "line": 796
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTerminalCapabilityOverrides",
+          "line": 799
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "terminal",
+          "line": 800
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "images",
+          "line": 801
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowImages",
+          "line": 808
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowImages",
+          "line": 811
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getImageWidthCells",
+          "line": 819
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "width",
+          "line": 820
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setImageWidthCells",
+          "line": 826
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getClearOnShrink",
+          "line": 834
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setClearOnShrink",
+          "line": 841
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowTerminalProgress",
+          "line": 849
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowTerminalProgress",
+          "line": 852
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTuiMode",
+          "line": 860
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTuiMode",
+          "line": 863
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFullscreenExitOutput",
+          "line": 868
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFullscreenExitOutput",
+          "line": 871
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFullscreenScrollbar",
+          "line": 876
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "mode",
+          "line": 877
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFullscreenScrollbar",
+          "line": 880
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getFullscreenCopyOnSelect",
+          "line": 885
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setFullscreenCopyOnSelect",
+          "line": 888
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getImageAutoResize",
+          "line": 893
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setImageAutoResize",
+          "line": 896
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getBlockImages",
+          "line": 904
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setBlockImages",
+          "line": 907
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEnabledModels",
+          "line": 915
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDefaultTools",
+          "line": 918
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "tools",
+          "line": 919
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEnabledModels",
+          "line": 922
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getDoubleEscapeAction",
+          "line": 927
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setDoubleEscapeAction",
+          "line": 930
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getTreeFilterMode",
+          "line": 935
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "mode",
+          "line": 936
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "valid",
+          "line": 937
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setTreeFilterMode",
+          "line": 940
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getShowHardwareCursor",
+          "line": 945
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setShowHardwareCursor",
+          "line": 948
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getEditorPaddingX",
+          "line": 953
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setEditorPaddingX",
+          "line": 956
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getOutputPad",
+          "line": 961
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setOutputPad",
+          "line": 964
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getAutocompleteMaxVisible",
+          "line": 969
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setAutocompleteMaxVisible",
+          "line": 972
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getCodeBlockIndent",
+          "line": 977
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getMermaidRenderingMode",
+          "line": 980
+        },
+        {
+          "kind": "VariableDeclaration",
+          "name": "mode",
+          "line": 981
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setMermaidRenderingMode",
+          "line": 984
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "getWarnings",
+          "line": 990
+        },
+        {
+          "kind": "MethodDeclaration",
+          "name": "setWarnings",
+          "line": 993
+        }
+      ],
+      "imports": [
+        {
+          "line": 1,
+          "source": "import { randomUUID } from \"crypto\";"
+        },
+        {
+          "line": 2,
+          "source": "import { existsSync, mkdirSync, readFileSync, writeFileSync } from \"fs\";"
+        },
+        {
+          "line": 3,
+          "source": "import { dirname, join } from \"path\";"
+        },
+        {
+          "line": 4,
+          "source": "import lockfile from \"proper-lockfile\";"
+        },
+        {
+          "line": 5,
+          "source": "import { CONFIG_DIR_NAME, getAgentDir } from \"../config.js\";"
+        },
+        {
+          "line": 6,
+          "source": "import { normalizePath, resolvePath } from \"../utils/paths.js\";"
+        },
+        {
+          "line": 7,
+          "source": "import { stripBom } from \"../utils/text.js\";"
+        },
+        {
+          "line": 8,
+          "source": "import { DEFAULT_HTTP_IDLE_TIMEOUT_MS, parseHttpIdleTimeoutMs } from \"./http-dispatcher.js\";"
+        },
+        {
+          "line": 9,
+          "source": "import { DEFAULT_COMPACTION_SETTINGS } from \"./compaction/compaction.js\";"
+        }
+      ],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 9,
+          "category": "read",
+          "parent": "ImportSpecifier"
+        },
+        {
+          "name": "getCompactionEnabled",
+          "line": 549,
+          "category": "declaration",
+          "parent": "MethodDeclaration"
+        },
+        {
+          "name": "enabled",
+          "line": 550,
+          "category": "declaration",
+          "parent": "ReturnStatement"
+        },
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 550,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 550,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "setCompactionEnabled",
+          "line": 552,
+          "category": "declaration",
+          "parent": "MethodDeclaration"
+        },
+        {
+          "name": "enabled",
+          "line": 556,
+          "category": "write",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 556,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 556,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 556,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 556,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 561,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 561,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 561,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 561,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 561,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 564,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 564,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 564,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 564,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 564,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "getCompactionSettings",
+          "line": 566,
+          "category": "declaration",
+          "parent": "MethodDeclaration"
+        },
+        {
+          "name": "enabled",
+          "line": 568,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "getCompactionEnabled",
+          "line": 568,
+          "category": "read",
+          "parent": "CallExpression"
+        },
+        {
+          "name": "getCompactionEnabled",
+          "line": 568,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 569,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "keepRecentTokens",
+          "line": 570,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 571,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 571,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 571,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "retainedContextTokens",
+          "line": 571,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 576,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 576,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "reserveTokens",
+          "line": 576,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 584,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 584,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 586,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 590,
+          "category": "write",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 590,
+          "category": "read",
+          "parent": "PropertyAccessExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 590,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 596,
+          "category": "read",
+          "parent": "PropertyAssignment"
+        },
+        {
+          "name": "enabled",
+          "line": 702,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 703,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 714,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 715,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 717,
+          "category": "read+decision",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 791,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 792,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 841,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 845,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 852,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 856,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 888,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 889,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 896,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 900,
+          "category": "read",
+          "parent": "BinaryExpression"
+        },
+        {
+          "name": "enabled",
+          "line": 948,
+          "category": "declaration",
+          "parent": "Parameter"
+        },
+        {
+          "name": "enabled",
+          "line": 949,
+          "category": "read",
+          "parent": "BinaryExpression"
+        }
+      ]
+    },
+    {
+      "path": "dist/index.d.ts",
+      "declarations": [],
+      "imports": [],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 5,
+          "category": "read",
+          "parent": "ExportSpecifier"
+        },
+        {
+          "name": "shouldCompact",
+          "line": 5,
+          "category": "read",
+          "parent": "ExportSpecifier"
+        }
+      ]
+    },
+    {
+      "path": "dist/index.js",
+      "declarations": [],
+      "imports": [],
+      "inheritance": [],
+      "references": [
+        {
+          "name": "DEFAULT_COMPACTION_SETTINGS",
+          "line": 8,
+          "category": "read",
+          "parent": "ExportSpecifier"
+        },
+        {
+          "name": "shouldCompact",
+          "line": 8,
+          "category": "read",
+          "parent": "ExportSpecifier"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,254 @@
+"""A file claim in a selected turn reads the bus's messages, not its context rows.
+
+Real private bus, checkpoint, registry and coordination stores under /var/tmp.
+Context rows are nearly all of a long-lived bus (888 of 889 MB on the root
+where this was found); reading them four times per claim took 3.5 minutes on
+the owner's event loop with the wire, bus and registry locks held.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import os
+import sys
+from contextlib import contextmanager
+from dataclasses import replace
+from pathlib import Path
+from tempfile import TemporaryDirectory
+
+import pytest
+
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.attempt_start import AttemptStart
+from agent_comms.child_process import ProcessIdentity
+from agent_comms.claim_admission import (
+    publish_selected_resource_claim,
+    write_selected_claimed_file,
+)
+from agent_comms.cohort_schema import install_private_cohort_schema
+from agent_comms.comms import Comms
+from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.coordination_tables.executions import ExecutionOrigin
+from agent_comms.coordinator import Coordination
+from agent_comms.envelope_claim_transitions import ExistingFileClaim, WakeAdmission
+from agent_comms.messages import ClaimNoticeKind
+from agent_comms.owner_fence import prepare_fence_token
+from agent_comms.read_basis import DMDisplayScope
+from agent_comms.selected_source_batch import SelectedSource
+from agent_comms.thread_identity import TurnId, TurnIdentity
+from agent_comms.threads import Thread
+from agent_comms.turn_context import (
+    ContextManifest,
+    OwnerProvenance,
+    RecordedContextTurn,
+    SegmentManifest,
+    TranscriptSegment,
+)
+
+pytestmark = pytest.mark.skipif(
+    sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
+)
+
+
+def record_context(comms: Comms, name: str, generation: int) -> None:
+    owner = comms.registry.require(name)
+    segment = SegmentManifest(
+        TranscriptSegment,
+        (OwnerProvenance(owner.incarnation, "input-source"),),
+        hashlib.sha256(b"context").hexdigest(),
+        7,
+        2,
+    )
+    comms.bus.log.record_context(ContextManifest(
+        owner.incarnation,
+        RecordedContextTurn(TurnId(f"turn-{generation}"), TurnIdentity(owner.incarnation, generation)),
+        (segment,),
+        "pi.estimateTokens",
+    ))
+
+
+@contextmanager
+def selected_turn():
+    """Alice runs a selected turn for one message; context rows surround it."""
+    with TemporaryDirectory(prefix="ac-claim-read-") as dirname:
+        root = Path(dirname) / "wire"
+        root.mkdir(mode=0o700)
+        worktree = Path(dirname) / "work"
+        worktree.mkdir(mode=0o700)
+        resource = worktree / "module.py"
+        resource.write_text("value = 1\n")
+        comms = Comms(root)
+        for name, created in (("sender", 17021.0), ("Alice", 17022.0)):
+            comms.registry.declare(Thread(
+                name, frozenset({"team"}), str(worktree),
+                process_identity=ProcessIdentity.capture(os.getpid()), created_at=created,
+            ))
+        root_id = comms.messaging.initialize_private_initial_protocol()
+        record_context(comms, "Alice", 1)
+        message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+        record_context(comms, "Alice", 2)
+        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            install_private_cohort_schema(store)
+            for recipient in initial.audience.recipients:
+                store.participants.register(
+                    recipient.recipient_lookup, recipient.canonical_thread,
+                    recipient.canonical_thread, committed=True,
+                )
+            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+            lookup = RecordedThreadIncarnation("fixture", comms.registry.require("Alice").created_at).lookup
+            assignment = sealed_cohort_assignments(store, lookup)[0]
+            owner, generation = comms.registry.live_owner_with_admission("Alice")
+            owner, generation = comms.registry.lease_live_turn_with_admission(
+                owner, "selected-turn", expected_generation=generation
+            )
+            person = store.participants.get(lookup)
+            store.executions.create(
+                "execution", ExecutionOrigin.WIRE, lookup, owner.name, 1,
+                sources=(SelectedSource(assignment.assignment_id, store.assignments, initial),),
+            )
+            snapshot = store.snapshots.get("execution")
+            snapshot = store.executions.mark_pending(
+                "execution", expected_revision=snapshot.execution.revision
+            ).value
+            store.attempts.start(AttemptStart(
+                "execution", 1, owner.name, person.participant_generation, prepare_fence_token(),
+                expected_execution_revision=snapshot.execution.revision,
+                expected_pointer_revision=snapshot.pointer_revision,
+            ))
+            admission = WakeAdmission(
+                wire_root_id=root_id,
+                source_seq=message.seq,
+                source_message_id=message.message_id,
+                wake_assignment_id=assignment.assignment_id,
+                wake_revision=store.assignments.get(assignment.assignment_id).revision,
+                recipient_lookup=lookup,
+                execution_id="execution",
+                operation_id="f" * 32,
+                owner_admission_generation=generation,
+                turn_id=owner.active_turn.id,
+                participant_generation=person.participant_generation,
+                attempt_ordinal=1,
+            )
+            yield comms, store, admission, resource
+
+
+def settle_failed(store):
+    from agent_comms.attempt_states import AttemptFailedAttempt
+
+    with store.session.settlement() as boundary:
+        snapshot = store.snapshots.get("execution")
+        snapshot.attempt.advance(
+            store.session, type(snapshot.attempt.lifecycle), backend_done=True,
+            process_dead=True, progress=False, reason_code=None,
+        )
+        store.snapshots.get("execution").settle(store.session, AttemptFailedAttempt(), None, boundary)
+
+
+def test_claim_write_and_release_read_no_context_rows(monkeypatch: pytest.MonkeyPatch) -> None:
+    with selected_turn() as (comms, store, admission, resource):
+        log = comms.bus.log
+
+        def whole_bus(*_, **__):
+            raise AssertionError("a claim read every row of the bus")
+
+        with monkeypatch.context() as patch:
+            patch.setattr(log, "verified_records_unlocked", whole_bus)
+            claimed = publish_selected_resource_claim(
+                comms, store, admission, "Alice", ExistingFileClaim(resource)
+            )
+            # Asking again for the same file in the same turn returns the held claim.
+            assert publish_selected_resource_claim(
+                comms, store, admission, "Alice", ExistingFileClaim(resource)
+            ) == claimed
+            write_selected_claimed_file(comms, store, admission, "Alice", claimed, b"value = 2\n")
+            record_context(comms, "Alice", 3)
+            settle_failed(store)
+        assert resource.read_bytes() == b"value = 2\n"
+        # The strict whole-bus reader agrees with what the claim path left.
+        assert dict(log.claim_projection()) == {}
+        claims = [m for m in comms.views.full_history() if m.claim_transition is not None]
+        assert [(m.claim_transition.claims, len(m.claim_transition.releases)) for m in claims] == [
+            ((str(resource),), 0), ((), 1),
+        ]
+        assert all(message.type is ClaimNoticeKind for message in claims)
+        snapshot = comms.registry.snapshot()
+        dm_scope = DMDisplayScope.capture("Alice", "sender", snapshot)
+        assert comms.bus.conversation_page(dm_scope).messages == ()
+        raw_channel = comms.views.channel_history_page("#team").messages
+        assert [message.body for message in raw_channel] == [
+            "@Alice investigate", "Released files after a failed turn: module.py",
+        ]
+        channel = comms.views.channel_display_page("#team").messages
+        assert [message.body for message in channel] == ["@Alice investigate"]
+        assert all(message.notification_references() for message in channel)
+        with pytest.raises(ValueError, match="not generically sendable"):
+            comms.messaging.send_message(
+                "Alice", "sender", "Invented claim notice", ClaimNoticeKind
+            )
+
+
+def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
+    with selected_turn() as (comms, store, admission, resource):
+        claimed = publish_selected_resource_claim(
+            comms, store, admission, "Alice", ExistingFileClaim(resource)
+        )
+        assert dict(comms.bus.log.claim_projection()) == {str(resource): claimed}
+        comms.messaging.send_message("Alice", "sender", "Explicit release",
+                                     releases=(str(resource),))
+        with pytest.raises(IdentityConflict, match="already consumed"):
+            publish_selected_resource_claim(
+                comms, store, admission, "Alice", ExistingFileClaim(resource)
+            )
+        again = publish_selected_resource_claim(
+            comms, store, replace(admission, operation_id="e" * 32), "Alice",
+            ExistingFileClaim(resource),
+        )
+        assert again.generation != claimed.generation
+        assert dict(comms.bus.log.claim_projection()) == {str(resource): again}
+
+
+@pytest.mark.skipif(
+    not os.environ.get("PI_COMPACTION_TEST_PACKAGE"),
+    reason="Set PI_COMPACTION_TEST_PACKAGE to the immutable native bundle",
+)
+async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The live journey: the real Pi child asks its owner before a write, then answers."""
+    import asyncio
+
+    from agent_comms.wire_log import WireLog
+    from native_backend_fixture import native_backend_fixture
+
+    async with native_backend_fixture(tmp_path) as native:
+        await native.author_history()
+        target = native.project / "module.py"
+        target.write_text("value = 1\n")
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            comms.messaging.send_message("sender", session, "Change the value")
+            native.provider.tool_call = ("write", {"path": str(target), "content": "value = 2\n"})
+            native.provider.text = "Changed it."
+
+            def whole_bus(*_, **__):
+                raise AssertionError("the turn read every row of the bus")
+
+            with monkeypatch.context() as patch:
+                patch.setattr(WireLog, "verified_records_unlocked", whole_bus)
+                await agent.inputs.drain_inbox(session)
+                async with asyncio.timeout(60):
+                    while native.provider.posts < 2 or agent.turns.turn_state(session).busy:
+                        await asyncio.sleep(0.01)
+            assert target.read_text() == "value = 2\n"
+            assert [
+                (m.sender, m.target, m.body) for m in comms.views.full_history()
+            ] == [
+                ("sender", session, "Change the value"),
+                (session, "sender", "Resource claim admitted"),
+                (session, "sender", "Changed it."),
+                (session, "sender", "Released files after a completed turn: module.py"),
+            ]
+            assert dict(comms.bus.log.claim_projection()) == {}

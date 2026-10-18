@@ -1,0 +1,338 @@
+diff --git a/src/agent_comms/native_admission_epoch.py b/src/agent_comms/native_admission_epoch.py
+index 082f3431..1c0b9c08 100644
+--- a/src/agent_comms/native_admission_epoch.py
++++ b/src/agent_comms/native_admission_epoch.py
+@@ -1,16 +1,17 @@
+-"""Original SQLite send epoch owns admission and released-owner behavior.
++"""One original SQLite column owns native send state and its admission identity.
+ 
+-NULL and a positive integer are the original column's storage representations.
+-FieldCodec decodes that boundary once into these explicit admission members.
+-Neither an absent epoch nor a later release proves that prompt bytes were unwritten.
++NULL is uncertain historical evidence, zero is an affirmative new NotSent
++reservation, and a positive admission generation is Sending. Sending is committed
++with the selected session before bytes can be written; it does not prove delivery.
++Neither uncertainty nor an owner release permits another send.
+ """
+ 
+ from __future__ import annotations
+ 
+ from abc import abstractmethod
+-from dataclasses import dataclass
++from dataclasses import dataclass, field
+ from pathlib import Path
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Literal
+ 
+ from .coordination_errors import StaleFence
+ from .declared_family import DeclaredFamily
+@@ -23,6 +24,19 @@ if TYPE_CHECKING:
+ 
+ 
+ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmission"):
++    @classmethod
++    def sql_constraint(cls, column: str) -> str:
++        return f"{column}>={NotSentNativeAdmission.value}"
++
++    @classmethod
++    def sql_mutation_violation(cls, before: str, after: str) -> str:
++        """Only a fresh reservation can acquire an epoch; never relabel evidence."""
++        pending = NotSentNativeAdmission.value
++        return (
++            f"({before} IS NOT {pending} AND {after} IS NOT {before}) OR "
++            f"({before} IS {pending} AND {after} IS NULL)"
++        )
++
+     @abstractmethod
+     def matches(self, admission_generation: int) -> bool: ...
+ 
+@@ -30,7 +44,7 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
+     def reservation_violation(self) -> bool: ...
+ 
+     def record(self, row, db, admission_generation: int, session: NativeSessionIdentity) -> None:
+-        raise StaleFence("native input admission was already bound")
++        raise StaleFence("native input is not a fresh NotSent reservation")
+ 
+     @abstractmethod
+     def require_release(self, receipt, snapshot, current) -> None: ...
+@@ -40,50 +54,72 @@ class NativeAdmissionEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeAdmissi
+         """Original launch selections to inspect after attested owner loss."""
+ 
+ 
+-@dataclass(frozen=True)
+-class UnrecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
+-    # Explicit SQL NULL representation, not an optional internal admission state.
+-    value: None = None
++class UnboundNativeAdmission(NativeAdmissionEpoch):
++    """No generation to borrow; release must attest the exact original owner."""
+ 
+     def matches(self, admission_generation: int) -> bool:
+         return False
+ 
++    def require_release(self, receipt, snapshot, current) -> None:
++        current.require_local_process(receipt.thread.require_process())
++        current.require_idle()
++        if not receipt.current(snapshot, current, receipt.before):
++            raise RelationViolationError("Native input without a sending epoch has no exact stopped release")
++
++    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
++        # A child can launch before send admission. NotSent proves no prompt
++        # write, not the absence of a child or an allocated/saved session.
++        saved = receipt.thread.session_file
++        return () if saved is None else (Path(saved),)
++
++
++@dataclass(frozen=True)
++class UncertainNativeAdmission(UnboundNativeAdmission, JsonShapeMember):
++    value: None = None
++
++    def __post_init__(self) -> None:
++        if self.value is not None:
++            raise TypeError("Uncertain admission requires the original SQL NULL")
++
++    def reservation_violation(self) -> bool:
++        return True
++
++
++@dataclass(frozen=True)
++class NotSentNativeAdmission(UnboundNativeAdmission):
++    value: Literal[0] = field(default=0, init=False)
++
+     def reservation_violation(self) -> bool:
+         return False
+ 
+     def record(self, row, db, admission_generation: int, session: NativeSessionIdentity) -> None:
+         updated = row.update(
+             db,
+-            where="input_id=? AND sent_owner_admission_generation IS NULL",
+-            parameters=(row.input_id,),
+-            sent_owner_admission_generation=RecordedNativeAdmission(admission_generation),
++            where="input_id=? AND sent_owner_admission_generation=?",
++            parameters=(row.input_id, self.value),
++            sent_owner_admission_generation=SendingNativeAdmission(admission_generation),
+             session_id=session.session_id,
+             session_file=session.session_file,
+         )
+         if updated.rowcount != 1:
+-            raise StaleFence("native input admission was already bound")
+-
+-    def require_release(self, receipt, snapshot, current) -> None:
+-        current.require_local_process(receipt.thread.require_process())
+-        current.require_idle()
+-        if not receipt.current(snapshot, current, receipt.before):
+-            raise RelationViolationError("Unrecorded native send has no exact stopped release")
+-
+-    def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+-        # Selection can launch before get_state/send admission records a session.
+-        # The exact stopped declaration still owns an existing saved selection;
+-        # an unopened owner instead has only its allocated session directory.
+-        saved = receipt.thread.session_file
+-        return () if saved is None else (Path(saved),)
++            raise StaleFence("native input is no longer a fresh NotSent reservation")
+ 
+ 
+ @dataclass(frozen=True)
+-class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
++class SendingNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
+     value: int
+ 
+     def __post_init__(self) -> None:
+         GenerationCounter.require_positive(self.value)
+ 
++    @classmethod
++    def from_json_value(cls, value: int) -> NativeAdmissionEpoch:
++        # This single integer ingress owns the distinction. NotSent has no
++        # competing JSON-shape registration or alternate codec.
++        if value == NotSentNativeAdmission.value:
++            return NotSentNativeAdmission()
++        return cls(value)
++
+     def matches(self, admission_generation: int) -> bool:
+         return self.value == admission_generation
+ 
+@@ -100,11 +136,7 @@ class RecordedNativeAdmission(NativeAdmissionEpoch, JsonShapeMember):
+                 raise RelationViolationError("Native release differs from its stopped declaration")
+ 
+     def recovery_session_files(self, row, receipt) -> tuple[Path, ...]:
+-        # The original send contract admitted only journals inside this
+-        # recipient's native-sessions directory, and recorded selected identity
+-        # later, with the context receipt. That directory remains checked by
+-        # VerifiedOwnerLoss. New admissions atomically record the selected file;
+-        # keep its additional subprocess check whenever it exists. Neither
+-        # representation permits borrowing the replacement owner's selection.
++        # Old positive epochs can lack selected identity; recovery still inspects
++        # the original allocated directory. Never borrow a replacement session.
+         session = row.selected_session
+         return () if session is None else (session.path,)
+diff --git a/src/agent_comms/native_admission_rules.py b/src/agent_comms/native_admission_rules.py
+index 3565e179..6bb242e6 100644
+--- a/src/agent_comms/native_admission_rules.py
++++ b/src/agent_comms/native_admission_rules.py
+@@ -192,9 +192,9 @@ class NativeTokenRule(ReservationRule):
+         return check.row.owner_token_digest != check.token_digest
+ 
+ 
+-class NativeAlreadyAdmittedRule(ReservationRule):
++class NativeNotSendableRule(ReservationRule):
+     check_type = NativeReservationCheck
+-    explanation = "The native input was already bound to a sending admission."
++    explanation = "The native input lacks an affirmative, unused NotSent reservation."
+ 
+     def violated(self, check: NativeReservationCheck) -> bool:
+         return check.row.sent_owner_admission_generation.reservation_violation()
+diff --git a/src/agent_comms/native_runtime_input.py b/src/agent_comms/native_runtime_input.py
+index a7cb6113..8979ff45 100644
+--- a/src/agent_comms/native_runtime_input.py
++++ b/src/agent_comms/native_runtime_input.py
+@@ -16,7 +16,7 @@ from agent_comms.coordination_tables.participants import Participants
+ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
+ 
+ from .coordination_errors import StaleFence, IdentityConflict
+-from .native_admission_epoch import NativeAdmissionEpoch, UnrecordedNativeAdmission
++from .native_admission_epoch import NativeAdmissionEpoch, NotSentNativeAdmission
+ from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
+ from .selected_triage import SelectedTriage, RecordedTriageText
+ from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
+@@ -39,7 +39,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
+         install_native_runtime_schema(store)
+ 
+     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
+-    version: Literal[6] = field(default=6, kw_only=True)
++    version: Literal[7] = field(default=7, kw_only=True)
+     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
+ 
+     @classmethod
+@@ -218,8 +218,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
+     owner_generation: int = field(metadata={"sql": Column(check="owner_generation>0")})
+     owner_token_digest: str = field(metadata={"sql": Column(check="length(owner_token_digest)=64")})
+     sent_owner_admission_generation: NativeAdmissionEpoch = field(
+-        default_factory=UnrecordedNativeAdmission,
+-        metadata={"sql": Column(check="sent_owner_admission_generation>0",
++        default_factory=NotSentNativeAdmission,
++        metadata={"sql": Column(check=NativeAdmissionEpoch.sql_constraint("sent_owner_admission_generation"),
+                                  storage=IntegerStorage, nullable=True)},
+     )
+     session_id: str | None = None
+@@ -239,7 +239,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
+         "(stage='full' AND execution_id IS NOT NULL AND attempt_ordinal>0)",
+         "(session_id IS NULL AND session_file IS NULL) OR "
+         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
+-        "AND length(session_file)>0 AND sent_owner_admission_generation IS NOT NULL)",
++        "AND length(session_file)>0 AND sent_owner_admission_generation IS NOT NULL "
++        "AND sent_owner_admission_generation>0)",
+         "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
+         "AND committed_at_ms IS NULL) OR "
+         "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 AND request_generation>0 "
+@@ -289,10 +290,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
+                 OR NEW.owner_thread IS NOT OLD.owner_thread
+                 OR NEW.owner_generation IS NOT OLD.owner_generation
+                 OR NEW.owner_token_digest IS NOT OLD.owner_token_digest
+-                OR (OLD.sent_owner_admission_generation
+-                    IS NOT NULL
+-                    AND NEW.sent_owner_admission_generation
+-                        IS NOT OLD.sent_owner_admission_generation)
++                OR ({NativeAdmissionEpoch.sql_mutation_violation('OLD.sent_owner_admission_generation', 'NEW.sent_owner_admission_generation')})
++                OR (OLD.sent_owner_admission_generation IS {NotSentNativeAdmission.value}
++                    AND NEW.sent_owner_admission_generation>0 AND NEW.session_id IS NULL)
+                 OR (NEW.sent_owner_admission_generation IS NULL AND NEW.session_id IS NOT NULL)
+                 OR (OLD.session_id IS NOT NULL AND
+                     (NEW.session_id IS NOT OLD.session_id OR NEW.session_file IS NOT OLD.session_file))
+diff --git a/tests/test_native_admission_epoch_installed.py b/tests/test_native_admission_epoch_installed.py
+index b5306744..08cc6f6a 100644
+--- a/tests/test_native_admission_epoch_installed.py
++++ b/tests/test_native_admission_epoch_installed.py
+@@ -23,7 +23,7 @@ from agent_comms.comms import Comms
+ from agent_comms.coordination_errors import RecoveryBlocked
+ from agent_comms.coordination_tables.attempts import ReplayFact
+ from agent_comms.coordinator import Coordination
+-from agent_comms.native_admission_epoch import RecordedNativeAdmission
++from agent_comms.native_admission_epoch import SendingNativeAdmission
+ from agent_comms.native_pi import NativePiTerminalFailure, NativePiUnavailable
+ from compaction_loopback import LoopbackProvider
+ from test_coordinated_runtime import _root, tmp_path  # noqa: F401
+@@ -64,7 +64,7 @@ def released_native_owner(directory, package, output, exit_allowed):
+                     assert not isinstance(error.value, NativePiTerminalFailure)
+                     (source,) = [row for row in owned.records() if row.input_id not in before]
+                     assert isinstance(
+-                        source.sent_owner_admission_generation, RecordedNativeAdmission
++                        source.sent_owner_admission_generation, SendingNativeAdmission
+                     )
+                     with Coordination(str(root / "coordination.sqlite3")) as store:
+                         snapshot = store.snapshots.get(source.execution.require_attempt().execution_id)
+diff --git a/tests/test_native_admission_rules.py b/tests/test_native_admission_rules.py
+index 37a03338..2f2299f6 100644
+--- a/tests/test_native_admission_rules.py
++++ b/tests/test_native_admission_rules.py
+@@ -15,7 +15,7 @@ from agent_comms.coordinator import Coordination
+ from agent_comms.goals import Goal
+ from agent_comms.native_prompt_binding import read_expected_prompt_binding
+ from agent_comms.native_runtime_input import NativeRuntimeInput
+-from agent_comms.native_admission_epoch import RecordedNativeAdmission
++from agent_comms.native_admission_epoch import SendingNativeAdmission
+ from agent_comms.private_sidecar import native_request_digest
+ from agent_comms.reservation_rules import ReservationRule, ReservationViolationError
+ from agent_comms.text_digest import TextDigest
+@@ -93,8 +93,8 @@ async def test_durable_private_admission_names_each_changed_authority(
+                 reservation, row=replace(row, owner_generation=expected.generation + 1)
+             ),
+             rules.NativeTokenRule: replace(reservation, token_digest="0" * 64),
+-            rules.NativeAlreadyAdmittedRule: replace(
+-                reservation, row=replace(row, sent_owner_admission_generation=RecordedNativeAdmission(1))
++            rules.NativeNotSendableRule: replace(
++                reservation, row=replace(row, sent_owner_admission_generation=SendingNativeAdmission(1))
+             ),
+             rules.NativeAlreadyProvenRule: replace(
+                 reservation, row=replace(row, session_id="returned")
+diff --git a/tests/test_native_context_reference.py b/tests/test_native_context_reference.py
+index fdb947a2..6206af54 100644
+--- a/tests/test_native_context_reference.py
++++ b/tests/test_native_context_reference.py
+@@ -10,7 +10,7 @@ from agent_comms.selected_triage import IgnoreSelectedTriage
+ from agent_comms.coordination_errors import IdentityConflict
+ from agent_comms.native_input_record import NativeInputReference, UnrecordedNativeInputReference
+ from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
+-from agent_comms.native_admission_epoch import RecordedNativeAdmission
++from agent_comms.native_admission_epoch import SendingNativeAdmission
+ from agent_comms.assignment_states import TriagePendingAssignment
+ 
+ 
+@@ -64,7 +64,7 @@ def test_original_unrecorded_context_and_reserved_input_remain_distinct_from_cor
+     assert reservation().reference == UnrecordedNativeInputReference()
+     with pytest.raises(IdentityConflict, match="partial"):
+         _ = replace(reservation(), request_generation=1).reference
+-    recorded = replace(reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
++    recorded = replace(reservation(), sent_owner_admission_generation=SendingNativeAdmission(2),
+                        session_id="original-session", session_file="/original/session.jsonl",
+                        session_entry_id="original-entry", request_generation=1,
+                        llm_context_digest="f" * 64, committed_at_ms=1_791_964_800_001)
+@@ -86,7 +86,7 @@ def test_original_native_sql_acquires_required_triage_or_full_recorded_proof():
+     from agent_comms.selected_triage import FullSelectedTriage
+ 
+     recorded = replace(
+-        reservation(), sent_owner_admission_generation=RecordedNativeAdmission(2),
++        reservation(), sent_owner_admission_generation=SendingNativeAdmission(2),
+         session_id="original-session", session_file="/original/session.jsonl",
+         session_entry_id="original-entry", request_generation=1, llm_context_digest="f" * 64,
+         committed_at_ms=1_791_964_800_001,
+diff --git a/tests/test_selected_tool_runner_hook.py b/tests/test_selected_tool_runner_hook.py
+index 2444486c..4d5d13a1 100644
+--- a/tests/test_selected_tool_runner_hook.py
++++ b/tests/test_selected_tool_runner_hook.py
+@@ -20,7 +20,7 @@ from agent_comms.errors import RelationViolationError
+ from agent_comms.native_pi import NativePiUnavailable
+ from agent_comms.native_input_record import FullNativeExecution
+ from agent_comms.native_runtime_input import NativeRuntimeInput
+-from agent_comms.native_admission_epoch import UnrecordedNativeAdmission
++from agent_comms.native_admission_epoch import NotSentNativeAdmission
+ from agent_comms.selected_actions import SelectedExistingFileWrite
+ from agent_comms.selected_tool_broker import (
+     SelectedToolIntent,
+@@ -64,7 +64,7 @@ def nominal_broker_stub(monkeypatch):
+         assert row.owner_thread == owner
+         assert row.owner_lookup == admission.recipient_lookup
+         assert row.attempt_ordinal == admission.attempt_ordinal == 1
+-        assert row.stage is FullNativeExecution and row.sent_owner_admission_generation == UnrecordedNativeAdmission()
++        assert row.stage is FullNativeExecution and row.sent_owner_admission_generation == NotSentNativeAdmission()
+         assert (
+             comms.registry.snapshot().admission_generations[owner]
+             == admission.owner_admission_generation

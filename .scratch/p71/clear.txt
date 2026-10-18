@@ -1,0 +1,143 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 3 items
+
+tests/test_selected_owner_followup.py .                                  [ 33%]
+tests/test_agent_backend.py .                                            [ 66%]
+tests/test_clear_queue_native.py F                                       [100%]
+
+=================================== FAILURES ===================================
+_____ test_clear_during_selected_start_never_sends_or_replays_fresh_input ______
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f8a8a282510>
+
+    async def test_clear_during_selected_start_never_sends_or_replays_fresh_input(native_backend):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner(runtime_enabled=True, auto_wake=False) as (agent, session):
+            comms = agent._comms
+            owner = comms.registry.require(session)
+    
+            def declare_sender():
+                comms.registry.declare(Thread("sender", frozenset(), str(native.project)))
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(owner.incarnation.lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(declare_sender)
+            child = agent.turns.persistent_backends[session].custody.child.proc
+            turn = None
+            try:
+                # Only this fixture's idle, attested child is paused. The selected
+                # owner can open its inbox but cannot commit its native input yet.
+                child.platform.send(child.identity, signal.SIGSTOP)
+                try:
+                    await Coordination.run_worker(partial(
+                        Comms(native.root, private_initial_writes=True).messaging.send_message,
+                        "sender", session, "One selected message",
+                    ))
+                    turn = asyncio.create_task(agent.inputs.drain_inbox(session))
+                    async with asyncio.timeout(8):
+                        while session not in agent.inputs.backend_inboxes:
+>                           await asyncio.sleep(.01)
+
+tests/test_clear_queue_native.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f8a8a282510>
+
+    async def test_clear_during_selected_start_never_sends_or_replays_fresh_input(native_backend):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner(runtime_enabled=True, auto_wake=False) as (agent, session):
+            comms = agent._comms
+            owner = comms.registry.require(session)
+    
+            def declare_sender():
+                comms.registry.declare(Thread("sender", frozenset(), str(native.project)))
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(owner.incarnation.lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(declare_sender)
+            child = agent.turns.persistent_backends[session].custody.child.proc
+            turn = None
+            try:
+                # Only this fixture's idle, attested child is paused. The selected
+                # owner can open its inbox but cannot commit its native input yet.
+                child.platform.send(child.identity, signal.SIGSTOP)
+                try:
+                    await Coordination.run_worker(partial(
+                        Comms(native.root, private_initial_writes=True).messaging.send_message,
+                        "sender", session, "One selected message",
+                    ))
+                    turn = asyncio.create_task(agent.inputs.drain_inbox(session))
+>                   async with asyncio.timeout(8):
+                               ^^^^^^^^^^^^^^^^^^
+
+tests/test_clear_queue_native.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7f8a8b698d00>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/clear/saved-native-owner0/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 760656, "start_time": 166391149}], "children_retired": true}
+=========================== short test summary info ============================
+FAILED tests/test_clear_queue_native.py::test_clear_during_selected_start_never_sends_or_replays_fresh_input
+========================= 1 failed, 2 passed in 23.54s =========================

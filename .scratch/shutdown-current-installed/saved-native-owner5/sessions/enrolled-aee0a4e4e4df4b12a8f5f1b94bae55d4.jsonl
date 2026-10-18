@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"aee0a4e4e4df4b12a8f5f1b94bae55d4","timestamp":"2026-10-16T03:38:26.907Z","cwd":"/home/ts/wt/core-doctrine-segment/.scratch/shutdown-current-installed/saved-native-owner5/project"}
+{"type":"model_change","id":"fe066733","parentId":null,"timestamp":"2026-10-16T03:38:29.653Z","provider":"response-local","modelId":"fixture"}
+{"type":"thinking_level_change","id":"116f7be4","parentId":"fe066733","timestamp":"2026-10-16T03:38:29.657Z","thinkingLevel":"off"}
+{"type":"message","id":"58e0eca2","parentId":"116f7be4","timestamp":"2026-10-16T03:38:29.677Z","message":{"role":"user","content":[{"type":"text","text":"Uncertain input before interrupted owner stop"}],"timestamp":1792121909674,"inputId":"3a435257902bc511468871daaed6157d","inputDigest":"0b83ce002b1ba4807396fa38596e1b945c0d61435318b0c6b42d250662bce6c7"}}

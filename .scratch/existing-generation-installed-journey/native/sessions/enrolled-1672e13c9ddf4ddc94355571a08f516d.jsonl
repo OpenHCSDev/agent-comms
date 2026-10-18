@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"1672e13c9ddf4ddc94355571a08f516d","timestamp":"2026-10-13T19:27:58.335Z","cwd":"/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-installed-journey/native/project"}
+{"type":"model_change","id":"32f07e7b","parentId":null,"timestamp":"2026-10-13T19:27:59.073Z","provider":"response-local","modelId":"fixture"}
+{"type":"thinking_level_change","id":"97e47f97","parentId":"32f07e7b","timestamp":"2026-10-13T19:27:59.076Z","thinkingLevel":"off"}
+{"type":"message","id":"26263cba","parentId":"97e47f97","timestamp":"2026-10-13T19:27:59.078Z","message":{"role":"user","content":"Original saved question","timestamp":1}}
+{"type":"message","id":"0b50457e","parentId":"26263cba","timestamp":"2026-10-13T19:27:59.080Z","message":{"role":"assistant","content":[{"type":"text","text":"Original saved answer"}],"api":"openai-completions","provider":"response-local","model":"fixture","stopReason":"stop","timestamp":2,"usage":{"input":8,"output":4,"cacheRead":0,"cacheWrite":0,"totalTokens":12,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}}}}

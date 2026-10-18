@@ -1,0 +1,10 @@
+{
+  "owner": "doctrine-segment",
+  "purpose": "Merged #769 clean-main Core wheel for toad-close-lifecycle paired runtime assembly; no relink",
+  "source": "aa02e996a70cc2cf93cbf8e16527af838e6982e6",
+  "wheel": "/home/ts/wt/core-doctrine-segment/.scratch/checkpoint-main-aa02e996a/wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "9a42cb2f592ee0730f4966f12350ade2c1f81cae05566773dd3ca89d1931f055",
+  "source_members_verified": 335,
+  "forced_native_assets_verified": 2,
+  "unmerged_777_included": false
+}

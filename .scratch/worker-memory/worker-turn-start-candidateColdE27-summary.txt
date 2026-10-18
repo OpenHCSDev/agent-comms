@@ -1,0 +1,2 @@
+/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/worker-turn-start-20min-candidateColdE27.json
+{"samples": 31, "elapsed_seconds": 30.272, "rss_max": 146489344, "rss_last": 146489344, "uss_max": 126599168, "turn_start": {"observations": 6, "cold_ms": 1372.305825, "warm_min_ms": 118.113566, "warm_median_ms": 139.496716, "warm_max_ms": 142.029792, "entries": 2167}, "returncode": 0, "original_unchanged": true}

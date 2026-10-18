@@ -1,0 +1,75 @@
+{
+  "threads": {
+    "Nested": {
+      "name": "Nested",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/checkpoint-main-aa02e996a/checkpoint-check/ancestor/nested",
+      "created_at": 1791914220.764124,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "execution": "external",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "Repo": {
+      "name": "Repo",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/checkpoint-main-aa02e996a/checkpoint-check/ancestor",
+      "created_at": 1791914221.9285445,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "execution": "external",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "Nested": {
+      "kind": "running"
+    },
+    "Repo": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "Nested": 1791914220.7646837,
+    "Repo": 1791914221.9298666
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 2,
+    "generations": {
+      "Nested": 1,
+      "Repo": 2
+    }
+  },
+  "admissions": {
+    "counter": 2,
+    "generations": {
+      "Nested": 1,
+      "Repo": 2
+    }
+  }
+}

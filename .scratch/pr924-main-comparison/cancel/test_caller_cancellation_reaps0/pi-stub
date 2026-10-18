@@ -1,0 +1,3 @@
+#!/home/ts/wt/core-doctrine-segment/.venv/bin/python
+import time
+time.sleep(60)

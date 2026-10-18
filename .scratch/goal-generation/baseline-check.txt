@@ -1,0 +1,311 @@
+FFEF                                                                     [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling _
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/baseline-pytest/test_goal_snapshot_reads_curre0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2710944160>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = wire(tmp_path / "wire")
+        owner = canonical_agent(comms, agent_bin="pi", runtime_enabled=True, auto_wake=False)
+        monkeypatch.setattr(owner.inputs, "ensure_live_drain", lambda _: None)
+>       session = (await owner.new_session(str(tmp_path / "project"))).session_id
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.scratch/goal-generation/baseline/tests/test_runtime_goal_snapshot.py:39: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.scratch/goal-generation/baseline/src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.config_options.ModelConfigOption object at 0x7f270ff50050>
+thread = Thread(name='project', tags=frozenset({'acp'}), worktree='/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/b...backend.PiNativeBackend'>, active_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+
+    async def describe(self, thread: Thread) -> SessionConfigOptionSelect:
+        choices = await self.choices(thread)
+        configured = self.current_value(thread)
+        selected = configured if configured is not None else ""
+        if configured is None:
+            choices = [SessionConfigSelectOption(
+                value=selected, name="Not configured"
+            ), *choices]
+        elif selected not in {choice.value for choice in choices}:
+>           raise NativePiUnavailable(
+                f"Configured {self.title.lower()} {selected!r} is absent from its native catalog"
+            )
+E           agent_comms.native_pi.NativePiUnavailable: Configured model 'openrouter/z-ai/glm-5.3-flash' is absent from its native catalog
+
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:98: NativePiUnavailable
+=================================== FAILURES ===================================
+___ test_ready_recovery_rechecks_executing_owner_before_rotating[admission] ____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/baseline-pytest/test_ready_recovery_rechecks_e0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2710b61940>
+changed = 'admission'
+
+    @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
+    async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+        tmp_path, monkeypatch, changed
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = canonical_goal_wire(tmp_path / "wire")
+        agent = canonical_agent(comms, agent_bin="pi")
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
+>       await agent.new_session(str(tmp_path / "parent"))
+
+.scratch/goal-generation/baseline/tests/test_goal_standby.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.scratch/goal-generation/baseline/src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.config_options.ModelConfigOption object at 0x7f2710ad1010>
+thread = Thread(name='parent', tags=frozenset({'acp'}), worktree='/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/ba...backend.PiNativeBackend'>, active_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+
+    async def describe(self, thread: Thread) -> SessionConfigOptionSelect:
+        choices = await self.choices(thread)
+        configured = self.current_value(thread)
+        selected = configured if configured is not None else ""
+        if configured is None:
+            choices = [SessionConfigSelectOption(
+                value=selected, name="Not configured"
+            ), *choices]
+        elif selected not in {choice.value for choice in choices}:
+>           raise NativePiUnavailable(
+                f"Configured {self.title.lower()} {selected!r} is absent from its native catalog"
+            )
+E           agent_comms.native_pi.NativePiUnavailable: Configured model 'openrouter/z-ai/glm-5.3-flash' is absent from its native catalog
+
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:98: NativePiUnavailable
+____ test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin] ____
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+.scratch/goal-generation/baseline/src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f2710abf390>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/baseline-pytest/test_acquired_claim_and_lease_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2710ade210>
+failure = 'begin'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+    async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
+        comms, tmp_path, monkeypatch, failure
+    ):
+        """Inject resource faults while all registry, journal and input owners stay real."""
+        owner = CommsAgent(
+            comms, agent_bin="unused",
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.scratch/goal-generation/baseline/tests/test_turn_goal_account.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.scratch/goal-generation/baseline/src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+.scratch/goal-generation/baseline/src/agent_comms/pi_commands.py:296: NativePiUnavailable
+________ test_idle_owner_original_input_preserves_autonomous_goal_grant ________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/baseline-pytest/test_idle_owner_original_input0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f2710102a50>
+
+    @pytest.mark.asyncio
+    async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_path, monkeypatch):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.scratch/goal-generation/baseline/tests/test_acp_goal_original_input.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.scratch/goal-generation/baseline/tests/test_acp_goal_original_input.py:37: in owner
+    await agent.new_session(str(tmp_path / "project"))
+.scratch/goal-generation/baseline/src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.config_options.ModelConfigOption object at 0x7f270ff3afd0>
+thread = Thread(name='project', tags=frozenset({'acp'}), worktree='/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/b...backend.PiNativeBackend'>, active_turn=None, channel_scope_generation=0, turn_generation=0, last_finished_turn_id=None)
+
+    async def describe(self, thread: Thread) -> SessionConfigOptionSelect:
+        choices = await self.choices(thread)
+        configured = self.current_value(thread)
+        selected = configured if configured is not None else ""
+        if configured is None:
+            choices = [SessionConfigSelectOption(
+                value=selected, name="Not configured"
+            ), *choices]
+        elif selected not in {choice.value for choice in choices}:
+>           raise NativePiUnavailable(
+                f"Configured {self.title.lower()} {selected!r} is absent from its native catalog"
+            )
+E           agent_comms.native_pi.NativePiUnavailable: Configured model 'openrouter/z-ai/glm-5.3-flash' is absent from its native catalog
+
+.scratch/goal-generation/baseline/src/agent_comms/config_options.py:98: NativePiUnavailable
+=========================== short test summary info ============================
+FAILED .scratch/goal-generation/baseline/tests/test_goal_standby.py::test_ready_recovery_rechecks_executing_owner_before_rotating[admission]
+FAILED .scratch/goal-generation/baseline/tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]
+FAILED .scratch/goal-generation/baseline/tests/test_acp_goal_original_input.py::test_idle_owner_original_input_preserves_autonomous_goal_grant
+ERROR .scratch/goal-generation/baseline/tests/test_runtime_goal_snapshot.py::test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling
+3 failed, 1 error in 1.99s

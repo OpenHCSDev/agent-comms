@@ -1,0 +1,3 @@
+#!/home/ts/wt/core-doctrine-segment/.scratch/nominal-gateway-candidate/bin/python
+import time
+time.sleep(60)

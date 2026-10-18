@@ -1,0 +1,883 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 35 items
+
+tests/test_captured_input_dispatch.py .....                              [ 14%]
+tests/test_acp_input_disposition.py FFFFFFFF.FF                          [ 45%]
+tests/test_native_drain_readiness.py ...F                                [ 57%]
+tests/test_input_drain.py FF                                             [ 62%]
+tests/test_acp_queue_contract.py ........F....                           [100%]
+
+=================================== FAILURES ===================================
+_______ test_native_preflight_failure_is_visible_and_cannot_mark_started _______
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c5fa41a0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff1c6375710>
+
+    async def test_native_preflight_failure_is_visible_and_cannot_mark_started(native_backend, monkeypatch):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:57: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c5fa41a0>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner0/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner0/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+___ test_late_owner_socket_observes_unknown_until_exact_native_start[False] ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4499f90>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff1c4eed310>
+second_start = False
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4499f90>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner1/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner1/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+____ test_late_owner_socket_observes_unknown_until_exact_native_start[True] ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c449b750>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff1c446ea30>
+second_start = True
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c449b750>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner2/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner2/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+___________ test_native_steer_keeps_original_input_and_turn_custody ____________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4d42060>
+
+    async def test_native_steer_keeps_original_input_and_turn_custody(native_backend):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:178: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4d42060>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner3/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner3/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+_______ test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn ________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4d37bb0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff1c43da510>
+
+    async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
+        native_backend, monkeypatch,
+    ):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:223: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4d37bb0>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner4/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner4/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+__________ test_waiting_message_is_drained_when_following_input_opens __________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c6139fd0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7ff1c43daac0>
+
+    async def test_waiting_message_is_drained_when_following_input_opens(
+        native_backend, monkeypatch,
+    ):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c6139fd0>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner5/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner5/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+________ test_waiting_messages_follow_the_original_on_the_changed_model ________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c629a690>
+
+    async def test_waiting_messages_follow_the_original_on_the_changed_model(
+        native_backend,
+    ):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:406: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c629a690>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner6/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner6/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+____ test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c64ff350>
+
+    async def test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay(native_backend):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:469: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c64ff350>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner7/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner7/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+_____ test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn ______
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c5f26150>
+
+    async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(native_backend):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:542: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c5f26150>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner8/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner8/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+_____ test_model_change_stored_by_another_process_reaches_the_running_turn _____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c7af9250>
+
+    async def test_model_change_stored_by_another_process_reaches_the_running_turn(native_backend):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_acp_input_disposition.py:604: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c7af9250>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner9/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner9/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+___________ test_real_saved_native_failure_then_distinct_fresh_input ___________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c5fa8050>
+
+    @pytest.mark.asyncio
+    async def test_real_saved_native_failure_then_distinct_fresh_input(native_backend):
+        """Real saved ACP/native process; only localhost provider responses are controlled."""
+        from acp import RequestError
+        from acp.schema import TextContentBlock
+        from agent_comms.activity import NativeInputDrainDiagnostic
+    
+        native = native_backend
+>       await native.author_history()
+
+tests/test_native_drain_readiness.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c5fa8050>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner10/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner10/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+__ test_unstarted_input_failure_restores_exact_original_without_replay[False] __
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4d38230>
+terminal = False
+
+    @pytest.mark.parametrize("terminal", [False, True])
+    async def test_unstarted_input_failure_restores_exact_original_without_replay(native_backend, terminal):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_input_drain.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c4d38230>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner11/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner11/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+__ test_unstarted_input_failure_restores_exact_original_without_replay[True] ___
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c630e7b0>
+terminal = True
+
+    @pytest.mark.parametrize("terminal", [False, True])
+    async def test_unstarted_input_failure_restores_exact_original_without_replay(native_backend, terminal):
+        native = native_backend
+>       await native.author_history()
+
+tests/test_input_drain.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <native_backend_fixture.NativeBackendFixture object at 0x7ff1c630e7b0>
+
+        async def author_history(self):
+            """The SDK authors saved rows; no provider or receipt is invented."""
+            package = os.environ["PI_COMPACTION_TEST_PACKAGE"]
+            result = await BoundedRun.run(
+                ("node", "--input-type=module", "-e", """
+    import {pathToFileURL} from 'node:url';
+    import {join} from 'node:path';
+    const {SessionManager} = await import(pathToFileURL(join(process.argv[1],
+      'dist/core/session-manager.js')));
+    const manager = SessionManager.open(process.argv[2]);
+    manager.appendModelChange('response-local','fixture');
+    manager.appendThinkingLevelChange('off');
+    manager.appendMessage({role:'user',content:'Original saved question',timestamp:1});
+    manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original saved answer'}],
+      api:'openai-completions',provider:'response-local',model:'fixture',stopReason:'stop',
+      timestamp:2,usage:{input:8,output:4,cacheRead:0,cacheWrite:0,totalTokens:12,
+        cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}}});
+    """, package, str(self.session)),
+                timeout=10, cwd=self.project,
+            )
+>           assert result.outcome.successful, result.stderr.decode()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AssertionError: node:internal/modules/esm/resolve:241
+E               throw new ERR_MODULE_NOT_FOUND(
+E                     ^
+E           
+E           Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js' imported from /home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner12/project/[eval1]
+E               at finalizeResolution (node:internal/modules/esm/resolve:241:11)
+E               at moduleResolve (node:internal/modules/esm/resolve:846:10)
+E               at defaultResolve (node:internal/modules/esm/resolve:973:11)
+E               at #cachedDefaultResolve (node:internal/modules/esm/loader:708:20)
+E               at #resolveAndMaybeBlockOnLoaderThread (node:internal/modules/esm/loader:728:38)
+E               at ModuleLoader.resolveSync (node:internal/modules/esm/loader:766:56)
+E               at #resolve (node:internal/modules/esm/loader:690:17)
+E               at ModuleLoader.getOrCreateModuleJob (node:internal/modules/esm/loader:610:35)
+E               at node:internal/modules/esm/loader:639:32
+E               at TracingChannel.tracePromise (node:diagnostics_channel:551:22) {
+E             code: 'ERR_MODULE_NOT_FOUND',
+E             url: 'file:///home/ts/.local/share/agent-comms/native-current-6468a1979d983e9d/dist/core/session-manager.js'
+E           }
+E           
+E           Node.js v26.10.0
+
+tests/native_backend_fixture.py:56: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native/saved-native-owner12/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [], "children_retired": true}
+_____ test_unavailable_projection_never_drops_or_replays_owned_rows[rows0] _____
+
+tmp_path = PosixPath('/home/ts/.cache/agent-scratch/p71-tests/native/test_unavailable_projection_ne0')
+rows = {'malformed': ['not text']}
+
+    @pytest.mark.parametrize(
+        "rows",
+        [
+            {"malformed": ["not text"]},
+            {str(i): "message" for i in range(33)},
+            {"long": "x" * 4097},
+        ],
+    )
+    async def test_unavailable_projection_never_drops_or_replays_owned_rows(tmp_path, rows):
+        _, agent, created, generation = _owner(tmp_path)
+        agent.inputs.queued_inputs["beta"] = {
+            key: QueuedInput(
+                text,
+                True,
+                QueuedInputContext(AdmissionIdentity(RecordedThreadIncarnation("beta", created), generation)),
+                key,
+                text,
+            )
+            for key, text in rows.items()
+        }
+>       state = await agent.inputs.queue_state("beta")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_queue_contract.py:200: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/input_drain.py:615: in queue_state
+    return QueueChangedUpdate(scope, revision, QueueProjection.capture(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.acp_extension.QueueProjection'>
+scope = QueueScope(session_id='beta', admission=AdmissionIdentity(incarnation=RecordedThreadIncarnation(name='beta', created_at=1792187406.1695375), admission_generation=1), owner_pid=646227)
+queued = (QueuedInput(text=['not text'], echo=True, context=QueuedInputContext(admission=AdmissionIdentity(incarnation=Recorded...1695375), admission_generation=1), goal=None), input_id='malformed', prompt=['not text'], images=(), controller=None),)
+restored = ()
+
+    @classmethod
+    def capture(
+        cls, scope: QueueScope | None, queued: tuple[QueuedInput, ...],
+        restored: tuple[QueuedInput, ...],
+    ) -> QueueProjection:
+        """Project live inputs without repairing or withdrawing their authority."""
+        if scope is None:
+            return UnavailableQueueProjection()
+        items = tuple(row for item in queued for row in item.queue_items(scope))
+        previous = tuple(row for item in restored for row in item.queue_items(scope))
+        rows = items + previous
+        try:
+>           sizes = [len(row.text.encode("utf-8")) for row in rows]
+                         ^^^^^^^^^^^^^^^
+E           AttributeError: 'list' object has no attribute 'encode'
+
+src/agent_comms/acp_extension.py:349: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_acp_input_disposition.py::test_native_preflight_failure_is_visible_and_cannot_mark_started
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[False]
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[True]
+FAILED tests/test_acp_input_disposition.py::test_native_steer_keeps_original_input_and_turn_custody
+FAILED tests/test_acp_input_disposition.py::test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn
+FAILED tests/test_acp_input_disposition.py::test_waiting_message_is_drained_when_following_input_opens
+FAILED tests/test_acp_input_disposition.py::test_waiting_messages_follow_the_original_on_the_changed_model
+FAILED tests/test_acp_input_disposition.py::test_hard_exit_after_owner_acceptance_preserves_unknown_without_replay
+FAILED tests/test_acp_input_disposition.py::test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn
+FAILED tests/test_acp_input_disposition.py::test_model_change_stored_by_another_process_reaches_the_running_turn
+FAILED tests/test_native_drain_readiness.py::test_real_saved_native_failure_then_distinct_fresh_input
+FAILED tests/test_input_drain.py::test_unstarted_input_failure_restores_exact_original_without_replay[False]
+FAILED tests/test_input_drain.py::test_unstarted_input_failure_restores_exact_original_without_replay[True]
+FAILED tests/test_acp_queue_contract.py::test_unavailable_projection_never_drops_or_replays_owned_rows[rows0]
+======================== 14 failed, 21 passed in 14.79s ========================

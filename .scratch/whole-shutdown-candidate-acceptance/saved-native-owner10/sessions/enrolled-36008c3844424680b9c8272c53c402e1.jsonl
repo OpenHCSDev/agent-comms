@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"36008c3844424680b9c8272c53c402e1","timestamp":"2026-10-16T00:44:41.127Z","cwd":"/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-candidate-acceptance/saved-native-owner10/project"}
+{"type":"model_change","id":"c2715840","parentId":null,"timestamp":"2026-10-16T00:44:43.744Z","provider":"response-local","modelId":"fixture"}
+{"type":"thinking_level_change","id":"0d2cdba7","parentId":"c2715840","timestamp":"2026-10-16T00:44:43.752Z","thinkingLevel":"off"}
+{"type":"message","id":"dc7cdc04","parentId":"0d2cdba7","timestamp":"2026-10-16T00:44:43.768Z","message":{"role":"user","content":[{"type":"text","text":"Uncertain input before interrupted owner stop"}],"timestamp":1792111483766,"inputId":"1822f6573834a946ec13a08ee93bbe47","inputDigest":"0b83ce002b1ba4807396fa38596e1b945c0d61435318b0c6b42d250662bce6c7"}}

@@ -1,0 +1,1658 @@
+{
+  "modules": 341,
+  "parse_errors": [],
+  "versions": {
+    "before": {
+      "classes": [
+        {
+          "name": "Measure",
+          "line": 23,
+          "bases": [
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "name": "GitMeasure",
+          "line": 29,
+          "bases": [
+            "Measure"
+          ]
+        },
+        {
+          "name": "CountedSource",
+          "line": 53,
+          "bases": [
+            "GitMeasure"
+          ]
+        },
+        {
+          "name": "OccurrenceMeasure",
+          "line": 62,
+          "bases": [
+            "CountedSource"
+          ]
+        },
+        {
+          "name": "PerFileMeasure",
+          "line": 79,
+          "bases": [
+            "CountedSource"
+          ]
+        },
+        {
+          "name": "PerFileOccurrenceMeasure",
+          "line": 93,
+          "bases": [
+            "PerFileMeasure",
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "FamilyFlattened",
+          "line": 97,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "DispatchCases",
+          "line": 120,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "LiteralDispatchCases",
+          "line": 146,
+          "bases": [
+            "DispatchCases"
+          ]
+        },
+        {
+          "name": "TypeDispatchCases",
+          "line": 173,
+          "bases": [
+            "DispatchCases"
+          ]
+        },
+        {
+          "name": "DispatchMeasure",
+          "line": 193,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "StringDispatch",
+          "line": 217,
+          "bases": [
+            "DispatchMeasure"
+          ]
+        },
+        {
+          "name": "TypeSwitch",
+          "line": 223,
+          "bases": [
+            "DispatchMeasure"
+          ]
+        },
+        {
+          "name": "DispatchArms",
+          "line": 229,
+          "bases": []
+        },
+        {
+          "name": "StringDispatchArms",
+          "line": 237,
+          "bases": [
+            "DispatchArms",
+            "StringDispatch"
+          ]
+        },
+        {
+          "name": "TypeSwitchArms",
+          "line": 241,
+          "bases": [
+            "DispatchArms",
+            "TypeSwitch"
+          ]
+        },
+        {
+          "name": "BuiltinHandlerTypeSwitch",
+          "line": 245,
+          "bases": [
+            "BuiltinHandlerDeclarations",
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "GodClassExcess",
+          "line": 262,
+          "bases": [
+            "GitMeasure"
+          ]
+        },
+        {
+          "name": "TypeIdentity",
+          "line": 320,
+          "bases": [
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "LongBooleanChain",
+          "line": 342,
+          "bases": [
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "BooleanChainTerms",
+          "line": 353,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "ForeignAbsenceProbe",
+          "line": 362,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "CodecSubclass",
+          "line": 368,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "TypingImports",
+          "line": 386,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "TypingReference",
+          "line": 472,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "StringSubscript",
+          "line": 495,
+          "bases": [
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "AnyInTypeExpression",
+          "line": 517,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "AnyUse",
+          "line": 572,
+          "bases": []
+        },
+        {
+          "name": "DeclaredTypeSites",
+          "line": 580,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "AnyAnnotation",
+          "line": 649,
+          "bases": [
+            "PerFileMeasure"
+          ]
+        },
+        {
+          "name": "Comparison",
+          "line": 689,
+          "bases": []
+        }
+      ],
+      "functions": [
+        {
+          "name": "compare",
+          "line": 26
+        },
+        {
+          "name": "scope",
+          "line": 33
+        },
+        {
+          "name": "snapshot",
+          "line": 38
+        },
+        {
+          "name": "align",
+          "line": 42
+        },
+        {
+          "name": "compare",
+          "line": 46
+        },
+        {
+          "name": "snapshot",
+          "line": 47
+        },
+        {
+          "name": "count",
+          "line": 58
+        },
+        {
+          "name": "occurrences",
+          "line": 67
+        },
+        {
+          "name": "count",
+          "line": 71
+        },
+        {
+          "name": "snapshot",
+          "line": 75
+        },
+        {
+          "name": "snapshot",
+          "line": 83
+        },
+        {
+          "name": "align",
+          "line": 87
+        },
+        {
+          "name": "occurrences",
+          "line": 110
+        },
+        {
+          "name": "count",
+          "line": 114
+        },
+        {
+          "name": "__init__",
+          "line": 125
+        },
+        {
+          "name": "add",
+          "line": 128
+        },
+        {
+          "name": "groups",
+          "line": 131
+        },
+        {
+          "name": "read_function",
+          "line": 135
+        },
+        {
+          "name": "literal",
+          "line": 148
+        },
+        {
+          "name": "comparison",
+          "line": 154
+        },
+        {
+          "name": "match_cases",
+          "line": 167
+        },
+        {
+          "name": "instance_check",
+          "line": 175
+        },
+        {
+          "name": "exact_type",
+          "line": 181
+        },
+        {
+          "name": "match_cases",
+          "line": 187
+        },
+        {
+          "name": "collector",
+          "line": 202
+        },
+        {
+          "name": "groups",
+          "line": 205
+        },
+        {
+          "name": "occurrences",
+          "line": 213
+        },
+        {
+          "name": "collector",
+          "line": 219
+        },
+        {
+          "name": "collector",
+          "line": 225
+        },
+        {
+          "name": "occurrences",
+          "line": 233
+        },
+        {
+          "name": "occurrences",
+          "line": 254
+        },
+        {
+          "name": "count",
+          "line": 258
+        },
+        {
+          "name": "scope",
+          "line": 268
+        },
+        {
+          "name": "snapshot",
+          "line": 274
+        },
+        {
+          "name": "visit",
+          "line": 276
+        },
+        {
+          "name": "align",
+          "line": 291
+        },
+        {
+          "name": "names",
+          "line": 292
+        },
+        {
+          "name": "is_type_call",
+          "line": 322
+        },
+        {
+          "name": "occurrences",
+          "line": 330
+        },
+        {
+          "name": "occurrences",
+          "line": 346
+        },
+        {
+          "name": "occurrences",
+          "line": 355
+        },
+        {
+          "name": "codec_base",
+          "line": 372
+        },
+        {
+          "name": "occurrences",
+          "line": 379
+        },
+        {
+          "name": "__init__",
+          "line": 393
+        },
+        {
+          "name": "bind",
+          "line": 398
+        },
+        {
+          "name": "modules",
+          "line": 404
+        },
+        {
+          "name": "members",
+          "line": 410
+        },
+        {
+          "name": "assignment",
+          "line": 418
+        },
+        {
+          "name": "mutation",
+          "line": 423
+        },
+        {
+          "name": "parameter",
+          "line": 430
+        },
+        {
+          "name": "named_binding",
+          "line": 434
+        },
+        {
+          "name": "exception_binding",
+          "line": 438
+        },
+        {
+          "name": "type_parameter",
+          "line": 446
+        },
+        {
+          "name": "of",
+          "line": 450
+        },
+        {
+          "name": "at_any_depth",
+          "line": 460
+        },
+        {
+          "name": "__init__",
+          "line": 475
+        },
+        {
+          "name": "name",
+          "line": 480
+        },
+        {
+          "name": "member",
+          "line": 484
+        },
+        {
+          "name": "raw_access_count",
+          "line": 490
+        },
+        {
+          "name": "count",
+          "line": 497
+        },
+        {
+          "name": "occurrences",
+          "line": 509
+        },
+        {
+          "name": "__init__",
+          "line": 525
+        },
+        {
+          "name": "resolved",
+          "line": 530
+        },
+        {
+          "name": "reference",
+          "line": 536
+        },
+        {
+          "name": "parameterised",
+          "line": 540
+        },
+        {
+          "name": "members",
+          "line": 551
+        },
+        {
+          "name": "union",
+          "line": 556
+        },
+        {
+          "name": "forward_reference",
+          "line": 561
+        },
+        {
+          "name": "__init__",
+          "line": 583
+        },
+        {
+          "name": "read",
+          "line": 587
+        },
+        {
+          "name": "declare",
+          "line": 596
+        },
+        {
+          "name": "record_class",
+          "line": 606
+        },
+        {
+          "name": "last_name",
+          "line": 608
+        },
+        {
+          "name": "assignment_site",
+          "line": 614
+        },
+        {
+          "name": "parameter",
+          "line": 620
+        },
+        {
+          "name": "result",
+          "line": 624
+        },
+        {
+          "name": "annotated",
+          "line": 628
+        },
+        {
+          "name": "alias",
+          "line": 635
+        },
+        {
+          "name": "alias_statement",
+          "line": 645
+        },
+        {
+          "name": "uses",
+          "line": 659
+        },
+        {
+          "name": "count",
+          "line": 666
+        },
+        {
+          "name": "git",
+          "line": 670
+        },
+        {
+          "name": "revision",
+          "line": 674
+        },
+        {
+          "name": "python_paths",
+          "line": 680
+        },
+        {
+          "name": "delta",
+          "line": 698
+        },
+        {
+          "name": "increased",
+          "line": 702
+        },
+        {
+          "name": "compare",
+          "line": 706
+        },
+        {
+          "name": "main",
+          "line": 728
+        }
+      ]
+    },
+    "after": {
+      "classes": [
+        {
+          "name": "Measure",
+          "line": 26,
+          "bases": [
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "name": "GitMeasure",
+          "line": 32,
+          "bases": [
+            "Measure"
+          ]
+        },
+        {
+          "name": "CountedSource",
+          "line": 56,
+          "bases": [
+            "GitMeasure"
+          ]
+        },
+        {
+          "name": "OccurrenceMeasure",
+          "line": 65,
+          "bases": [
+            "CountedSource"
+          ]
+        },
+        {
+          "name": "PerFileMeasure",
+          "line": 82,
+          "bases": [
+            "CountedSource"
+          ]
+        },
+        {
+          "name": "PerFileOccurrenceMeasure",
+          "line": 96,
+          "bases": [
+            "PerFileMeasure",
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "ChangedSource",
+          "line": 101,
+          "bases": []
+        },
+        {
+          "name": "CleanChangedLines",
+          "line": 127,
+          "bases": []
+        },
+        {
+          "name": "FrozenFieldWrite",
+          "line": 141,
+          "bases": [
+            "CleanChangedLines",
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "BannedVocabulary",
+          "line": 150,
+          "bases": [
+            "CleanChangedLines",
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "FunctionLocalImport",
+          "line": 196,
+          "bases": [
+            "PerFileMeasure"
+          ]
+        },
+        {
+          "name": "Collector",
+          "line": 199,
+          "bases": [
+            "ast.NodeVisitor"
+          ]
+        },
+        {
+          "name": "LiteralGetattr",
+          "line": 219,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "ForeignFieldSpellings",
+          "line": 228,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "BroadExceptDefault",
+          "line": 244,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "FamilyFlattened",
+          "line": 278,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "DispatchCases",
+          "line": 301,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "LiteralDispatchCases",
+          "line": 327,
+          "bases": [
+            "DispatchCases"
+          ]
+        },
+        {
+          "name": "TypeDispatchCases",
+          "line": 354,
+          "bases": [
+            "DispatchCases"
+          ]
+        },
+        {
+          "name": "DispatchMeasure",
+          "line": 374,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "StringDispatch",
+          "line": 398,
+          "bases": [
+            "DispatchMeasure"
+          ]
+        },
+        {
+          "name": "TypeSwitch",
+          "line": 404,
+          "bases": [
+            "DispatchMeasure"
+          ]
+        },
+        {
+          "name": "DispatchArms",
+          "line": 410,
+          "bases": []
+        },
+        {
+          "name": "StringDispatchArms",
+          "line": 418,
+          "bases": [
+            "DispatchArms",
+            "StringDispatch"
+          ]
+        },
+        {
+          "name": "TypeSwitchArms",
+          "line": 422,
+          "bases": [
+            "DispatchArms",
+            "TypeSwitch"
+          ]
+        },
+        {
+          "name": "BuiltinHandlerTypeSwitch",
+          "line": 426,
+          "bases": [
+            "BuiltinHandlerDeclarations",
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "GodClassExcess",
+          "line": 443,
+          "bases": [
+            "GitMeasure"
+          ]
+        },
+        {
+          "name": "TypeIdentity",
+          "line": 501,
+          "bases": [
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "LongBooleanChain",
+          "line": 523,
+          "bases": [
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "BooleanChainTerms",
+          "line": 534,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "ForeignAbsenceProbe",
+          "line": 543,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "CodecSubclass",
+          "line": 549,
+          "bases": [
+            "PerFileOccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "TypingImports",
+          "line": 567,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "TypingReference",
+          "line": 653,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "StringSubscript",
+          "line": 676,
+          "bases": [
+            "OccurrenceMeasure"
+          ]
+        },
+        {
+          "name": "AnyInTypeExpression",
+          "line": 698,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "AnyUse",
+          "line": 753,
+          "bases": []
+        },
+        {
+          "name": "DeclaredTypeSites",
+          "line": 761,
+          "bases": [
+            "MroDispatch"
+          ]
+        },
+        {
+          "name": "AnyAnnotation",
+          "line": 830,
+          "bases": [
+            "PerFileMeasure"
+          ]
+        },
+        {
+          "name": "Comparison",
+          "line": 870,
+          "bases": []
+        }
+      ],
+      "functions": [
+        {
+          "name": "compare",
+          "line": 29
+        },
+        {
+          "name": "scope",
+          "line": 36
+        },
+        {
+          "name": "snapshot",
+          "line": 41
+        },
+        {
+          "name": "align",
+          "line": 45
+        },
+        {
+          "name": "compare",
+          "line": 49
+        },
+        {
+          "name": "snapshot",
+          "line": 50
+        },
+        {
+          "name": "count",
+          "line": 61
+        },
+        {
+          "name": "occurrences",
+          "line": 70
+        },
+        {
+          "name": "count",
+          "line": 74
+        },
+        {
+          "name": "snapshot",
+          "line": 78
+        },
+        {
+          "name": "snapshot",
+          "line": 86
+        },
+        {
+          "name": "align",
+          "line": 90
+        },
+        {
+          "name": "tree",
+          "line": 109
+        },
+        {
+          "name": "read",
+          "line": 113
+        },
+        {
+          "name": "site_lines",
+          "line": 131
+        },
+        {
+          "name": "count_changed",
+          "line": 135
+        },
+        {
+          "name": "occurrences",
+          "line": 143
+        },
+        {
+          "name": "occurrences",
+          "line": 154
+        },
+        {
+          "name": "site_lines",
+          "line": 164
+        },
+        {
+          "name": "prose_lines",
+          "line": 169
+        },
+        {
+          "name": "count",
+          "line": 187
+        },
+        {
+          "name": "count_changed",
+          "line": 192
+        },
+        {
+          "name": "__init__",
+          "line": 200
+        },
+        {
+          "name": "generic_visit",
+          "line": 204
+        },
+        {
+          "name": "count",
+          "line": 213
+        },
+        {
+          "name": "occurrences",
+          "line": 221
+        },
+        {
+          "name": "occurrences",
+          "line": 232
+        },
+        {
+          "name": "broad",
+          "line": 246
+        },
+        {
+          "name": "default",
+          "line": 255
+        },
+        {
+          "name": "returns_default",
+          "line": 264
+        },
+        {
+          "name": "occurrences",
+          "line": 273
+        },
+        {
+          "name": "occurrences",
+          "line": 291
+        },
+        {
+          "name": "count",
+          "line": 295
+        },
+        {
+          "name": "__init__",
+          "line": 306
+        },
+        {
+          "name": "add",
+          "line": 309
+        },
+        {
+          "name": "groups",
+          "line": 312
+        },
+        {
+          "name": "read_function",
+          "line": 316
+        },
+        {
+          "name": "literal",
+          "line": 329
+        },
+        {
+          "name": "comparison",
+          "line": 335
+        },
+        {
+          "name": "match_cases",
+          "line": 348
+        },
+        {
+          "name": "instance_check",
+          "line": 356
+        },
+        {
+          "name": "exact_type",
+          "line": 362
+        },
+        {
+          "name": "match_cases",
+          "line": 368
+        },
+        {
+          "name": "collector",
+          "line": 383
+        },
+        {
+          "name": "groups",
+          "line": 386
+        },
+        {
+          "name": "occurrences",
+          "line": 394
+        },
+        {
+          "name": "collector",
+          "line": 400
+        },
+        {
+          "name": "collector",
+          "line": 406
+        },
+        {
+          "name": "occurrences",
+          "line": 414
+        },
+        {
+          "name": "occurrences",
+          "line": 435
+        },
+        {
+          "name": "count",
+          "line": 439
+        },
+        {
+          "name": "scope",
+          "line": 449
+        },
+        {
+          "name": "snapshot",
+          "line": 455
+        },
+        {
+          "name": "visit",
+          "line": 457
+        },
+        {
+          "name": "align",
+          "line": 472
+        },
+        {
+          "name": "names",
+          "line": 473
+        },
+        {
+          "name": "is_type_call",
+          "line": 503
+        },
+        {
+          "name": "occurrences",
+          "line": 511
+        },
+        {
+          "name": "occurrences",
+          "line": 527
+        },
+        {
+          "name": "occurrences",
+          "line": 536
+        },
+        {
+          "name": "codec_base",
+          "line": 553
+        },
+        {
+          "name": "occurrences",
+          "line": 560
+        },
+        {
+          "name": "__init__",
+          "line": 574
+        },
+        {
+          "name": "bind",
+          "line": 579
+        },
+        {
+          "name": "modules",
+          "line": 585
+        },
+        {
+          "name": "members",
+          "line": 591
+        },
+        {
+          "name": "assignment",
+          "line": 599
+        },
+        {
+          "name": "mutation",
+          "line": 604
+        },
+        {
+          "name": "parameter",
+          "line": 611
+        },
+        {
+          "name": "named_binding",
+          "line": 615
+        },
+        {
+          "name": "exception_binding",
+          "line": 619
+        },
+        {
+          "name": "type_parameter",
+          "line": 627
+        },
+        {
+          "name": "of",
+          "line": 631
+        },
+        {
+          "name": "at_any_depth",
+          "line": 641
+        },
+        {
+          "name": "__init__",
+          "line": 656
+        },
+        {
+          "name": "name",
+          "line": 661
+        },
+        {
+          "name": "member",
+          "line": 665
+        },
+        {
+          "name": "raw_access_count",
+          "line": 671
+        },
+        {
+          "name": "count",
+          "line": 678
+        },
+        {
+          "name": "occurrences",
+          "line": 690
+        },
+        {
+          "name": "__init__",
+          "line": 706
+        },
+        {
+          "name": "resolved",
+          "line": 711
+        },
+        {
+          "name": "reference",
+          "line": 717
+        },
+        {
+          "name": "parameterised",
+          "line": 721
+        },
+        {
+          "name": "members",
+          "line": 732
+        },
+        {
+          "name": "union",
+          "line": 737
+        },
+        {
+          "name": "forward_reference",
+          "line": 742
+        },
+        {
+          "name": "__init__",
+          "line": 764
+        },
+        {
+          "name": "read",
+          "line": 768
+        },
+        {
+          "name": "declare",
+          "line": 777
+        },
+        {
+          "name": "record_class",
+          "line": 787
+        },
+        {
+          "name": "last_name",
+          "line": 789
+        },
+        {
+          "name": "assignment_site",
+          "line": 795
+        },
+        {
+          "name": "parameter",
+          "line": 801
+        },
+        {
+          "name": "result",
+          "line": 805
+        },
+        {
+          "name": "annotated",
+          "line": 809
+        },
+        {
+          "name": "alias",
+          "line": 816
+        },
+        {
+          "name": "alias_statement",
+          "line": 826
+        },
+        {
+          "name": "uses",
+          "line": 840
+        },
+        {
+          "name": "count",
+          "line": 847
+        },
+        {
+          "name": "git",
+          "line": 851
+        },
+        {
+          "name": "revision",
+          "line": 855
+        },
+        {
+          "name": "python_paths",
+          "line": 861
+        },
+        {
+          "name": "delta",
+          "line": 880
+        },
+        {
+          "name": "failed",
+          "line": 884
+        },
+        {
+          "name": "compare",
+          "line": 888
+        },
+        {
+          "name": "main",
+          "line": 916
+        }
+      ]
+    }
+  },
+  "references": [
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/owner_restart.py",
+      "line": 191,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/owner_restart.py",
+      "line": 275,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/goal_actions.py",
+      "line": 192,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/coordination_schema.py",
+      "line": 69,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/coordination_schema.py",
+      "line": 81,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 32,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 113,
+      "name": "ChangedSource",
+      "context": "Load",
+      "function": "read"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 135,
+      "name": "ChangedSource",
+      "context": "Load",
+      "function": "count_changed"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 141,
+      "name": "CleanChangedLines",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 141,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 150,
+      "name": "CleanChangedLines",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 150,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 192,
+      "name": "ChangedSource",
+      "context": "Load",
+      "function": "count_changed"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 219,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 228,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 244,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 278,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 374,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 426,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 534,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 543,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 549,
+      "name": "PerFileOccurrenceMeasure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 903,
+      "name": "Measure",
+      "context": "Load",
+      "function": "compare"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 903,
+      "name": "Measure",
+      "context": "Load",
+      "function": "compare"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 908,
+      "name": "Measure",
+      "context": "Load",
+      "function": "compare"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 908,
+      "name": "CleanChangedLines",
+      "context": "Load",
+      "function": "compare"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 910,
+      "name": "ChangedSource",
+      "context": "Load",
+      "function": "compare"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 913,
+      "name": "Comparison",
+      "context": "Load",
+      "function": "compare"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 888,
+      "name": "Comparison",
+      "context": "Load",
+      "function": "compare"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 885,
+      "name": "introduced",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/debt_ratchet.py",
+      "line": 924,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/assignment_states.py",
+      "line": 133,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/turn_stats.py",
+      "line": 83,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/turn_stats.py",
+      "line": 87,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/execution_states.py",
+      "line": 179,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/src/agent_comms/pi_payloads.py",
+      "line": 667,
+      "name": "failed",
+      "context": "Load"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 39,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 76,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 124,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 172,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 267,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 399,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 412,
+      "name": "Measure",
+      "context": "Load",
+      "function": null
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 549,
+      "name": "Measure",
+      "context": "Load",
+      "function": "_dispatch"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 550,
+      "name": "Measure",
+      "context": "Load",
+      "function": "_dispatch"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 548,
+      "name": "Measure",
+      "context": "Load",
+      "function": "_dispatch"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 571,
+      "name": "Measure",
+      "context": "Load",
+      "function": "__getitem__"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 574,
+      "name": "Measure",
+      "context": "Load",
+      "function": "density"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 581,
+      "name": "Measure",
+      "context": "Load",
+      "function": "headline"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/measures.py",
+      "line": 584,
+      "name": "Measure",
+      "context": "Load",
+      "function": "as_record"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/census.py",
+      "line": 36,
+      "name": "Measure",
+      "context": "Load",
+      "function": "render_top"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/census.py",
+      "line": 58,
+      "name": "Measure",
+      "context": "Load",
+      "function": "render"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/census.py",
+      "line": 59,
+      "name": "Measure",
+      "context": "Load",
+      "function": "render"
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/audit-dependency/refactor_audit/census.py",
+      "line": 71,
+      "name": "Measure",
+      "context": "Load",
+      "function": "render"
+    }
+  ],
+  "limits": "Syntax references do not prove dynamic alias resolution. Class registration and actual CLI status were exercised separately."
+}

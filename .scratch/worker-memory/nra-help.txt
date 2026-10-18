@@ -1,0 +1,42 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 189, in _run_module_as_main
+  File "<frozen runpy>", line 148, in _get_module_details
+  File "<frozen runpy>", line 112, in _get_module_details
+  File "/home/ts/wt/nra-refactor2-r1-20260928/nominal_refactor_advisor/__init__.py", line 8, in <module>
+    from .analysis import (
+        analyze_lean_export,
+    )
+  File "/home/ts/wt/nra-refactor2-r1-20260928/nominal_refactor_advisor/analysis.py", line 24, in <module>
+    from .analysis_cache import (
+    ...<15 lines>...
+    )
+  File "/home/ts/wt/nra-refactor2-r1-20260928/nominal_refactor_advisor/analysis_cache.py", line 35, in <module>
+    from .detectors import (
+    ...<3 lines>...
+    )
+  File "/home/ts/wt/nra-refactor2-r1-20260928/nominal_refactor_advisor/detectors/__init__.py", line 3, in <module>
+    from ._base import *
+  File "/home/ts/wt/nra-refactor2-r1-20260928/nominal_refactor_advisor/detectors/_base.py", line 6366, in <module>
+    class ClassLineWitnessCandidate(ClassNameWitnessNameMixin, LineWitnessCandidate):
+        class_name: str
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-503b9a093-native-84d389a90e2228d6-20261014T030539Z/lib/python3.14/site-packages/metaclass_registry/core.py", line 806, in __new__
+    superseded = mcs._register_class(
+        new_class,
+    ...<2 lines>...
+        replaces=replaces,
+    )
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-503b9a093-native-84d389a90e2228d6-20261014T030539Z/lib/python3.14/site-packages/metaclass_registry/core.py", line 1034, in _register_class
+    superseded: type | None = register_once(
+                              ~~~~~~~~~~~~~^
+        config.registry_dict,
+        ^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        replaces=replaces,
+        ^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-503b9a093-native-84d389a90e2228d6-20261014T030539Z/lib/python3.14/site-packages/metaclass_registry/core.py", line 168, in register_once
+    raise DuplicateRegistryKeyError(
+    ...<4 lines>...
+    )
+metaclass_registry.exceptions.DuplicateRegistryKeyError: witness name alias mixin key AliasProperty(source_name='class_name') is already registered to nominal_refactor_advisor.detectors._base.ClassNameWitnessNameMixin; nominal_refactor_advisor.detectors._base.ClassLineWitnessCandidate cannot register under the same key. Give it its own key, or declare __replaces_registered__ = ClassNameWitnessNameMixin in its class body if it is meant to take the key over.

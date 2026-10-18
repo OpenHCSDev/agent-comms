@@ -1,0 +1,29 @@
+src/agent_comms/cursor_owner.py:22:    from .proven_source_coverage import ProvenSourceCoverage
+src/agent_comms/cursor_owner.py:85:        coverage: ProvenSourceCoverage,
+src/agent_comms/native_entries.py:221:        from .native_pi import PrivateEvidenceRead, _private_session_dir
+src/agent_comms/native_entries.py:224:        with PrivateEvidenceRead.open(session_file) as source:
+src/agent_comms/input_drain.py:551:            await self.effects.cursors.refresh(session_id, self.sessions.require(session_id))
+src/agent_comms/native_pi.py:645:    with PrivateEvidenceRead.open(path) as evidence:
+src/agent_comms/native_pi.py:651:    with PrivateEvidenceRead.open(path) as evidence:
+src/agent_comms/native_pi.py:688:class PrivateEvidenceRead:
+src/agent_comms/native_pi.py:736:    def _capture_append(self):
+src/agent_comms/native_pi.py:825:            size, digest = self._capture_append()
+src/agent_comms/native_pi.py:831:            self._commit_snapshot(size, digest)
+src/agent_comms/native_pi.py:837:    def _commit_snapshot(self, size, digest) -> None:
+src/agent_comms/native_pi.py:839:            self.verify_snapshot(size, digest.digest())
+src/agent_comms/native_pi.py:851:                    self.verify_snapshot(previous_size, self.prefix.digest.digest())
+src/agent_comms/native_pi.py:856:            size, digest = self._capture_append()
+src/agent_comms/native_pi.py:865:            self._commit_snapshot(size, digest)
+src/agent_comms/native_pi.py:870:    def verify_snapshot(self, size, expected_digest):
+src/agent_comms/cursor_publication.py:186:    async def refresh(self, session_id: str, thread_name: str) -> None:
+src/agent_comms/proven_source_coverage.py:44:class ProvenSourceCoverage:
+src/agent_comms/proven_source_coverage.py:113:    ) -> ProvenSourceCoverage:
+src/agent_comms/proven_source_coverage.py:162:            return ProvenSourceCoverage(
+src/agent_comms/proven_source_coverage.py:228:               source_reads: NativeEvidenceScope | None = None) -> ProvenSourceCoverage:
+src/agent_comms/proven_source_coverage.py:255:                    return ProvenSourceCoverage(
+src/agent_comms/native_source_cursor.py:23:from .proven_source_coverage import ProvenSourceCoverage, SourceCoverage
+src/agent_comms/native_source_cursor.py:80:    async def refresh_async(
+src/agent_comms/native_source_cursor.py:86:            partial(cls._refresh_owned, bus, wire_root_id, owner_name, source_reads),
+src/agent_comms/native_source_cursor.py:90:    def _refresh_owned(cls, bus, wire_root_id, owner_name, source_reads, store):
+src/agent_comms/native_source_cursor.py:172:        coverage: ProvenSourceCoverage,
+src/agent_comms/native_source_cursor.py:271:    ) -> ProvenSourceCoverage:

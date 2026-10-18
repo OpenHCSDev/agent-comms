@@ -1,0 +1,2 @@
+/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/worker-20min-baseline.json
+{"samples": 41, "rss_min": 397312, "rss_max": 503533568, "rss_last": 497287168, "uss_max": 483667968, "returncode": 0, "original_unchanged": true}

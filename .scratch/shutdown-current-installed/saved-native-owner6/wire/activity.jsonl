@@ -1,0 +1,8 @@
+{"thread": "project", "state": "thinking", "detail": "Message from the user, typed directly to you in this thread's own view. It is ad", "ts": 1792121913.7066743}
+{"thread": "project", "state": "thinking", "detail": "", "ts": 1792121913.835794}
+{"thread": "project", "state": "thinking", "detail": "", "ts": 1792121915.172257, "diagnostic": {"kind": "unavailable_drain", "owner": {"incarnation": {"name": "project", "created_at": 1792121910.5785902}, "generation": 2}, "error_type": "CoordinationReadUnavailable", "reason": "The database store is busy \u00b7 Diagnostic: /home/ts/wt/core-doctrine-segment/.scratch/shutdown-current-installed/saved-native-owner6/wire/diagnostics/drain-e7a191b73078e41432225979fae83773a4170e879509dd3ba227505210a6d11b.json", "recorded_at": 1792121915.158204}}
+{"thread": "project", "state": "thinking", "detail": "", "ts": 1792121915.1755989, "diagnostic": {"kind": "unavailable_drain", "owner": {"incarnation": {"name": "project", "created_at": 1792121910.5785902}, "generation": 2}, "error_type": "CoordinationReadUnavailable", "reason": "The database store is busy \u00b7 Diagnostic: /home/ts/wt/core-doctrine-segment/.scratch/shutdown-current-installed/saved-native-owner6/wire/diagnostics/drain-e7a191b73078e41432225979fae83773a4170e879509dd3ba227505210a6d11b.json", "recorded_at": 1792121915.158204}}
+{"thread": "project", "state": "thinking", "detail": "", "ts": 1792121916.0775805}
+{"thread": "project", "state": "thinking", "detail": "Finishing native statistics", "ts": 1792121916.147239}
+{"thread": "project", "state": "thinking", "detail": "Finishing turn", "ts": 1792121916.1876886}
+{"thread": "project", "state": "idle", "detail": "", "ts": 1792121916.2272992}

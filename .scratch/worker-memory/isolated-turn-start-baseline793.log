@@ -1,0 +1,625 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    from multiprocessing.spawn import spawn_main; spawn_main(tracker_fd=14, pipe_handle=16)
+                                                  ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 122, in spawn_main
+    exitcode = _main(fd, parent_sentinel)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 131, in _main
+    prepare(preparation_data)
+    ~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 246, in prepare
+    _fixup_main_from_path(data['init_main_from_path'])
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/spawn.py", line 297, in _fixup_main_from_path
+    main_content = runpy.run_path(main_path,
+                                  run_name="__mp_main__")
+  File "<frozen runpy>", line 287, in run_path
+  File "<frozen runpy>", line 98, in _run_module_code
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/isolated_worker_turn_start_child.py", line 39, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/isolated_worker_turn_start_child.py", line 34, in main
+    await run()
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/worker.py", line 43, in run
+    await agent.sessions.start_owner(thread.worktree, name)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/session_lifecycle.py", line 234, in start_owner
+    raise RelationViolationError(
+        f"Headless owner {os.getpid()} did not acquire {thread.name!r}; it belongs to {thread.pid}"
+    )
+agent_comms.errors.RelationViolationError: Headless owner 3503244 did not acquire 'memory-fork-worker'; it belongs to 3503032
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 700, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/isolated_worker_turn_start_child.py", line 39, in <module>
+    asyncio.run(main())
+    ~~~~~~~~~~~^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/isolated_worker_turn_start_child.py", line 34, in main
+    await run()
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/worker.py", line 43, in run
+    await agent.sessions.start_owner(thread.worktree, name)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/session_lifecycle.py", line 237, in start_owner
+    await self._bind_loaded(thread, session_id)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/session_lifecycle.py", line 256, in _bind_loaded
+    await self.transcript.replay(session_id, thread.name)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/transcript_updates.py", line 62, in replay
+    snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), name))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 674, in read
+    return await waiter
+           ^^^^^^^^^^^^
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 3503244) exited with status 1

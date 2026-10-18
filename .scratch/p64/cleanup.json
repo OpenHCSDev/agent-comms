@@ -1,0 +1,22 @@
+{
+  "owner": "doctrine-segment",
+  "purpose": "completed ratchet Git fixtures; no active lsof borrowers",
+  "removed": [
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/pytest-complete-data",
+      "bytes": 2806567
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/pytest-context-data",
+      "bytes": 57844
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/pytest-data",
+      "bytes": 1433864
+    },
+    {
+      "path": "/home/ts/wt/core-doctrine-segment/.scratch/p64/pytest-paired-data",
+      "bytes": 2808620
+    }
+  ]
+}

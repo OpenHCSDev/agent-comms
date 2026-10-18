@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"afa0e893d3074fc3896c5c8db52b219a","timestamp":"2026-10-16T04:11:39.746Z","cwd":"/home/ts/wt/core-doctrine-segment/.scratch/pi-state-name-installed/saved-native-owner3/project"}
+{"type":"model_change","id":"5b399025","parentId":null,"timestamp":"2026-10-16T04:11:42.457Z","provider":"response-local","modelId":"fixture"}
+{"type":"thinking_level_change","id":"a68b36c8","parentId":"5b399025","timestamp":"2026-10-16T04:11:42.465Z","thinkingLevel":"off"}
+{"type":"message","id":"ea1f6a3b","parentId":"a68b36c8","timestamp":"2026-10-16T04:11:42.479Z","message":{"role":"user","content":[{"type":"text","text":"single uncertain input"}],"timestamp":1792123902477,"inputId":"6d5c9f85a0bf6c4b30bff9071d581c8b","inputDigest":"c9b18c41d8463d4559e9e95469210078be085f1647f42ea17dce1a81e048bc0b"}}

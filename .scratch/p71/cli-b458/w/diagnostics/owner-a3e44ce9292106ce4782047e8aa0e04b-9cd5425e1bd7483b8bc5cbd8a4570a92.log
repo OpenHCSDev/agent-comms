@@ -1,0 +1,265 @@
+Owner launch: recipient
+Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+Exception in callback ObservationProcess.results()
+handle: <Handle ObservationProcess.results()>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1035, in results
+    raise self.died
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 1509895) was killed by signal 15 (Terminated)
+/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/resource_tracker.py:396: UserWarning: resource_tracker: There appear to be 5 leaked semaphore objects to clean up at shutdown: {'/mp-hm8h8kwf', '/mp-hed0z0sg', '/mp-awhs1v0z', '/mp-gvd6vh0q', '/mp-6uixq0i_'}
+  warnings.warn(

@@ -1,0 +1,78 @@
+{
+  "threads": {
+    "sender": {
+      "name": "sender",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/p71/cli-one/project",
+      "created_at": 1792191838.9926157,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": "selected-offline/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "recipient": {
+      "name": "recipient",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/p71/cli-one/project",
+      "created_at": 1792191839.1932254,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 1224902,
+        "start_time": 166748958
+      },
+      "model": "selected-offline/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "sender": {
+      "kind": "running"
+    },
+    "recipient": {
+      "kind": "stopped"
+    }
+  },
+  "last_seen": {
+    "sender": 1792191838.9940116,
+    "recipient": 1792191850.4147215
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 5,
+    "generations": {
+      "sender": 1,
+      "recipient": 5
+    }
+  },
+  "admissions": {
+    "counter": 5,
+    "generations": {
+      "sender": 1,
+      "recipient": 5
+    }
+  }
+}

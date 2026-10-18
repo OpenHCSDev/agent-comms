@@ -1,0 +1,659 @@
+{
+ "string_dispatch": [
+  {
+   "function": "src/agent_comms/todos.py::_repo",
+   "subject": "piece",
+   "values": [
+    "",
+    ".",
+    ".."
+   ]
+  }
+ ],
+ "isinstance_switch": [
+  {
+   "function": "src/agent_comms/field_codec.py::encode",
+   "subject": "value",
+   "checks": 7
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::value_schema",
+   "subject": "annotation",
+   "checks": 3
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_decode",
+   "subject": "data",
+   "checks": 5
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_decode",
+   "subject": "target",
+   "checks": 3
+  },
+  {
+   "function": "src/agent_comms/shared_ledger.py::remove_threads",
+   "subject": "value",
+   "checks": 3
+  }
+ ],
+ "raw_shape": [
+  {
+   "function": "src/agent_comms/bus_page_index.py::record",
+   "subject": "record",
+   "keys": [
+    "from",
+    "seq",
+    "to"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/channel_coding_tools.py::decode_request",
+   "subject": "value",
+   "keys": [
+    "arguments",
+    "call_id",
+    "name",
+    "token"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/cli_commands.py::add_parser",
+   "subject": "metadata",
+   "keys": [
+    "flags",
+    "group",
+    "parser_default",
+    "parser_default_factory",
+    "parser_options",
+    "wire_name"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/cli_commands.py::add_parser",
+   "subject": "options",
+   "keys": [
+    "choices",
+    "default",
+    "dest",
+    "required"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/declared_family.py::__new__",
+   "subject": "namespace",
+   "keys": [
+    "__registry__",
+    "_family_affix",
+    "declared_name"
+   ],
+   "model": {
+    "model": "src/agent_comms/declared_family.py::DeclaredFamily"
+   }
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_record_schema",
+   "subject": "metadata",
+   "keys": [
+    "description",
+    "wire_choices",
+    "wire_nonnull"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_record_schema",
+   "subject": "schema",
+   "keys": [
+    "default",
+    "description",
+    "enum"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/field_codec.py::_record_plan",
+   "subject": "field.metadata",
+   "keys": [
+    "wire_choices",
+    "wire_nonnull",
+    "wire_required"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/goal_attempts.py::for_goal",
+   "subject": "usage",
+   "keys": [
+    "cost",
+    "input",
+    "output",
+    "totalTokens"
+   ],
+   "model": {
+    "model": "src/agent_comms/pi_payloads.py::PiUsage"
+   }
+  },
+  {
+   "function": "src/agent_comms/goal_presentation.py::from_wire",
+   "subject": "data",
+   "keys": [
+    "block_reason",
+    "goal_id",
+    "inactive_wait_for",
+    "state",
+    "wait_for"
+   ],
+   "model": {
+    "model": "src/agent_comms/goal_presentation.py::GoalExecution"
+   }
+  },
+  {
+   "function": "src/agent_comms/image_inputs.py::prompt_images",
+   "subject": "block",
+   "keys": [
+    "data",
+    "mimeType",
+    "resource",
+    "type"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "wire",
+   "keys": [
+    "callID",
+    "state",
+    "tool"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "state",
+   "keys": [
+    "error",
+    "input",
+    "output",
+    "status"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "wire",
+   "keys": [
+    "arguments",
+    "call_id",
+    "input",
+    "name"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/import_records.py::capture",
+   "subject": "payload",
+   "keys": [
+    "guardian_history",
+    "message",
+    "replacement_history",
+    "summary"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/importing.py::_export",
+   "subject": "info",
+   "keys": [
+    "directory",
+    "id",
+    "revert",
+    "title"
+   ],
+   "model": {
+    "model": "src/agent_comms/importing.py::OpenCodeSession"
+   }
+  },
+  {
+   "function": "src/agent_comms/importing.py::_message",
+   "subject": "info",
+   "keys": [
+    "id",
+    "role",
+    "summary"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/registry_document.py::entry_from_wire",
+   "subject": "raw",
+   "keys": [
+    "admissions",
+    "aliases",
+    "last_seen",
+    "owners",
+    "statuses",
+    "threads"
+   ],
+   "model": {
+    "model": "src/agent_comms/registry_document.py::RegistryDocument"
+   }
+  },
+  {
+   "function": "src/agent_comms/runtime.py::_raise_owner_error",
+   "subject": "rpc",
+   "keys": [
+    "code",
+    "data",
+    "message"
+   ],
+   "model": {
+    "model": "src/agent_comms/exporting.py::WireExportRow"
+   }
+  },
+  {
+   "function": "src/agent_comms/runtime.py::update",
+   "subject": "request",
+   "keys": [
+    "id",
+    "options",
+    "toolCall"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/tools.py::tool_field",
+   "subject": "metadata",
+   "keys": [
+    "context_binding",
+    "wire_choices",
+    "wire_name"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/tools.py::_bounded_inbox_response",
+   "subject": "review",
+   "keys": [
+    "goal_id",
+    "messages",
+    "reviewed_inputs",
+    "wait_for"
+   ],
+   "model": {
+    "model": "src/agent_comms/tools.py::CommsGoalTool"
+   }
+  },
+  {
+   "function": "src/agent_comms/transcripts.py::repair_input_routing",
+   "subject": "report",
+   "keys": [
+    "conflicts",
+    "eligible",
+    "repaired",
+    "skipped"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/ui_model/delivery.py::from_wire",
+   "subject": "overview",
+   "keys": [
+    "currentScope",
+    "dismissedHistoricalCount",
+    "historicalCount",
+    "historicalInputs",
+    "inputs"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/ui_model/goal.py::from_owner",
+   "subject": "result",
+   "keys": [
+    "_meta",
+    "goal",
+    "goalExecution"
+   ],
+   "model": {}
+  },
+  {
+   "function": "src/agent_comms/wire_record.py::certified_public_references",
+   "subject": "value",
+   "keys": [
+    "from",
+    "id",
+    "seq"
+   ],
+   "model": {
+    "model": "src/agent_comms/bus_page_index.py::BusPageRow"
+   }
+  }
+ ],
+ "exact_key_set": [
+  {
+   "location": "src/agent_comms/acp_extension.py:611"
+  },
+  {
+   "location": "src/agent_comms/bus_publication.py:182"
+  },
+  {
+   "location": "src/agent_comms/channel_coding_tools.py:156"
+  },
+  {
+   "location": "src/agent_comms/pi_events.py:725"
+  },
+  {
+   "location": "src/agent_comms/working_memory_labels.py:260"
+  }
+ ],
+ "named_attribute": [
+  {
+   "location": "src/agent_comms/acp.py:299",
+   "name": "type"
+  },
+  {
+   "location": "src/agent_comms/acp.py:586",
+   "name": "message"
+  },
+  {
+   "location": "src/agent_comms/acp.py:516",
+   "name": "text"
+  },
+  {
+   "location": "src/agent_comms/agent_backend.py:550",
+   "name": "location_type"
+  },
+  {
+   "location": "src/agent_comms/agent_backend.py:561",
+   "name": "__abstractmethods__"
+  },
+  {
+   "location": "src/agent_comms/agent_backend.py:555",
+   "name": "event_kinds"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:67",
+   "name": "pidfd_open"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:70",
+   "name": "pidfd_open"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:83",
+   "name": "pidfd_send_signal"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:87",
+   "name": "pidfd_send_signal"
+  },
+  {
+   "location": "src/agent_comms/claim_admission.py:319",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/claim_admission.py:242",
+   "name": "O_DIRECTORY"
+  },
+  {
+   "location": "src/agent_comms/cohort_foreground.py:247",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/debt_ratchet.py:455",
+   "name": "type_param"
+  },
+  {
+   "location": "src/agent_comms/debt_ratchet.py:654",
+   "name": "TypeAlias"
+  },
+  {
+   "location": "src/agent_comms/debt_ratchet.py:503",
+   "name": "__module__"
+  },
+  {
+   "location": "src/agent_comms/debt_ratchet.py:557",
+   "name": "elts"
+  },
+  {
+   "location": "src/agent_comms/debt_ratchet.py:620",
+   "name": "func"
+  },
+  {
+   "location": "src/agent_comms/mro_dispatch.py:45",
+   "name": "__handled_classes__"
+  },
+  {
+   "location": "src/agent_comms/private_sidecar.py:106",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:61",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:69",
+   "name": "getpeereid"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:252",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway.py:253",
+   "name": "getpeereid"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway_client.py:72",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway_client.py:77",
+   "name": "dup"
+  },
+  {
+   "location": "src/agent_comms/recovery_gateway_client.py:79",
+   "name": "getpeereid"
+  },
+  {
+   "location": "src/agent_comms/selected_tool_broker.py:450",
+   "name": "SO_PEERCRED"
+  },
+  {
+   "location": "src/agent_comms/selected_tool_broker.py:450",
+   "name": "O_NOFOLLOW"
+  },
+  {
+   "location": "src/agent_comms/view_unread.py:119",
+   "name": "_connection"
+  }
+ ],
+ "long_condition": [
+  {
+   "location": "src/agent_comms/input_drain.py:311",
+   "terms": 6,
+   "profile": {
+    "kinds": [
+     [
+      "rule",
+      4
+     ],
+     [
+      "flag",
+      1
+     ],
+     [
+      "predicate",
+      1
+     ]
+    ]
+   },
+   "text": "session_id in self._idle_private_revisions and (not self.effects.cursors.delivery(session_"
+  }
+ ],
+ "god_class": [
+  {
+   "qualname": "src/agent_comms/input_drain.py::InputDrain",
+   "size": 629
+  },
+  {
+   "qualname": "src/agent_comms/publisher.py::Publisher",
+   "size": 506
+  },
+  {
+   "qualname": "src/agent_comms/thread_management.py::ThreadManagement",
+   "size": 557
+  },
+  {
+   "qualname": "src/agent_comms/wire_log.py::WireLog",
+   "size": 607
+  }
+ ],
+ "god_function": [
+  {
+   "qualname": "src/agent_comms/cohort_foreground.py::run_foreground_once",
+   "size": 116
+  },
+  {
+   "qualname": "src/agent_comms/cohort_schema.py::triggers",
+   "size": 105
+  },
+  {
+   "qualname": "src/agent_comms/field_codec.py::_decode",
+   "size": 103
+  },
+  {
+   "qualname": "src/agent_comms/fresh_private_session.py::create_fresh_private_session",
+   "size": 101
+  },
+  {
+   "qualname": "src/agent_comms/historical_native_inputs.py::read_historical_native_inputs",
+   "size": 108
+  },
+  {
+   "qualname": "src/agent_comms/historical_views.py::attach",
+   "size": 107
+  },
+  {
+   "qualname": "src/agent_comms/publisher.py::publish_initial_cohort",
+   "size": 206
+  },
+  {
+   "qualname": "src/agent_comms/recovery_projection.py::project",
+   "size": 137
+  },
+  {
+   "qualname": "src/agent_comms/relationships.py::snapshot",
+   "size": 140
+  },
+  {
+   "qualname": "src/agent_comms/thread_management.py::_rename_thread_unlocked",
+   "size": 132
+  }
+ ],
+ "legacy_marker": [
+  {
+   "location": "src/agent_comms/active_route.py:207",
+   "text": "thread dispatch. Nested shared borrowers remain compatible and each owns"
+  },
+  {
+   "location": "src/agent_comms/pi_payloads.py:326",
+   "text": "fallback_transport: str | None = wire_field(\"fallbackTransport\")"
+  },
+  {
+   "location": "src/agent_comms/pi_payloads.py:346",
+   "text": "if self.fallback_transport is not None:"
+  },
+  {
+   "location": "src/agent_comms/pi_payloads.py:347",
+   "text": "parts.append(f\"reported fallback transport: {self.fallback_transport}\")"
+  }
+ ],
+ "positional_insert": [],
+ "column_insert": [],
+ "embedded_script": [
+  {
+   "location": "src/agent_comms/tool_output.py:22",
+   "length": 252
+  }
+ ],
+ "child_process_site": [
+  {
+   "location": "src/agent_comms/change_report.py:129",
+   "call": "subprocess.run"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:255",
+   "call": "os.kill"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:599",
+   "call": "subprocess.Popen"
+  },
+  {
+   "location": "src/agent_comms/child_process.py:963",
+   "call": "asyncio.create_subprocess_exec"
+  },
+  {
+   "location": "src/agent_comms/cli_commands.py:1186",
+   "call": "subprocess.run"
+  }
+ ],
+ "literal_roster": [
+  {
+   "values": [
+    "X",
+    "Z"
+   ],
+   "copies": 2
+  }
+ ],
+ "dead_module": [
+  {
+   "path": "src/agent_comms/acp_ingress.py",
+   "lines": 192,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/cohort_send.py",
+   "lines": 74,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/context_segments/response.py",
+   "lines": 12,
+   "named_in_strings": true
+  },
+  {
+   "path": "src/agent_comms/delivery_failure.py",
+   "lines": 29,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/recovery_gateway.py",
+   "lines": 428,
+   "named_in_strings": true
+  },
+  {
+   "path": "src/agent_comms/recovery_gateway_client.py",
+   "lines": 135,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/todos.py",
+   "lines": 562,
+   "named_in_strings": false
+  },
+  {
+   "path": "src/agent_comms/ui_model/status.py",
+   "lines": 88,
+   "named_in_strings": true
+  }
+ ]
+}

@@ -1,0 +1,19 @@
+{
+  "label": "baseline793",
+  "runtime_python": "/home/ts/.local/share/agent-comms/runtimes/toad-4d37fae50-core-7ed862d6f-native-6152254fee45b5ed-20261014T013214Z/bin/python",
+  "pid": 3503032,
+  "sample_seconds": 30,
+  "duration_seconds": 1200,
+  "original": "/home/ts/.pi/agent/sessions/--home-ts-wt-toad-close-lifecycle--/2026-10-13T07-12-27-696Z_01a1341b-0231-7179-9990-6fb9b9ffe526.jsonl",
+  "original_bytes": 173654666,
+  "original_sha256": "c7a0b792751f7a6bfbf1a87476f68a6a335bb3ab75830261bf3ae3e7ee9edef1",
+  "fork": "/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/isolated-turn-start-baseline793/forks/2026-10-14T01-32-38-515Z_01a1380a-40f4-7728-ac7d-f4e5ccddddf6.jsonl",
+  "samples": [
+    {
+      "elapsed_seconds": 0.0,
+      "rss_bytes": 278528,
+      "uss_bytes": 28672,
+      "threads": 1
+    }
+  ]
+}

@@ -1,0 +1,5 @@
+#!/home/ts/wt/core-doctrine-segment/.venv/bin/python
+import os, pathlib, time
+pathlib.Path('/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-selected-final/test_stream_failure_reaps_back0/child.pid').write_text(str(os.getpid()))
+print('[]', flush=True)
+time.sleep(60)

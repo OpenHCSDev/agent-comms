@@ -1,0 +1,30 @@
+{
+  "dm": [
+    {
+      "seq": 1,
+      "id": "a3b06d6572d0",
+      "from": "sender",
+      "to": "recipient",
+      "ts": 1792192012.2954574,
+      "type": "info",
+      "text": "P71_INSTALLED_CLI_DM",
+      "sender_role": "agent"
+    },
+    {
+      "seq": 2,
+      "id": "7da390fcdd25",
+      "from": "recipient",
+      "to": "sender",
+      "ts": 1792192016.1713176,
+      "type": "info",
+      "text": "P71_INSTALLED_CLI_REPLY",
+      "sender_role": "agent",
+      "answers": [
+        {
+          "seq": 1,
+          "message_id": "a3b06d6572d0"
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "threads": {
+    "user": {
+      "name": "user",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/p9/run-2/project",
+      "created_at": 1792182813.556363,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "user",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "user": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "user": 1792182813.5565736
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 1,
+    "generations": {
+      "user": 1
+    }
+  },
+  "admissions": {
+    "counter": 1,
+    "generations": {
+      "user": 1
+    }
+  }
+}

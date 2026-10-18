@@ -1,0 +1,66 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/sqlite-tool-error/fresh-holder-case/saved-native-owner0/project",
+      "created_at": 1792114728.3179138,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/sqlite-tool-error/fresh-holder-case/saved-native-owner0/sessions/enrolled-3c9421f9f96745219805843f4e3f58dc.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 631352,
+        "start_time": 159036538
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": true,
+      "role": "agent",
+      "active_turn": {
+        "id": "10c13257f4734af8a87b4cd896e35230",
+        "owner_pid": 631352,
+        "started_at": 1792114731.0773444,
+        "routing": {
+          "requests": [],
+          "reply": null
+        },
+        "admission_generation": 2,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "provider_retry",
+          "detail": ""
+        }
+      },
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "project": 1792114731.077401
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 2,
+    "generations": {
+      "project": 2
+    }
+  },
+  "admissions": {
+    "counter": 2,
+    "generations": {
+      "project": 2
+    }
+  }
+}

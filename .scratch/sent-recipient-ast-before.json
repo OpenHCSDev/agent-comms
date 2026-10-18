@@ -1,0 +1,1056 @@
+{
+  "parsed": 685,
+  "omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 53,
+      "kind": "ClassDef",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 74,
+      "kind": "FunctionDef",
+      "name": "receipt_state"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 65,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 66,
+      "kind": "Name",
+      "name": "answered_at_ms"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 211,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 245,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 262,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 177,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 182,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 188,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 88,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 108,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 116,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 173,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 192,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 166,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 269,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 271,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 196,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 115,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 198,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/wake.py",
+      "line": 54,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/wake.py",
+      "line": 71,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 98,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 101,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 104,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 477,
+      "kind": "Attribute",
+      "name": "source_paths"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 348,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 351,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/history_views.py",
+      "line": 477,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 363,
+      "kind": "Name",
+      "name": "source_paths"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 367,
+      "kind": "Name",
+      "name": "source_paths"
+    },
+    {
+      "path": "src/agent_comms/publisher.py",
+      "line": 499,
+      "kind": "Name",
+      "name": "source_paths"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 45,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 155,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/selected_participant.py",
+      "line": 157,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 50,
+      "kind": "FunctionDef",
+      "name": "selected_response"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 56,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 43,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 88,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 54,
+      "kind": "Name",
+      "name": "AssignmentProgress"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 58,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 58,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 47,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 68,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/agent_activity.py",
+      "line": 81,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 196,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 198,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/thread_presentation.py",
+      "line": 74,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/thread_presentation.py",
+      "line": 75,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 69,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 231,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 322,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 346,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 400,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 463,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 513,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 555,
+      "kind": "FunctionDef",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 241,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 244,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 356,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 410,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 473,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 523,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 565,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 81,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 241,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 244,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 246,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 332,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 356,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 359,
+      "kind": "Attribute",
+      "name": "selected_response"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 360,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 360,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 410,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 424,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 473,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 476,
+      "kind": "Attribute",
+      "name": "selected_response"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 477,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 477,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 523,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 527,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 565,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 568,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 249,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 416,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 430,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 431,
+      "kind": "Attribute",
+      "name": "response_received_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 247,
+      "kind": "Attribute",
+      "name": "receipt_state"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 247,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 421,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 425,
+      "kind": "Attribute",
+      "name": "receipt_state"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 426,
+      "kind": "Attribute",
+      "name": "response_received_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 528,
+      "kind": "Attribute",
+      "name": "receipt_state"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 247,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 417,
+      "kind": "Attribute",
+      "name": "receipt_state"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 417,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 425,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 528,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/assignment_states.py",
+      "line": 417,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 26,
+      "kind": "ClassDef",
+      "name": "AssignmentProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 40,
+      "kind": "ClassDef",
+      "name": "NotShownProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 60,
+      "kind": "ClassDef",
+      "name": "ShownToModelProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 142,
+      "kind": "ClassDef",
+      "name": "AssignmentActivity"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 181,
+      "kind": "ClassDef",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 40,
+      "kind": "Name",
+      "name": "AssignmentProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 60,
+      "kind": "Name",
+      "name": "AssignmentProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 209,
+      "kind": "FunctionDef",
+      "name": "source_paths"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 32,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 37,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 117,
+      "kind": "Name",
+      "name": "response_received_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 145,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 148,
+      "kind": "Name",
+      "name": "response_received_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 151,
+      "kind": "Name",
+      "name": "AssignmentProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 168,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 183,
+      "kind": "Name",
+      "name": "AssignmentActivity"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 281,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 31,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 36,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 43,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 63,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 72,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 131,
+      "kind": "Name",
+      "name": "AssignmentActivity"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 282,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 67,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 77,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 137,
+      "kind": "Attribute",
+      "name": "response_received_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 152,
+      "kind": "Name",
+      "name": "ShownToModelProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 152,
+      "kind": "Name",
+      "name": "NotShownProgress"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 187,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 64,
+      "kind": "Attribute",
+      "name": "receipt_state"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 64,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 73,
+      "kind": "Attribute",
+      "name": "receipt_state"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 73,
+      "kind": "Name",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 47,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 64,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 73,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 375,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 377,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "src/agent_comms/context_segments/wake.py",
+      "line": 38,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "tests/test_acp_channel_disposition.py",
+      "line": 104,
+      "kind": "Attribute",
+      "name": "answered_at_ms"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 33,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 215,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 299,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 53,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 217,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 221,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 223,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 350,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "tests/test_outbound_transcript_source.py",
+      "line": 39,
+      "kind": "Name",
+      "name": "NotificationAssignment"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 151,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 152,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 157,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/reply_relevance_installed_journey.py",
+      "line": 149,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "tests/c4_coordination_installed_ui.py",
+      "line": 60,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "tests/channel_drain_readiness_installed_ui.py",
+      "line": 98,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/channel_drain_readiness_installed_ui.py",
+      "line": 104,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/channel_drain_readiness_installed_ui.py",
+      "line": 100,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/channel_drain_readiness_installed_ui.py",
+      "line": 102,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_coordinated_runtime.py",
+      "line": 455,
+      "kind": "Name",
+      "name": "MessageNotification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 50,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 107,
+      "kind": "Name",
+      "name": "AssignmentActivity"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 119,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 127,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 51,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 53,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 54,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 116,
+      "kind": "Attribute",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_historical_notifications.py",
+      "line": 52,
+      "kind": "Name",
+      "name": "notification"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 270,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 354,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    },
+    {
+      "path": "tests/test_acp_input_disposition.py",
+      "line": 372,
+      "kind": "Attribute",
+      "name": "read_at_ms"
+    }
+  ]
+}

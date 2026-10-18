@@ -1,0 +1,9 @@
+{
+  "source_head": "21e83b3982088a9ceaa2eb50efa9e3d2bd245d4e",
+  "wheel": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "0fee125f367b06ff10e3e5fdc87a6de0cb37dec95bb059a43c3945df626c9cd8",
+  "matched_production_modules": 307,
+  "matched_native_assets": 2,
+  "installed_ui_receipt": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-installed-journey-v2/receipt.json",
+  "unchanged_wheel_source_after_documentation_commit": true
+}

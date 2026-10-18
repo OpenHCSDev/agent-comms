@@ -1,0 +1,260 @@
+{
+  "runtime_python": "/home/ts/.local/share/agent-comms/runtimes/toad-6f0e3211d-core-012af2ffa-native-6152254fee45b5ed-20261013T234026Z/bin/python",
+  "pid": 3382020,
+  "sample_seconds": 30,
+  "duration_seconds": 1200,
+  "original": "/home/ts/.pi/agent/sessions/--home-ts-wt-toad-close-lifecycle--/2026-10-13T07-12-27-696Z_01a1341b-0231-7179-9990-6fb9b9ffe526.jsonl",
+  "original_bytes": 173654666,
+  "original_sha256": "c7a0b792751f7a6bfbf1a87476f68a6a335bb3ab75830261bf3ae3e7ee9edef1",
+  "fork": "/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/isolated-worker-stage-baseline/forks/2026-10-14T00-59-13-618Z_01a137eb-a952-72cf-bf22-009f844d8e0b.jsonl",
+  "samples": [
+    {
+      "elapsed_seconds": 0.0,
+      "rss_bytes": 397312,
+      "uss_bytes": 40960,
+      "threads": 1
+    },
+    {
+      "elapsed_seconds": 30.106,
+      "rss_bytes": 323923968,
+      "uss_bytes": 304119808,
+      "threads": 3
+    },
+    {
+      "elapsed_seconds": 60.116,
+      "rss_bytes": 497786880,
+      "uss_bytes": 477917184,
+      "threads": 3
+    },
+    {
+      "elapsed_seconds": 90.225,
+      "rss_bytes": 325402624,
+      "uss_bytes": 305532928,
+      "threads": 4
+    },
+    {
+      "elapsed_seconds": 120.334,
+      "rss_bytes": 327041024,
+      "uss_bytes": 307171328,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 150.443,
+      "rss_bytes": 327237632,
+      "uss_bytes": 307367936,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 180.553,
+      "rss_bytes": 327651328,
+      "uss_bytes": 307781632,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 210.66,
+      "rss_bytes": 502616064,
+      "uss_bytes": 482746368,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 240.686,
+      "rss_bytes": 329297920,
+      "uss_bytes": 309428224,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 270.777,
+      "rss_bytes": 329646080,
+      "uss_bytes": 309776384,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 300.88,
+      "rss_bytes": 329691136,
+      "uss_bytes": 309821440,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 330.988,
+      "rss_bytes": 329711616,
+      "uss_bytes": 309841920,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 361.102,
+      "rss_bytes": 503394304,
+      "uss_bytes": 483524608,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 391.212,
+      "rss_bytes": 329740288,
+      "uss_bytes": 309870592,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 421.321,
+      "rss_bytes": 329773056,
+      "uss_bytes": 309903360,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 451.43,
+      "rss_bytes": 329777152,
+      "uss_bytes": 309907456,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 481.539,
+      "rss_bytes": 329801728,
+      "uss_bytes": 309936128,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 511.652,
+      "rss_bytes": 503476224,
+      "uss_bytes": 483610624,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 541.759,
+      "rss_bytes": 329818112,
+      "uss_bytes": 309952512,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 571.866,
+      "rss_bytes": 329854976,
+      "uss_bytes": 309989376,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 601.977,
+      "rss_bytes": 329854976,
+      "uss_bytes": 309989376,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 632.051,
+      "rss_bytes": 503513088,
+      "uss_bytes": 483647488,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 662.159,
+      "rss_bytes": 329875456,
+      "uss_bytes": 310009856,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 692.274,
+      "rss_bytes": 503533568,
+      "uss_bytes": 483667968,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 722.465,
+      "rss_bytes": 500297728,
+      "uss_bytes": 483663872,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 752.577,
+      "rss_bytes": 250138624,
+      "uss_bytes": 233537536,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 782.64,
+      "rss_bytes": 235872256,
+      "uss_bytes": 219357184,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 812.731,
+      "rss_bytes": 237346816,
+      "uss_bytes": 220848128,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 842.809,
+      "rss_bytes": 239702016,
+      "uss_bytes": 223203328,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 872.845,
+      "rss_bytes": 322809856,
+      "uss_bytes": 306311168,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 902.955,
+      "rss_bytes": 323493888,
+      "uss_bytes": 306995200,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 933.05,
+      "rss_bytes": 323538944,
+      "uss_bytes": 307040256,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 963.157,
+      "rss_bytes": 497205248,
+      "uss_bytes": 480706560,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 993.226,
+      "rss_bytes": 323575808,
+      "uss_bytes": 307077120,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 1023.336,
+      "rss_bytes": 323575808,
+      "uss_bytes": 307077120,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 1053.445,
+      "rss_bytes": 323579904,
+      "uss_bytes": 307081216,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 1083.505,
+      "rss_bytes": 323579904,
+      "uss_bytes": 307081216,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 1113.558,
+      "rss_bytes": 323612672,
+      "uss_bytes": 307113984,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 1143.667,
+      "rss_bytes": 323612672,
+      "uss_bytes": 307113984,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 1173.775,
+      "rss_bytes": 323624960,
+      "uss_bytes": 307126272,
+      "threads": 5
+    },
+    {
+      "elapsed_seconds": 1203.83,
+      "rss_bytes": 497287168,
+      "uss_bytes": 480788480,
+      "threads": 5
+    }
+  ],
+  "returncode": 0,
+  "original_unchanged": true
+}

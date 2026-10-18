@@ -1,0 +1,36 @@
+Owner launch: recipient
+Traceback (most recent call last):
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-162dff613-core-21c25f49d-native-6468a1979d983e9d-20261016T230012Z/lib/python3.14/site-packages/agent_comms/native_pi.py", line 998, in _trusted_package
+    verify_native_package(package)
+    ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-162dff613-core-21c25f49d-native-6468a1979d983e9d-20261016T230012Z/lib/python3.14/site-packages/agent_comms/native_package.py", line 353, in verify_native_package
+    raise NativePackageError("Native package tree differs from pinned artifact")
+agent_comms.native_package.NativePackageError: Native package tree differs from pinned artifact
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-162dff613-core-21c25f49d-native-6468a1979d983e9d-20261016T230012Z/lib/python3.14/site-packages/agent_comms/worker.py", line 124, in <module>
+    asyncio.run(run())
+    ~~~~~~~~~~~^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-162dff613-core-21c25f49d-native-6468a1979d983e9d-20261016T230012Z/lib/python3.14/site-packages/agent_comms/worker.py", line 23, in run
+    verified_cli = private_nk.validate() if private_nk is not None else None
+                   ~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-162dff613-core-21c25f49d-native-6468a1979d983e9d-20261016T230012Z/lib/python3.14/site-packages/agent_comms/private_nk_entrypoint.py", line 81, in validate
+    return _preflight(self.validated_root, self.wire_root_id, self.native_package, True)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-162dff613-core-21c25f49d-native-6468a1979d983e9d-20261016T230012Z/lib/python3.14/site-packages/agent_comms/cohort_foreground.py", line 62, in _preflight
+    cli = _trusted_package(native_package)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-162dff613-core-21c25f49d-native-6468a1979d983e9d-20261016T230012Z/lib/python3.14/site-packages/agent_comms/native_pi.py", line 1000, in _trusted_package
+    raise NativePiUnavailable("Pinned native Pi package differs from reviewed fork") from error
+agent_comms.native_pi.NativePiUnavailable: Pinned native Pi package differs from reviewed fork

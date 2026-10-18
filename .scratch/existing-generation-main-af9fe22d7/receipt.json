@@ -1,0 +1,9 @@
+{
+  "merged_main": "af9fe22d71cc40e888bdd124abd798d8679bddc7",
+  "artifact": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/wheels/agent_comms-0.1.0-py3-none-any.whl",
+  "sha256": "0fee125f367b06ff10e3e5fdc87a6de0cb37dec95bb059a43c3945df626c9cd8",
+  "all_source_members_matched": 336,
+  "forced_native_assets_matched": 2,
+  "reuse": "Unchanged accepted wheel compared byte-for-byte with clean merged export",
+  "installed_acceptance": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-installed-journey-v2/receipt.json"
+}

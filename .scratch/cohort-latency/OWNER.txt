@@ -1,0 +1,3 @@
+Owner: doctrine-segment
+Purpose: disposable isolated SQLite copies and timing evidence for sealed cohort lookup latency
+Source originals are read-only; delete after PR acceptance.

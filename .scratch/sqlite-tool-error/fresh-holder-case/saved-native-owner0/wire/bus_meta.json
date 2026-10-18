@@ -1,0 +1,39 @@
+{
+  "last_seq": 0,
+  "admission_after_seq": 0,
+  "access": {
+    "kind": "writable"
+  },
+  "writer_protocol_version": 1,
+  "wire_root_id": "fc917a12bc7c4a36ab37b2cfd1c9df30",
+  "claim_envelopes_version": 1,
+  "checkpoint_version": 1,
+  "checkpoint_seal": {
+    "state": "final",
+    "version": 1,
+    "db_revision": {
+      "identity": {
+        "device": 2084,
+        "inode": 10917515
+      },
+      "size": 73728,
+      "mtime_ns": 1792114742639647508,
+      "ctime_ns": 1792114742639647508
+    },
+    "witness": {
+      "root_id": "fc917a12bc7c4a36ab37b2cfd1c9df30",
+      "revision": {
+        "identity": {
+          "device": 2084,
+          "inode": 10917513
+        },
+        "size": 123448,
+        "mtime_ns": 1792114742627647244,
+        "ctime_ns": 1792114742627647244
+      },
+      "through_seq": 0,
+      "digest": "79f1c75ae0f623c2dd464352d80c1b399ca9e03aa52368ce67b614340e249e68",
+      "tail": "2a0afe03d00e15fb4650f267d2e6c4ea28b941c2358c9ffb11b17ebbc3f28708"
+    }
+  }
+}

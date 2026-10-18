@@ -1,0 +1,78 @@
+{
+  "threads": {
+    "sender": {
+      "name": "sender",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/p71/cli-five/project",
+      "created_at": 1792192142.412367,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": "selected-offline/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "recipient": {
+      "name": "recipient",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/p71/cli-five/project",
+      "created_at": 1792192142.4584553,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/p71/cli-five/w/native-sessions/2208f1983c2795d049f9cc89f84ec105/2026-10-16T23-09-14-438Z_01a146fa-0b45-71f8-a091-b4a8da38bd4f.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 1250966,
+        "start_time": 166778370
+      },
+      "model": "selected-offline/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "435d16293f19cc1552ce94338bd108c5"
+    }
+  },
+  "statuses": {
+    "sender": {
+      "kind": "running"
+    },
+    "recipient": {
+      "kind": "stopped"
+    }
+  },
+  "last_seen": {
+    "sender": 1792192142.4134853,
+    "recipient": 1792192156.7973356
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 4,
+    "generations": {
+      "sender": 1,
+      "recipient": 4
+    }
+  },
+  "admissions": {
+    "counter": 4,
+    "generations": {
+      "sender": 1,
+      "recipient": 4
+    }
+  }
+}

@@ -1,0 +1,3 @@
+{"installed_core": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/goal_management.py", "saved_history_visible": true, "model_set_then_blocked": true, "actual_ui_retry_click": true, "goal_identity_preserved": true, "retry_generation": 2, "completed": true, "localhost_posts": 5, "saved_inputs": 3}
+{"saved_native_fixture": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed-tools-journey/native/wire", "localhost_posts": 5, "native_input_proofs": 7, "children": [{"pid": 1962650, "start_time": 138914049}], "children_retired": true}
+GOAL_GENERATION_INSTALLED_UI_PASS

@@ -1,0 +1,738 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 14 items
+
+tests/test_acp_input_disposition.py .FFFFFF..F.                          [ 78%]
+tests/test_input_drain.py FF                                             [ 92%]
+tests/test_native_drain_readiness.py .                                   [100%]
+
+=================================== FAILURES ===================================
+___ test_late_owner_socket_observes_unknown_until_exact_native_start[False] ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd7b7a7b110>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd7b7b8b680>
+second_start = False
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        native.provider.response_gate = asyncio.Event()
+        acknowledgements = []
+        decode = PiRpcChannel.decode_record
+    
+        def observed_response(raw, **options):
+            event = decode(raw, **options)
+            if isinstance(event, pi.Response) and event.command is commands.Prompt:
+                acknowledgements.append(event)
+            return event
+    
+        monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            updates = Updates()
+            attachment.on_connect(updates)
+            proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+            try:
+                await wait_for(lambda: native.provider.posts == 1)
+                # Subscribe after the original input starts, before transferring
+                # this socket controller's distinct follow-up into owned custody.
+                await proxy.subscribe()
+                accepted = await proxy.request(
+                    "prompt", prompt=[{"type": "text", "text": "followup"}],
+                    meta=encode_request(QueuePromptRequest()),
+                )
+                (receipt,) = decode_updates(accepted["_meta"])
+                assert isinstance(receipt, InputDeliveryChangedUpdate)
+                public_id = receipt.input_id
+                key = "acp:" + public_id
+                await wait_for(lambda: any(event.id == public_id and event.success
+                                          for event in acknowledgements))
+                pending = await proxy.request("input_dispositions")
+                assert any(isinstance(fact, InputDeliveryChangedUpdate)
+                           for update in updates.rows for fact in decode_updates(update.get("_meta")))
+                assert [row["inputId"] for row in pending["inputs"]] == [public_id]
+                unknown = stored_inputs(owner.inputs.dispositions.root).lookup(key)
+                assert unknown.unresolved and unknown.has_native_binding
+                assert not unknown.has_started  # Original RPC ACK is not native STARTED.
+                assert len(native.saved_inputs()) == 2 and native.provider.posts == 1
+                if second_start:
+                    native.provider.response_gate.set()
+                else:
+                    # Retire this exact private native child before the queued
+                    # input starts. Its original sent intent remains UNKNOWN.
+                    await backend.terminate_task_process(turn)
+                if second_start:
+                    assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+                else:
+                    with pytest.raises(RequestError) as caught:
+                        await asyncio.wait_for(turn, 30)
+                    failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+                    assert failure.notification_published
+                final = stored_inputs(owner.inputs.dispositions.root).rows
+                assert len(final) == 2
+                assert final[key].unresolved is (not second_start)
+                assert final[key].has_started is second_start
+                assert len({row.native_id for row in final.values()}) == 2
+>               assert sent_text(native, final[key]).endswith("followup")
+                       ^^^^^^^^^
+E               NameError: name 'sent_text' is not defined
+
+tests/test_acp_input_disposition.py:150: NameError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner1/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 649857, "start_time": 166308047}], "children_retired": true}
+____ test_late_owner_socket_observes_unknown_until_exact_native_start[True] ____
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd7b60b07d0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd7b46e6550>
+second_start = True
+
+    @pytest.mark.parametrize("second_start", [False, True])
+    async def test_late_owner_socket_observes_unknown_until_exact_native_start(
+        native_backend, monkeypatch, second_start
+    ):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        native.provider.response_gate = asyncio.Event()
+        acknowledgements = []
+        decode = PiRpcChannel.decode_record
+    
+        def observed_response(raw, **options):
+            event = decode(raw, **options)
+            if isinstance(event, pi.Response) and event.command is commands.Prompt:
+                acknowledgements.append(event)
+            return event
+    
+        monkeypatch.setattr(PiRpcChannel, "decode_record", staticmethod(observed_response))
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            updates = Updates()
+            attachment.on_connect(updates)
+            proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+            try:
+                await wait_for(lambda: native.provider.posts == 1)
+                # Subscribe after the original input starts, before transferring
+                # this socket controller's distinct follow-up into owned custody.
+                await proxy.subscribe()
+                accepted = await proxy.request(
+                    "prompt", prompt=[{"type": "text", "text": "followup"}],
+                    meta=encode_request(QueuePromptRequest()),
+                )
+                (receipt,) = decode_updates(accepted["_meta"])
+                assert isinstance(receipt, InputDeliveryChangedUpdate)
+                public_id = receipt.input_id
+                key = "acp:" + public_id
+                await wait_for(lambda: any(event.id == public_id and event.success
+                                          for event in acknowledgements))
+                pending = await proxy.request("input_dispositions")
+                assert any(isinstance(fact, InputDeliveryChangedUpdate)
+                           for update in updates.rows for fact in decode_updates(update.get("_meta")))
+                assert [row["inputId"] for row in pending["inputs"]] == [public_id]
+                unknown = stored_inputs(owner.inputs.dispositions.root).lookup(key)
+                assert unknown.unresolved and unknown.has_native_binding
+                assert not unknown.has_started  # Original RPC ACK is not native STARTED.
+                assert len(native.saved_inputs()) == 2 and native.provider.posts == 1
+                if second_start:
+                    native.provider.response_gate.set()
+                else:
+                    # Retire this exact private native child before the queued
+                    # input starts. Its original sent intent remains UNKNOWN.
+                    await backend.terminate_task_process(turn)
+                if second_start:
+                    assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+                else:
+                    with pytest.raises(RequestError) as caught:
+                        await asyncio.wait_for(turn, 30)
+                    failure = RequestFailure.from_error(caught.value.code, str(caught.value), caught.value.data)
+                    assert failure.notification_published
+                final = stored_inputs(owner.inputs.dispositions.root).rows
+                assert len(final) == 2
+                assert final[key].unresolved is (not second_start)
+                assert final[key].has_started is second_start
+                assert len({row.native_id for row in final.values()}) == 2
+>               assert sent_text(native, final[key]).endswith("followup")
+                       ^^^^^^^^^
+E               NameError: name 'sent_text' is not defined
+
+tests/test_acp_input_disposition.py:150: NameError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner2/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 650443, "start_time": 166309194}], "children_retired": true}
+___________ test_native_steer_keeps_original_input_and_turn_custody ____________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd7b4246780>
+
+    async def test_native_steer_keeps_original_input_and_turn_custody(native_backend):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        original_response = asyncio.Event()
+        native.provider.response_gate = original_response
+        async with native.open_owner(runtime_enabled=True) as (owner, session):
+            turn = asyncio.create_task(owner.prompt(session, [TextContentBlock(type="text", text="first")]))
+            attachment = canonical_agent(owner._comms, auto_wake=False)
+            attachment.on_connect(Updates())
+            proxy = RuntimeProxy(attachment, session, socket_path(native.root, os.getpid()))
+            try:
+                await proxy.subscribe()
+                await wait_for(lambda: native.provider.posts == 1)
+                lease = owner._comms.registry.require(session).require_turn_lease()
+                # The first actual response remains held; native interrupt must
+                # consume the distinct steer before it can finish this turn.
+                native.provider.response_gate = None
+                accepted = await proxy.request(
+                    "prompt", prompt=[{"type": "text", "text": "steer now"}],
+                    meta=encode_request(SteerPromptRequest()),
+                )
+                (receipt,) = decode_updates(accepted["_meta"])
+                assert isinstance(receipt, InputDeliveryChangedUpdate)
+>               assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_input_disposition.py:200: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+src/agent_comms/acp.py:207: in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp_request_consumer.py:23: in run
+    await self.dispatch(request)
+src/agent_comms/mro_dispatch.py:58: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/mro_dispatch.py:63: in consume_handlers
+    replacement = await handler(value, *args, **kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp_request_consumer.py:46: in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:286: in _prompt_request
+    return await self.turns.prompt_owned(
+src/agent_comms/turn_runner.py:231: in prompt_owned
+    await InitialInput.run(self.inputs,
+src/agent_comms/queued_input.py:585: in run
+    await item.dispatch(inputs.effects.turns, session_id, thread_name)
+src/agent_comms/queued_input.py:244: in dispatch
+    await turns.run_agent_turn(
+src/agent_comms/turn_runner.py:543: in run_agent_turn
+    await OwnedTurn(
+src/agent_comms/owned_turn.py:415: in run
+    await self.run_native()
+src/agent_comms/owned_turn.py:443: in run_native
+    await self.progress.publish_result()
+src/agent_comms/turn_progress.py:355: in publish_result
+    self.result.outcome.raise_if_failed()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = FailedNativeTurnOutcome(request=RequestFailure(failure=RequestACPFailure(code=-32603, detail='Request aborted', input_...nostics=(), retry_result=None), notification_published=True), source=UnrecordedFailureSource(), failed_input_text=None)
+
+    def raise_if_failed(self) -> None:
+>       raise self.request.request_error()
+E       acp.exceptions.RequestError: Internal error
+
+src/agent_comms/acp_failure.py:301: RequestError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner3/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 651090, "start_time": 166310358}], "children_retired": true}
+_______ test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn ________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd7b42468b0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd7b423e5d0>
+
+    async def test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn(
+        native_backend, monkeypatch,
+    ):
+        native = native_backend
+        await native.author_history()
+        held = asyncio.Event()
+        native.provider.response_gate = held
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+            comms = owner._comms
+            root_id = owner._private_nk_wire_root_id
+            receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+            lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
+    
+            def prepare():
+                comms.registry.register(
+                    Thread(
+                        name="sender", tags=frozenset(), worktree=str(native.project),
+                        created_at=61001.0,
+                    )
+                )
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(prepare)
+            turn = asyncio.create_task(
+                owner.prompt(session, [TextContentBlock(type="text", text="first")])
+            )
+            try:
+                await wait_for(lambda: native.provider.posts == 1)
+                message = await Coordination.run_worker(partial(
+                    Comms(native.root, private_initial_writes=True).messaging.send_message,
+                    "sender", session, "are you still on the parser?",
+                ))
+                native.provider.response_gate = None
+                # The owner's own observation hands the message to the turn.
+                await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 2)
+                held.set()
+                assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+    
+                def assignments():
+                    with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                        return sealed_cohort_assignments(store, lookup)
+    
+                (assignment,) = await Coordination.run_worker(assignments)
+                assert assignment.wire_seq == message.seq
+                assert type(assignment.lifecycle) is DeliveredAssignment
+                def forbid_native_evidence(*_args, **_kwargs):
+                    raise AssertionError("notification projection decoded native evidence")
+    
+                monkeypatch.setattr(
+                    "agent_comms.native_entries.NativeEntry.read_evidence",
+                    forbid_native_evidence,
+                )
+                sender_view = comms.views.thread_presentation("sender")
+                assert sender_view is not None
+                sent_read = next(
+                    outcome for outcome in sender_view.sent_notifications
+                    if outcome.message.reference == message.reference
+                )
+                assert sent_read.state.startswith("Read ")
+>               assert sent_read.read_at_ms == assignment.updated_at_ms
+                       ^^^^^^^^^^^^^^^^^^^^
+E               AttributeError: 'MessageNotification' object has no attribute 'read_at_ms'
+
+tests/test_acp_input_disposition.py:280: AttributeError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner4/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 651971, "start_time": 166311563}], "children_retired": true}
+__________ test_waiting_message_is_drained_when_following_input_opens __________
+
+fut = <coroutine object Event.wait at 0x7fd79fa19000>, timeout = 30
+
+    async def wait_for(fut, timeout):
+        """Wait for the single Future or coroutine to complete, with timeout.
+    
+        Coroutine will be wrapped in Task.
+    
+        Returns result of the Future or coroutine.  When a timeout occurs,
+        it cancels the task and raises TimeoutError.  To avoid the task
+        cancellation, wrap it in shield().
+    
+        If the wait is cancelled, the task is also cancelled.
+    
+        If the task suppresses the cancellation and returns a value instead,
+        that value is returned.
+    
+        This function is a coroutine.
+        """
+        # The special case for timeout <= 0 is for the following case:
+        #
+        # async def test_waitfor():
+        #     func_started = False
+        #
+        #     async def func():
+        #         nonlocal func_started
+        #         func_started = True
+        #
+        #     try:
+        #         await asyncio.wait_for(func(), 0)
+        #     except asyncio.TimeoutError:
+        #         assert not func_started
+        #     else:
+        #         assert False
+        #
+        # asyncio.run(test_waitfor())
+    
+    
+        if timeout is not None and timeout <= 0:
+            fut = ensure_future(fut)
+    
+            if fut.done():
+                return fut.result()
+    
+            await _cancel_and_wait(fut)
+            try:
+                return fut.result()
+            except exceptions.CancelledError as exc:
+                raise TimeoutError from exc
+    
+        async with timeouts.timeout(timeout):
+>           return await fut
+                   ^^^^^^^^^
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <asyncio.locks.Event object at 0x7fd79f6fdd30 [unset]>
+
+    async def wait(self):
+        """Block until the internal flag is true.
+    
+        If the internal flag is true on entry, return True
+        immediately.  Otherwise, block until another task calls
+        set() to set the flag to true, then return True.
+        """
+        if self._value:
+            return True
+    
+        fut = self._get_loop().create_future()
+        self._waiters.append(fut)
+        try:
+>           await fut
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/locks.py:213: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd79fb895b0>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fd7b7cabd80>
+
+    async def test_waiting_message_is_drained_when_following_input_opens(
+        native_backend, monkeypatch,
+    ):
+        native = native_backend
+        await native.author_history()
+        native.provider.tool_call = (
+            "bash", {"command": "sleep 2; printf slow-tool-done"},
+        )
+        opened, open_release = asyncio.Event(), asyncio.Event()
+        started, started_release = asyncio.Event(), asyncio.Event()
+        original_open = OwnerFollowingInputs.open
+        original_started = OwnerFollowingInputs.started
+    
+        async def delayed_open(following, tracked):
+            opened.set()
+            await open_release.wait()
+            await original_open(following, tracked)
+    
+        async def delayed_started(following, input_id):
+            started.set()
+            await started_release.wait()
+            return await original_started(following, input_id)
+    
+        monkeypatch.setattr(OwnerFollowingInputs, "open", delayed_open)
+        monkeypatch.setattr(OwnerFollowingInputs, "started", delayed_started)
+        async with native.open_owner(
+            runtime_enabled=True, auto_wake=True, native_options=("--tools", "bash"),
+        ) as (owner, session):
+            comms = owner._comms
+            receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+            lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
+    
+            def prepare():
+                comms.registry.register(
+                    Thread(
+                        name="sender", tags=frozenset(), worktree=str(native.project),
+                        created_at=61002.0,
+                    )
+                )
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(prepare)
+            initial = await Coordination.run_worker(partial(
+                Comms(native.root, private_initial_writes=True).messaging.send_message,
+                "sender", session, "first",
+            ))
+            try:
+>               await asyncio.wait_for(opened.wait(), 30)
+
+tests/test_acp_input_disposition.py:348: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:487: in wait_for
+    async with timeouts.timeout(timeout):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fd7b4179a80>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner5/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 652577, "start_time": 166312447}], "children_retired": true}
+________ test_waiting_messages_follow_the_original_on_the_changed_model ________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd79f420490>
+
+    async def test_waiting_messages_follow_the_original_on_the_changed_model(
+        native_backend,
+    ):
+        native = native_backend
+        await native.author_history()
+        held = asyncio.Event()
+        native.provider.response_gate = held
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+            comms = owner._comms
+            receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+            lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
+    
+            def prepare():
+                comms.registry.register(
+                    Thread(
+                        name="sender", tags=frozenset(), worktree=str(native.project),
+                        created_at=61001.0,
+                    )
+                )
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(prepare)
+            turn = asyncio.create_task(
+                owner.prompt(session, [TextContentBlock(type="text", text="first")])
+            )
+            try:
+                await wait_for(lambda: native.provider.posts == 1)
+                assert native.provider.requests[0]["model"] == "fixture"
+                sender = Comms(native.root, private_initial_writes=True).messaging
+                for body in ("first question", "second question"):
+                    await Coordination.run_worker(partial(
+                        sender.send_message, "sender", session, body
+                    ))
+                native.provider.response_gate = None
+                await owner.set_config_option(
+                    FieldCodec.encode(ModelConfigOption), session, "response-local/fixture-second"
+                )
+                await wait_for(lambda: len(stored_inputs(owner.inputs.dispositions.root).rows) == 3)
+                held.set()
+                assert (await asyncio.wait_for(turn, 30)).stop_reason == "end_turn"
+                # Bus inputs are follow-ups, not steering. Pi's default takes each
+                # separately after the original answer, both using the changed model.
+>               assert native.provider.posts == 3
+E               assert 2 == 3
+E                +  where 2 = <compaction_loopback.LoopbackProvider object at 0x7fd79f420af0>.posts
+E                +    where <compaction_loopback.LoopbackProvider object at 0x7fd79f420af0> = <native_backend_fixture.NativeBackendFixture object at 0x7fd79f420490>.provider
+
+tests/test_acp_input_disposition.py:446: AssertionError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner6/wire", "localhost_posts": 2, "native_input_proofs": 4, "children": [{"pid": 655436, "start_time": 166316046}], "children_retired": true}
+_____ test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn ______
+
+predicate = <function test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn.<locals>.<lambda> at 0x7fd79f753ed0>
+
+    async def wait_for(predicate):
+        async with asyncio.timeout(30):
+            while not predicate():
+>               await asyncio.sleep(0.01)
+
+tests/test_acp_input_disposition.py:52: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+delay = 0.01, result = None
+
+    async def sleep(delay, result=None):
+        """Coroutine that completes after a given time (in seconds)."""
+        if delay <= 0:
+            await __sleep0()
+            return result
+    
+        if math.isnan(delay):
+            raise ValueError("Invalid delay: NaN (not a number)")
+    
+        loop = events.get_running_loop()
+        future = loop.create_future()
+        h = loop.call_later(delay,
+                            futures._set_result_unless_cancelled,
+                            future, result)
+        try:
+>           return await future
+                   ^^^^^^^^^^^^
+E           asyncio.exceptions.CancelledError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:702: CancelledError
+
+The above exception was the direct cause of the following exception:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd79f456c50>
+
+    async def test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn(native_backend):
+        native = native_backend
+        await native.author_history()
+        held = asyncio.Event()
+        native.provider.response_gate = held
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (owner, session):
+            comms = owner._comms
+            receiver = await Coordination.run_worker(partial(comms.registry.require, session))
+            lookup = RecordedThreadIncarnation("fixture", receiver.created_at).lookup
+            comms.threads.claim_thread("sender", tags=frozenset(), worktree=str(native.project))
+            try:
+                first = comms.messaging.send_message("sender", session, "which parser is slow?")
+                await owner.inputs.drain_inbox(session)
+>               await wait_for(lambda: native.provider.posts == 1)
+
+tests/test_acp_input_disposition.py:553: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_input_disposition.py:50: in wait_for
+    async with asyncio.timeout(30):
+               ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Timeout [expired]>
+exc_type = <class 'asyncio.exceptions.CancelledError'>
+exc_val = CancelledError(), exc_tb = <traceback object at 0x7fd79f5e5640>
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> bool | None:
+        assert self._state in (_State.ENTERED, _State.EXPIRING)
+    
+        if self._timeout_handler is not None:
+            self._timeout_handler.cancel()
+            self._timeout_handler = None
+    
+        if self._state is _State.EXPIRING:
+            self._state = _State.EXPIRED
+    
+            if self._task.uncancel() <= self._cancelling and exc_type is not None:
+                # Since there are no new cancel requests, we're
+                # handling this.
+                if issubclass(exc_type, exceptions.CancelledError):
+>                   raise TimeoutError from exc_val
+E                   TimeoutError
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py:114: TimeoutError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner8/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 656611, "start_time": 166317834}], "children_retired": true}
+__ test_unstarted_input_failure_restores_exact_original_without_replay[False] __
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd79f84c5f0>
+terminal = False
+
+    @pytest.mark.parametrize("terminal", [False, True])
+    async def test_unstarted_input_failure_restores_exact_original_without_replay(native_backend, terminal):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        async with native.open_owner() as (agent, session_id):
+            async with native.original_input(agent, session_id, "lost prompt") as turn:
+                if terminal:
+                    # The original native failure owner settles unbound input before
+                    # reporting its terminal error; error observation alone does not.
+                    from agent_comms.input_attempt import NotSentInput
+                    assert await Coordination.run_worker(turn.settle_unbound) is NotSentInput
+                event = (events.Done("Pi preflight ended before attestation", False)
+                         if terminal else events.Error("Pi preflight ended before attestation"))
+                await agent._emit_event(session_id, event, Client())
+>               failed = tuple(fact for fact in decode_updates(updates[-1].field_meta)
+                                                               ^^^^^^^^^^^
+                               if isinstance(fact, InputFailedUpdate))
+E               IndexError: list index out of range
+
+tests/test_input_drain.py:38: IndexError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner10/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 660096, "start_time": 166322299}], "children_retired": true}
+__ test_unstarted_input_failure_restores_exact_original_without_replay[True] ___
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd79f8456d0>
+terminal = True
+
+    @pytest.mark.parametrize("terminal", [False, True])
+    async def test_unstarted_input_failure_restores_exact_original_without_replay(native_backend, terminal):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        updates = []
+    
+        class Client:
+            async def session_update(self, **kwargs):
+                updates.append(kwargs["update"])
+    
+        async with native.open_owner() as (agent, session_id):
+            async with native.original_input(agent, session_id, "lost prompt") as turn:
+                if terminal:
+                    # The original native failure owner settles unbound input before
+                    # reporting its terminal error; error observation alone does not.
+                    from agent_comms.input_attempt import NotSentInput
+                    assert await Coordination.run_worker(turn.settle_unbound) is NotSentInput
+                event = (events.Done("Pi preflight ended before attestation", False)
+                         if terminal else events.Error("Pi preflight ended before attestation"))
+>               await agent._emit_event(session_id, event, Client())
+
+tests/test_input_drain.py:37: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:504: in _emit_event
+    return await AcpEventConsumer(self, session_id, client, turn_id, route).dispatch(event)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/mro_dispatch.py:58: in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/mro_dispatch.py:63: in consume_handlers
+    replacement = await handler(value, *args, **kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/agent_event_updates.py:180: in on_done
+    return replace(event, outcome=await event.outcome.publish(self.client, self.session_id))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = UnresolvedNativeTurnOutcome()
+client = <test_input_drain.test_unstarted_input_failure_restores_exact_original_without_replay.<locals>.Client object at 0x7fd79f402120>
+session_id = 'project'
+
+    async def publish(self, client, session_id: str) -> NativeTurnOutcome:
+>       raise RuntimeError("Native completion has not been resolved at its input boundary")
+E       RuntimeError: Native completion has not been resolved at its input boundary
+
+src/agent_comms/acp_failure.py:234: RuntimeError
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/native-package/saved-native-owner11/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 660458, "start_time": 166322694}], "children_retired": true}
+=========================== short test summary info ============================
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[False]
+FAILED tests/test_acp_input_disposition.py::test_late_owner_socket_observes_unknown_until_exact_native_start[True]
+FAILED tests/test_acp_input_disposition.py::test_native_steer_keeps_original_input_and_turn_custody
+FAILED tests/test_acp_input_disposition.py::test_bus_message_arriving_mid_turn_is_taken_by_the_running_turn
+FAILED tests/test_acp_input_disposition.py::test_waiting_message_is_drained_when_following_input_opens
+FAILED tests/test_acp_input_disposition.py::test_waiting_messages_follow_the_original_on_the_changed_model
+FAILED tests/test_acp_input_disposition.py::test_bus_message_arriving_during_a_reply_turn_is_taken_by_that_turn
+FAILED tests/test_input_drain.py::test_unstarted_input_failure_restores_exact_original_without_replay[False]
+FAILED tests/test_input_drain.py::test_unstarted_input_failure_restores_exact_original_without_replay[True]
+=================== 9 failed, 5 passed in 251.39s (0:04:11) ====================

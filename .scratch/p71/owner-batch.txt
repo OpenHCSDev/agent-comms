@@ -1,0 +1,17 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 73 items
+
+tests/test_captured_input_dispatch.py .....                              [  6%]
+tests/test_private_idle_drain.py ............                            [ 23%]
+tests/test_input_disposition.py ..........                               [ 36%]
+tests/test_pi_rpc_nominal.py ........................................    [ 91%]
+tests/test_agent_backend.py .                                            [ 93%]
+tests/test_selected_owner_followup.py ....                               [ 98%]
+tests/test_acp_queue_contract.py .                                       [100%]
+
+============================= 73 passed in 15.27s ==============================

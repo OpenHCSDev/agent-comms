@@ -1,0 +1,1 @@
+{"providers": {"response-local": {"baseUrl": "http://127.0.0.1:43487/v1", "api": "openai-completions", "models": [{"id": "fixture", "name": "Local coding fixture", "contextWindow": 272000, "maxTokens": 128}]}}}

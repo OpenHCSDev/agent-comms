@@ -1,0 +1,6 @@
+Processing ./.scratch/existing-generation-candidate/wheels/agent_comms-0.1.0-py3-none-any.whl
+Installing collected packages: agent-comms
+Successfully installed agent-comms-0.1.0
+
+[notice] A new release of pip is available: 25.3 -> 26.2.1
+[notice] To update, run: /home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/bin/python -m pip install --upgrade pip

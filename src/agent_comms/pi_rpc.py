@@ -6,9 +6,9 @@ from .jsonl_stream import JsonlStreamReader
 import asyncio
 import json
 from typing import TYPE_CHECKING, Any
-from uuid import uuid4
 
-from .pending_requests import PendingRequests
+from .native_prompt_send import send_fenced_prompt
+from .pending_requests import PendingRequest, PendingRequests
 from .sealed import Sealed
 
 if TYPE_CHECKING:
@@ -60,15 +60,16 @@ class PiRpcChannel(JsonlStreamReader, Sealed):
             return None
         return self.decode_record(raw, strict=strict, max_bytes=max_bytes)
 
-    def encode(self, command: PiCommand) -> bytes:
-        """Register before writing; correlated proof still requires its native input ID."""
-        self.track(command)
-        return self.command_bytes(command)
+    def write(self, command: PiCommand, writer: asyncio.StreamWriter) -> PendingRequest:
+        writer.write(self.command_bytes(command))
+        return self.pending.add(command)
 
-    def track(self, command: PiCommand) -> asyncio.Future[Response]:
-        """Expose the same pending response to the request's lifecycle owner."""
-        key = command.id or uuid4().hex
-        return self.pending.add(type(command), key, request=command)
+    async def write_fenced(self, command: PiCommand, writer: asyncio.StreamWriter,
+                           boundary, *, measurements) -> PendingRequest:
+        await send_fenced_prompt(
+            writer, self.command_bytes(command), boundary, measurements=measurements,
+        )
+        return self.pending.add(command)
 
     @staticmethod
     def command_bytes(command: PiCommand) -> bytes:

@@ -1,0 +1,78 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed-manifest-journey/native/project",
+      "created_at": 1791913408.866502,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed-manifest-journey/native/sessions/enrolled-b90ca813e85742bd9faed14c3668e1ac.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 1958001,
+        "start_time": 138904622
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "e3642ee49e5c400aa31f74125f05a9c7"
+    },
+    "user": {
+      "name": "user",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed-manifest-journey/native/project",
+      "created_at": 1791913414.4693112,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "user",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "stopped"
+    },
+    "user": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "project": 1791913417.2697675,
+    "user": 1791913414.4695404
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "user": 3
+    }
+  },
+  "admissions": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "user": 3
+    }
+  }
+}

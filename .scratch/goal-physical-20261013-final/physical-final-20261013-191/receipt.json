@@ -1,0 +1,12 @@
+{
+  "installed_core": "/home/ts/.local/share/agent-comms/runtimes/toad-f2240a6b3-core-9f94e8f5a-native-21e71cdc648ed997-20261013T183520Z/lib/python3.14/site-packages/agent_comms/goal_management.py",
+  "physical_st": true,
+  "saved_history_visible": true,
+  "model_set_then_blocked": true,
+  "actual_ui_retry_click": true,
+  "goal_identity_preserved": true,
+  "retry_generation": 2,
+  "completed": true,
+  "localhost_posts": 5,
+  "saved_inputs": 3
+}

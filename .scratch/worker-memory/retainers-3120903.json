@@ -1,0 +1,893 @@
+{
+  "pid": 3120903,
+  "thread": "toad-close-lifecycle",
+  "time": 1791936085.2542539,
+  "bytes": [],
+  "container_parents": [
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248083520,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280156800,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248052320,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280816576,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248069184,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280547520,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248069632,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538278884736,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248070080,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280546624,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248070304,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280871680,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248070528,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538278882880,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248070752,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280834944,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248071200,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538278915776,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248071648,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280885824,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248072096,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538278884544,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248072544,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279057664,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248072768,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279053248,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248073216,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279160768,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248073440,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279245504,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248073888,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279062528,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248074336,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279228928,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248074784,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538278907008,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248075008,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279343552,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248075232,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538276083712,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248075456,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280157760,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248075680,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538275415040,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248075904,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538275319232,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248076128,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538275417088,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248076352,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271636032,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248076576,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271834880,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248076800,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271828160,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248077024,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271762112,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248077248,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271886528,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248077472,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271776064,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248077696,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271773056,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248077920,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271764480,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248078144,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538272278784,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248078368,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538272368320,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248078592,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538270555328,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248078816,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538270970112,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248079040,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271425856,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248079264,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538271306048,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248079488,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251059328,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248079712,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251194624,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248079936,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251210176,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248080160,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538250919232,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248080384,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251194368,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248080608,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538250916544,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248081056,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251492160,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248081280,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538249703680,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248081504,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538249657024,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248081728,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538249648128,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248082176,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538250156288,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248082400,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538249998400,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248082624,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538250201152,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248082848,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251189440,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248083072,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538250214592,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248083296,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538250192832,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538244793504,
+        "size": 131288,
+        "length": 1992
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538247781696,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538244798880,
+        "size": 131288,
+        "length": 1992
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538247798592,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248069408,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280809536,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248069856,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538287976128,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248070976,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280687232,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248071424,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538282566912,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248071872,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280874752,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248072320,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538278876928,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248072992,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280821184,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248073664,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538280875712,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248074112,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279066624,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248074560,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538279226560,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248080832,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251287424,
+        "size": 64
+      }
+    },
+    {
+      "target": {
+        "type": "builtins.set",
+        "id": 140538248081952,
+        "size": 131288,
+        "length": 2001
+      },
+      "parent": {
+        "type": "_abc._abc_data",
+        "id": 140538251724288,
+        "size": 64
+      }
+    }
+  ],
+  "status": "Name:\tpython\nUmask:\t0022\nState:\tR (running)\nTgid:\t3120903\nNgid:\t0\nPid:\t3120903\nPPid:\t1\nTracerPid:\t0\nUid:\t1000\t1000\t1000\t1000\nGid:\t1000\t1000\t1000\t1000\nFDSize:\t64\nGroups:\t108 964 969 972 998 1000 \nNStgid:\t3120903\nNSpid:\t3120903\nNSpgid:\t3120903\nNSsid:\t3120903\nKthread:\t0\nVmPeak:\t 1551148 kB\nVmSize:\t 1140176 kB\nVmLck:\t       0 kB\nVmPin:\t       0 kB\nVmHWM:\t 1318576 kB\nVmRSS:\t  910704 kB\nRssAnon:\t  889096 kB\nRssFile:\t   21608 kB\nRssShmem:\t       0 kB\nVmData:\t  952716 kB\nVmStk:\t     140 kB\nVmExe:\t   24844 kB\nVmLib:\t       0 kB\nVmPTE:\t    1904 kB\nVmSwap:\t       0 kB\nHugetlbPages:\t       0 kB\nCoreDumping:\t0\nTHP_enabled:\t1\nuntag_mask:\t0xffffffffffffffff\nThreads:\t6\nSigQ:\t2/127610\nSigPnd:\t0000000000000000\nShdPnd:\t0000000000000000\nSigBlk:\t0000000000000000\nSigIgn:\t0000000001001000\nSigCgt:\t0000000100004002\nCapInh:\t0000000800000000\nCapPrm:\t0000000000000000\nCapEff:\t0000000000000000\nCapBnd:\t000001ffffffffff\nCapAmb:\t0000000000000000\nNoNewPrivs:\t0\nSeccomp:\t0\nSeccomp_filters:\t0\nSpeculation_Store_Bypass:\tthread vulnerable\nSpeculationIndirectBranch:\tconditional enabled\nCpus_allowed:\tffff\nCpus_allowed_list:\t0-15\nMems_allowed:\t00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000000,00000001\nMems_allowed_list:\t0\nvoluntary_ctxt_switches:\t109225\nnonvoluntary_ctxt_switches:\t751\nx86_Thread_features:\t\nx86_Thread_features_locked:\t\n"
+}

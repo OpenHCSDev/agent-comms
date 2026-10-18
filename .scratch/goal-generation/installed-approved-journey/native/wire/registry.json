@@ -1,0 +1,51 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed-approved-journey/native/project",
+      "created_at": 1791913378.3921835,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed-approved-journey/native/sessions/enrolled-1b1feadadd1e48b3a019198607fbf680.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 1956302,
+        "start_time": 138901563
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": true,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "stopped"
+    }
+  },
+  "last_seen": {
+    "project": 1791913378.4772575
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 3,
+    "generations": {
+      "project": 3
+    }
+  },
+  "admissions": {
+    "counter": 3,
+    "generations": {
+      "project": 3
+    }
+  }
+}

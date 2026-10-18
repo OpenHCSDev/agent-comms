@@ -1,0 +1,28 @@
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/.scratch/p71/installed-cli.py", line 121, in <module>
+    asyncio.run(main(Path(sys.argv[1]).absolute(), Path(sys.argv[2]).absolute()))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/p71/installed-cli.py", line 80, in main
+    await connection.load_session(cwd=str(project), session_id='recipient', mcp_servers=[])
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-53898dc05-native-70f0512abbcfa4e0-20261016T223529Z/lib/python3.14/site-packages/acp/client/connection.py", line 193, in load_session
+    return await request_model_from_dict(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<10 lines>...
+    )
+    ^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-53898dc05-native-70f0512abbcfa4e0-20261016T223529Z/lib/python3.14/site-packages/acp/utils.py", line 108, in request_model_from_dict
+    response = await conn.send_request(method, serialize_params(params))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-53898dc05-native-70f0512abbcfa4e0-20261016T223529Z/lib/python3.14/site-packages/acp/connection.py", line 126, in send_request
+    return await future
+           ^^^^^^^^^^^^
+acp.exceptions.RequestError: Invalid params

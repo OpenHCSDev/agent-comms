@@ -1,0 +1,2004 @@
+{
+  "revision": "503b9a093e",
+  "parsed_modules": 309,
+  "parse_omissions": [],
+  "files": {
+    "src/agent_comms/cohort_foreground.py": {
+      "definitions": [
+        {
+          "kind": "ClassDef",
+          "name": "NoWakeReceipt",
+          "line": 51,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_preflight",
+          "line": 57,
+          "bases": []
+        },
+        {
+          "kind": "AsyncFunctionDef",
+          "name": "_accept_visible_deliveries",
+          "line": 73,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accept",
+          "line": 89,
+          "bases": []
+        },
+        {
+          "kind": "AsyncFunctionDef",
+          "name": "run_foreground_once",
+          "line": 127,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "retire",
+          "line": 166,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "admit",
+          "line": 175,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "read_observers",
+          "line": 226,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_read_selected_write_source",
+          "line": 245,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "main",
+          "line": 270,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "ready",
+          "line": 292,
+          "bases": []
+        }
+      ],
+      "imports": [
+        {
+          "line": 14,
+          "source": "from __future__ import annotations"
+        },
+        {
+          "line": 16,
+          "source": "import argparse"
+        },
+        {
+          "line": 17,
+          "source": "import asyncio"
+        },
+        {
+          "line": 18,
+          "source": "from contextlib import AsyncExitStack"
+        },
+        {
+          "line": 19,
+          "source": "import json"
+        },
+        {
+          "line": 20,
+          "source": "import math"
+        },
+        {
+          "line": 21,
+          "source": "import os"
+        },
+        {
+          "line": 22,
+          "source": "import stat"
+        },
+        {
+          "line": 23,
+          "source": "import sys"
+        },
+        {
+          "line": 24,
+          "source": "import time"
+        },
+        {
+          "line": 25,
+          "source": "from collections.abc import Callable, Sequence"
+        },
+        {
+          "line": 26,
+          "source": "from dataclasses import dataclass"
+        },
+        {
+          "line": 27,
+          "source": "from functools import partial"
+        },
+        {
+          "line": 28,
+          "source": "from pathlib import Path"
+        },
+        {
+          "line": 30,
+          "source": "from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked"
+        },
+        {
+          "line": 31,
+          "source": "from agent_comms.coordinator import Coordination"
+        },
+        {
+          "line": 33,
+          "source": "from .bus_publication import stable_thread_lookup"
+        },
+        {
+          "line": 34,
+          "source": "from .child_process import ProcessIdentity"
+        },
+        {
+          "line": 35,
+          "source": "from .cohort_schema import CohortDeliveryReceipts"
+        },
+        {
+          "line": 36,
+          "source": "from .comms import Comms"
+        },
+        {
+          "line": 37,
+          "source": "from .coordination_cohort import accept_delivery_cohort, sealed_cohort_sequences"
+        },
+        {
+          "line": 38,
+          "source": "from .envelope_claim_transitions import ExistingFileClaim"
+        },
+        {
+          "line": 39,
+          "source": "from .errors import RelationViolationError"
+        },
+        {
+          "line": 40,
+          "source": "from .field_codec import FieldCodec"
+        },
+        {
+          "line": 41,
+          "source": "from .message_bus import MessageBus"
+        },
+        {
+          "line": 42,
+          "source": "from .native_pi import _private_session_dir, _trusted_package"
+        },
+        {
+          "line": 43,
+          "source": "from .private_registry_guard import _require_no_private_owner_rename"
+        },
+        {
+          "line": 44,
+          "source": "from .selected_actions import SelectedExistingFileWrite"
+        },
+        {
+          "line": 45,
+          "source": "from .selected_result import CoordinatedTurn"
+        },
+        {
+          "line": 46,
+          "source": "from .store_files import _store_lock"
+        },
+        {
+          "line": 47,
+          "source": "from .threads import Thread"
+        },
+        {
+          "line": 146,
+          "source": "from .coordinated_runtime import SelectedExecution"
+        }
+      ],
+      "references": [
+        {
+          "name": "sealed",
+          "line": 90,
+          "context": "Store"
+        },
+        {
+          "name": "sealed_cohort_sequences",
+          "line": 90,
+          "context": "Load"
+        },
+        {
+          "name": "after_seq",
+          "line": 96,
+          "context": "Load"
+        },
+        {
+          "name": "addressed",
+          "line": 97,
+          "context": "Store"
+        },
+        {
+          "name": "addressed_sequences",
+          "line": 97,
+          "context": "Load",
+          "source": "source.addressed_sequences"
+        },
+        {
+          "name": "unaccepted",
+          "line": 100,
+          "context": "Store"
+        },
+        {
+          "name": "addressed",
+          "line": 101,
+          "context": "Load"
+        },
+        {
+          "name": "sealed",
+          "line": 102,
+          "context": "Load"
+        },
+        {
+          "name": "unaccepted",
+          "line": 109,
+          "context": "Load"
+        },
+        {
+          "name": "addressed",
+          "line": 110,
+          "context": "Load"
+        },
+        {
+          "name": "addressed",
+          "line": 110,
+          "context": "Load"
+        },
+        {
+          "name": "unaccepted",
+          "line": 111,
+          "context": "Load"
+        },
+        {
+          "name": "unaccepted",
+          "line": 113,
+          "context": "Load"
+        },
+        {
+          "name": "unaccepted",
+          "line": 117,
+          "context": "Load"
+        }
+      ],
+      "writes": [
+        {
+          "line": 90,
+          "names": [
+            "sealed"
+          ],
+          "source": "sealed = sealed_cohort_sequences(resource, root_id)"
+        },
+        {
+          "line": 97,
+          "names": [
+            "addressed"
+          ],
+          "source": "addressed = source.addressed_sequences(bus.log, lookup, admitted_after)"
+        },
+        {
+          "line": 100,
+          "names": [
+            "unaccepted"
+          ],
+          "source": "unaccepted = []"
+        }
+      ],
+      "decisions": [
+        {
+          "line": 101,
+          "names": [
+            "addressed",
+            "sealed",
+            "unaccepted"
+          ],
+          "source": "addressed"
+        },
+        {
+          "line": 102,
+          "names": [
+            "sealed"
+          ],
+          "source": "seq in sealed"
+        },
+        {
+          "line": 108,
+          "names": [
+            "unaccepted"
+          ],
+          "source": "any((r.canonical_thread == owner_name for r in recipients))"
+        },
+        {
+          "line": 111,
+          "names": [
+            "unaccepted"
+          ],
+          "source": "len(unaccepted) > 100"
+        },
+        {
+          "line": 113,
+          "names": [
+            "unaccepted"
+          ],
+          "source": "unaccepted and acquire_package is not None"
+        },
+        {
+          "line": 117,
+          "names": [
+            "unaccepted"
+          ],
+          "source": "unaccepted"
+        }
+      ]
+    },
+    "src/agent_comms/cohort_schema.py": {
+      "definitions": [
+        {
+          "kind": "ClassDef",
+          "name": "CohortTable",
+          "line": 32,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "AwarenessTable",
+          "line": 36,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "CohortSchemaMeta",
+          "line": 41,
+          "bases": [
+            "CohortTable",
+            "TypedTable",
+            "PrivateRuntimeSchema"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "install",
+          "line": 43,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "triggers",
+          "line": 51,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "ClaimBatchReceipts",
+          "line": 69,
+          "bases": [
+            "CohortTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_selected_claim",
+          "line": 107,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "triggers",
+          "line": 115,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "ClaimBatchMembers",
+          "line": 223,
+          "bases": [
+            "CohortTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "references",
+          "line": 237,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "triggers",
+          "line": 247,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "CohortDeliveryReceipts",
+          "line": 290,
+          "bases": [
+            "CohortTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "references",
+          "line": 319,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "triggers",
+          "line": 329,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "AwarenessSchemaMeta",
+          "line": 382,
+          "bases": [
+            "AwarenessTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "triggers",
+          "line": 388,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "AwarenessClaimGenerations",
+          "line": 406,
+          "bases": [
+            "AwarenessTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "current",
+          "line": 416,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "captured_owner",
+          "line": 427,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_selection",
+          "line": 434,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_obligation",
+          "line": 446,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "references",
+          "line": 469,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "triggers",
+          "line": 481,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_schema",
+          "line": 522,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_digest",
+          "line": 530,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_cohort_objects",
+          "line": 534,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_awareness_objects",
+          "line": 540,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "assert_cohort_schema",
+          "line": 546,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "assert_optional_awareness_schema",
+          "line": 562,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_install_optional_awareness_schema",
+          "line": 571,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "install_private_cohort_schema",
+          "line": 581,
+          "bases": []
+        }
+      ],
+      "imports": [
+        {
+          "line": 3,
+          "source": "from __future__ import annotations"
+        },
+        {
+          "line": 5,
+          "source": "import hashlib"
+        },
+        {
+          "line": 6,
+          "source": "import logging"
+        },
+        {
+          "line": 7,
+          "source": "import sqlite3"
+        },
+        {
+          "line": 8,
+          "source": "from dataclasses import dataclass, field"
+        },
+        {
+          "line": 9,
+          "source": "from typing import Literal"
+        },
+        {
+          "line": 11,
+          "source": "from agent_comms.coordination_errors import SchemaVersionError"
+        },
+        {
+          "line": 12,
+          "source": "from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION"
+        },
+        {
+          "line": 13,
+          "source": "from agent_comms.coordination_tables.assignments import WakeAssignment"
+        },
+        {
+          "line": 14,
+          "source": "from agent_comms.coordination_tables.participants import OwnerGenerations, Participants"
+        },
+        {
+          "line": 15,
+          "source": "from agent_comms.coordinator import Coordination"
+        },
+        {
+          "line": 16,
+          "source": "from agent_comms.private_runtime_schema import PrivateRuntimeSchema"
+        },
+        {
+          "line": 18,
+          "source": "from .typed_table import Column, ForeignKey, Index, SQLiteForeignKeys, SQLiteJournalMode, SQLiteSchemaObject, TypedTable"
+        },
+        {
+          "line": 109,
+          "source": "from .wake_candidate_index import ProjectionUnavailableError"
+        },
+        {
+          "line": 418,
+          "source": "from .wake_candidate_index import ProjectionUnavailableError"
+        },
+        {
+          "line": 436,
+          "source": "from .wake_candidate_index import ProjectionUnavailableError"
+        },
+        {
+          "line": 448,
+          "source": "from .coordination_tables.executions import ExecutionOrigin"
+        },
+        {
+          "line": 449,
+          "source": "from .wake_candidate_index import ProjectionUnavailableError"
+        }
+      ],
+      "references": [
+        {
+          "name": "sealed",
+          "line": 104,
+          "context": "Store"
+        },
+        {
+          "name": "sealed",
+          "line": 111,
+          "context": "Load",
+          "source": "self.sealed"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 242,
+          "context": "Load"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 324,
+          "context": "Load"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 434,
+          "context": "Load"
+        }
+      ],
+      "writes": [
+        {
+          "line": 104,
+          "names": [
+            "sealed"
+          ],
+          "source": "sealed: bool = field(default=False)"
+        }
+      ],
+      "decisions": []
+    },
+    "src/agent_comms/coordination_cohort.py": {
+      "definitions": [
+        {
+          "kind": "ClassDef",
+          "name": "AcceptedCohort",
+          "line": 43,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_assignment_id",
+          "line": 53,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_expected_assignments",
+          "line": 58,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_immutable_assignment_matches",
+          "line": 90,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_receipt_matches",
+          "line": 107,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_record_optional_owner_generations",
+          "line": 196,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accept_delivery_cohort",
+          "line": 230,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "sealed_cohort_sequences",
+          "line": 313,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "next_sealed_assignment",
+          "line": 327,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "pending_sealed_assignments",
+          "line": 343,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "sealed_cohort_assignments",
+          "line": 367,
+          "bases": []
+        }
+      ],
+      "imports": [
+        {
+          "line": 8,
+          "source": "from __future__ import annotations"
+        },
+        {
+          "line": 10,
+          "source": "import hashlib"
+        },
+        {
+          "line": 11,
+          "source": "import logging"
+        },
+        {
+          "line": 12,
+          "source": "import sqlite3"
+        },
+        {
+          "line": 13,
+          "source": "from dataclasses import dataclass, field"
+        },
+        {
+          "line": 15,
+          "source": "from agent_comms.assignment_states import AssignmentState, PendingNotification"
+        },
+        {
+          "line": 16,
+          "source": "from agent_comms.bus_publication import CommittedDelivery"
+        },
+        {
+          "line": 17,
+          "source": "from agent_comms.cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts, assert_cohort_schema, assert_optional_awareness_schema"
+        },
+        {
+          "line": 25,
+          "source": "from agent_comms.coordination_contracts import POLICY_VERSION, RESOLVER_VERSION"
+        },
+        {
+          "line": 26,
+          "source": "from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError, SchemaVersionError"
+        },
+        {
+          "line": 31,
+          "source": "from agent_comms.coordination_results import AlreadyApplied, Applied"
+        },
+        {
+          "line": 32,
+          "source": "from agent_comms.coordination_tables.assignments import WakeAssignment"
+        },
+        {
+          "line": 33,
+          "source": "from agent_comms.coordination_tables.participants import OwnerGenerations, Participants"
+        },
+        {
+          "line": 34,
+          "source": "from agent_comms.coordinator import Coordination"
+        },
+        {
+          "line": 35,
+          "source": "from agent_comms.message_bus import MessageBus"
+        },
+        {
+          "line": 36,
+          "source": "from agent_comms.typed_table import sql_literal"
+        },
+        {
+          "line": 37,
+          "source": "from agent_comms.wake import NoWakeDecision, WakeDecision"
+        }
+      ],
+      "references": [
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 110,
+          "context": "Load"
+        },
+        {
+          "name": "sealed",
+          "line": 111,
+          "context": "Load",
+          "source": "row.sealed"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 253,
+          "context": "Load"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 258,
+          "context": "Load"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 265,
+          "context": "Load"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 304,
+          "context": "Load"
+        },
+        {
+          "name": "ClaimBatchReceipts",
+          "line": 319,
+          "context": "Load"
+        },
+        {
+          "name": "after_seq",
+          "line": 339,
+          "context": "Load"
+        },
+        {
+          "name": "after_seq",
+          "line": 353,
+          "context": "Load"
+        },
+        {
+          "name": "after_seq",
+          "line": 373,
+          "context": "Load"
+        },
+        {
+          "name": "after_seq",
+          "line": 374,
+          "context": "Load"
+        },
+        {
+          "name": "after_seq",
+          "line": 398,
+          "context": "Load"
+        }
+      ],
+      "writes": [],
+      "decisions": [
+        {
+          "line": null,
+          "names": [
+            "ClaimBatchReceipts"
+          ],
+          "source": "ClaimBatchReceipts.select(store.session._connection, where='wire_root_id=? AND sealed=1', parameters=(wire_root_id,))"
+        },
+        {
+          "line": 258,
+          "names": [
+            "ClaimBatchReceipts"
+          ],
+          "source": "ClaimBatchReceipts.select(db, where='wire_seq=?', parameters=(wire_seq,))"
+        },
+        {
+          "line": 372,
+          "names": [
+            "after_seq"
+          ],
+          "source": "type(after_seq) is not int or after_seq < 0 or type(limit) is not int or (not 0 < limit <= 100)"
+        }
+      ]
+    },
+    "src/agent_comms/private_bus_checkpoint.py": {
+      "definitions": [
+        {
+          "kind": "ClassDef",
+          "name": "CapturedWireSource",
+          "line": 52,
+          "bases": [
+            "Generic[OriginalSource]"
+          ]
+        },
+        {
+          "kind": "ClassDef",
+          "name": "PrefixWitness",
+          "line": 62,
+          "bases": [
+            "PrefixSeal"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "device",
+          "line": 67,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "inode",
+          "line": 71,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "offset",
+          "line": 75,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "seal",
+          "line": 78,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_marker",
+          "line": 81,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_append",
+          "line": 85,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_read_window",
+          "line": 92,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "CertifiedSourceRead",
+          "line": 101,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_marker",
+          "line": 110,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_current",
+          "line": 114,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "require_open_prefix",
+          "line": 118,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "committed_sequence",
+          "line": 134,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "message_rows",
+          "line": 139,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "public_message_references",
+          "line": 173,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "messages",
+          "line": 181,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "capture_sources",
+          "line": 186,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "capture_resources",
+          "line": 196,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decoded",
+          "line": 212,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "references",
+          "line": 223,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "delivery",
+          "line": 240,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "addressed_sequences",
+          "line": 250,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "addressed_page",
+          "line": 269,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decoded",
+          "line": 299,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "conversation_sources",
+          "line": 311,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decoded",
+          "line": 346,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "context_manifests",
+          "line": 356,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "retained_task_facts",
+          "line": 359,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "indexed_context_resources",
+          "line": 380,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decoded",
+          "line": 397,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "keyed_receipt",
+          "line": 406,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "CheckpointTable",
+          "line": 433,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "ResponseKeys",
+          "line": 438,
+          "bases": [
+            "CheckpointTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "ClassDef",
+          "name": "WireSourcePointer",
+          "line": 443,
+          "bases": [
+            "Generic[OriginalSource]",
+            "ABC"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decode_bytes",
+          "line": 450,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "read_bytes",
+          "line": 452,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "DeliverySources",
+          "line": 465,
+          "bases": [
+            "WireSourcePointer['CommittedDelivery']",
+            "CheckpointTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "delivery",
+          "line": 471,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decode_bytes",
+          "line": 475,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "reference",
+          "line": 496,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "ContextManifestSources",
+          "line": 503,
+          "bases": [
+            "WireSourcePointer['ContextManifest']",
+            "CheckpointTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decode_bytes",
+          "line": 507,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "Addressed",
+          "line": 525,
+          "bases": [
+            "CheckpointTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "ClassDef",
+          "name": "PrefixCertificate",
+          "line": 531,
+          "bases": [
+            "CheckpointTable",
+            "TypedTable"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "read_witness",
+          "line": 547,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "witness",
+          "line": 566,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "capture",
+          "line": 576,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_path",
+          "line": 594,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_tail",
+          "line": 598,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_chain",
+          "line": 603,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_directory_sync",
+          "line": 607,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_connect",
+          "line": 615,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_saved",
+          "line": 635,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_index_row",
+          "line": 649,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "install_private_bus_checkpoint",
+          "line": 654,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "collect",
+          "line": 703,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "certificate_enabled",
+          "line": 735,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_recover_pending_unlocked",
+          "line": 740,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "collect",
+          "line": 761,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "CheckpointNeedsRepair",
+          "line": 805,
+          "bases": [
+            "Exception"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_check_final_checkpoint_read_only",
+          "line": 814,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_verify_open_checkpoint_unlocked",
+          "line": 836,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "collect",
+          "line": 867,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "opened_private_checkpoint_unlocked",
+          "line": 926,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "opened_claim_source_unlocked",
+          "line": 948,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "verify_private_bus_checkpoint_unlocked",
+          "line": 1002,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "append_private_bus_checkpoint_unlocked",
+          "line": 1008,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "addressed_source_pointers_unlocked",
+          "line": 1051,
+          "bases": []
+        }
+      ],
+      "imports": [
+        {
+          "line": 12,
+          "source": "from __future__ import annotations"
+        },
+        {
+          "line": 14,
+          "source": "import hashlib"
+        },
+        {
+          "line": 15,
+          "source": "import json"
+        },
+        {
+          "line": 16,
+          "source": "import os"
+        },
+        {
+          "line": 17,
+          "source": "import sqlite3"
+        },
+        {
+          "line": 18,
+          "source": "import stat"
+        },
+        {
+          "line": 19,
+          "source": "import tempfile"
+        },
+        {
+          "line": 20,
+          "source": "from abc import ABC, abstractmethod"
+        },
+        {
+          "line": 21,
+          "source": "from contextlib import ExitStack, closing, contextmanager, nullcontext"
+        },
+        {
+          "line": 22,
+          "source": "from dataclasses import dataclass, field, replace"
+        },
+        {
+          "line": 23,
+          "source": "from pathlib import Path"
+        },
+        {
+          "line": 24,
+          "source": "from collections.abc import Iterator, Mapping"
+        },
+        {
+          "line": 25,
+          "source": "from typing import TYPE_CHECKING, BinaryIO, Generic, Literal, TypeVar"
+        },
+        {
+          "line": 27,
+          "source": "from .bus_source_page import AddressedPage"
+        },
+        {
+          "line": 28,
+          "source": "from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource, file_revision"
+        },
+        {
+          "line": 29,
+          "source": "from .errors import RelationViolationError"
+        },
+        {
+          "line": 30,
+          "source": "from .field_codec import FieldCodec"
+        },
+        {
+          "line": 31,
+          "source": "from .typed_table import Column, Index, SQLiteSchemaObject, SqlStorage, TypedTable"
+        },
+        {
+          "line": 32,
+          "source": "from .wire_metadata import WireMetadata"
+        },
+        {
+          "line": 33,
+          "source": "from .wire_record import WireRecord, WireScan"
+        },
+        {
+          "line": 34,
+          "source": "from .thread_identity import ThreadIncarnation"
+        },
+        {
+          "line": 37,
+          "source": "from .bus_publication import CommittedDelivery"
+        },
+        {
+          "line": 38,
+          "source": "from .wire_log import WireLog"
+        },
+        {
+          "line": 39,
+          "source": "from .messages import Message"
+        },
+        {
+          "line": 40,
+          "source": "from .message_reference import MessageReference"
+        },
+        {
+          "line": 41,
+          "source": "from .coordination_tables.publications import PublicationIntents"
+        },
+        {
+          "line": 42,
+          "source": "from .turn_context import ContextManifest"
+        },
+        {
+          "line": 43,
+          "source": "from .retained_task_facts import ExactTaskFact"
+        },
+        {
+          "line": 149,
+          "source": "from .store_files import _iter_jsonl_stream"
+        },
+        {
+          "line": 367,
+          "source": "from .bus_publication import stable_thread_lookup"
+        },
+        {
+          "line": 477,
+          "source": "from .bus_publication import CommittedDelivery, unique_wire_object"
+        },
+        {
+          "line": 497,
+          "source": "from .message_reference import MessageReference"
+        },
+        {
+          "line": 509,
+          "source": "from .bus_publication import unique_wire_object"
+        },
+        {
+          "line": 510,
+          "source": "from .errors import StoredHistoryUnreadable"
+        },
+        {
+          "line": 663,
+          "source": "from .wire_log import WireLog"
+        }
+      ],
+      "references": [
+        {
+          "name": "after_seq",
+          "line": 262,
+          "context": "Load"
+        },
+        {
+          "name": "after_seq",
+          "line": 288,
+          "context": "Load",
+          "source": "request.after_seq"
+        }
+      ],
+      "writes": [],
+      "decisions": []
+    },
+    "src/agent_comms/typed_table.py": {
+      "definitions": [
+        {
+          "kind": "FunctionDef",
+          "name": "_identifier",
+          "line": 35,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_base_type",
+          "line": 41,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "SqlStorage",
+          "line": 51,
+          "bases": [
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 58,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_choice_constraint",
+          "line": 61,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "family_constraints",
+          "line": 75,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "constraints",
+          "line": 88,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "to_sql",
+          "line": 104,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "from_sql",
+          "line": 108,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "for_type",
+          "line": 112,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "TextStorage",
+          "line": 124,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 128,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "IntegerStorage",
+          "line": 132,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 136,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "RealStorage",
+          "line": 140,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 144,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "BooleanStorage",
+          "line": 148,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 152,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "constraints",
+          "line": 156,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "to_sql",
+          "line": 160,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "from_sql",
+          "line": 164,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "StringEnumStorage",
+          "line": 170,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 174,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "IntegerEnumStorage",
+          "line": 182,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 186,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "FamilyClassStorage",
+          "line": 190,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 196,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "ExactStorage",
+          "line": 201,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 207,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "JsonStorage",
+          "line": 211,
+          "bases": [
+            "SqlStorage"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "accepts",
+          "line": 215,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "to_sql",
+          "line": 226,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "from_sql",
+          "line": 230,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "Column",
+          "line": 237,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "Index",
+          "line": 252,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "ForeignKey",
+          "line": 259,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "sql",
+          "line": 268,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "_Field",
+          "line": 281,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "encode",
+          "line": 289,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "decode",
+          "line": 295,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "sql_literal",
+          "line": 301,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "TypedRow",
+          "line": 307,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_fields",
+          "line": 312,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "columns",
+          "line": 329,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_fields_named",
+          "line": 333,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_positions",
+          "line": 341,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_decode_row",
+          "line": 350,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "iterate",
+          "line": 359,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "joined",
+          "line": 369,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "read",
+          "line": 384,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "SQLiteSchemaDifference",
+          "line": 390,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "SQLiteSchemaObject",
+          "line": 397,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "differences",
+          "line": 402,
+          "bases": []
+        },
+        {
+          "kind": "ClassDef",
+          "name": "SQLiteForeignKeys",
+          "line": 414,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "kind": "ClassDef",
+          "name": "SQLiteJournalMode",
+          "line": 419,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "kind": "ClassDef",
+          "name": "SQLiteUserVersion",
+          "line": 424,
+          "bases": [
+            "TypedRow"
+          ]
+        },
+        {
+          "kind": "ClassDef",
+          "name": "TypedTable",
+          "line": 428,
+          "bases": [
+            "TypedRow",
+            "DeclaredFamily"
+          ]
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "references",
+          "line": 443,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_column_list",
+          "line": 448,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "schema_objects",
+          "line": 455,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "triggers",
+          "line": 508,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "ddl",
+          "line": 512,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "create",
+          "line": 516,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "select",
+          "line": 521,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "one",
+          "line": 544,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "_insertion",
+          "line": 550,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "insert",
+          "line": 559,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "upsert",
+          "line": 562,
+          "bases": []
+        },
+        {
+          "kind": "FunctionDef",
+          "name": "update",
+          "line": 581,
+          "bases": []
+        }
+      ],
+      "imports": [
+        {
+          "line": 8,
+          "source": "from __future__ import annotations"
+        },
+        {
+          "line": 10,
+          "source": "import json"
+        },
+        {
+          "line": 11,
+          "source": "import sqlite3"
+        },
+        {
+          "line": 12,
+          "source": "import types"
+        },
+        {
+          "line": 13,
+          "source": "from abc import abstractmethod"
+        },
+        {
+          "line": 14,
+          "source": "from collections.abc import Generator, Mapping"
+        },
+        {
+          "line": 15,
+          "source": "from dataclasses import dataclass, fields"
+        },
+        {
+          "line": 16,
+          "source": "from enum import Enum, IntEnum, IntFlag"
+        },
+        {
+          "line": 17,
+          "source": "from functools import lru_cache"
+        },
+        {
+          "line": 18,
+          "source": "from typing import Annotated, ClassVar, Literal, Self, TypeVar, Union, get_args, get_origin, get_type_hints"
+        },
+        {
+          "line": 30,
+          "source": "from .declared_family import DeclaredFamily"
+        },
+        {
+          "line": 31,
+          "source": "from .field_codec import FieldCodec"
+        },
+        {
+          "line": 216,
+          "source": "from dataclasses import is_dataclass"
+        }
+      ],
+      "references": [],
+      "writes": [],
+      "decisions": []
+    }
+  }
+}

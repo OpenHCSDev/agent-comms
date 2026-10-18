@@ -1,0 +1,347 @@
+{
+  "modules": 356,
+  "parse_omissions": [],
+  "owners": {
+    "tests/goal_generation_installed_journey.py": [
+      {
+        "qualname": "tests/goal_generation_installed_journey.py::run",
+        "size": 90,
+        "dispatch": {
+          "comms.registry.require(session).goal.sta": [
+            "blocked",
+            "completed"
+          ],
+          "view.goal_display.snapshot.state.declare": [
+            "completed"
+          ]
+        },
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "AssertionError",
+          "BlockedGeneration",
+          "Comms",
+          "CompletedGeneration",
+          "Responses",
+          "ToadApp",
+          "author_history",
+          "click",
+          "decode",
+          "dumps",
+          "focus",
+          "getfile",
+          "join",
+          "len",
+          "mkdir",
+          "native_backend_fixture",
+          "open_goal_store",
+          "open_owner",
+          "pause",
+          "predicate",
+          "press",
+          "print",
+          "query_one",
+          "read_bytes",
+          "register",
+          "render",
+          "render_strips",
+          "replace",
+          "require",
+          "require_generation",
+          "require_goal",
+          "run_test",
+          "save_screenshot",
+          "saved_inputs",
+          "startswith",
+          "str",
+          "timeout",
+          "until",
+          "update"
+        ]
+      },
+      {
+        "qualname": "tests/goal_generation_installed_journey.py::wait",
+        "size": 14,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "AssertionError",
+          "Comms",
+          "require",
+          "require_goal"
+        ]
+      },
+      {
+        "qualname": "tests/goal_generation_installed_journey.py::until",
+        "size": 5,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "pause",
+          "predicate",
+          "timeout"
+        ]
+      }
+    ],
+    "tests/native_backend_fixture.py": [
+      {
+        "qualname": "tests/native_backend_fixture.py::native_backend_fixture",
+        "size": 83,
+        "dispatch": {},
+        "keys": {
+          "os.environ": [
+            "PI_COMPACTION_TEST_PACKAGE"
+          ]
+        },
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "Comms",
+          "LoopbackProvider",
+          "NativeBackendFixture",
+          "Path",
+          "ValueError",
+          "add",
+          "all",
+          "cancel",
+          "close",
+          "create_fresh_private_session",
+          "current_task",
+          "dict",
+          "dumps",
+          "encode",
+          "gather",
+          "get",
+          "getsockname",
+          "handle",
+          "initialize_private_initial_protocol",
+          "is_file",
+          "len",
+          "mkdir",
+          "print",
+          "read_proof_rows",
+          "remove",
+          "resolve",
+          "set",
+          "start_server",
+          "stop",
+          "str",
+          "tuple",
+          "wait_closed",
+          "write_text"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::__init__",
+        "size": 7,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "PersistentPiSession"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::author_history",
+        "size": 21,
+        "dispatch": {},
+        "keys": {
+          "os.environ": [
+            "PI_COMPACTION_TEST_PACKAGE"
+          ]
+        },
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "decode",
+          "run",
+          "str"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::attach_saved_owner",
+        "size": 11,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "attach_session",
+          "bind_owned",
+          "declare_thread",
+          "ensure_live_drain",
+          "run_worker",
+          "str"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::bind_saved_owner",
+        "size": 8,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "append",
+          "attach_saved_owner",
+          "backend_for",
+          "partial",
+          "prepare",
+          "run_worker"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::native_arguments",
+        "size": 5,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": []
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::open_owner",
+        "size": 15,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "Comms",
+          "bind_saved_owner",
+          "canonical_agent",
+          "native_arguments",
+          "on_connect",
+          "shutdown"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::original_input",
+        "size": 18,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "AsyncExitStack",
+          "OwnedTurn",
+          "acquire",
+          "pop_all",
+          "push_async_callback",
+          "require",
+          "reserve"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::force_reopen",
+        "size": 4,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "close_idle",
+          "require_identity"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::started",
+        "size": 10,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "append",
+          "current_task"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::run",
+        "size": 25,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {
+          "event": 1
+        },
+        "literal_sets": [],
+        "constructed": [
+          "InputContent",
+          "InputId",
+          "InputRequest",
+          "Queue",
+          "append",
+          "isinstance",
+          "native_arguments",
+          "put_nowait",
+          "str",
+          "stream_agent_events",
+          "timeout"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::saved_inputs",
+        "size": 7,
+        "dispatch": {
+          "row.get('type')": [
+            "message"
+          ],
+          "row['message'].get('role')": [
+            "user"
+          ]
+        },
+        "keys": {
+          "row": [
+            "message",
+            "type"
+          ],
+          "row['message']": [
+            "role"
+          ]
+        },
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "get",
+          "map",
+          "read_text",
+          "splitlines"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::serve",
+        "size": 7,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "add",
+          "current_task",
+          "handle",
+          "remove"
+        ]
+      },
+      {
+        "qualname": "tests/native_backend_fixture.py::acquire",
+        "size": 4,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "attach_session",
+          "declare_thread",
+          "str"
+        ]
+      }
+    ]
+  },
+  "boundary": "One retained-state journey; Textual owns readiness and shutdown. Physical controls will inherit Pilot but send X keyboard/mouse events instead of injected Textual events. Goal, native fixture, ACP and provider owners remain unchanged. Textual and installed Toad source read separately; dynamic runtime binding not established by AST."
+}

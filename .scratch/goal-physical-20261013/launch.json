@@ -1,0 +1,13 @@
+{
+  "runtime": "/home/ts/.local/share/agent-comms/runtimes/toad-1b91eb1f9-core-aa02e996a-native-21e71cdc648ed997-20261013T175812Z",
+  "command": [
+    "/home/ts/.local/share/agent-comms/runtimes/toad-1b91eb1f9-core-aa02e996a-native-21e71cdc648ed997-20261013T175812Z/bin/python",
+    "/home/ts/wt/core-doctrine-segment/tests/goal_generation_installed_journey.py",
+    "--stage",
+    "/home/ts/wt/core-doctrine-segment/.scratch/goal-physical-20261013/physical-20261013-191",
+    "--extension",
+    "/home/ts/.local/share/agent-comms/native-current-21e71cdc648ed997/node_modules/@earendil-works/pi-coding-agent/agent-comms-extensions/global-agent-comms/index.mjs",
+    "--physical"
+  ],
+  "native_package": "/home/ts/.local/share/agent-comms/native-current-21e71cdc648ed997/node_modules/@earendil-works/pi-coding-agent"
+}

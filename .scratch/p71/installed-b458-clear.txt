@@ -1,0 +1,12 @@
+Installed Core: /home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/__init__.py
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_backend_native_lifecycle.py .{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/installed-b458/saved-native-owner0/wire", "localhost_posts": 2, "native_input_proofs": 3, "children": [{"pid": 1506577, "start_time": 167080619}, {"pid": 1507059, "start_time": 167081457}], "children_retired": true}
+
+
+============================== 1 passed in 52.49s ==============================

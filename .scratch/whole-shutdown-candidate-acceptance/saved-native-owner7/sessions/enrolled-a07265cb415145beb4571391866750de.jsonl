@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"a07265cb415145beb4571391866750de","timestamp":"2026-10-16T00:44:31.653Z","cwd":"/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-candidate-acceptance/saved-native-owner7/project"}
+{"type":"model_change","id":"f4cfb265","parentId":null,"timestamp":"2026-10-16T00:44:34.550Z","provider":"response-local","modelId":"fixture"}
+{"type":"thinking_level_change","id":"33e2ce01","parentId":"f4cfb265","timestamp":"2026-10-16T00:44:34.559Z","thinkingLevel":"off"}
+{"type":"message","id":"3f05099b","parentId":"33e2ce01","timestamp":"2026-10-16T00:44:34.577Z","message":{"role":"user","content":[{"type":"text","text":"single uncertain input"}],"timestamp":1792111474575,"inputId":"7793fe448d4406f1bc2d729d7b631f37","inputDigest":"c9b18c41d8463d4559e9e95469210078be085f1647f42ea17dce1a81e048bc0b"}}

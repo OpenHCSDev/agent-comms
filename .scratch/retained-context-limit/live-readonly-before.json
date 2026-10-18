@@ -1,0 +1,30 @@
+{
+  "session": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl",
+  "bytes": 179664007,
+  "messages": 32658,
+  "compactions": 91,
+  "last_model_change": {
+    "provider": "openai-codex",
+    "modelId": "gpt-5.6-sol"
+  },
+  "last_assistant": {
+    "provider": "openai-codex",
+    "model": "gpt-5.6-sol",
+    "usage": {
+      "input": 1274,
+      "output": 383,
+      "cacheRead": 890496,
+      "cacheWrite": 0,
+      "reasoning": 205,
+      "totalTokens": 892153,
+      "cost": {
+        "input": 0.010192,
+        "output": 0.01149,
+        "cacheRead": 0.7123968,
+        "cacheWrite": 0,
+        "total": 0.7340788
+      }
+    },
+    "stopReason": "toolUse"
+  }
+}

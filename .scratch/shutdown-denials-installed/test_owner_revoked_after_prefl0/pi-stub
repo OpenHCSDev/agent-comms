@@ -1,0 +1,11 @@
+#!/home/ts/wt/core-doctrine-segment/.scratch/nominal-gateway-candidate/bin/python
+
+import json, select, sys
+state = json.loads(sys.stdin.readline())
+print(json.dumps({"type":"response", "command":"get_state", "id":state["id"],
+                  "success":True, "data":{
+                      "nativeInputProofCapability":"pi-native-input-v1-live-only"
+                  }}), flush=True)
+if select.select([sys.stdin], [], [], 0.3)[0]:
+    line = sys.stdin.readline()
+    if line: open('/home/ts/wt/core-doctrine-segment/.scratch/shutdown-denials-installed/test_owner_revoked_after_prefl0/received-prompt', "w").write(line)

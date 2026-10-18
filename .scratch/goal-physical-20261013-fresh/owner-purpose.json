@@ -1,0 +1,9 @@
+{
+  "owner": "doctrine-segment",
+  "purpose": "physical st completion of merged #777 acceptance",
+  "source": "verify/goal-physical",
+  "display": ":191",
+  "retention": "concise receipt and stills pending reviewer acceptance; preserve native sessions/dispositions",
+  "no_live_bus_inputs": true,
+  "no_paid_provider": true
+}

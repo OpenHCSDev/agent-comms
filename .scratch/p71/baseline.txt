@@ -1,0 +1,97 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 20 items / 19 deselected / 1 selected
+
+.scratch/p71/baseline/tests/test_selected_owner_followup.py F            [100%]
+
+=================================== FAILURES ===================================
+______ test_selected_turn_accepts_and_starts_fresh_input_once[True-none] _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-oxkvd10y')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f7c79e04180>
+goal_mode = 'none', native_ok = True
+
+    @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
+    @pytest.mark.parametrize("native_ok", [True, False])
+    async def test_selected_turn_accepts_and_starts_fresh_input_once(
+        tmp_path, monkeypatch, goal_mode, native_ok
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        starts = []
+        if goal_mode != "none":
+            from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
+            if goal_mode == "standby":
+                comms.agents.begin_turn("sender", "dependency-work")
+                comms.goals.update_goal(
+                    "beta",
+                    StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",)),
+                )
+        before_goal = comms.registry.require("beta").goal
+        before_wait = comms.goals.goal_wait("beta")
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            native_id = "b" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, native_id, args[2])
+            starts.append(args[2])
+            yield events.InputStarted(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=native_ok, text="Fresh owner input completed")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert comms.registry.require("beta").active_turn is not None
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            receipt = accepted_input(response)
+            accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+            assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
+            assert not starts
+            release.set()
+            if native_ok:
+                await asyncio.wait_for(turn, 8)
+            else:
+                from agent_comms.acp_failure import RequestFailure
+    
+                with pytest.raises(RequestError) as failed:
+                    await asyncio.wait_for(turn, 8)
+                assert failed.value.__cause__ is not None
+                request_failure = RequestFailure.from_error(
+                    failed.value.code, str(failed.value), failed.value.data
+                )
+                assert request_failure.notification_published
+                assert request_failure.failure.input_state is type(
+                    stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{receipt.input_id}")
+                )
+>           assert len(starts) == 1 and "Fresh owner input" in starts[0]
+E           assert (0 == 1)
+E            +  where 0 = len([])
+
+.scratch/p71/baseline/tests/test_selected_owner_followup.py:103: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+=========================== short test summary info ============================
+FAILED .scratch/p71/baseline/tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[True-none]
+======================= 1 failed, 19 deselected in 2.35s =======================

@@ -1,0 +1,10 @@
+#!/home/ts/wt/core-doctrine-segment/.scratch/nominal-gateway-candidate/bin/python
+
+import json, select, sys, time
+state = json.loads(sys.stdin.readline())
+assert state["type"] == "get_state"
+print("Native startup timeout witness", file=sys.stderr, flush=True)
+time.sleep(0.3)
+if select.select([sys.stdin], [], [], 0)[0]:
+    line = sys.stdin.readline()
+    if line: open('/home/ts/wt/core-doctrine-segment/.scratch/shutdown-denials-installed/test_preflight_timeout_reports0/received-prompt', "w").write(line)

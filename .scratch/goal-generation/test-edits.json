@@ -1,0 +1,274 @@
+[
+  {
+    "path": "tests/test_acp.py",
+    "edits": [
+      {
+        "oldText": "        agent.turns.agent_bin = \"pi\"\n        private = wired.root / \"goal-private\"\n        private.mkdir(mode=448, exist_ok=True)\n        store = GoalAttemptStore.initialize(private)\n        store.create_goal(goal.id)\n        agent.turns.goals.goal_store = store\n\n    async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):\n        agent = self._agent_with_events(tmp_path, wired)\n        sent: list = []\n\n",
+        "newText": "        agent.turns.agent_bin = \"pi\"\n        private = wired.root / \"goal-private\"\n        private.mkdir(mode=448, exist_ok=True)\n        store = GoalAttemptStore.initialize(private)\n        store.create_goal(goal.id)\n        agent.turns.comms.goals.goal_store = store\n\n    async def test_pi_session_name_stays_runtime_metadata(self, wired, tmp_path, monkeypatch):\n        agent = self._agent_with_events(tmp_path, wired)\n        sent: list = []\n\n"
+      },
+      {
+        "oldText": "        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Ship the release\"))\n        private = wired.root / \"goal-private\"\n        private.mkdir(mode=448)\n        store = GoalAttemptStore.initialize(private)\n        store.create_goal(goal.id)\n        agent.turns.goals.goal_store = store\n\n        async def events(*args, **kwargs):\n            wired.goals.update_goal(\n                \"proj\",\n                CompletedGoalAction(\n",
+        "newText": "        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Ship the release\"))\n        private = wired.root / \"goal-private\"\n        private.mkdir(mode=448)\n        store = GoalAttemptStore.initialize(private)\n        store.create_goal(goal.id)\n        agent.turns.comms.goals.goal_store = store\n\n        async def events(*args, **kwargs):\n            wired.goals.update_goal(\n                \"proj\",\n                CompletedGoalAction(\n"
+      },
+      {
+        "oldText": "        store = GoalAttemptStore(wired.root / \"goal-private\")\n        assert store.snapshot(goal.id).lifecycle == ReadyGeneration()\n        assert store.snapshot(goal.id).number == 2\n        assert ProviderUsageTotal.for_goal(store, goal.id).responses == 2\n        assert str(ProviderUsageTotal.for_goal(store, goal.id).cost_total) == \"0.03\"\n        grant = agent.turns.goals.goal_store.ready_grant(goal.id, 2)\n        assert grant not in repr(updates)\n        assert grant not in repr(goal)\n        await agent.shutdown()\n\n    async def test_failed_final_after_goal_completion_does_not_leave_false_completed_status(\n",
+        "newText": "        store = GoalAttemptStore(wired.root / \"goal-private\")\n        assert store.snapshot(goal.id).lifecycle == ReadyGeneration()\n        assert store.snapshot(goal.id).number == 2\n        assert ProviderUsageTotal.for_goal(store, goal.id).responses == 2\n        assert str(ProviderUsageTotal.for_goal(store, goal.id).cost_total) == \"0.03\"\n        grant = agent.turns.comms.goals.goal_store.ready_grant(goal.id, 2)\n        assert grant not in repr(updates)\n        assert grant not in repr(goal)\n        await agent.shutdown()\n\n    async def test_failed_final_after_goal_completion_does_not_leave_false_completed_status(\n"
+      },
+      {
+        "oldText": "        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Finish safely\"))\n        private = wired.root / \"goal-private\"\n        private.mkdir(mode=448)\n        store = GoalAttemptStore.initialize(private)\n        store.create_goal(goal.id)\n        agent.turns.goals.goal_store = store\n\n        async def events(*args, **kwargs):\n            wired.goals.update_goal(\n                \"proj\",\n                CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress=\"Premature\"),\n",
+        "newText": "        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Finish safely\"))\n        private = wired.root / \"goal-private\"\n        private.mkdir(mode=448)\n        store = GoalAttemptStore.initialize(private)\n        store.create_goal(goal.id)\n        agent.turns.comms.goals.goal_store = store\n\n        async def events(*args, **kwargs):\n            wired.goals.update_goal(\n                \"proj\",\n                CompletedGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress=\"Premature\"),\n"
+      },
+      {
+        "oldText": "                pass\n\n        agent.on_connect(FakeClient())\n        await agent.new_session(cwd=str(tmp_path / \"proj\"), mcp_servers=[])\n        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Keep working\"))\n        store = agent.turns.goals.open_goal_store()\n        store.create_goal(goal.id)\n        reservation = store.reserve(goal.id, 1)\n        store.claim_launch(reservation)\n        reservation.fail(store, \"The previous turn failed\")\n        blocked = wired.goals.update_goal(\n",
+        "newText": "                pass\n\n        agent.on_connect(FakeClient())\n        await agent.new_session(cwd=str(tmp_path / \"proj\"), mcp_servers=[])\n        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Keep working\"))\n        store = agent.turns.comms.goals.open_goal_store()\n        store.create_goal(goal.id)\n        reservation = store.reserve(goal.id, 1)\n        store.claim_launch(reservation)\n        reservation.fail(store, \"The previous turn failed\")\n        blocked = wired.goals.update_goal(\n"
+      },
+      {
+        "oldText": "        agent = canonical_agent(wired, agent_bin=\"pi\", runtime_enabled=True)\n        monkeypatch.setattr(agent.inputs, \"ensure_live_drain\", lambda _session: None)\n        monkeypatch.setattr(WakeScheduleCheck, \"schedule\", lambda _check: None)\n        await agent.new_session(cwd=str(tmp_path / \"proj\"), mcp_servers=[])\n        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Recover a retry\"))\n        store = agent.turns.goals.open_goal_store()\n        store.create_goal(goal.id)\n        reservation = store.reserve(goal.id, 1)\n        store.claim_launch(reservation)\n        reservation.fail(store, \"Previous turn failed\")\n        blocked = wired.goals.update_goal(\n",
+        "newText": "        agent = canonical_agent(wired, agent_bin=\"pi\", runtime_enabled=True)\n        monkeypatch.setattr(agent.inputs, \"ensure_live_drain\", lambda _session: None)\n        monkeypatch.setattr(WakeScheduleCheck, \"schedule\", lambda _check: None)\n        await agent.new_session(cwd=str(tmp_path / \"proj\"), mcp_servers=[])\n        goal = wired.goals.update_goal(\"proj\", SetGoalAction(text=\"Recover a retry\"))\n        store = agent.turns.comms.goals.open_goal_store()\n        store.create_goal(goal.id)\n        reservation = store.reserve(goal.id, 1)\n        store.claim_launch(reservation)\n        reservation.fail(store, \"Previous turn failed\")\n        blocked = wired.goals.update_goal(\n"
+      },
+      {
+        "oldText": "            goal.id,\n            expected_generation=1,\n            attempt_id=reservation.attempt_id,\n            user_decision_id=\"first-ui-retry-before-crash\",\n        )\n        agent.turns.goals.goal_store = GoalAttemptStore(wired.root / \"goal-private\")\n        proxy = RuntimeProxy(agent, \"proj\", socket_path(wired.root, os.getpid()))\n        try:\n            result = await proxy.request(\n                \"retry_goal\", goal_id=goal.id, expected_revision=blocked.revision\n            )\n            assert FieldCodec.decode(Goal, result[\"goal\"]).state.declared_name == \"active\"\n            generation = agent.turns.goals.goal_store.snapshot(goal.id)\n            assert (generation.number, generation.lifecycle) == (3, ReadyGeneration())\n            assert agent.turns.goals.goal_store.ready_grant(goal.id, 3)\n        finally:\n            await agent.shutdown()\n\n    @pytest.mark.parametrize(\"failed\", [False, True])\n    async def test_owner_resume_checks_attempt_before_publishing_active(\n",
+        "newText": "            goal.id,\n            expected_generation=1,\n            attempt_id=reservation.attempt_id,\n            user_decision_id=\"first-ui-retry-before-crash\",\n        )\n        agent.turns.comms.goals.goal_store = GoalAttemptStore(wired.root / \"goal-private\")\n        proxy = RuntimeProxy(agent, \"proj\", socket_path(wired.root, os.getpid()))\n        try:\n            result = await proxy.request(\n                \"retry_goal\", goal_id=goal.id, expected_revision=blocked.revision\n            )\n            assert FieldCodec.decode(Goal, result[\"goal\"]).state.declared_name == \"active\"\n            generation = agent.turns.comms.goals.goal_store.snapshot(goal.id)\n            assert (generation.number, generation.lifecycle) == (3, ReadyGeneration())\n            assert agent.turns.comms.goals.goal_store.ready_grant(goal.id, 3)\n        finally:\n            await agent.shutdown()\n\n    @pytest.mark.parametrize(\"failed\", [False, True])\n    async def test_owner_resume_checks_attempt_before_publishing_active(\n"
+      },
+      {
+        "oldText": "                updates.append(kwargs[\"update\"])\n\n        agent.sessions.client = Client()\n        await agent.new_session(cwd=str(tmp_path / \"proj\"), mcp_servers=[])\n        goal = await agent.turns.goals.set_goal(\"proj\", \"Keep working\")\n        store = agent.turns.goals.goal_store\n        assert store is not None\n        if failed:\n            reservation = store.reserve(goal.id, 1)\n            store.claim_launch(reservation)\n            reservation.fail(store, \"Interrupted by owner\")\n",
+        "newText": "                updates.append(kwargs[\"update\"])\n\n        agent.sessions.client = Client()\n        await agent.new_session(cwd=str(tmp_path / \"proj\"), mcp_servers=[])\n        goal = await agent.turns.goals.set_goal(\"proj\", \"Keep working\")\n        store = agent.turns.comms.goals.goal_store\n        assert store is not None\n        if failed:\n            reservation = store.reserve(goal.id, 1)\n            store.claim_launch(reservation)\n            reservation.fail(store, \"Interrupted by owner\")\n"
+      },
+      {
+        "oldText": "            private.mkdir(mode=448)\n            store = GoalAttemptStore.initialize(private)\n            store.create_goal(goal.id)\n            reservation = store.reserve(goal.id, 1)\n            store.claim_launch(reservation)\n            agent.turns.goals.goal_store = GoalAttemptStore(private)\n\n            async def forbidden_backend(*args, **kwargs):\n                raise AssertionError(\"A claimed attempt must never launch again\")\n                yield\n\n",
+        "newText": "            private.mkdir(mode=448)\n            store = GoalAttemptStore.initialize(private)\n            store.create_goal(goal.id)\n            reservation = store.reserve(goal.id, 1)\n            store.claim_launch(reservation)\n            agent.turns.comms.goals.goal_store = GoalAttemptStore(private)\n\n            async def forbidden_backend(*args, **kwargs):\n                raise AssertionError(\"A claimed attempt must never launch again\")\n                yield\n\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_acp_goal_input_authority.py",
+    "edits": [
+      {
+        "oldText": "        yield ae.ToolEnd(id=\"set-goal\", name=\"comms_set_goal\", ok=True)\n        assert agent.turns.goals.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()\n        if not queued_before_activation:\n",
+        "newText": "        yield ae.ToolEnd(id=\"set-goal\", name=\"comms_set_goal\", ok=True)\n        assert agent.turns.comms.goals.goal_store.snapshot(goal.id).lifecycle == ReservedGeneration()\n        if not queued_before_activation:\n"
+      },
+      {
+        "oldText": "        assert comms.registry.require(\"project\").goal.state.active\n        state = agent.turns.goals.goal_store.snapshot(observed[\"goal\"].id)\n        assert state.lifecycle == ReadyGeneration() and state.number == 2\n",
+        "newText": "        assert comms.registry.require(\"project\").goal.state.active\n        state = agent.turns.comms.goals.goal_store.snapshot(observed[\"goal\"].id)\n        assert state.lifecycle == ReadyGeneration() and state.number == 2\n"
+      },
+      {
+        "oldText": "    agent, comms, session, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.goals.open_goal_store()\n    original_goal = comms.goals.update_goal(\n        \"project\", SetGoalAction(text=\"Read files until stopped\"), owner_store=store\n    )\n",
+        "newText": "    agent, comms, session, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.comms.goals.open_goal_store()\n    original_goal = comms.goals.update_goal(\n        \"project\", SetGoalAction(text=\"Read files until stopped\")\n    )\n"
+      },
+      {
+        "oldText": "            observed[\"replacement\"] = comms.goals.update_goal(\n                \"project\", SetGoalAction(text=\"A different goal\"), owner_store=store\n            )\n",
+        "newText": "            observed[\"replacement\"] = comms.goals.update_goal(\n                \"project\", SetGoalAction(text=\"A different goal\")\n            )\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_acp_goal_original_input.py",
+    "edits": [
+      {
+        "oldText": "    agent, comms, session, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.goals.open_goal_store()\n    goal = comms.goals.update_goal(\"project\", SetGoalAction(text=\"Keep reading\"), owner_store=store)\n    prior_generation = store.snapshot(goal.id)\n",
+        "newText": "    agent, comms, session, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.comms.goals.open_goal_store()\n    goal = comms.goals.update_goal(\"project\", SetGoalAction(text=\"Keep reading\"))\n    prior_generation = store.snapshot(goal.id)\n"
+      },
+      {
+        "oldText": "    agent, comms, _, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.goals.open_goal_store()\n    if existing_goal:\n        comms.goals.update_goal(\"project\", SetGoalAction(text=\"Original goal\"), owner_store=store)\n    original_emit = agent.inputs.emit_input_disposition\n",
+        "newText": "    agent, comms, _, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.comms.goals.open_goal_store()\n    if existing_goal:\n        comms.goals.update_goal(\"project\", SetGoalAction(text=\"Original goal\"))\n    original_emit = agent.inputs.emit_input_disposition\n"
+      },
+      {
+        "oldText": "            replacement = comms.goals.update_goal(\n                \"project\", SetGoalAction(text=\"New authority\"), owner_store=store\n            )\n",
+        "newText": "            replacement = comms.goals.update_goal(\n                \"project\", SetGoalAction(text=\"New authority\")\n            )\n"
+      },
+      {
+        "oldText": "    agent, comms, _, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.goals.open_goal_store()\n    goal = comms.goals.update_goal(\"project\", SetGoalAction(text=\"Keep reading\"), owner_store=store)\n    prior_generation = store.snapshot(goal.id)\n",
+        "newText": "    agent, comms, _, _ = await owner(tmp_path, monkeypatch)\n    store = agent.turns.comms.goals.open_goal_store()\n    goal = comms.goals.update_goal(\"project\", SetGoalAction(text=\"Keep reading\"))\n    prior_generation = store.snapshot(goal.id)\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_backend_failure_owner_pause.py",
+    "edits": [
+      {
+        "oldText": "        )\n        generation = agent.turns.goals.goal_store.snapshot(goal.id)\n        assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None\n        with pytest.raises(UnresolvedAttemptError):\n            agent.turns.goals.goal_store.resume(goal.id, generation.number)\n        await agent.turns.goals.schedule_goal(\"project\")\n",
+        "newText": "        )\n        generation = agent.turns.comms.goals.goal_store.snapshot(goal.id)\n        assert generation.lifecycle == BlockedGeneration() and generation.attempt_id is not None\n        with pytest.raises(UnresolvedAttemptError):\n            agent.turns.comms.goals.goal_store.resume(goal.id, generation.number)\n        await agent.turns.goals.schedule_goal(\"project\")\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_goal_block_reason.py",
+    "edits": [
+      {
+        "oldText": "            actor=OwnerInvocable,\n            owner_store=store,\n        )\n",
+        "newText": "            actor=OwnerInvocable,\n        )\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_goal_failure_native.py",
+    "edits": [
+      {
+        "oldText": "            )\n            store = agent.turns.goals.open_goal_store()\n            store.create_goal(goal.id)\n",
+        "newText": "            )\n            store = agent.turns.comms.goals.open_goal_store()\n            store.create_goal(goal.id)\n"
+      },
+      {
+        "oldText": "            goal = comms.goals.update_goal(sid, SetGoalAction(text=\"Exercise one explicit failed attempt\"))\n            store = agent.turns.goals.open_goal_store()\n            store.create_goal(goal.id)\n",
+        "newText": "            goal = comms.goals.update_goal(sid, SetGoalAction(text=\"Exercise one explicit failed attempt\"))\n            store = agent.turns.comms.goals.open_goal_store()\n            store.create_goal(goal.id)\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_goal_selection_native.py",
+    "edits": [
+      {
+        "oldText": "        comms = agent._comms\n        store = agent.turns.goals.open_goal_store()\n        original = await Coordination.run_worker(lambda: comms.goals.update_goal(\n            session, SetGoalAction(text=\"One genuine native goal turn\"),\n            actor=OwnerInvocable, owner_store=store,\n        ))\n",
+        "newText": "        comms = agent._comms\n        store = agent.turns.comms.goals.open_goal_store()\n        original = await Coordination.run_worker(lambda: comms.goals.update_goal(\n            session, SetGoalAction(text=\"One genuine native goal turn\"),\n            actor=OwnerInvocable, \n        ))\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_goal_standby.py",
+    "edits": [
+      {
+        "oldText": "    await agent.new_session(str(tmp_path / \"parent\"))\n    store = agent.turns.goals.open_goal_store()\n    goal = comms.goals.update_goal(\"parent\", SetGoalAction(text=\"Work\"), owner_store=store)\n    owner = comms.registry.require(\"parent\")\n",
+        "newText": "    await agent.new_session(str(tmp_path / \"parent\"))\n    store = agent.turns.comms.goals.open_goal_store()\n    goal = comms.goals.update_goal(\"parent\", SetGoalAction(text=\"Work\"))\n    owner = comms.registry.require(\"parent\")\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_goal_standby_liveness.py",
+    "edits": [
+      {
+        "oldText": "    goal = comms.goals.update_goal(\n        owner, SetGoalAction(text=\"Review child work\"), owner_store=agent.turns.goals.open_goal_store()\n    )\n",
+        "newText": "    goal = comms.goals.update_goal(\n        owner, SetGoalAction(text=\"Review child work\")\n    )\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_goal_ui_creation.py",
+    "edits": [
+      {
+        "oldText": "        assert generation is not None and generation.lifecycle == ReadyGeneration()\n        assert owner.turns.goals.goal_store.ready_grant(goal[\"id\"], generation.number)\n        assert session in wakes\n",
+        "newText": "        assert generation is not None and generation.lifecycle == ReadyGeneration()\n        assert owner.turns.comms.goals.goal_store.ready_grant(goal[\"id\"], generation.number)\n        assert session in wakes\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_l0_goal_input_closure.py",
+    "edits": [
+      {
+        "oldText": "    with pytest.raises(ValueError, match=\"Retry cannot create a grant\"):\n        comms.goals.update_goal(\"owner\", retry, actor=OwnerInvocable, owner_store=store)\n    assert store.snapshot(goal.id) is None\n",
+        "newText": "    with pytest.raises(ValueError, match=\"Retry cannot create a grant\"):\n        comms.goals.update_goal(\"owner\", retry, actor=OwnerInvocable)\n    assert store.snapshot(goal.id) is None\n"
+      },
+      {
+        "oldText": "    assert not store.snapshot(goal.id).lifecycle.allows_resume(False)\n    changed = comms.goals.update_goal(\"owner\", retry, actor=OwnerInvocable, owner_store=store)\n    assert changed.state.active and changed.id == goal.id\n",
+        "newText": "    assert not store.snapshot(goal.id).lifecycle.allows_resume(False)\n    changed = comms.goals.update_goal(\"owner\", retry, actor=OwnerInvocable)\n    assert changed.state.active and changed.id == goal.id\n"
+      },
+      {
+        "oldText": "            await proxy.request(\"retry_goal\", goal_id=goal.id, expected_revision=goal.revision)\n        assert owner.turns.goals.open_goal_store().snapshot(goal.id) is None\n        assert comms.registry.require(session).goal == goal\n",
+        "newText": "            await proxy.request(\"retry_goal\", goal_id=goal.id, expected_revision=goal.revision)\n        assert owner.turns.comms.goals.open_goal_store().snapshot(goal.id) is None\n        assert comms.registry.require(session).goal == goal\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_native_context_inspection.py",
+    "edits": [
+      {
+        "oldText": "            expect=GoalPrecondition(expected_owner=thread.require_process())),\n            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())\n        owner._comms.goals.update_goal(thread.name, StandbyGoalAction(\n",
+        "newText": "            expect=GoalPrecondition(expected_owner=thread.require_process())),\n            actor=OwnerInvocable)\n        owner._comms.goals.update_goal(thread.name, StandbyGoalAction(\n"
+      },
+      {
+        "oldText": "            text='Replacement acceptance scope', expect=GoalPrecondition(expected_owner=thread.require_process())),\n            actor=OwnerInvocable, owner_store=owner.turns.goals.open_goal_store())\n        owner._comms.goals.update_goal(thread.name, StandbyGoalAction(\n",
+        "newText": "            text='Replacement acceptance scope', expect=GoalPrecondition(expected_owner=thread.require_process())),\n            actor=OwnerInvocable)\n        owner._comms.goals.update_goal(thread.name, StandbyGoalAction(\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_runtime_goal_retry_running.py",
+    "edits": [
+      {
+        "oldText": "    owner.on_connect(Client())\n    store = owner.turns.goals.open_goal_store()\n    goal = comms.goals.update_goal(\n        session, SetGoalAction(text=\"Finish the blocked objective\"), owner_store=store\n    )\n",
+        "newText": "    owner.on_connect(Client())\n    store = owner.turns.comms.goals.open_goal_store()\n    goal = comms.goals.update_goal(\n        session, SetGoalAction(text=\"Finish the blocked objective\")\n    )\n"
+      },
+      {
+        "oldText": "        async with native.original_input(owner, session, \"Unrelated turn\") as turn:\n            store = owner.turns.goals.open_goal_store()\n            goal = comms.goals.update_goal(\n                session, SetGoalAction(text=\"Keep attempt authority\"), owner_store=store\n            )\n",
+        "newText": "        async with native.original_input(owner, session, \"Unrelated turn\") as turn:\n            store = owner.turns.comms.goals.open_goal_store()\n            goal = comms.goals.update_goal(\n                session, SetGoalAction(text=\"Keep attempt authority\")\n            )\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_runtime_goal_snapshot.py",
+    "edits": [
+      {
+        "oldText": "        SetGoalAction(text=\"Review child output\"),\n        owner_store=owner.turns.goals.open_goal_store(),\n    )\n",
+        "newText": "        SetGoalAction(text=\"Review child output\"),\n    )\n"
+      },
+      {
+        "oldText": "    assert scheduled == [session]\n    assert owner.turns.goals.goal_store.snapshot(goal.id).lifecycle == CancelledGeneration()\n\n",
+        "newText": "    assert scheduled == [session]\n    assert owner.turns.comms.goals.goal_store.snapshot(goal.id).lifecycle == CancelledGeneration()\n\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_stack_goal_cancel_resume.py",
+    "edits": [
+      {
+        "oldText": "        goal_id = created[\"goal\"][\"id\"]\n        store = owner.turns.goals.open_goal_store()\n        owner.inputs.dispositions.record(\n",
+        "newText": "        goal_id = created[\"goal\"][\"id\"]\n        store = owner.turns.comms.goals.open_goal_store()\n        owner.inputs.dispositions.record(\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_stack_goal_standby.py",
+    "edits": [
+      {
+        "oldText": "                SetGoalAction(text=\"Review @child report\"),\n                owner_store=agent.turns.goals.open_goal_store(),\n            )\n",
+        "newText": "                SetGoalAction(text=\"Review @child report\"),\n            )\n"
+      },
+      {
+        "oldText": "            assert not agent.inputs.pending_turns.get(\"parent\")\n            assert agent.turns.goals.goal_store.snapshot(goal.id).number == 2\n            if restart:\n",
+        "newText": "            assert not agent.inputs.pending_turns.get(\"parent\")\n            assert agent.turns.comms.goals.goal_store.snapshot(goal.id).number == 2\n            if restart:\n"
+      },
+      {
+        "oldText": "            assert comms.registry.require(\"parent\").goal.state.declared_name == \"completed\"\n            assert agent.turns.goals.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()\n            session = Path(comms.registry.require(\"parent\").session_file)\n",
+        "newText": "            assert comms.registry.require(\"parent\").goal.state.declared_name == \"completed\"\n            assert agent.turns.comms.goals.goal_store.snapshot(goal.id).lifecycle == CompletedGeneration()\n            session = Path(comms.registry.require(\"parent\").session_file)\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_stack_retry_running.py",
+    "edits": [
+      {
+        "oldText": "        comms = owner._comms\n        store = owner.turns.goals.open_goal_store()\n        goal = comms.goals.update_goal(\n            session, SetGoalAction(text=\"Finish native retry objective\"), owner_store=store\n        )\n",
+        "newText": "        comms = owner._comms\n        store = owner.turns.comms.goals.open_goal_store()\n        goal = comms.goals.update_goal(\n            session, SetGoalAction(text=\"Finish native retry objective\")\n        )\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_stack_send_now.py",
+    "edits": [
+      {
+        "oldText": "                    SetGoalAction(text=\"Continue useful work\"),\n                    owner_store=owner.turns.goals.open_goal_store(),\n                )\n",
+        "newText": "                    SetGoalAction(text=\"Continue useful work\"),\n                )\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_turn_context_wire.py",
+    "edits": [
+      {
+        "oldText": "    goals = TurnGoalAccount(comms=comms, owner=thread, turn=TurnId(lease.turn_id),\n        lease=lease, permit=None, open_store=owner.turns.goals.open_goal_store,\n        pending_origins=owner.turns.goals.pending_goal_origins, claims=resources)\n",
+        "newText": "    goals = TurnGoalAccount(comms=comms, owner=thread, turn=TurnId(lease.turn_id),\n        lease=lease, permit=None, \n        pending_origins=owner.turns.goals.pending_goal_origins, claims=resources)\n"
+      }
+    ]
+  },
+  {
+    "path": "tests/test_turn_goal_account.py",
+    "edits": [
+      {
+        "oldText": "    goal = runner.comms.goals.update_goal(execution.thread_name, SetGoalAction(text=\"new work\"))\n    store = runner.goals.open_goal_store()\n\n",
+        "newText": "    goal = runner.comms.goals.update_goal(execution.thread_name, SetGoalAction(text=\"new work\"))\n    store = runner.comms.goals.open_goal_store()\n\n"
+      },
+      {
+        "oldText": "    execution = OwnedTurn(owner.turns, session.session_id, name, \"work\", autonomous_goal=True)\n    store = owner.turns.goals.open_goal_store()\n    pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))\n",
+        "newText": "    execution = OwnedTurn(owner.turns, session.session_id, name, \"work\", autonomous_goal=True)\n    store = owner.turns.comms.goals.open_goal_store()\n    pending_before = tuple(owner.inputs.pending_turns.get(session.session_id, ()))\n"
+      }
+    ]
+  }
+]

@@ -1,0 +1,136 @@
+{
+  "root": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v3/wire",
+  "backup": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v3/repeat-backup/goal_attempts.sqlite3",
+  "before": {
+    "root": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v3/wire",
+    "missing_count": 0,
+    "would_carry": [],
+    "paper1_editor": null,
+    "existing_goals": [
+      {
+        "thread": "blocked",
+        "owner_created_at": 1791918912.0457733,
+        "goal_id": "6a758371220f4a1c8f93a04b29b3e3eb",
+        "goal_revision": 1,
+        "state": "active",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 2,
+        "lifecycle": "ready",
+        "attempt_id": null,
+        "attempts": 0
+      },
+      {
+        "thread": "paused",
+        "owner_created_at": 1791918912.076156,
+        "goal_id": "b13350f17f8b463d9b8e94577a4f5b89",
+        "goal_revision": 0,
+        "state": "paused",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 1,
+        "lifecycle": "ready",
+        "attempt_id": null,
+        "attempts": 0
+      },
+      {
+        "thread": "completed",
+        "owner_created_at": 1791918912.0920858,
+        "goal_id": "aaf8e8bc261b45f0a342591cfbb2c9df",
+        "goal_revision": 0,
+        "state": "completed",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 1,
+        "lifecycle": "ready",
+        "attempt_id": null,
+        "attempts": 0
+      },
+      {
+        "thread": "existing",
+        "owner_created_at": 1791918912.1084857,
+        "goal_id": "ea27efe1646f4e2b99d8a94438d5ba30",
+        "goal_revision": 0,
+        "state": "blocked",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 1,
+        "lifecycle": "blocked",
+        "attempt_id": "24fd54caef20421b90488811c26f8a48",
+        "attempts": 1
+      }
+    ],
+    "mode": "read-only"
+  },
+  "writes": [],
+  "carried_count": 0,
+  "after": {
+    "root": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v3/wire",
+    "missing_count": 0,
+    "would_carry": [],
+    "paper1_editor": null,
+    "existing_goals": [
+      {
+        "thread": "blocked",
+        "owner_created_at": 1791918912.0457733,
+        "goal_id": "6a758371220f4a1c8f93a04b29b3e3eb",
+        "goal_revision": 1,
+        "state": "active",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 2,
+        "lifecycle": "ready",
+        "attempt_id": null,
+        "attempts": 0
+      },
+      {
+        "thread": "paused",
+        "owner_created_at": 1791918912.076156,
+        "goal_id": "b13350f17f8b463d9b8e94577a4f5b89",
+        "goal_revision": 0,
+        "state": "paused",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 1,
+        "lifecycle": "ready",
+        "attempt_id": null,
+        "attempts": 0
+      },
+      {
+        "thread": "completed",
+        "owner_created_at": 1791918912.0920858,
+        "goal_id": "aaf8e8bc261b45f0a342591cfbb2c9df",
+        "goal_revision": 0,
+        "state": "completed",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 1,
+        "lifecycle": "ready",
+        "attempt_id": null,
+        "attempts": 0
+      },
+      {
+        "thread": "existing",
+        "owner_created_at": 1791918912.1084857,
+        "goal_id": "ea27efe1646f4e2b99d8a94438d5ba30",
+        "goal_revision": 0,
+        "state": "blocked",
+        "progress": "",
+        "status": "running",
+        "executing": false,
+        "generation": 1,
+        "lifecycle": "blocked",
+        "attempt_id": "24fd54caef20421b90488811c26f8a48",
+        "attempts": 1
+      }
+    ],
+    "mode": "read-only"
+  }
+}

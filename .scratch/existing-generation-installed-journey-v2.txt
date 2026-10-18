@@ -1,0 +1,67 @@
+Runtime request failed (session=project)
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/runtime.py", line 251, in handle
+    await request.apply(context)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/runtime_requests.py", line 88, in apply
+    await ctx.send({"result": await self.result(ctx)})
+                              ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/runtime_requests.py", line 332, in result
+    goal = await ctx.server.agent.turns.goals.retry_goal(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ctx.session_id, self.goal_id, self.expected_revision
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_scheduler.py", line 201, in retry_goal
+    resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    ))
+    ^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/coordinator.py", line 34, in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/child_process.py", line 820, in join_retirement
+    await asyncio.shield(task)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_scheduler.py", line 201, in <lambda>
+    resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name,
+        ^^^^^
+    ...<7 lines>...
+        actor=OwnerInvocable,
+        ^^^^^^^^^^^^^^^^^^^^^
+    ))
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_management.py", line 381, in update_goal
+    return action.apply(
+           ~~~~~~~~~~~~^
+        GoalActionContext(self, self.registry.require(name), actor)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_actions.py", line 136, in apply
+    goal = self.change(ctx)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_actions.py", line 450, in change
+    generation = store.require_generation(goal.id)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_attempts.py", line 665, in require_generation
+    raise MissingGoalGenerationError(goal_id)
+agent_comms.goal_attempts.MissingGoalGenerationError: Goal 243ed145076d491a9b47727b9196c168 has no launch authority. Clear this goal and set it again. Retry cannot create a grant.
+{"saved_native_fixture": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-installed-journey-v2/native/wire", "localhost_posts": 2, "native_input_proofs": 2, "children": [{"pid": 2289022, "start_time": 139571446}], "children_retired": true}
+{
+  "core": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_management.py",
+  "saved_history_prefix_preserved": true,
+  "missing_retry_refused_with_zero_provider_requests": true,
+  "carry_preserved_blocked_public_goal": true,
+  "actual_retry_widget_clicked": true,
+  "same_goal_generation": 2,
+  "completed": true,
+  "localhost_posts": 2,
+  "saved_inputs": 2
+}
+
+HISTORICAL_GOAL_INSTALLED_JOURNEY_PASS

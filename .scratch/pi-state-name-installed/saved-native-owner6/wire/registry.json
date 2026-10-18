@@ -1,0 +1,80 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/pi-state-name-installed/saved-native-owner6/project",
+      "created_at": 1792123909.1433978,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/pi-state-name-installed/saved-native-owner6/sessions/enrolled-07a3bf249b754d8986b5e035c121e6e9.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 1173709,
+        "start_time": 159952236
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": true,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "b18eebc08f5349c880e12bf59aaa8208"
+    },
+    "sender": {
+      "name": "sender",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/pi-state-name-installed/saved-native-owner6/project",
+      "created_at": 61001.0,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "stopped"
+    },
+    "sender": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "project": 1792123915.065064,
+    "sender": 1792123912.6531906
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "sender": 3
+    }
+  },
+  "admissions": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "sender": 3
+    }
+  }
+}

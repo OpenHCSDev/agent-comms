@@ -1,0 +1,463 @@
+{
+  "root": "/var/tmp/agent-comms-live-20260927-wzjtqhza",
+  "missing_count": 17,
+  "would_carry": [
+    {
+      "thread": "mcp-goal-scope-consultant",
+      "owner_created_at": 1790362891.0932813,
+      "goal_id": "d1a2e2fc33c54d17a3e72bd91fab446e",
+      "goal_revision": 8,
+      "state": "active",
+      "progress": "Package owner requested the contract again after not receiving earlier direct send; resent with explicit file ownership split and smallest local offline end-to-end path (seq 7080), and asked coordinator for one precise shared-file assignment (seq 7081). Package head 58d60b6 not reviewed by me; no defect claim. Prior channel-awareness issue #84 and PR17 handoff complete. No code/provider/activation/push; await coordinator assignment or package-owner follow-up.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "mcp-pr77",
+      "owner_created_at": 1790097831.120443,
+      "goal_id": "b0e7d9ec27884fbd8d94454fed299c3d",
+      "goal_revision": 7,
+      "state": "paused",
+      "progress": "Final pairing3fc252f+Toad64be740 owner actual-linked4/4PASS52.99s; parent lifecycle repro/queue negatives corrected. Independently verified full evidence bundle hashes and exact commits; updated PR77 draft body. Worktree clean; no further code changes. Await parent final exact integrated clearance/merge handoff; repeated full run unnecessary until requested.\n\nDeclared dependency @agent-comms-ux finished without a qualifying direct reply, and no declared dependency has an active turn. Goal paused: inspect messages and UNKNOWN inputs before explicitly resuming or redelegating. No model turn or claim was admitted.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "native-pi-launch-isolation",
+      "owner_created_at": 1790182599.3301673,
+      "goal_id": "e0d8e26f828c401a9d3ae168e4f7c8ea",
+      "goal_revision": 3,
+      "state": "paused",
+      "progress": "Frozen isolated main-based startup-liveness fix 7adde0b; exact patch SHA256 f85f0764..., 34 focused tests passing, static checks passing and fully pinned copied-Pi no-provider readiness evidence sent to parent. Prior 32 dependency inputs are historical/superseded, reviewed and not replayed. Await independent exact-byte review/merge decision; no activation.\n\nDeclared dependency @agent-comms-ux finished without a qualifying direct reply, and no declared dependency has an active turn. Goal paused: inspect messages and UNKNOWN inputs before explicitly resuming or redelegating. No model turn or claim was admitted.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "owner_created_at": 1790116627.8997042,
+      "goal_id": "f24503310f684e5fa0280cb0d3463727",
+      "goal_revision": 13,
+      "state": "completed",
+      "progress": "Verified and delivered the scoped domain-mapping refinement to coordinator: source-pinned PR #60 evidence-lens packet SHA ef6c3d6d4524b4d374d486f4cbd3541484322590b5ad794f4b58bb0ef20485ac and exact architecture/skill/protocol seams SHA 7a5b36947fb16e299879fcc561bce16ec1675e9ba19bc2a141533a691cf4e7d6. The model preserves human normative domain rules and authoritative declarations, LLM candidate tracing/semantic-completeness reasoning, and NRA deterministic source/provenance/OPEN/DSL checks; it identifies the omitted human input and rule/admission receipt in the maintained protocol and a two-world #60 counterexample. Scope complete as a read-only domain-mapping handoff; parent-owned skill/docs integration, merge, runtime parity and publication remain unclaimed.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "opencode-toad-maintenance",
+      "owner_created_at": 1790101117.1526291,
+      "goal_id": "779c3bf66282457db93f872ad796f21b",
+      "goal_revision": 0,
+      "state": "active",
+      "progress": "User desktop test reported working pretty good. User-requested commit/push checkpoint completed in existing OpenHCSDev/toad#1 at83cc970f151f7ed034c50713ca36ac710f10faa6 (28 files): all23 outstanding legitimate local source/test changes plus opt-in renderer constructor/CLI/TOAD_RENDERER/optional extra/docs. 25 focused checks, paired+stock Textual two-app UI reuse, Markdown/transcript/diff/retained-text/footer/right-Comms pilots, focused10-module mypy, fatal Ruff/diff and wheel build pass. Shared/live worktree unchanged; final integration only in isolated /tmp/opencode/toad-renderer-checkpoint and PR. PR draft, no CI checks reported; compatible core pin/feature reviews separate. Cold startup/45-57ms UI-loop stalls and <16ms terminal presentation remain open; do not mark performance goal complete. Handoff and owners notified.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-comms-threads-scaling-fix",
+      "owner_created_at": 1790228398.9384804,
+      "goal_id": "7005cfd7d8bb4f01bbb8c4275e3bdff5",
+      "goal_revision": 3,
+      "state": "paused",
+      "progress": "",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-goal-capability-preflight",
+      "owner_created_at": 1790211918.7697482,
+      "goal_id": "a9bc5d395801457490130365181863c5",
+      "goal_revision": 2,
+      "state": "paused",
+      "progress": "",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-macos313-backend-ci-fix",
+      "owner_created_at": 1790222814.8705122,
+      "goal_id": "23d7634062e74ad3a80605584c5dffe8",
+      "goal_revision": 4,
+      "state": "completed",
+      "progress": "Verified bounded publication objective complete:15 failures reproduced/classified, strict test-only corrections published PR97, normally integrated mainfc417934 into frozen6200a1e08ec6c40ab5fe5836e1e0053f9733b765. Owner329 pass/4 explicit native-launcher skips, independent316 integrated pass and5 base negatives; final independent CLEAN narrow disposition semantics report SHA9cb65a9f5ea1d5549b06605221e56827368ad4aea9aa5dd61f71678cd005cef0 read/verified. Exact head/evidence/caveats handed parent and posted PR comments5843460090/5843472770. PR verified OPEN draft, not merged or activated; parent owns merge decision. No application-source/live/installed mutation or uncertain-input replay. Existing artifacts preserved.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-native-ancestor-fsync-fix",
+      "owner_created_at": 1790222833.028218,
+      "goal_id": "53eaeec997c343e39e6edafb527596a6",
+      "goal_revision": 2,
+      "state": "unrecorded_block",
+      "progress": "Goal attempt unresolved; inspect diagnostics before Retry.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-native-goal-tool-profile",
+      "owner_created_at": 1790211735.5535102,
+      "goal_id": "b7b7ce066854445fb7f11dca35dbe832",
+      "goal_revision": 2,
+      "state": "active",
+      "progress": "Initial MCP triage completed from this thread. Current repository has a planning-only `plans/mcp-support-plan.md` and no implemented usable MCP client. The plan's core architecture is a package-owned `pi-mcp-client` using the official MCP SDK; agent-comms remains thin launch/projection owner, Toad is typed inventory/controller, and OpenHCS is an acceptance target rather than a special-case branch. ACP currently accepts `mcp_servers` parameters but does not implement usable MCP behavior. I am standing by for `mcp`'s active research/handoff and `agent-comms-ux` coordination before editing to avoid conflicting ownership.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-v3-backend-semantic-merge-owner",
+      "owner_created_at": 1790227645.7492373,
+      "goal_id": "cebb9057df6c45388ee3f474c7ce324b",
+      "goal_revision": 5,
+      "state": "unrecorded_block",
+      "progress": "Goal set. Read agent-comms `plans/mcp-support-plan.md` and OpenHCS MCP client contract plus canonical refactoring/architecture guides. The plan assigns MCP protocol/config/trust to one Pi package, with only generic ACP/backend projection in agent-comms; no package implementation exists in this checkout. Asked @agent-comms-ux for an exclusive bounded backend MCP scope; frozen backend 1620 unchanged. Production/provider activation remains off.\n\nGoal attempt unresolved; inspect diagnostics before Retry.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-v3-coordination-schema-merge-owner",
+      "owner_created_at": 1790227661.2048979,
+      "goal_id": "0a314919764e40a9816cc1ccf825d8b0",
+      "goal_revision": 3,
+      "state": "paused",
+      "progress": "",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr94",
+      "owner_created_at": 1790349563.8946054,
+      "goal_id": "4cdf0f253dac4b76af88d78d831fbd46",
+      "goal_revision": 14,
+      "state": "blocked",
+      "progress": "Isolated clean HEAD bd8e7ba267c56eea7ef4902c7013f90a5272aec6; reviewed OFF-only typed journal and RPC negatives pass, production selected ACP wake remains NO-GO. Exact PR108 says incumbent TurnClaimFence/claim_batch/source/route/native-FK helper is shared steering\u2192PR94 only after PR112 normal merge and explicit parent handoff; current ACP/coordinator/raw files cannot adopt a turn or guarantee pre-byte/pre-effect CAS. Requested @agent-comms-ux explicit coordinated file-seam handoff. Waiting on that specific owner dependency, not polling or replaying historical UNKNOWN. Codex PR116 fresh-root path avoids local in-place v2 rewrite but not old-child continuity. No shared install/provider/live/STARTED; PR95 UNKNOWN.\n\nBackend turn failed; inspect local diagnostics before resuming.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "toad-anymode-negative-independent-review",
+      "owner_created_at": 1790215776.3152986,
+      "goal_id": "4f44ae769da840b89a23bd7f4fa3b8d0",
+      "goal_revision": 2,
+      "state": "active",
+      "progress": "Set review-ready full-stack MCP goal; read agent-comms MCP architecture, OpenHCS MCP public-operation projection and client docs, NRA leverage and maintenance principles. Identified current checkout has only plan/inert ACP MCP arguments, no generic Pi package or Toad inventory. Sent specific single-authority, trust, no-replay, direct Pi+detached+Toad, and immutable evidence review gates to @agent-comms-ux and @mcp. No edits or duplicate implementation. Await their exact isolated candidate root/hash or assignment for independent review.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "toad-comms-ux",
+      "owner_created_at": 1790370861.5243301,
+      "goal_id": "c22f2d29c72c40728618d3c146f419a2",
+      "goal_revision": 3,
+      "state": "completed",
+      "progress": "Independent review found no blocker within owner-private-root threat model, noted lstat/chmod race if hostile writer controls an existing nonprivate root. PR #88 synced with #87, relevant local 48 passed/14 skipped; Ruff and mypy passed, broader unrelated failures documented. Merged as 9275890 and fast-forwarded /home/ts/.agent-comms main to same commit; tracked clean and untracked live files preserved. Notified agent-comms-ux. No live input replay, owner restart, or model change.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "toad-pr50-browser-security-owner",
+      "owner_created_at": 1790364546.2059865,
+      "goal_id": "413527e81da04c43a5b09be342f168c6",
+      "goal_revision": 6,
+      "state": "active",
+      "progress": "Independently reviewed exact local commit 4d26fd00ab71141804bb8d9fa42a3d03633d0706 has been pushed unchanged and opened as verified DRAFT Toad PR #50 (https://github.com/OpenHCSDev/toad/pull/50), base main 65339eed; five scoped files, worktree clean. Ownership thread renamed toad-pr50-browser-security-owner and coordinator informed. Review-ready within pinned local browser-gate scope only; no live Comms, production activation, external bind, provider, or merge. Waiting for agent-comms-ux PR-review follow-up or explicit next task.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "codex-shepherd",
+      "owner_created_at": 1791864442.4248712,
+      "goal_id": "e58dd9721cb3442aad5dd8e26db07bf1",
+      "goal_revision": 2,
+      "state": "blocked",
+      "progress": "Goal attempt unresolved; inspect diagnostics before Retry.",
+      "executing": true,
+      "generation": null,
+      "attempts": 0
+    }
+  ],
+  "paper1_editor": {
+    "thread": "paper1-editor",
+    "owner_created_at": 1791878783.196527,
+    "goal_id": "800db2b9b05e45a59020211b78e60283",
+    "goal_revision": 4,
+    "state": "blocked",
+    "progress": "Goal origin turn did not finish successfully.\n\nBackend turn failed; inspect local diagnostics before resuming.",
+    "executing": true,
+    "generation": {
+      "kind": "generation",
+      "goal_id": "800db2b9b05e45a59020211b78e60283",
+      "number": 2,
+      "lifecycle": {
+        "kind": "blocked"
+      },
+      "attempt_id": "6d2250f4c07d4e1bbcc033af4a957b7b",
+      "ready_digest": ""
+    },
+    "attempts": 2
+  },
+  "existing_goals": [
+    {
+      "thread": "agent-comms-ux",
+      "owner_created_at": 1790049004.0955005,
+      "goal_id": "6d7f845589514588ba9063e07fc66628",
+      "goal_revision": 7,
+      "state": "blocked",
+      "progress": "Started the newly authorized priority on isolated branch fix/empty-provider-recovery from current main; preserved published #750 and #747 branches and all historical failed/UNKNOWN records. Checked open PRs and exact affected-file claims: no overlapping provider-recovery implementation. Source pass identified native AgentSession as the existing provider continuation owner: tracked inputs force one transport attempt at agent-session.js:948 and blanket-disable failure continuation at :1017. Parsed that native owner's AST with Node's existing Acorn parser and enumerated all nine tracked-input flag consumers plus its declaration; Python/Core family relationships are traced through TrackedTurnSession, ProgressWatchdog, native tool observations, turn outcomes and InputDrain. Core text_parts clears after tool rounds and cannot prove no output; whole-turn production must be monotonic at the native owner. Recovery will continue the existing committed context, not reappend/replay the input; explicit refusals and a 120-second empty wait share named bounded recovery states, three retries and backoff, while any output/tool start and unknown disconnects keep no-replay behavior. The false Inbox unavailable label comes from InputDrain.observe grouping NativePiUnavailable with inbox-read errors at input_drain.py:365-379. Sent the ownership checkpoint to codex-shepherd. Implementation is still in progress, not tested/merged/installed; no finished-piece claim. Staying active because I have independent implementation work; any future wait_for will include claude-code and codex-shepherd as directed.\n\nBackend turn failed; inspect local diagnostics before resuming.\n\nBackend turn failed; inspect local diagnostics before resuming.\n\nBackend turn failed; inspect local diagnostics before resuming.",
+      "executing": true,
+      "generation": {
+        "kind": "generation",
+        "goal_id": "6d7f845589514588ba9063e07fc66628",
+        "number": 4,
+        "lifecycle": {
+          "kind": "blocked"
+        },
+        "attempt_id": "00814b3a8bd243f7bc065451e4100975",
+        "ready_digest": ""
+      },
+      "attempts": 4
+    },
+    {
+      "thread": "mcp-goal-scope-consultant",
+      "owner_created_at": 1790362891.0932813,
+      "goal_id": "d1a2e2fc33c54d17a3e72bd91fab446e",
+      "goal_revision": 8,
+      "state": "active",
+      "progress": "Package owner requested the contract again after not receiving earlier direct send; resent with explicit file ownership split and smallest local offline end-to-end path (seq 7080), and asked coordinator for one precise shared-file assignment (seq 7081). Package head 58d60b6 not reviewed by me; no defect claim. Prior channel-awareness issue #84 and PR17 handoff complete. No code/provider/activation/push; await coordinator assignment or package-owner follow-up.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "mcp-pr77",
+      "owner_created_at": 1790097831.120443,
+      "goal_id": "b0e7d9ec27884fbd8d94454fed299c3d",
+      "goal_revision": 7,
+      "state": "paused",
+      "progress": "Final pairing3fc252f+Toad64be740 owner actual-linked4/4PASS52.99s; parent lifecycle repro/queue negatives corrected. Independently verified full evidence bundle hashes and exact commits; updated PR77 draft body. Worktree clean; no further code changes. Await parent final exact integrated clearance/merge handoff; repeated full run unnecessary until requested.\n\nDeclared dependency @agent-comms-ux finished without a qualifying direct reply, and no declared dependency has an active turn. Goal paused: inspect messages and UNKNOWN inputs before explicitly resuming or redelegating. No model turn or claim was admitted.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "native-pi-launch-isolation",
+      "owner_created_at": 1790182599.3301673,
+      "goal_id": "e0d8e26f828c401a9d3ae168e4f7c8ea",
+      "goal_revision": 3,
+      "state": "paused",
+      "progress": "Frozen isolated main-based startup-liveness fix 7adde0b; exact patch SHA256 f85f0764..., 34 focused tests passing, static checks passing and fully pinned copied-Pi no-provider readiness evidence sent to parent. Prior 32 dependency inputs are historical/superseded, reviewed and not replayed. Await independent exact-byte review/merge decision; no activation.\n\nDeclared dependency @agent-comms-ux finished without a qualifying direct reply, and no declared dependency has an active turn. Goal paused: inspect messages and UNKNOWN inputs before explicitly resuming or redelegating. No model turn or claim was admitted.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "nra-domain-mapping",
+      "owner_created_at": 1790116627.8997042,
+      "goal_id": "f24503310f684e5fa0280cb0d3463727",
+      "goal_revision": 13,
+      "state": "completed",
+      "progress": "Verified and delivered the scoped domain-mapping refinement to coordinator: source-pinned PR #60 evidence-lens packet SHA ef6c3d6d4524b4d374d486f4cbd3541484322590b5ad794f4b58bb0ef20485ac and exact architecture/skill/protocol seams SHA 7a5b36947fb16e299879fcc561bce16ec1675e9ba19bc2a141533a691cf4e7d6. The model preserves human normative domain rules and authoritative declarations, LLM candidate tracing/semantic-completeness reasoning, and NRA deterministic source/provenance/OPEN/DSL checks; it identifies the omitted human input and rule/admission receipt in the maintained protocol and a two-world #60 counterexample. Scope complete as a read-only domain-mapping handoff; parent-owned skill/docs integration, merge, runtime parity and publication remain unclaimed.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "opencode-toad-maintenance",
+      "owner_created_at": 1790101117.1526291,
+      "goal_id": "779c3bf66282457db93f872ad796f21b",
+      "goal_revision": 0,
+      "state": "active",
+      "progress": "User desktop test reported working pretty good. User-requested commit/push checkpoint completed in existing OpenHCSDev/toad#1 at83cc970f151f7ed034c50713ca36ac710f10faa6 (28 files): all23 outstanding legitimate local source/test changes plus opt-in renderer constructor/CLI/TOAD_RENDERER/optional extra/docs. 25 focused checks, paired+stock Textual two-app UI reuse, Markdown/transcript/diff/retained-text/footer/right-Comms pilots, focused10-module mypy, fatal Ruff/diff and wheel build pass. Shared/live worktree unchanged; final integration only in isolated /tmp/opencode/toad-renderer-checkpoint and PR. PR draft, no CI checks reported; compatible core pin/feature reviews separate. Cold startup/45-57ms UI-loop stalls and <16ms terminal presentation remain open; do not mark performance goal complete. Handoff and owners notified.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-comms-threads-scaling-fix",
+      "owner_created_at": 1790228398.9384804,
+      "goal_id": "7005cfd7d8bb4f01bbb8c4275e3bdff5",
+      "goal_revision": 3,
+      "state": "paused",
+      "progress": "",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-goal-capability-preflight",
+      "owner_created_at": 1790211918.7697482,
+      "goal_id": "a9bc5d395801457490130365181863c5",
+      "goal_revision": 2,
+      "state": "paused",
+      "progress": "",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-macos313-backend-ci-fix",
+      "owner_created_at": 1790222814.8705122,
+      "goal_id": "23d7634062e74ad3a80605584c5dffe8",
+      "goal_revision": 4,
+      "state": "completed",
+      "progress": "Verified bounded publication objective complete:15 failures reproduced/classified, strict test-only corrections published PR97, normally integrated mainfc417934 into frozen6200a1e08ec6c40ab5fe5836e1e0053f9733b765. Owner329 pass/4 explicit native-launcher skips, independent316 integrated pass and5 base negatives; final independent CLEAN narrow disposition semantics report SHA9cb65a9f5ea1d5549b06605221e56827368ad4aea9aa5dd61f71678cd005cef0 read/verified. Exact head/evidence/caveats handed parent and posted PR comments5843460090/5843472770. PR verified OPEN draft, not merged or activated; parent owns merge decision. No application-source/live/installed mutation or uncertain-input replay. Existing artifacts preserved.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-native-ancestor-fsync-fix",
+      "owner_created_at": 1790222833.028218,
+      "goal_id": "53eaeec997c343e39e6edafb527596a6",
+      "goal_revision": 2,
+      "state": "unrecorded_block",
+      "progress": "Goal attempt unresolved; inspect diagnostics before Retry.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-native-goal-tool-profile",
+      "owner_created_at": 1790211735.5535102,
+      "goal_id": "b7b7ce066854445fb7f11dca35dbe832",
+      "goal_revision": 2,
+      "state": "active",
+      "progress": "Initial MCP triage completed from this thread. Current repository has a planning-only `plans/mcp-support-plan.md` and no implemented usable MCP client. The plan's core architecture is a package-owned `pi-mcp-client` using the official MCP SDK; agent-comms remains thin launch/projection owner, Toad is typed inventory/controller, and OpenHCS is an acceptance target rather than a special-case branch. ACP currently accepts `mcp_servers` parameters but does not implement usable MCP behavior. I am standing by for `mcp`'s active research/handoff and `agent-comms-ux` coordination before editing to avoid conflicting ownership.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-v3-backend-semantic-merge-owner",
+      "owner_created_at": 1790227645.7492373,
+      "goal_id": "cebb9057df6c45388ee3f474c7ce324b",
+      "goal_revision": 5,
+      "state": "unrecorded_block",
+      "progress": "Goal set. Read agent-comms `plans/mcp-support-plan.md` and OpenHCS MCP client contract plus canonical refactoring/architecture guides. The plan assigns MCP protocol/config/trust to one Pi package, with only generic ACP/backend projection in agent-comms; no package implementation exists in this checkout. Asked @agent-comms-ux for an exclusive bounded backend MCP scope; frozen backend 1620 unchanged. Production/provider activation remains off.\n\nGoal attempt unresolved; inspect diagnostics before Retry.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr1-v3-coordination-schema-merge-owner",
+      "owner_created_at": 1790227661.2048979,
+      "goal_id": "0a314919764e40a9816cc1ccf825d8b0",
+      "goal_revision": 3,
+      "state": "paused",
+      "progress": "",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "pr94",
+      "owner_created_at": 1790349563.8946054,
+      "goal_id": "4cdf0f253dac4b76af88d78d831fbd46",
+      "goal_revision": 14,
+      "state": "blocked",
+      "progress": "Isolated clean HEAD bd8e7ba267c56eea7ef4902c7013f90a5272aec6; reviewed OFF-only typed journal and RPC negatives pass, production selected ACP wake remains NO-GO. Exact PR108 says incumbent TurnClaimFence/claim_batch/source/route/native-FK helper is shared steering\u2192PR94 only after PR112 normal merge and explicit parent handoff; current ACP/coordinator/raw files cannot adopt a turn or guarantee pre-byte/pre-effect CAS. Requested @agent-comms-ux explicit coordinated file-seam handoff. Waiting on that specific owner dependency, not polling or replaying historical UNKNOWN. Codex PR116 fresh-root path avoids local in-place v2 rewrite but not old-child continuity. No shared install/provider/live/STARTED; PR95 UNKNOWN.\n\nBackend turn failed; inspect local diagnostics before resuming.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "toad-anymode-negative-independent-review",
+      "owner_created_at": 1790215776.3152986,
+      "goal_id": "4f44ae769da840b89a23bd7f4fa3b8d0",
+      "goal_revision": 2,
+      "state": "active",
+      "progress": "Set review-ready full-stack MCP goal; read agent-comms MCP architecture, OpenHCS MCP public-operation projection and client docs, NRA leverage and maintenance principles. Identified current checkout has only plan/inert ACP MCP arguments, no generic Pi package or Toad inventory. Sent specific single-authority, trust, no-replay, direct Pi+detached+Toad, and immutable evidence review gates to @agent-comms-ux and @mcp. No edits or duplicate implementation. Await their exact isolated candidate root/hash or assignment for independent review.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "toad-comms-ux",
+      "owner_created_at": 1790370861.5243301,
+      "goal_id": "c22f2d29c72c40728618d3c146f419a2",
+      "goal_revision": 3,
+      "state": "completed",
+      "progress": "Independent review found no blocker within owner-private-root threat model, noted lstat/chmod race if hostile writer controls an existing nonprivate root. PR #88 synced with #87, relevant local 48 passed/14 skipped; Ruff and mypy passed, broader unrelated failures documented. Merged as 9275890 and fast-forwarded /home/ts/.agent-comms main to same commit; tracked clean and untracked live files preserved. Notified agent-comms-ux. No live input replay, owner restart, or model change.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "toad-pr50-browser-security-owner",
+      "owner_created_at": 1790364546.2059865,
+      "goal_id": "413527e81da04c43a5b09be342f168c6",
+      "goal_revision": 6,
+      "state": "active",
+      "progress": "Independently reviewed exact local commit 4d26fd00ab71141804bb8d9fa42a3d03633d0706 has been pushed unchanged and opened as verified DRAFT Toad PR #50 (https://github.com/OpenHCSDev/toad/pull/50), base main 65339eed; five scoped files, worktree clean. Ownership thread renamed toad-pr50-browser-security-owner and coordinator informed. Review-ready within pinned local browser-gate scope only; no live Comms, production activation, external bind, provider, or merge. Waiting for agent-comms-ux PR-review follow-up or explicit next task.",
+      "executing": false,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "toad-close-lifecycle",
+      "owner_created_at": 1791849208.3625324,
+      "goal_id": "1519ecf76f024e00828cc874198450f7",
+      "goal_revision": 7,
+      "state": "blocked",
+      "progress": "#594 done and installed. Dot-vs-arrow diagnosed and routed to parent (Core page-traversal fix). Row-top activation and selection-paint defects traced with file:line; plan written at docs/plans/row-top-and-selection-paint-plan.md and sent to claude-code for Tristan approval. Blocked on that approval for the protected-path edits; paired Core #750 and LAN serve follow after.\n\nBackend turn failed; inspect local diagnostics before resuming.",
+      "executing": true,
+      "generation": {
+        "kind": "generation",
+        "goal_id": "1519ecf76f024e00828cc874198450f7",
+        "number": 6,
+        "lifecycle": {
+          "kind": "blocked"
+        },
+        "attempt_id": "dea727fedb0747f8880b6b170659b12f",
+        "ready_digest": ""
+      },
+      "attempts": 6
+    },
+    {
+      "thread": "codex-shepherd",
+      "owner_created_at": 1791864442.4248712,
+      "goal_id": "e58dd9721cb3442aad5dd8e26db07bf1",
+      "goal_revision": 2,
+      "state": "blocked",
+      "progress": "Goal attempt unresolved; inspect diagnostics before Retry.",
+      "executing": true,
+      "generation": null,
+      "attempts": 0
+    },
+    {
+      "thread": "paper1-editor",
+      "owner_created_at": 1791878783.196527,
+      "goal_id": "800db2b9b05e45a59020211b78e60283",
+      "goal_revision": 4,
+      "state": "blocked",
+      "progress": "Goal origin turn did not finish successfully.\n\nBackend turn failed; inspect local diagnostics before resuming.",
+      "executing": true,
+      "generation": {
+        "kind": "generation",
+        "goal_id": "800db2b9b05e45a59020211b78e60283",
+        "number": 2,
+        "lifecycle": {
+          "kind": "blocked"
+        },
+        "attempt_id": "6d2250f4c07d4e1bbcc033af4a957b7b",
+        "ready_digest": ""
+      },
+      "attempts": 2
+    }
+  ],
+  "mode": "read-only"
+}

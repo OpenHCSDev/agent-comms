@@ -1,0 +1,116 @@
+{
+  "threads": {
+    "sender": {
+      "name": "sender",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-selected-final/test_installed_selected_long_t1",
+      "created_at": 1792121111.4215043,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 1015937,
+        "start_time": 159674514
+      },
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "alpha": {
+      "name": "alpha",
+      "tags": [
+        "team"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-selected-final/test_installed_selected_long_t1",
+      "created_at": 1792121111.4215863,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": "release notes; ignore arithmetic tasks",
+      "process_identity": {
+        "pid": 1015937,
+        "start_time": 159674514
+      },
+      "model": "openai-codex/gpt-6-sol",
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "beta": {
+      "name": "beta",
+      "tags": [
+        "team"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-selected-final/test_installed_selected_long_t1",
+      "created_at": 1792121111.421641,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-selected-final/test_installed_selected_long_t1/wire/native-sessions/5709065531314a3b0e9ef97be278ec39/2026-10-16T03-25-13-758Z_01a142be-0c9d-7118-8045-57f8cdd9657c.jsonl",
+      "title": null,
+      "parent": null,
+      "task": "arithmetic answers",
+      "process_identity": {
+        "pid": 1015937,
+        "start_time": 159674514
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "c99fe0d83d3acc3d0ad9ac2041aceb08"
+    }
+  },
+  "statuses": {
+    "sender": {
+      "kind": "running"
+    },
+    "alpha": {
+      "kind": "running"
+    },
+    "beta": {
+      "kind": "stopped"
+    }
+  },
+  "last_seen": {
+    "sender": 1792121111.4220903,
+    "alpha": 1792121111.4287677,
+    "beta": 1792121114.299387
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 4,
+    "generations": {
+      "sender": 1,
+      "alpha": 2,
+      "beta": 4
+    }
+  },
+  "admissions": {
+    "counter": 4,
+    "generations": {
+      "sender": 1,
+      "alpha": 2,
+      "beta": 4
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "sessionFile": "/home/ts/.pi/agent/sessions/--home-ts-code-projects-openhcs--/2026-09-22T03-50-07-145Z_01a0c73c-3628-7073-880c-e0df5f56e98e.jsonl",
+  "tokensBefore": 926423,
+  "estimatedTokensAfter": 42399,
+  "firstKeptEntryId": "c8397e07",
+  "summaryStart": "Work in progress when compaction started:\nNow: Fixing #814’s ratchet by moving entry-record selection from `WireLog` to the certified checkpoint owner and replacing forward-reference base types.\nUncommitted: Cutover tool restored locally for archive rehearsal; active copied archives were rebuilt before the retained-original-only failure. (the worktree has uncommitted changes at compaction)\nNext: Merge current main, pass focused checks/ratchet, then finish active historical-page acceptance.\n\n## Goal\n- Identity: `agent-comms-ux`, tag `comms`; worktree `/home/ts/wt/core-relrev`.\n- Original persistent goal (#771/#620, #796 coordination wait/retry, #798 immediate reply painting) is complete.\n- **Current priority:** make #814’s context-entry wire-format rewrite merge/cutover ready, including active retained archives, architecture ratchets, exact-head build, and hard fleet/Toad cutover evidence.\n- **Next priority:** correct #823 so only genuinely pre-existing saved tracked sessions skip `get_state`; fresh enrollment must retain native attestation and registry attachment.\n- Retain #750/#747/#593 integration checkpoints and deferred backlog.\n\n## Constraints & Preferences\n- Never replay UNKN",
+  "events": [
+    "compaction_start",
+    "compaction_end"
+  ]
+}

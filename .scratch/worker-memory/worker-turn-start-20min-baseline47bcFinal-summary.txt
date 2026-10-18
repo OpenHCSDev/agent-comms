@@ -1,0 +1,2 @@
+/home/ts/wt/core-doctrine-segment/.scratch/worker-memory/worker-turn-start-20min-baseline47bcFinal.json
+{"samples": 41, "elapsed_seconds": 1204.036, "rss_max": 160972800, "rss_last": 160972800, "uss_max": 141119488, "turn_start": {"observations": 9, "cold_ms": 128519.936903, "warm_min_ms": 124323.464301, "warm_median_ms": 128878.5198235, "warm_max_ms": 136460.76954, "entries": 2167}, "returncode": 0, "original_unchanged": true}

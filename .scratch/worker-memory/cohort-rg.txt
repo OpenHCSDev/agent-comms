@@ -1,0 +1,785 @@
+tests/test_native_prompt_binding.py:26:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_native_prompt_binding.py:31:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_native_prompt_binding.py:80:    message = comms.messaging.send_initial_cohort("sender", "#team", "Compute 17+25.")
+tests/test_native_prompt_binding.py:81:    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_native_prompt_binding.py:83:        install_private_cohort_schema(store)
+tests/test_native_prompt_binding.py:94:        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_native_prompt_binding.py:285:    second = comms.messaging.send_initial_cohort("sender", "#team", "Second source.")
+tests/test_native_prompt_binding.py:291:        accept_delivery_cohort(bus, root_id, second.seq, store)
+tests/test_native_prompt_binding.py:328:    second = comms.messaging.send_initial_cohort("sender", "alpha", "Second selected source.")
+tests/test_native_prompt_binding.py:330:        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
+tests/test_native_prompt_binding.py:376:    second = comms.messaging.send_initial_cohort("sender", "#team", "@beta please review.")
+tests/test_native_prompt_binding.py:378:        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
+tests/test_native_prompt_binding.py:542:    second = comms.messaging.send_initial_cohort("sender", "alpha-new", "Canonical recipient.")
+tests/test_native_prompt_binding.py:544:        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
+tests/test_native_prompt_binding.py:810:        from agent_comms.coordination_cohort import sealed_cohort_assignments
+tests/test_native_prompt_binding.py:812:        claims = sealed_cohort_assignments(store, stable_thread_lookup(people[1].created_at))
+src/agent_comms/coordination_response.py:28:from agent_comms.cohort_schema import assert_cohort_schema
+src/agent_comms/coordination_response.py:277:def _require_cohort_assignments(
+src/agent_comms/coordination_response.py:292:    assert_cohort_schema(db)
+src/agent_comms/coordination_response.py:296:        raise IdentityConflict("cohort bus root changed")
+src/agent_comms/coordination_response.py:297:    originals = {initial.message.seq: initial for initial in bus.log.delivery_cohorts_unlocked(
+src/agent_comms/coordination_response.py:307:                "JOIN cohort_delivery_receipts d "
+src/agent_comms/coordination_response.py:315:            raise IdentityConflict("response claim lacks original bus/cohort authority")
+src/agent_comms/coordination_response.py:347:    _require_cohort_assignments(store, bus, snapshot, wire_root_id)
+src/agent_comms/coordination_response.py:456:    _require_cohort_assignments(store, bus, snapshot, wire_root_id, terminal=snapshot.completed_response())
+tests/test_cutover_admission.py:7:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_cutover_admission.py:8:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_cutover_admission.py:11:from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+tests/test_cutover_admission.py:25:    accept_delivery_cohort(comms.bus, root_id, old.seq, old_store)
+tests/test_cutover_admission.py:26:    assert len(sealed_cohort_assignments(old_store, lookups["bob"])) == 1
+tests/test_cutover_admission.py:36:        install_private_cohort_schema(store)
+tests/test_cutover_admission.py:50:            assert sealed_cohort_assignments(store, lookups["bob"]) == ()
+tests/test_cutover_admission.py:52:                accept_delivery_cohort(reopened.bus, root_id, old.seq, store)
+tests/test_cutover_admission.py:67:        assignments = sealed_cohort_assignments(store, lookups["bob"])
+tests/test_checkpoint_seals.py:96:    comms.messaging.send_initial_cohort("sender", "Alice", "original")
+tests/test_checkpoint_seals.py:117:            comms.messaging.send_initial_cohort("sender", "Alice", "durable bus, uncertain seal")
+tests/test_turn_context_wire.py:32:    comms.messaging.send_initial_cohort('sender', '#team', '@Alice original question')
+tests/test_turn_context_wire.py:120:    from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_turn_context_wire.py:144:    original_message = comms.messaging.send_initial_cohort('sender', '#team', '@Bob recording fixture')
+tests/test_turn_context_wire.py:210:            accept_delivery_cohort(comms.bus, root_id, original_message.seq, store)
+tests/test_turn_context_wire.py:246:    first=comms.messaging.send_initial_cohort('sender','#team','@Alice original question')
+tests/test_turn_context_wire.py:266:    second=comms.messaging.send_initial_cohort('sender','#team','@Alice next original message')
+tests/test_turn_context_wire.py:339:        comms.messaging.send_initial_cohort('sender', '#team', f'@Alice original-{index}')
+tests/test_private_idle_drain.py:11:from agent_comms import acp, cohort_foreground, coordinated_runtime, native_pi
+tests/test_private_idle_drain.py:15:from agent_comms.coordination_cohort import next_sealed_assignment
+tests/test_private_idle_drain.py:173:    comms.messaging.send_initial_cohort("sender", other.name, "another recipient's original source")
+tests/test_private_idle_drain.py:200:    monkeypatch.setattr(cohort_foreground, "_trusted_package", no_package)
+tests/test_private_idle_drain.py:473:    first = comms.messaging.send_initial_cohort("sender", "alpha", "new absent-audience source")
+tests/test_private_idle_drain.py:479:    second = comms.messaging.send_initial_cohort("sender", "beta", "new pending input")
+tests/test_private_idle_drain.py:482:        await cohort_foreground._accept_visible_deliveries(
+tests/test_private_idle_drain.py:510:    comms.messaging.send_initial_cohort("sender", "beta", "arrived during observation")
+tests/test_private_idle_drain.py:520:async def test_sealed_cohorts_are_not_reaccepted_or_rewritten(tmp_path, monkeypatch):
+tests/test_private_idle_drain.py:524:    accept = cohort_foreground.accept_delivery_cohort
+tests/test_private_idle_drain.py:530:    monkeypatch.setattr(cohort_foreground, "accept_delivery_cohort", observed)
+tests/test_private_idle_drain.py:542:            await cohort_foreground._accept_visible_deliveries(
+tests/test_private_idle_drain.py:549:        message = comms.messaging.send_initial_cohort("sender", "beta", "unaccepted source")
+tests/test_private_idle_drain.py:550:        await cohort_foreground._accept_visible_deliveries(
+tests/test_private_idle_drain.py:555:        await cohort_foreground._accept_visible_deliveries(
+tests/test_native_source_cursor_certificate.py:16:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_native_source_cursor_certificate.py:19:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_native_source_cursor_certificate.py:64:        install_private_cohort_schema(store)
+tests/test_native_source_cursor_certificate.py:78:    message = comms.messaging.send_initial_cohort("sender", target, body)
+tests/test_native_source_cursor_certificate.py:80:        assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count
+tests/test_native_source_cursor_certificate.py:97:        comms.messaging.send_initial_cohort("sender", "other001", f"unrelated-{n}:" + "x" * 8400)
+tests/test_native_source_cursor_certificate.py:150:    frozen = comms.bus.log.read_delivery_cohort(root_id, source.seq)
+tests/test_selected_tool_broker.py:123:        wake_assignment_id="cohort-v1:" + "b" * 64,
+tests/test_selected_tool_broker.py:177:        wake_assignment_id="cohort-v1:" + "b" * 64,
+tests/test_selected_tool_broker.py:208:        wake_assignment_id="cohort-v1:" + "b" * 64,
+tests/selected_write_owner_child.py:12:from agent_comms import acp, cohort_foreground, native_pi, worker
+tests/selected_write_owner_child.py:25:    cohort_foreground._trusted_package = lambda _: None
+tests/test_wake.py:25:    resolve_wake_cohort,
+tests/test_wake.py:312:def test_full_cohort_validates_large_frozen_n_with_one_envelope_digest(monkeypatch) -> None:
+tests/test_wake.py:330:    decisions = resolve_wake_cohort(
+tests/test_wake.py:342:def test_full_cohort_preserves_direct_control_and_fail_closed_envelope() -> None:
+tests/test_wake.py:344:    assert resolve_wake_cohort(
+tests/test_wake.py:350:    assert resolve_wake_cohort(
+tests/test_wake.py:359:        resolve_wake_cohort(
+tests/test_wake.py:365:        resolve_wake_cohort(
+tests/test_private_checkpoint_cursor_integration.py:17:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_private_checkpoint_cursor_integration.py:20:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_private_checkpoint_cursor_integration.py:69:    first = comms.messaging.send_initial_cohort("sender", "#team", "selected one")
+tests/test_private_checkpoint_cursor_integration.py:71:        install_private_cohort_schema(store)
+tests/test_private_checkpoint_cursor_integration.py:77:        accept_delivery_cohort(comms.bus, root_id, first.seq, store)
+tests/test_private_checkpoint_cursor_integration.py:91:        comms.messaging.send_initial_cohort(
+tests/test_private_checkpoint_cursor_integration.py:94:    second = comms.messaging.send_initial_cohort(
+tests/test_private_checkpoint_cursor_integration.py:99:        accept_delivery_cohort(comms.bus, root_id, second.seq, store)
+tests/test_private_checkpoint_cursor_integration.py:126:        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
+tests/test_private_checkpoint_cursor_integration.py:127:    later = comms.messaging.send_initial_cohort("sender", "alpha", "later selected")
+tests/test_private_checkpoint_cursor_integration.py:129:        accept_delivery_cohort(comms.bus, root_id, later.seq, store)
+tests/test_private_checkpoint_cursor_integration.py:165:        comms.messaging.send_initial_cohort("sender", "other", "uncertain other original")
+tests/test_viewer_snapshot_index.py:265:    first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
+tests/test_viewer_snapshot_index.py:271:        second = comms.messaging.send_initial_cohort('sender', '#team', '@Alice next')
+tests/test_viewer_snapshot_index.py:315:    first = comms.messaging.send_initial_cohort('sender', '#team', '@Alice first')
+tests/test_selected_execution_native.py:16:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_selected_execution_native.py:52:        fresh = comms.messaging.send_initial_cohort("sender", "beta", "Run the coding tools now.")
+tests/test_selected_execution_native.py:53:        initial = comms.bus.log.read_delivery_cohort(root_id, fresh.seq)
+tests/test_selected_execution_native.py:55:            accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
+tests/test_channels.py:51:def test_tag_cohort_refuses_active_owners_before_any_registry_publication(tmp_path):
+tests/test_channels.py:53:    comms.registry.declare(Thread('inactive', frozenset({'cohort'}), str(tmp_path)), StoppedThreadStatus())
+tests/test_channels.py:54:    comms.registry.declare(Thread('active', frozenset({'cohort'}), str(tmp_path),
+tests/test_channels.py:60:            comms.channels.delete_tag('cohort', disposition=disposition)
+tests/test_channels.py:61:        assert str(refusal.value) == disposition.confirmation('cohort')
+tests/test_channels.py:63:            comms.channels.delete_tag('cohort', disposition=disposition, confirmed=True)
+tests/test_channels.py:122:def test_tag_removal_commits_cohort_once_and_preserves_current_records(tmp_path):
+tests/test_channels.py:146:    # An acquired cohort may predate unrelated metadata changes. Tag mutation
+tests/test_nk_foreground.py:20:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_nk_foreground.py:23:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_nk_foreground.py:32:from test_cohort_foreground import _configured_thread, _fake_package
+tests/test_nk_foreground.py:109:    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_nk_foreground.py:111:        install_private_cohort_schema(store)
+tests/test_nk_foreground.py:121:        assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count == 2
+tests/test_nk_foreground.py:152:        message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+tests/test_nk_foreground.py:153:        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_nk_foreground.py:173:                    "SELECT count(*) FROM cohort_delivery_receipts "
+tests/test_nk_foreground.py:220:        message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+tests/test_nk_foreground.py:281:            message = comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25.")
+tests/test_private_human_ingress.py:15:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_private_human_ingress.py:17:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_private_human_ingress.py:43:    install_private_cohort_schema(store)
+tests/test_private_human_ingress.py:54:    initial = comms.bus.log.read_delivery_cohort(root_id, channel.seq)
+tests/test_private_human_ingress.py:59:    receipt = accept_delivery_cohort(comms.bus, root_id, channel.seq, store)
+tests/test_private_human_ingress.py:66:    dm_initial = comms.bus.log.read_delivery_cohort(root_id, dm.seq)
+tests/test_private_human_ingress.py:71:    accepted = accept_delivery_cohort(comms.bus, root_id, dm.seq, store)
+tests/test_private_human_ingress.py:85:    assert selected.bus.log.read_delivery_cohort(root_id, sent.seq).message == sent
+tests/test_private_human_ingress.py:93:        comms.bus.publisher.publish_initial_cohort(message)
+tests/test_private_human_ingress.py:136:    initial = comms.bus.log.read_delivery_cohort(root_id, error.wire_seq)
+tests/test_private_human_ingress.py:194:    later_agent = second.messaging.send_initial_cohort("alice", "bob", "unrelated agent input")
+tests/test_private_human_ingress.py:214:    assert comms.bus.log.read_delivery_cohort(root_id, raised.value.wire_seq).message.message_id == (
+tests/test_private_human_ingress.py:240:        comms.bus.log.read_delivery_cohort(root_id, message.seq).message.message_id
+tests/test_private_human_ingress.py:268:    assert [comms.bus.log.read_delivery_cohort(root_id, seq).message.seq for seq in seqs] == seqs
+tests/test_private_human_ingress.py:304:    assert comms.bus.log.read_delivery_cohort(root_id, 1).message.body == "cancelled"
+tests/test_acp_input_disposition.py:23:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_acp_input_disposition.py:27:from agent_comms.coordination_cohort import sealed_cohort_assignments
+tests/test_acp_input_disposition.py:238:                install_private_cohort_schema(store)
+tests/test_acp_input_disposition.py:259:                    return sealed_cohort_assignments(store, lookup)
+tests/test_acp_input_disposition.py:301:                install_private_cohort_schema(store)
+tests/test_acp_input_disposition.py:436:                    return sealed_cohort_assignments(store, lookup)
+tests/test_optional_awareness_projection.py:13:from agent_comms import coordination_cohort as cohort
+tests/test_optional_awareness_projection.py:16:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_optional_awareness_projection.py:19:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_optional_awareness_projection.py:33:pytestmark = pytest.mark.skipif(os.name != "posix", reason="private cohort requires POSIX")
+tests/test_optional_awareness_projection.py:62:    install_private_cohort_schema(store)
+tests/test_optional_awareness_projection.py:69:    message = comms.messaging.send_initial_cohort("sender", target, body)
+tests/test_optional_awareness_projection.py:70:    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_optional_awareness_projection.py:78:    receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+tests/test_optional_awareness_projection.py:120:        message = comms.messaging.send_initial_cohort(
+tests/test_optional_awareness_projection.py:123:        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_optional_awareness_projection.py:131:        actual_assert = cohort.assert_optional_awareness_schema
+tests/test_optional_awareness_projection.py:143:            cohort, "assert_optional_awareness_schema", inject_second_insert_failure
+tests/test_optional_awareness_projection.py:145:        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+tests/test_optional_awareness_projection.py:177:        message = comms.messaging.send_initial_cohort("sender", "member000", "fresh")
+tests/test_optional_awareness_projection.py:178:        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_optional_awareness_projection.py:186:        real_record = cohort._record_optional_owner_generations
+tests/test_optional_awareness_projection.py:195:            monkeypatch.setattr(cohort, "_record_optional_owner_generations", crash_optional)
+tests/test_optional_awareness_projection.py:201:            monkeypatch.setattr(cohort, "_receipt_matches", crash_after_seal)
+tests/test_optional_awareness_projection.py:203:            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_optional_awareness_projection.py:309:        second = comms.messaging.send_initial_cohort("sender", "member000", "not yet sealed")
+tests/test_optional_awareness_projection.py:479:            "SELECT sql FROM sqlite_master WHERE name='cohort_receipt_update_guard'"
+tests/test_optional_awareness_projection.py:481:        db.execute("DROP TRIGGER cohort_receipt_update_guard")
+tests/test_optional_awareness_projection.py:532:        current_message = comms.messaging.send_initial_cohort("sender", "gamma", "new selected")
+tests/test_optional_awareness_projection.py:533:        current = comms.bus.log.read_delivery_cohort(root_id, current_message.seq)
+tests/test_optional_awareness_projection.py:534:        receipt = accept_delivery_cohort(comms.bus, root_id, current_message.seq, store).value
+tests/test_optional_awareness_projection.py:596:            comms.messaging.send_initial_cohort("sender", "member001", f"other owner {number}")
+tests/test_optional_awareness_projection.py:623:        notice = comms.messaging.send_initial_cohort(
+tests/test_optional_awareness_projection.py:626:        passive = accept_delivery_cohort(comms.bus, root_id, notice.seq, store).value.assignments[0]
+tests/test_coordination_cohort.py:22:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_coordination_cohort.py:24:from agent_comms.coordination_cohort import (
+tests/test_coordination_cohort.py:25:    accept_delivery_cohort,
+tests/test_coordination_cohort.py:27:    sealed_cohort_assignments,
+tests/test_coordination_cohort.py:71:    install_private_cohort_schema(coordinator)
+tests/test_coordination_cohort.py:97:    message = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+tests/test_coordination_cohort.py:106:    verified = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_coordination_cohort.py:112:    first = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
+tests/test_coordination_cohort.py:118:    assert len(sealed_cohort_assignments(coordinator, lookups["Alice"])) == 1
+tests/test_coordination_cohort.py:119:    assert sealed_cohort_assignments(coordinator, lookups["Bob"]) == ()
+tests/test_coordination_cohort.py:121:        "SELECT kind,claim_id FROM cohort_delivery_receipts ORDER BY ordinal"
+tests/test_coordination_cohort.py:129:    first = comms.messaging.send_initial_cohort("sender", "#team", "first @Alice")
+tests/test_coordination_cohort.py:130:    second = comms.messaging.send_initial_cohort("sender", "#team", "second @Bob")
+tests/test_coordination_cohort.py:150:    message = comms.messaging.send_initial_cohort("sender", "#team", "all must respond")
+tests/test_coordination_cohort.py:157:    result = accept_delivery_cohort(reopened.bus, root_id, message.seq, store)
+tests/test_coordination_cohort.py:171:    again = accept_delivery_cohort(reopened.bus, root_id, message.seq, recovered)
+tests/test_coordination_cohort.py:191:    empty = comms.messaging.send_initial_cohort("sender", "#missing", "No recipient")
+tests/test_coordination_cohort.py:192:    result = accept_delivery_cohort(comms.bus, root_id, empty.seq, store)
+tests/test_coordination_cohort.py:199:    assert isinstance(accept_delivery_cohort(comms.bus, root_id, empty.seq, store), AlreadyApplied)
+tests/test_coordination_cohort.py:200:    direct = comms.messaging.send_initial_cohort("sender", "Alice", "Direct")
+tests/test_coordination_cohort.py:201:    single = accept_delivery_cohort(comms.bus, root_id, direct.seq, store)
+tests/test_coordination_cohort.py:207:    assert accept_delivery_cohort(comms.bus, root_id, direct.seq, store).value == single.value
+tests/test_coordination_cohort.py:212:    sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+tests/test_coordination_cohort.py:214:        assignment_id="singleton-before-cohort",
+tests/test_coordination_cohort.py:226:        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:233:            "SELECT COUNT(*) FROM cohort_delivery_receipts"
+tests/test_coordination_cohort.py:237:    assert sealed_cohort_assignments(store, lookups["Alice"]) == ()
+tests/test_coordination_cohort.py:242:    sent = comms.messaging.send_initial_cohort("sender", "#team", "@Alice hello")
+tests/test_coordination_cohort.py:243:    result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:258:    sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+tests/test_coordination_cohort.py:260:        accept_delivery_cohort(comms.bus, "a" * 32, sent.seq, store)
+tests/test_coordination_cohort.py:269:        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:278:        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:296:        delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)
+tests/test_coordination_cohort.py:317:        comms.bus.publisher.publish_initial_cohort(
+tests/test_coordination_cohort.py:322:    sent = comms.messaging.send_initial_cohort("sender", "#all", "ordinary")
+tests/test_coordination_cohort.py:323:    result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:338:    sent = comms.messaging.send_initial_cohort("sender", "#team", "Hello @Alice")
+tests/test_coordination_cohort.py:339:    proof = comms.bus.log.read_delivery_cohort(root_id, sent.seq)
+tests/test_coordination_cohort.py:363:        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:364:    assert sealed_cohort_assignments(store, lookups["Alice"]) == ()
+tests/test_coordination_cohort.py:366:        "SELECT COUNT(*) FROM cohort_delivery_receipts"
+tests/test_coordination_cohort.py:374:    sent = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+tests/test_coordination_cohort.py:379:        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:405:        comms.messaging.send_initial_cohort("sender", "Alice", "must not wake")
+tests/test_coordination_cohort.py:439:    sent = comms.messaging.send_initial_cohort("sender", "#team", "all")
+tests/test_coordination_cohort.py:445:            result = accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_cohort.py:458:    message = comms.messaging.send_initial_cohort("sender", "#team", "read this while you work")
+tests/test_coordination_cohort.py:459:    accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
+tests/test_wake_candidate_index.py:21:from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+tests/test_wake_candidate_index.py:83:    comms.messaging.send_initial_cohort("sender", "#team", "initial")
+tests/test_wake_candidate_index.py:85:        comms.messaging.send_initial_cohort(
+tests/test_wake_candidate_index.py:122:    message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+tests/test_wake_candidate_index.py:168:        assert sealed_cohort_assignments(store, lookup["Alice"]) == ()
+tests/test_wake_candidate_index.py:169:        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_wake_candidate_index.py:170:        assert len(sealed_cohort_assignments(store, lookup["Alice"])) == 1
+tests/test_wake_candidate_index.py:171:        assert sealed_cohort_assignments(store, lookup["Bob"]) == ()
+tests/test_wake_candidate_index.py:207:    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+tests/test_wake_candidate_index.py:208:    second = comms.messaging.send_initial_cohort("sender", "Alice", "second")
+tests/test_wake_candidate_index.py:260:    message = comms.messaging.send_initial_cohort("sender", "Alice", "a" * 4096)
+tests/test_wake_candidate_index.py:299:        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+tests/test_wake_candidate_index.py:318:        comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
+tests/test_wake_candidate_index.py:334:        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+tests/test_wake_candidate_index.py:356:        comms.bus.log.read_delivery_cohort(root_id, messages[2].seq)
+tests/test_wake_candidate_index.py:365:        comms.messaging.send_initial_cohort("sender", "Alice", f"message {number}")
+tests/test_wake_candidate_index.py:415:        comms.bus.log.read_delivery_cohort(root_id, messages[3].seq)
+tests/test_wake_candidate_index.py:420:    message = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+tests/test_acp_selected_write_plan.py:18:from agent_comms import cohort_foreground, coordinated_runtime
+tests/test_acp_selected_write_plan.py:29:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_acp_selected_write_plan.py:30:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_acp_selected_write_plan.py:33:from agent_comms.coordination_cohort import sealed_cohort_assignments
+tests/test_acp_selected_write_plan.py:93:            install_private_cohort_schema(store)
+tests/test_acp_selected_write_plan.py:205:        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_selected_write_plan.py:287:            install_private_cohort_schema(store)
+tests/test_acp_selected_write_plan.py:393:                assert sealed_cohort_assignments(store, stable_thread_lookup(61002.0)) == ()
+tests/test_roster_restoration.py:131:def test_private_restoration_allows_new_cohort_without_starting_old_subscribers(
+tests/test_roster_restoration.py:135:    from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_roster_restoration.py:136:    from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_roster_restoration.py:157:        install_private_cohort_schema(store)
+tests/test_roster_restoration.py:186:        accept_delivery_cohort(current.bus, root_id, message.seq, store)
+tests/test_acp_private_nk_delivery.py:15:from agent_comms import cohort_foreground, coordinated_runtime, native_pi
+tests/test_acp_private_nk_delivery.py:25:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_acp_private_nk_delivery.py:127:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:167:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:192:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:212:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:295:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:438:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:490:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:546:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:699:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:721:            "SELECT kind,claim_id FROM cohort_delivery_receipts WHERE wire_root_id=? "
+tests/test_acp_private_nk_delivery.py:734:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:765:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:816:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:839:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:873:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_private_nk_delivery.py:895:        cohort_foreground,
+tests/test_private_nk_entrypoint.py:19:    cohort_foreground,
+tests/test_private_nk_entrypoint.py:26:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_private_nk_entrypoint.py:39:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:67:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:115:    monkeypatch.setattr(cohort_foreground, "_trusted_package", trusted)
+tests/test_private_nk_entrypoint.py:136:    monkeypatch.setattr(cohort_foreground, "_trusted_package", rejected_package)
+tests/test_private_nk_entrypoint.py:162:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:185:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:226:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:250:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:275:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:352:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:409:    monkeypatch.setattr(cohort_foreground, "_preflight", lambda *_: None)
+tests/test_private_nk_entrypoint.py:479:    monkeypatch.setattr(cohort_foreground, "_trusted_package", trust_and_switch)
+tests/test_private_nk_entrypoint.py:524:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:550:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_private_nk_entrypoint.py:555:    message = comms.messaging.send_initial_cohort("sender", "late-owner", "fresh private task")
+tests/test_private_nk_entrypoint.py:577:        assert accept_delivery_cohort(comms.bus, root_id, message.seq, store).value.member_count == 1
+tests/test_historical_notifications.py:32:        old.messaging.send_initial_cohort("sender", "agent", "authored pending delivery"),
+tests/test_historical_notifications.py:33:        old.messaging.send_initial_cohort("sender", "reader", "painted historical delivery"),
+tests/test_historical_notifications.py:34:        old.messaging.send_initial_cohort("sender", "reader", "unpainted historical delivery"),
+tests/test_historical_notifications.py:103:    recipient, = old.bus.log.read_delivery_cohort(root_id, messages[0].seq).audience.recipients
+tests/channel_drain_readiness_installed_ui.py:52:        comms.messaging.send_initial_cohort('history-sender', 'history-recipient',
+tests/test_native_outcome_publication.py:15:from agent_comms import cohort_foreground, native_pi
+tests/test_native_outcome_publication.py:58:    monkeypatch.setattr(cohort_foreground, "_preflight",
+tests/test_native_source_cursor_scale.py:16:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_native_source_cursor_scale.py:63:        comms.messaging.send_initial_cohort("sender", "member000", f"unrelated-{number}")
+tests/test_native_source_cursor_scale.py:64:    selected = comms.messaging.send_initial_cohort(
+tests/test_native_source_cursor_scale.py:67:    frozen = comms.bus.log.read_delivery_cohort(root_id, selected.seq)
+tests/test_native_source_cursor_scale.py:70:        receipt = accept_delivery_cohort(comms.bus, root_id, selected.seq, store).value
+tests/test_native_source_cursor_scale.py:122:        message = comms.messaging.send_initial_cohort("sender", "#team", f"@other note-{number}")
+tests/test_native_source_cursor_scale.py:124:            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_native_source_cursor_scale.py:157:        comms.messaging.send_initial_cohort("sender", "other", f"unrelated-{number}")
+tests/test_native_source_cursor_scale.py:158:    later = comms.messaging.send_initial_cohort("sender", "alpha", "new exact selected work")
+tests/test_native_source_cursor_scale.py:160:        accept_delivery_cohort(comms.bus, root_id, later.seq, store)
+tests/test_native_source_cursor_scale.py:196:    second_message = comms.messaging.send_initial_cohort("sender", "alpha-new", "new selected")
+tests/test_native_source_cursor_scale.py:198:        accept_delivery_cohort(comms.bus, root_id, second_message.seq, store)
+tests/test_selected_answer_forms.py:23:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_selected_answer_forms.py:25:from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+tests/test_selected_answer_forms.py:35:    sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
+tests/test_selected_answer_forms.py:52:        messages = [comms.messaging.send_initial_cohort("sender", target, text) for target, text in sent]
+tests/test_selected_answer_forms.py:54:            install_private_cohort_schema(store)
+tests/test_selected_answer_forms.py:55:            deliveries = [comms.bus.log.read_delivery_cohort(root_id, m.seq) for m in messages]
+tests/test_selected_answer_forms.py:62:                accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_selected_answer_forms.py:64:            assignments = sealed_cohort_assignments(store, lookup)
+tests/test_native_owner_launcher_resolution.py:21:    from agent_comms import cohort_foreground
+tests/test_native_owner_launcher_resolution.py:22:    monkeypatch.setattr(cohort_foreground, "_preflight", lambda root, root_id, package, enabled: native_pi._trusted_package(package))
+tests/test_native_owner_launcher_resolution.py:61:    from agent_comms import cohort_foreground
+tests/test_native_owner_launcher_resolution.py:62:    monkeypatch.setattr(cohort_foreground, "_preflight", lambda root, root_id, selected, enabled: native_pi._trusted_package(selected))
+tests/test_envelope_claim_transitions.py:34:        wake_assignment_id="cohort-v1:" + "d" * 64,
+tests/test_ordinary_nk_delivery.py:14:from agent_comms import cohort_foreground, coordinated_runtime
+tests/test_ordinary_nk_delivery.py:18:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_ordinary_nk_delivery.py:67:        install_private_cohort_schema(store)
+tests/test_ordinary_nk_delivery.py:71:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_ordinary_nk_delivery.py:81:        # The ordinary public API, not send_initial_cohort or a candidate bridge.
+tests/test_ordinary_nk_delivery.py:85:    result = await cohort_foreground.run_foreground_once(
+tests/test_ordinary_nk_delivery.py:97:        assert isinstance(result, cohort_foreground.NoWakeReceipt)
+tests/test_ordinary_nk_delivery.py:101:    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_ordinary_nk_delivery.py:109:            db.execute("SELECT COUNT(*) FROM cohort_delivery_receipts").fetchone()[0] == expected_n
+tests/test_ordinary_nk_delivery.py:142:    initial = comms.bus.log.read_delivery_cohort(metadata.root_id, message.seq)
+tests/test_ordinary_nk_delivery.py:147:    human = comms.bus.log.read_delivery_cohort(metadata.root_id, reply.seq)
+tests/test_selected_source_batch.py:12:from agent_comms.coordination_cohort import accept_delivery_cohort, pending_sealed_assignments
+tests/test_selected_source_batch.py:40:            message = comms.messaging.send_initial_cohort("sender", "#team", body)
+tests/test_selected_source_batch.py:41:            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_selected_source_batch.py:122:            message = comms.messaging.send_initial_cohort("sender", target, body)
+tests/test_selected_source_batch.py:123:            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_selected_source_batch.py:165:        message = comms.messaging.send_initial_cohort("sender", "#team", "Question")
+tests/test_selected_source_batch.py:166:        accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_native_refusal_recovery.py:12:from agent_comms import backend, cohort_foreground, native_pi
+tests/test_native_refusal_recovery.py:100:    monkeypatch.setattr(cohort_foreground, "_preflight",
+tests/test_cohort_schema.py:1:"""The optional cohort schema is inert until an explicit private migration."""
+tests/test_cohort_schema.py:13:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_cohort_schema.py:92:        "INSERT INTO cohort_delivery_receipts VALUES (?,?,?,?,?,?,?)",
+tests/test_cohort_schema.py:139:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:145:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:160:        assert "cohort_delivery_receipts" not in _tables(store)
+tests/test_cohort_schema.py:161:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:163:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:170:        install_private_cohort_schema(reopened)
+tests/test_cohort_schema.py:175:            reopened.session._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
+tests/test_cohort_schema.py:180:def test_zero_member_zero_claim_cohort_is_durable_without_fabricated_claim(tmp_path: Path) -> None:
+tests/test_cohort_schema.py:183:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:192:        install_private_cohort_schema(reopened)
+tests/test_cohort_schema.py:201:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:233:        assert db.execute("SELECT COUNT(*) FROM cohort_delivery_receipts").fetchone()[0] == 0
+tests/test_cohort_schema.py:238:    from agent_comms.cohort_schema import CohortDeliveryReceipts
+tests/test_cohort_schema.py:242:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:264:                "FROM cohort_delivery_receipts ORDER BY ordinal"
+tests/test_cohort_schema.py:268:        for row in CohortDeliveryReceipts.select(db, order_by=("ordinal",)):
+tests/test_cohort_schema.py:270:            assert encoded["row"] == CohortDeliveryReceipts.declared_name
+tests/test_cohort_schema.py:272:            assert FieldCodec.decode(CohortDeliveryReceipts, encoded) == row
+tests/test_cohort_schema.py:276:            "UPDATE cohort_delivery_receipts SET canonical_thread='Other'",
+tests/test_cohort_schema.py:284:def test_seal_rejects_missing_rows_and_rolls_back_entire_cohort(tmp_path: Path) -> None:
+tests/test_cohort_schema.py:286:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:337:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:343:                    sqlite3.IntegrityError, match="does not match cohort acceptance"
+tests/test_cohort_schema.py:413:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:415:            pytest.raises(sqlite3.IntegrityError, match="does not match cohort acceptance"),
+tests/test_cohort_schema.py:434:        install_private_cohort_schema(store)
+tests/test_cohort_schema.py:462:            store.session._connection.execute("CREATE TABLE cohort_schema_meta (x INTEGER)")
+tests/test_cohort_schema.py:464:            install_private_cohort_schema(store)
+tests/test_cohort_schema.py:466:                store.session._connection.execute("DROP TRIGGER cohort_meta_update_guard")
+tests/test_cohort_schema.py:469:                    store.session._connection.execute("UPDATE cohort_schema_meta SET version=999")
+tests/test_cohort_schema.py:473:                store.session._connection.execute("DROP INDEX cohort_delivery_receipts_0_idx")
+tests/test_cohort_schema.py:476:            install_private_cohort_schema(store)
+tests/test_cohort_schema.py:490:            install_private_cohort_schema(store)
+tests/test_cohort_schema.py:491:            return store.session._connection.execute("SELECT version FROM cohort_schema_meta").fetchone()[0]
+tests/test_keyed_response_delivery.py:9:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_keyed_response_delivery.py:10:from agent_comms.coordination_cohort import sealed_cohort_assignments
+tests/test_keyed_response_delivery.py:36:        delivery = case.bus.log.read_delivery_cohort(case.root_id, response.seq)
+tests/test_keyed_response_delivery.py:47:        assignments = sealed_cohort_assignments(case.store, lookup)
+tests/test_keyed_response_delivery.py:74:        assert sealed_cohort_assignments(case.store, lookup) == assignments
+tests/test_private_runtime_bootstrap.py:7:from agent_comms.cohort_schema import CohortSchemaMeta
+tests/test_private_runtime_bootstrap.py:21:        db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
+tests/test_native_unknown_recovery.py:21:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_native_unknown_recovery.py:127:    # Real registry, private bus/cohort, slot acquisition and publication; only
+tests/test_native_unknown_recovery.py:136:    source = comms.messaging.send_initial_cohort("sender", "beta", "New independent request")
+tests/test_native_unknown_recovery.py:138:        accept_delivery_cohort(comms.bus, root_id, source.seq, store)
+tests/test_native_unknown_recovery.py:293:    source = comms.messaging.send_initial_cohort(
+tests/test_native_unknown_recovery.py:297:        accept_delivery_cohort(comms.bus, root_id, source.seq, store)
+tests/test_claim_admission_baseline.py:18:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_claim_admission_baseline.py:20:from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+tests/test_claim_admission_baseline.py:52:            install_private_cohort_schema(coordinator)
+tests/test_claim_admission_baseline.py:57:            message = comms.messaging.send_initial_cohort(
+tests/test_claim_admission_baseline.py:60:            receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator).value
+tests/test_claim_admission_baseline.py:63:            assert sealed_cohort_assignments(coordinator, stable_thread_lookup(people["Alice"]))
+tests/test_claim_admission_baseline.py:64:            assert sealed_cohort_assignments(coordinator, stable_thread_lookup(people["Bob"])) == ()
+tests/native_evidence_reader_installed_journey.py:15:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/native_evidence_reader_installed_journey.py:139:    message=comms.messaging.send_initial_cohort('sender','#team','New isolated greeting: acknowledge once.')
+tests/native_evidence_reader_installed_journey.py:140:    initial=comms.bus.log.read_delivery_cohort(rid,message.seq)
+tests/native_evidence_reader_installed_journey.py:144:        accept_delivery_cohort(comms.bus,rid,message.seq,store)
+tests/test_native_recovery_closure.py:11:from agent_comms import backend, cohort_foreground, native_pi
+tests/test_native_recovery_closure.py:167:    monkeypatch.setattr(cohort_foreground, "_preflight",
+tests/test_owner_process.py:460:        cohort = publisher.ReviewedRetainedSummaryCohort(
+tests/test_owner_process.py:490:                cohort, audience, captured, PreserveOwnerRuntime(),
+tests/test_owner_process.py:512:                cohort, audience, captured, PreserveOwnerRuntime(),
+tests/test_owner_process.py:598:    cohort = publisher.ReviewedCommsBackendCohort(
+tests/test_owner_process.py:602:    declaration = publisher.ReviewedRetainedSummaryCohort | publisher.ReviewedBackendCohort
+tests/test_owner_process.py:603:    decoded = FieldCodec.decode(declaration, FieldCodec.encode(cohort))
+tests/test_owner_process.py:604:    assert type(decoded) is publisher.ReviewedCommsBackendCohort
+tests/test_owner_process.py:605:    assert decoded == cohort
+tests/test_owner_process.py:608:        FieldCodec.decode(publisher.ReviewedRetainedSummaryCohort, FieldCodec.encode(cohort))
+tests/test_acp_channel_disposition.py:12:from agent_comms import cohort_foreground, coordinated_runtime
+tests/test_acp_channel_disposition.py:31:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_channel_disposition.py:80:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_channel_disposition.py:117:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_acp_channel_disposition.py:160:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_native_retry_exhaustion_installed.py:11:from agent_comms import cohort_foreground, native_pi
+tests/test_native_retry_exhaustion_installed.py:86:    monkeypatch.setattr(cohort_foreground, "_preflight",
+tests/test_wake_candidate_index_incremental.py:55:                frozenset({"cohort"}),
+tests/test_wake_candidate_index_incremental.py:79:    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+tests/test_wake_candidate_index_incremental.py:102:    message = comms.messaging.send_initial_cohort("sender", "member000", "x" * 4096)
+tests/test_wake_candidate_index_incremental.py:119:    message = comms.messaging.send_initial_cohort(
+tests/test_wake_candidate_index_incremental.py:133:    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+tests/test_wake_candidate_index_incremental.py:149:    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+tests/test_wake_candidate_index_incremental.py:154:    second = comms.messaging.send_initial_cohort("sender", "member000", "second")
+tests/test_wake_candidate_index_incremental.py:176:    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+tests/test_wake_candidate_index_incremental.py:180:    other.messaging.send_initial_cohort("sender", "member000", "elsewhere")
+tests/test_wake_candidate_index_incremental.py:194:    first = comms.messaging.send_initial_cohort("sender", "member000", "first")
+tests/test_wake_candidate_index_incremental.py:199:    second = comms.messaging.send_initial_cohort("sender", "member000", "second")
+tests/test_wake_candidate_index_incremental.py:215:        message = comms.messaging.send_initial_cohort(
+tests/test_wake_candidate_index_incremental.py:216:            "sender", "#cohort", f"@member000 benchmark {number}"
+tests/test_wake_candidate_index_incremental.py:263:    message = comms.messaging.send_initial_cohort("sender", "member000", "keep checkpoint")
+tests/test_live_drain_failure.py:13:from agent_comms.cohort_schema import CohortSchemaMeta
+tests/test_live_drain_failure.py:46:            db.execute(f'DROP TABLE "{CohortSchemaMeta.declared_name}"')
+tests/test_live_drain_failure.py:64:                    "SELECT name FROM sqlite_master WHERE name=?", (CohortSchemaMeta.declared_name,)
+tests/test_claim_bus_read.py:29:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_claim_bus_read.py:31:from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+tests/test_claim_bus_read.py:51:    sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
+tests/test_claim_bus_read.py:90:        message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+tests/test_claim_bus_read.py:92:        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_claim_bus_read.py:94:            install_private_cohort_schema(store)
+tests/test_claim_bus_read.py:100:            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_claim_bus_read.py:102:            assignment = sealed_cohort_assignments(store, lookup)[0]
+tests/test_cohort_foreground.py:19:from agent_comms import cohort_foreground as foreground
+tests/test_cohort_foreground.py:20:from agent_comms import cohort_send
+tests/test_cohort_foreground.py:24:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_cohort_foreground.py:27:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_cohort_foreground.py:171:            comms.messaging.send_initial_cohort("sender", "beta", "Compute 17+25")
+tests/test_cohort_foreground.py:213:            comms.messaging.send_initial_cohort("sender", "beta", "Compute 17+25")
+tests/test_cohort_foreground.py:342:                "from agent_comms.cohort_foreground import _read_selected_write_source; "
+tests/test_cohort_foreground.py:386:            comms.messaging.send_initial_cohort("sender", "#team", "@beta only")
+tests/test_cohort_foreground.py:422:                comms.messaging.send_initial_cohort("sender", "#team", "@beta Compute 17+25")
+tests/test_cohort_foreground.py:458:                    "SELECT count(*) FROM cohort_delivery_receipts "
+tests/test_cohort_foreground.py:483:            install_private_cohort_schema(store)
+tests/test_cohort_foreground.py:492:        initial = comms.messaging.send_initial_cohort("sender", "beta", "one message")
+tests/test_cohort_foreground.py:494:            accept_delivery_cohort(comms.bus, root_id, initial.seq, store)
+tests/test_cohort_foreground.py:548:from agent_comms import cohort_foreground as f, coordinated_runtime as r
+tests/test_cohort_foreground.py:549:from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+tests/test_cohort_foreground.py:596:                    "agent_comms.cohort_send",
+tests/test_cohort_foreground.py:634:from agent_comms import cohort_foreground as f, coordinated_runtime as r
+tests/test_cohort_foreground.py:635:from test_cohort_foreground import _fake_pi, _fake_package, _configured_thread
+tests/test_cohort_foreground.py:702:                    "agent_comms.cohort_send",
+tests/test_cohort_foreground.py:725:            # test rather than this original-cohort NO_WAKE fixture.
+tests/test_cohort_foreground.py:779:                ready=lambda _: comms.messaging.send_initial_cohort(
+tests/test_cohort_foreground.py:814:        sequence, message_id = cohort_send.publish_one(
+tests/test_cohort_foreground.py:827:        cohort_send.publish_one(
+tests/test_cohort_foreground.py:839:            cohort_send.publish_one(
+tests/test_private_bus_checkpoint.py:61:    first = comms.messaging.send_initial_cohort("sender", "#team", "@Alice first")
+tests/test_private_bus_checkpoint.py:78:    second = comms.messaging.send_initial_cohort("sender", "#team", "@Alice next")
+tests/test_private_bus_checkpoint.py:125:    one = comms.messaging.send_initial_cohort("sender", "#team", "@Alice selected; Bob no-wake")
+tests/test_private_bus_checkpoint.py:126:    two = comms.messaging.send_initial_cohort("sender", "outsider", "not their audience")
+tests/test_private_bus_checkpoint.py:127:    three = comms.messaging.send_initial_cohort("sender", "#team", "@Bob selected; Alice no-wake")
+tests/test_private_bus_checkpoint.py:186:    first = comms.messaging.send_initial_cohort("sender", "Alice", "first")
+tests/test_private_bus_checkpoint.py:195:            comms.messaging.send_initial_cohort("sender", "Alice", "second")
+tests/test_private_bus_checkpoint.py:247:    comms.messaging.send_initial_cohort("sender", "Alice", "prefix A" + "x" * 6000)
+tests/test_private_bus_checkpoint.py:255:            comms.messaging.send_initial_cohort("sender", "Bob", "complete lagged suffix")
+tests/test_private_bus_checkpoint.py:288:    comms.messaging.send_initial_cohort("sender", "Alice", "durable original")
+tests/test_private_bus_checkpoint.py:332:    comms.messaging.send_initial_cohort("sender", "Alice", "sealed")
+tests/test_private_bus_checkpoint.py:344:    source = comms.messaging.send_initial_cohort("sender", "Alice", "mandatory selected")
+tests/test_private_bus_checkpoint.py:359:    comms.messaging.send_initial_cohort("sender", "Alice", "sealed")
+tests/test_private_bus_checkpoint.py:367:            comms.messaging.send_initial_cohort("sender", "Alice", "complete suffix")
+tests/test_private_bus_checkpoint.py:379:    comms.messaging.send_initial_cohort("sender", "Alice", "source")
+tests/test_private_bus_checkpoint.py:405:    comms.messaging.send_initial_cohort("sender", "Alice", "first")
+tests/test_private_bus_checkpoint.py:419:        comms.messaging.send_initial_cohort("sender", "Alice", "second")
+tests/test_private_bus_checkpoint.py:438:            comms.messaging.send_initial_cohort("sender", "Alice", "pending")
+tests/test_private_bus_checkpoint.py:450:        comms.bus.publisher.publish_initial_cohort(
+tests/test_private_bus_checkpoint.py:475:            comms.bus.publisher.publish_initial_cohort(
+tests/test_private_bus_checkpoint.py:493:    one = comms.messaging.send_initial_cohort("sender", "Alice", "already committed")
+tests/test_private_bus_checkpoint.py:494:    two = comms.messaging.send_initial_cohort("sender", "outsider", "other audience")
+tests/test_private_bus_checkpoint.py:507:    three = reopened.messaging.send_initial_cohort("sender", "Alice", "after installation")
+tests/test_private_bus_checkpoint.py:517:    comms.messaging.send_initial_cohort("sender", "Alice", "first")
+tests/test_private_bus_checkpoint.py:536:    comms.messaging.send_initial_cohort("sender", "Alice", "first")
+tests/test_private_bus_checkpoint.py:544:            comms.messaging.send_initial_cohort("sender", "Bob", "lagged row")
+tests/test_private_bus_checkpoint.py:565:        comms.messaging.send_initial_cohort("sender", "Alice", body)
+tests/test_channel_bus_ownership.py:6:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_channel_bus_ownership.py:24:    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_channel_bus_ownership.py:28:        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+tests/test_selected_owner_followup.py:10:from agent_comms import cohort_foreground, coordinated_runtime
+tests/test_selected_owner_followup.py:39:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_selected_owner_followup.py:124:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_selected_owner_followup.py:210:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_selected_owner_followup.py:461:    monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+tests/test_certified_bootstrap.py:11:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_certified_bootstrap.py:45:        accept_delivery_cohort(comms.bus, root_id, sent.seq, store)
+tests/test_coordination_response.py:20:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_coordination_response.py:22:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_coordination_response.py:85:    original = comms.messaging.send_initial_cohort(
+tests/test_coordination_response.py:88:    original_record = comms.bus.log.read_delivery_cohort(root_id, original.seq)
+tests/test_coordination_response.py:93:    install_private_cohort_schema(store)
+tests/test_coordination_response.py:101:    accepted = accept_delivery_cohort(comms.bus, root_id, original.seq, store)
+tests/test_coordination_response.py:106:        message = comms.messaging.send_initial_cohort("sender", extra_target, "Another original question")
+tests/test_coordination_response.py:107:        delivery = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_coordination_response.py:108:        receipt = accept_delivery_cohort(comms.bus, root_id, message.seq, store).value
+tests/c4_coordination_installed_ui.py:50:    message = comms.messaging.send_initial_cohort(owner, '#team', 'Original metadata receipt')
+tests/c4_coordination_installed_ui.py:77:        checks.append('real mounted sidebar consumes default captured cohort')
+tests/c4_coordination_installed_ui.py:89:        checks.append('real sidebar filtered cohorts agree with original registry status')
+tests/test_claim_admission_verifier.py:24:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_claim_admission_verifier.py:26:from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+tests/test_claim_admission_verifier.py:38:    sys.platform != "linux", reason="private cohort admission requires real /var/tmp"
+tests/test_claim_admission_verifier.py:66:        message = comms.messaging.send_initial_cohort("sender", "#team", "@Alice investigate")
+tests/test_claim_admission_verifier.py:67:        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_claim_admission_verifier.py:69:            install_private_cohort_schema(store)
+tests/test_claim_admission_verifier.py:77:            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_claim_admission_verifier.py:80:            assert sealed_cohort_assignments(store, bob_lookup) == ()
+tests/test_claim_admission_verifier.py:81:            assignment = sealed_cohort_assignments(store, alice_lookup)[0]
+tests/test_schema_report.py:141:    from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_schema_report.py:143:    from test_coordination_cohort import _root as cohort_root
+tests/test_schema_report.py:145:    comms, coordinator, root_id, _ = cohort_root(tmp_path)
+tests/test_schema_report.py:146:    message = comms.messaging.send_initial_cohort("sender", "#team", "read this")
+tests/test_schema_report.py:147:    accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, coordinator)
+tests/test_channel_participant_registration.py:6:from agent_comms.cohort_foreground import _accept_visible_deliveries
+tests/test_channel_participant_registration.py:8:from agent_comms.coordination_cohort import sealed_cohort_assignments
+tests/test_channel_participant_registration.py:16:async def test_channel_with_unstarted_and_stopped_subscribers_delivers_whole_cohort(tmp_path):
+tests/test_channel_participant_registration.py:29:        initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_channel_participant_registration.py:37:        assignments = sealed_cohort_assignments(store, lookup)
+tests/test_channel_participant_registration.py:48:        assert len(sealed_cohort_assignments(store, lookup)) == 2
+tests/test_selected_input_lifetime_native.py:20:from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/test_selected_input_lifetime_native.py:70:        message = self.comms.messaging.send_initial_cohort(
+tests/test_selected_input_lifetime_native.py:74:            accept_delivery_cohort(self.comms.bus, self.root_id, message.seq, store)
+tests/test_selected_input_lifetime_native.py:185:    delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)
+tests/test_coordinated_runtime.py:33:from agent_comms.cohort_schema import install_private_cohort_schema
+tests/test_coordinated_runtime.py:41:from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
+tests/test_coordinated_runtime.py:137:    message = comms.messaging.send_initial_cohort("sender", target, body)
+tests/test_coordinated_runtime.py:138:    initial = comms.bus.log.read_delivery_cohort(root_id, message.seq)
+tests/test_coordinated_runtime.py:147:        accepted = accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_coordinated_runtime.py:382:                "SELECT count(*) FROM cohort_delivery_receipts"
+tests/test_coordinated_runtime.py:415:                "SELECT count(*) FROM cohort_delivery_receipts WHERE kind='unmentioned_observer'"
+tests/test_coordinated_runtime.py:426:        assert sealed_cohort_assignments(store, alpha_lookup) == ()
+tests/test_coordinated_runtime.py:427:        selected = sealed_cohort_assignments(store, beta_lookup)[0]
+tests/test_coordinated_runtime.py:441:        assignment = sealed_cohort_assignments(store, lookup)[0]
+tests/test_coordinated_runtime.py:698:        assignment = sealed_cohort_assignments(store, stable_thread_lookup(people[2].created_at))[0]
+tests/test_coordinated_runtime.py:790:        comms.messaging.send_initial_cohort("sender", "alpha", f"unrelated {index}")
+tests/test_coordinated_runtime.py:1310:    incoming = comms.messaging.send_initial_cohort("sender", "gamma", "Compute 17+25")
+tests/test_coordinated_runtime.py:1311:    initial = comms.bus.log.read_delivery_cohort(root_id, incoming.seq)
+tests/test_coordinated_runtime.py:1313:        install_private_cohort_schema(store)
+tests/test_coordinated_runtime.py:1323:        accept_delivery_cohort(comms.bus, root_id, incoming.seq, store)
+tests/test_coordinated_runtime.py:1681:            message = comms.messaging.send_initial_cohort(
+tests/test_coordinated_runtime.py:1684:            accept_delivery_cohort(comms.bus, root_id, message.seq, store)
+tests/test_coordinated_runtime.py:1685:        first_page = sealed_cohort_assignments(store, lookup, limit=100)
+tests/test_coordinated_runtime.py:1696:        assert len(sealed_cohort_assignments(store, lookup, after_seq=first_page[-1].wire_seq)) == 1
+tests/test_coordinated_runtime.py:1764:        pending = sealed_cohort_assignments(store, stable_thread_lookup(owner.created_at))
+tests/test_coordinated_runtime.py:1799:    notice_initial = comms.bus.log.read_delivery_cohort(root_id, notice.seq)
+tests/test_coordinated_runtime.py:1804:        assignment = sealed_cohort_assignments(store, lookup)[0]
+tests/test_coordinated_runtime.py:1817:    fresh = comms.messaging.send_initial_cohort("sender", "beta", "New independent message")
+tests/test_coordinated_runtime.py:1819:        accept_delivery_cohort(comms.bus, root_id, fresh.seq, store)
+tests/test_peer_relevance.py:147:    earlier = comms.messaging.send_initial_cohort("outsider", "Alice", "From a stranger")
+tests/test_peer_relevance.py:148:    later = comms.messaging.send_initial_cohort("Bob", "Alice", "From a partner")
+src/agent_comms/optional_awareness_projection.py:37:from .cohort_schema import (
+src/agent_comms/optional_awareness_projection.py:42:    CohortDeliveryReceipts,
+src/agent_comms/optional_awareness_projection.py:43:    assert_cohort_schema,
+src/agent_comms/optional_awareness_projection.py:46:from .coordination_cohort import _receipt_matches
+src/agent_comms/optional_awareness_projection.py:77:class _CohortVersion(TypedRow):
+src/agent_comms/optional_awareness_projection.py:342:        assert_cohort_schema(db)
+src/agent_comms/optional_awareness_projection.py:344:        cohort_versions = _CohortVersion.read(
+src/agent_comms/optional_awareness_projection.py:345:            db.execute("SELECT version FROM cohort_schema_meta WHERE singleton=1")
+src/agent_comms/optional_awareness_projection.py:347:        if cohort_versions != [_CohortVersion(COHORT_SCHEMA_VERSION)]:
+src/agent_comms/optional_awareness_projection.py:348:            raise ProjectionUnavailableError("cohort schema changed")
+src/agent_comms/optional_awareness_projection.py:399:            for row in CohortDeliveryReceipts.select(
+src/agent_comms/publisher.py:170:            return self.publish_initial_cohort(
+src/agent_comms/publisher.py:317:    def publish_initial_cohort(
+src/agent_comms/publisher.py:331:        from .wake import ControlClassification, resolve_wake_cohort
+src/agent_comms/publisher.py:338:            raise RelationViolationError("An initial cohort cannot carry resource claims.")
+src/agent_comms/publisher.py:476:            decisions = resolve_wake_cohort(
+src/agent_comms/cohort_foreground.py:3:Start this process *before* publishing an initial cohort. It registers a fresh
+src/agent_comms/cohort_foreground.py:6:protocol and publish the cohort after readiness. No inbox ACK, daemon, retry,
+src/agent_comms/cohort_foreground.py:9:    python -m agent_comms.cohort_foreground --root /var/tmp/my-private-wire \\
+src/agent_comms/cohort_foreground.py:35:from .cohort_schema import CohortDeliveryReceipts
+src/agent_comms/cohort_foreground.py:37:from .coordination_cohort import accept_delivery_cohort, sealed_cohort_sequences
+src/agent_comms/cohort_foreground.py:61:        raise PublicationActivationBlocked("foreground cohort requires explicit activation")
+src/agent_comms/cohort_foreground.py:87:    infer a cohort from an ordinary public message or its body.
+src/agent_comms/cohort_foreground.py:90:        sealed = sealed_cohort_sequences(resource, root_id)
+src/agent_comms/cohort_foreground.py:112:            raise IdentityConflict("recipient initial cohort batch exceeds bounded foreground scan")
+src/agent_comms/cohort_foreground.py:121:            accept_delivery_cohort(bus, root_id, initial.message.seq, resource)
+src/agent_comms/cohort_foreground.py:228:                        observers = CohortDeliveryReceipts.read(
+src/agent_comms/cohort_foreground.py:230:                                "SELECT d.* FROM cohort_delivery_receipts d "
+src/agent_comms/messaging.py:102:    def send_initial_cohort(
+src/agent_comms/messaging.py:115:            committed = self.bus.publisher.publish_initial_cohort(
+src/agent_comms/cohort_send.py:1:"""Sender for one private N/K cohort.
+src/agent_comms/cohort_send.py:3:Start each recipient with ``python -m agent_comms.cohort_foreground`` and wait
+src/agent_comms/cohort_send.py:35:        raise PublicationActivationBlocked("cohort sender requires a private /var/tmp root")
+src/agent_comms/cohort_send.py:42:    message = comms.messaging.send_initial_cohort(sender, target, body)
+src/agent_comms/wake.py:154:    """Resolve one member; prefer resolve_wake_cohort for the full frozen N.
+src/agent_comms/wake.py:167:def resolve_wake_cohort(
+src/agent_comms/response_conversation.py:1:"""A response's immutable recipients derive from its original committed cohorts."""
+src/agent_comms/response_conversation.py:30:        sources = bus.log.delivery_cohorts_unlocked(
+src/agent_comms/coordinator.py:78:        from . import cohort_schema, coordination_response, native_prompt_binding  # noqa: F401
+src/agent_comms/proven_source_coverage.py:25:from .cohort_schema import ClaimBatchReceipts, assert_cohort_schema
+src/agent_comms/proven_source_coverage.py:27:from .coordination_cohort import AcceptedCohort, _receipt_matches
+src/agent_comms/proven_source_coverage.py:188:    def _receipt(self, initial: CommittedDelivery) -> AcceptedCohort | None:
+src/agent_comms/proven_source_coverage.py:191:            assert_cohort_schema(db)
+src/agent_comms/proven_source_coverage.py:199:        self, seq: int, recipient: FrozenRecipient, decision: WakeDecision, receipt: AcceptedCohort,
+src/agent_comms/native_input_owner.py:196:            raise StaleFence("cohort participant generation changed")
+src/agent_comms/native_input_owner.py:198:            raise StaleFence("cohort participant incarnation changed")
+src/agent_comms/native_input_owner.py:200:            raise StaleFence("cohort recipient is not this live registered owner generation")
+src/agent_comms/native_input_owner.py:205:            raise StaleFence("cohort participant is not executable") from error
+tests/test_candidate_maintenance.py:141:            comms.messaging.send_initial_cohort(
+src/agent_comms/messages.py:283:        """One strict public-envelope boundary for full, indexed and cohort readers."""
+src/agent_comms/wire_log.py:503:    def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
+src/agent_comms/wire_log.py:514:    def delivery_cohorts_unlocked(self, wire_root_id: str, sequences):
+src/agent_comms/selected_write_plan.py:30:from .coordination_cohort import sealed_cohort_assignments
+src/agent_comms/selected_write_plan.py:202:            initial = self.comms.bus.log.read_delivery_cohort(self.root_id, source_seq)
+src/agent_comms/selected_write_plan.py:207:                assignments = sealed_cohort_assignments(store, lookup, after_seq=source_seq - 1)
+src/agent_comms/input_drain.py:29:from .coordination_cohort import next_sealed_assignment
+src/agent_comms/active_route.py:241:    from .cohort_foreground import _preflight
+src/agent_comms/active_route.py:265:    from .cohort_foreground import _preflight
+src/agent_comms/private_nk_entrypoint.py:81:        from .cohort_foreground import _preflight
+src/agent_comms/context_segments/optional_awareness.py:20:from ..cohort_schema import AwarenessClaimGenerations, ClaimBatchMembers, ClaimBatchReceipts, CohortDeliveryReceipts
+src/agent_comms/context_segments/optional_awareness.py:38:        delivery: CohortDeliveryReceipts,
+src/agent_comms/context_segments/optional_awareness.py:51:        expected_delivery = CohortDeliveryReceipts(
+src/agent_comms/registry_document.py:364:        """Change one cohort's tags on current records, retaining owner state."""
+src/agent_comms/coordination_cohort.py:17:from agent_comms.cohort_schema import (
+src/agent_comms/coordination_cohort.py:21:    CohortDeliveryReceipts,
+src/agent_comms/coordination_cohort.py:22:    assert_cohort_schema,
+src/agent_comms/coordination_cohort.py:43:class AcceptedCohort:
+src/agent_comms/coordination_cohort.py:54:    identity = f"agent-comms:cohort-claim:v1\0{root}:{seq}:{lookup}".encode()
+src/agent_comms/coordination_cohort.py:55:    return "cohort-v1:" + hashlib.sha256(identity).hexdigest()
+src/agent_comms/coordination_cohort.py:107:def _receipt_matches(db: sqlite3.Connection, initial: CommittedDelivery) -> AcceptedCohort:
+src/agent_comms/coordination_cohort.py:112:        raise IdentityConflict("cohort receipt is absent or unsealed")
+src/agent_comms/coordination_cohort.py:129:        raise IdentityConflict("sealed cohort receipt conflicts with committed bus")
+src/agent_comms/coordination_cohort.py:148:    deliveries = CohortDeliveryReceipts.select(
+src/agent_comms/coordination_cohort.py:156:        CohortDeliveryReceipts(
+src/agent_comms/coordination_cohort.py:172:            raise IdentityConflict("sealed cohort claim is missing")
+src/agent_comms/coordination_cohort.py:175:            raise IdentityConflict("sealed cohort claim immutable facts conflict")
+src/agent_comms/coordination_cohort.py:185:    return AcceptedCohort(
+src/agent_comms/coordination_cohort.py:204:    Rows are written only while the exact cohort is unsealed. A missing or
+src/agent_comms/coordination_cohort.py:230:def accept_delivery_cohort(
+src/agent_comms/coordination_cohort.py:235:) -> Applied[AcceptedCohort] | AlreadyApplied[AcceptedCohort]:
+src/agent_comms/coordination_cohort.py:243:        raise TypeError("cohort acceptance requires the actual bus and coordinator stores")
+src/agent_comms/coordination_cohort.py:247:            raise IdentityConflict("cohort admission wire root changed")
+src/agent_comms/coordination_cohort.py:250:    initial = bus.log.read_delivery_cohort(wire_root_id, wire_seq)
+src/agent_comms/coordination_cohort.py:252:        assert_cohort_schema(db)
+src/agent_comms/coordination_cohort.py:257:            raise IdentityConflict("singleton claim cannot be adopted by a cohort")
+src/agent_comms/coordination_cohort.py:259:            raise IdentityConflict("wire sequence already belongs to another cohort root")
+src/agent_comms/coordination_cohort.py:294:            CohortDeliveryReceipts(
+src/agent_comms/coordination_cohort.py:313:def sealed_cohort_sequences(store: Coordination, wire_root_id: str) -> frozenset[int]:
+src/agent_comms/coordination_cohort.py:314:    """Already committed cohort batches, derived from their immutable receipts."""
+src/agent_comms/coordination_cohort.py:316:        assert_cohort_schema(store.session._connection)
+src/agent_comms/coordination_cohort.py:356:            selected = sealed_cohort_assignments(
+src/agent_comms/coordination_cohort.py:367:def sealed_cohort_assignments(
+src/agent_comms/coordination_cohort.py:381:        assert_cohort_schema(db)
+src/agent_comms/coordination_cohort.py:393:                    "JOIN cohort_delivery_receipts d ON d.wire_root_id=m.wire_root_id "
+src/agent_comms/acp.py:56:from .cohort_foreground import _accept_visible_deliveries
+src/agent_comms/acp.py:58:from .coordination_cohort import next_sealed_assignment
+src/agent_comms/input_disposition.py:162:        """Publish one original cohort; return its exact captured document."""
+src/agent_comms/claim_admission.py:20:from .cohort_schema import assert_cohort_schema
+src/agent_comms/claim_admission.py:22:from .coordination_cohort import _receipt_matches
+src/agent_comms/claim_admission.py:58:            initial = comms.bus.log.read_delivery_cohort(
+src/agent_comms/claim_admission.py:87:        assert_cohort_schema(store.session._connection)
+src/agent_comms/claim_admission.py:93:            raise IdentityConflict("Wake claim is not in the sealed selected cohort")
+src/agent_comms/native_prompt_binding.py:24:from .cohort_schema import assert_cohort_schema
+src/agent_comms/native_prompt_binding.py:155:            assert_cohort_schema(db)
+src/agent_comms/native_prompt_binding.py:197:    """Resolve the trusted wire root for a sealed claim from the cohort receipt."""
+src/agent_comms/selected_participant.py:14:from .cohort_schema import assert_cohort_schema
+src/agent_comms/selected_participant.py:17:from .coordination_cohort import _receipt_matches, pending_sealed_assignments
+src/agent_comms/selected_participant.py:159:            assert_cohort_schema(store.session._connection)
+src/agent_comms/selected_participant.py:235:                assert_cohort_schema(resource.session._connection)
+src/agent_comms/historical_native_inputs.py:23:from .cohort_schema import assert_cohort_schema
+src/agent_comms/historical_native_inputs.py:129:            assert_cohort_schema(db)
+src/agent_comms/historical_native_inputs.py:140:                    "JOIN cohort_delivery_receipts d ON d.wire_root_id=r.wire_root_id "
+src/agent_comms/channel_management.py:51:    def apply(self, channels: ChannelManagement, tag: str, cohort: tuple[Thread, ...]) -> TagChangeResult: ...
+src/agent_comms/channel_management.py:61:    def apply(self, channels, tag, cohort):
+src/agent_comms/channel_management.py:62:        channels._change_tag_unlocked(tag, None, cohort)
+src/agent_comms/channel_management.py:72:    def apply(self, channels, tag, cohort):
+src/agent_comms/channel_management.py:73:        channels.threads._archive_unlocked(cohort)
+src/agent_comms/channel_management.py:74:        return TagChangeResult(tag, False, archived_threads=tuple(thread.incarnation for thread in cohort))
+src/agent_comms/channel_management.py:83:    def deletion_cohort(self, channels, tag, cohort) -> tuple[Thread, ...]:
+src/agent_comms/channel_management.py:84:        return cohort
+src/agent_comms/channel_management.py:86:    def apply(self, channels, tag, cohort):
+src/agent_comms/channel_management.py:87:        selected = self.deletion_cohort(channels, tag, cohort)
+src/agent_comms/channel_management.py:89:        channels._change_tag_unlocked(tag, None, tuple(thread for thread in cohort
+src/agent_comms/channel_management.py:102:    def deletion_cohort(self, channels, tag, cohort):
+src/agent_comms/channel_management.py:103:        return tuple(thread for thread in cohort if thread.tags == frozenset({tag})
+src/agent_comms/channel_management.py:288:            cohort = tuple(thread for thread in snapshot.threads.values() if name in thread.tags)
+src/agent_comms/channel_management.py:289:            return disposition.apply(self, name, cohort)
+src/agent_comms/channel_management.py:301:            cohort = tuple(thread for thread in self.registry.all_threads().values() if name in thread.tags)
+src/agent_comms/channel_management.py:302:            self._change_tag_unlocked(name, replacement, cohort)
+src/agent_comms/channel_management.py:305:                             cohort: tuple[Thread, ...]) -> None:
+src/agent_comms/channel_management.py:306:        self.registry.change_tag(cohort, name, replacement)
+src/agent_comms/bus_publication.py:27:_DECISION_DOMAIN: Final = b"agent-comms:cohort-decisions:v1\0"
+src/agent_comms/bus_publication.py:117:    raise TypeError("Only typed, pure full-cohort decisions may be committed.")
+src/agent_comms/delivery_policy.py:13:from .wake import ControlClassification, WakeDecision, resolve_wake_cohort
+src/agent_comms/delivery_policy.py:50:    # by immutable cohort receipts; changing this spelling would change proofs.
+src/agent_comms/delivery_policy.py:71:        return resolve_wake_cohort(message, frozen_audience=audience, control=control)
+src/agent_comms/thread_management.py:187:        their coordinator identities must exist before any cohort can be accepted.
+src/agent_comms/cohort_schema.py:1:"""Declared cohort receipts and optional acceptance-generation provenance."""
+src/agent_comms/cohort_schema.py:32:class CohortTable:
+src/agent_comms/cohort_schema.py:41:class CohortSchemaMeta(CohortTable, TypedTable, PrivateRuntimeSchema):
+src/agent_comms/cohort_schema.py:44:        install_private_cohort_schema(store)
+src/agent_comms/cohort_schema.py:53:            "cohort_meta_update_guard": (
+src/agent_comms/cohort_schema.py:54:                "CREATE TRIGGER cohort_meta_update_guard BEFORE UPDATE ON cohort_"
+src/agent_comms/cohort_schema.py:56:                "        BEGIN SELECT RAISE(ABORT, 'cohort schema metadata is imm"
+src/agent_comms/cohort_schema.py:59:            "cohort_meta_delete_guard": (
+src/agent_comms/cohort_schema.py:60:                "CREATE TRIGGER cohort_meta_delete_guard BEFORE DELETE ON cohort_"
+src/agent_comms/cohort_schema.py:62:                "        BEGIN SELECT RAISE(ABORT, 'cohort schema metadata cannot"
+src/agent_comms/cohort_schema.py:69:class ClaimBatchReceipts(CohortTable, TypedTable):
+src/agent_comms/cohort_schema.py:117:            "cohort_receipt_insert_guard": (
+src/agent_comms/cohort_schema.py:118:                "CREATE TRIGGER cohort_receipt_insert_guard\n"
+src/agent_comms/cohort_schema.py:121:                "        BEGIN SELECT RAISE(ABORT, 'cohort must be sealed after i"
+src/agent_comms/cohort_schema.py:124:            "cohort_receipt_update_guard": (
+src/agent_comms/cohort_schema.py:125:                "CREATE TRIGGER cohort_receipt_update_guard\n"
+src/agent_comms/cohort_schema.py:141:                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt facts are immu"
+src/agent_comms/cohort_schema.py:144:            "cohort_receipt_seal_complete": (
+src/agent_comms/cohort_schema.py:145:                "CREATE TRIGGER cohort_receipt_seal_complete\n"
+src/agent_comms/cohort_schema.py:149:                "            SELECT RAISE(ABORT, 'incomplete cohort delivery rece"
+src/agent_comms/cohort_schema.py:151:                "            WHERE (SELECT COUNT(*) FROM cohort_delivery_receipts"
+src/agent_comms/cohort_schema.py:156:                "               OR (SELECT COUNT(*) FROM cohort_delivery_receipts"
+src/agent_comms/cohort_schema.py:162:                "            SELECT RAISE(ABORT, 'incomplete cohort claim members"
+src/agent_comms/cohort_schema.py:168:                "            SELECT RAISE(ABORT, 'noncontiguous cohort receipt or"
+src/agent_comms/cohort_schema.py:171:                "                SELECT 1 FROM cohort_delivery_receipts d\n"
+src/agent_comms/cohort_schema.py:180:                "            SELECT RAISE(ABORT, 'cohort selected claim order doe"
+src/agent_comms/cohort_schema.py:184:                "                LEFT JOIN cohort_delivery_receipts d\n"
+src/agent_comms/cohort_schema.py:191:                "                    SELECT COUNT(*) FROM cohort_delivery_receipt"
+src/agent_comms/cohort_schema.py:203:                "                SELECT 1 FROM cohort_delivery_receipts d\n"
+src/agent_comms/cohort_schema.py:213:            "cohort_receipt_delete_guard": (
+src/agent_comms/cohort_schema.py:214:                "CREATE TRIGGER cohort_receipt_delete_guard\n"
+src/agent_comms/cohort_schema.py:216:                "        BEGIN SELECT RAISE(ABORT, 'cohort receipt cannot be dele"
+src/agent_comms/cohort_schema.py:223:class ClaimBatchMembers(CohortTable, TypedTable):
+src/agent_comms/cohort_schema.py:249:            "cohort_members_insert_guard": (
+src/agent_comms/cohort_schema.py:250:                "CREATE TRIGGER cohort_members_insert_guard BEFORE INSERT ON clai"
+src/agent_comms/cohort_schema.py:253:                "            SELECT RAISE(ABORT, 'sealed cohort rejects members')"
+src/agent_comms/cohort_schema.py:274:            "cohort_members_update_guard": (
+src/agent_comms/cohort_schema.py:275:                "CREATE TRIGGER cohort_members_update_guard BEFORE UPDATE ON clai"
+src/agent_comms/cohort_schema.py:277:                "        BEGIN SELECT RAISE(ABORT, 'cohort claim member is immuta"
+src/agent_comms/cohort_schema.py:280:            "cohort_members_delete_guard": (
+src/agent_comms/cohort_schema.py:281:                "CREATE TRIGGER cohort_members_delete_guard BEFORE DELETE ON clai"
+src/agent_comms/cohort_schema.py:283:                "        BEGIN SELECT RAISE(ABORT, 'cohort claim member cannot be"
+src/agent_comms/cohort_schema.py:290:class CohortDeliveryReceipts(CohortTable, TypedTable):
+src/agent_comms/cohort_schema.py:331:            "cohort_delivery_insert_guard": (
+src/agent_comms/cohort_schema.py:332:                "CREATE TRIGGER cohort_delivery_insert_guard BEFORE INSERT ON coh"
+src/agent_comms/cohort_schema.py:335:                "            SELECT RAISE(ABORT, 'sealed cohort rejects delivery "
+src/agent_comms/cohort_schema.py:352:            "cohort_observer_claim_insert_guard": (
+src/agent_comms/cohort_schema.py:353:                "CREATE TRIGGER cohort_observer_claim_insert_guard BEFORE INSERT "
+src/agent_comms/cohort_schema.py:356:                "            SELECT 1 FROM cohort_delivery_receipts d\n"
+src/agent_comms/cohort_schema.py:366:            "cohort_delivery_update_guard": (
+src/agent_comms/cohort_schema.py:367:                "CREATE TRIGGER cohort_delivery_update_guard BEFORE UPDATE ON coh"
+src/agent_comms/cohort_schema.py:369:                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt is im"
+src/agent_comms/cohort_schema.py:372:            "cohort_delivery_delete_guard": (
+src/agent_comms/cohort_schema.py:373:                "CREATE TRIGGER cohort_delivery_delete_guard BEFORE DELETE ON coh"
+src/agent_comms/cohort_schema.py:375:                "        BEGIN SELECT RAISE(ABORT, 'cohort delivery receipt canno"
+src/agent_comms/cohort_schema.py:534:def _cohort_objects(db: sqlite3.Connection) -> list[SQLiteSchemaObject]:
+src/agent_comms/cohort_schema.py:537:        "AND (name LIKE 'cohort_%' OR name LIKE 'claim_batch_%')"))
+src/agent_comms/cohort_schema.py:546:def assert_cohort_schema(db: sqlite3.Connection) -> None:
+src/agent_comms/cohort_schema.py:547:    schema = _schema(CohortTable)
+src/agent_comms/cohort_schema.py:549:        meta = CohortSchemaMeta.one(db, singleton=1)
+src/agent_comms/cohort_schema.py:551:        raise SchemaVersionError("private cohort schema is not installed") from error
+src/agent_comms/cohort_schema.py:552:    if meta != CohortSchemaMeta(
+src/agent_comms/cohort_schema.py:555:        raise SchemaVersionError("unsupported private cohort schema version")
+src/agent_comms/cohort_schema.py:556:    if SQLiteSchemaObject.differences(_cohort_objects(db), schema) or SQLiteForeignKeys.read(
+src/agent_comms/cohort_schema.py:559:        raise SchemaVersionError("private cohort schema is missing or drifted")
+src/agent_comms/cohort_schema.py:581:def install_private_cohort_schema(store: Coordination) -> None:
+src/agent_comms/cohort_schema.py:584:        raise TypeError("cohort installation requires an initialized Coordination")
+src/agent_comms/cohort_schema.py:588:        if not _cohort_objects(db):
+src/agent_comms/cohort_schema.py:589:            for table in TypedTable.members_with(CohortTable):
+src/agent_comms/cohort_schema.py:591:            CohortSchemaMeta(
+src/agent_comms/cohort_schema.py:592:                singleton=1, version=COHORT_SCHEMA_VERSION, ddl_digest=_digest(_schema(CohortTable))
+src/agent_comms/cohort_schema.py:594:        assert_cohort_schema(db)
+src/agent_comms/cohort_schema.py:598:            raise SchemaVersionError("cohort schema requires rollback-journal mode")
+src/agent_comms/cohort_schema.py:599:        # Missing/corrupt optional metadata must not roll back mandatory cohort
+src/agent_comms/nk_foreground.py:4:private cohort/schema, start this process and wait for READY, publish/accept the
+src/agent_comms/nk_foreground.py:5:initial cohort, then send exactly one ``GO <last-seen-seq>`` line on stdin. This
+src/agent_comms/envelope_claim_transitions.py:221:            or not self.wake_assignment_id.startswith("cohort-v1:")
+src/agent_comms/envelope_claim_transitions.py:222:            or len(self.wake_assignment_id) != len("cohort-v1:") + 64
+tests/shared_bus_restart_native.py:112:    from agent_comms.coordination_cohort import _receipt_matches
+tests/shared_bus_restart_native.py:161:            service.messaging.send_initial_cohort('history-sender', 'history-recipient',
+tests/shared_bus_restart_native.py:265:                            initial = service.bus.log.read_delivery_cohort(root_id,original.seq)
+tests/shared_bus_restart_native.py:719:        self.originals = [self.service.bus.publisher.publish_initial_cohort(Message(
+tests/shared_bus_restart_native.py:847:        service.messaging.send_initial_cohort('fixture-sender','history-recipient',
+tests/shared_bus_restart_native.py:980:            from agent_comms.coordination_cohort import accept_delivery_cohort
+tests/shared_bus_restart_native.py:981:            initial = service.bus.log.read_delivery_cohort(root_id, cutover.originals[0].seq)
+tests/shared_bus_restart_native.py:986:                accept_delivery_cohort(service.bus, root_id, cutover.originals[0].seq, store)
+src/agent_comms/queued_input.py:24:from .coordination_cohort import pending_sealed_assignments

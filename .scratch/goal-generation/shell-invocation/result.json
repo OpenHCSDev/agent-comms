@@ -1,0 +1,21 @@
+{
+  "goal": {
+    "text": "Standalone Bash invocation records its generation before returning",
+    "id": "7c8f9cad3aa74500953d6de95bf480f7",
+    "progress": "",
+    "revision": 1,
+    "reported_turn": null,
+    "mention_source": {
+      "goal_id": "7c8f9cad3aa74500953d6de95bf480f7",
+      "text_revision": 1,
+      "text_digest": "6c5388e72af34c71a8fa002c0736bbcc93c2475e6ae2116e03991d803d27d624",
+      "owner_name": "ShellGoal",
+      "owner_created_at": 1791914056.71239,
+      "bindings": []
+    },
+    "state": {
+      "kind": "active"
+    }
+  },
+  "instruction": "Persistent goal activated. Work toward it and report progress with comms_goal."
+}

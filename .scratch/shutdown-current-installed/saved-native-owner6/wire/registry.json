@@ -1,0 +1,80 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/shutdown-current-installed/saved-native-owner6/project",
+      "created_at": 1792121910.5785902,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/shutdown-current-installed/saved-native-owner6/sessions/enrolled-b26edee8e7764f34a37be9c0a257bca9.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 1062267,
+        "start_time": 159752429
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": true,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "80a083d3e15642d9ad3b37737eb43845"
+    },
+    "sender": {
+      "name": "sender",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/shutdown-current-installed/saved-native-owner6/project",
+      "created_at": 61001.0,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "stopped"
+    },
+    "sender": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "project": 1792121916.2140467,
+    "sender": 1792121913.5504527
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "sender": 3
+    }
+  },
+  "admissions": {
+    "counter": 4,
+    "generations": {
+      "project": 4,
+      "sender": 3
+    }
+  }
+}

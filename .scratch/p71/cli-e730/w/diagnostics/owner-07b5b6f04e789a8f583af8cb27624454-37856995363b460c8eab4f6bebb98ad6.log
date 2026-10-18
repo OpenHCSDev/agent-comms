@@ -1,0 +1,13 @@
+Owner launch: recipient
+Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+Exception in callback None()
+handle: <Handle cancelled>
+Traceback (most recent call last):
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/events.py", line 94, in _run
+    self._context.run(self._callback, *self._args)
+    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-16de888e2-core-e730922ce-native-70f0512abbcfa4e0-20261017T014032Z/lib/python3.14/site-packages/agent_comms/ui_model/observation.py", line 1041, in results
+    raise self.ended(None) from None
+agent_comms.ui_model.observation.ObserverDied: The comms observer (pid 2011015) was killed by signal 15 (Terminated)
+/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/multiprocessing/resource_tracker.py:396: UserWarning: resource_tracker: There appear to be 5 leaked semaphore objects to clean up at shutdown: {'/mp-sa3z28ob', '/mp-n4eyspr7', '/mp-uckl_z1z', '/mp-ydmq2vjw', '/mp-9nb6n9hj'}
+  warnings.warn(

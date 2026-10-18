@@ -1,0 +1,33 @@
+{
+  "event_types": [
+    "AgentInfo",
+    "AgentInfo",
+    "CompactionStart",
+    "NativePhaseChanged",
+    "ProviderUsage",
+    "AgentInfo",
+    "CompactionEnd",
+    "NativePhaseChanged",
+    "InputStarted",
+    "ContextObserved",
+    "Chunk",
+    "Chunk",
+    "Chunk",
+    "Chunk",
+    "ProviderUsage",
+    "AgentInfo",
+    "NativePhaseChanged",
+    "AgentInfo",
+    "AgentInfo",
+    "StreamSettled",
+    "Done"
+  ],
+  "compaction_events": 1,
+  "compaction_reason": "ThresholdCompactionReason",
+  "compaction_entries_before_fixture": 91,
+  "compaction_entries_after": 92,
+  "summary_starts": "Work in progress when compaction started:\nNow: validating the hard retained-context limit on this isolated real-session fork\nUncommitted: PR #824 source is pushed; acceptance evidence remains local (the worktree has uncommitted changes at compaction)\nNext: confirm one threshold compaction and a next-turn context below 300,000 tokens\n\n## Goal\n- **Current priority:** verify Core PR **#824** enforces the **300,000-token retained-context limit** on an isolated real-session fork: observe exactly one threshold compaction, then confirm the next turn starts below 300,000 tokens.\n- **Completed calibration trial:** failed-tab-close cleanup releases every acquired resource, preserves errors, prevents w",
+  "post_compaction_total_tokens": 40645,
+  "final_text": "FORK_LIMIT_OK",
+  "done": true
+}

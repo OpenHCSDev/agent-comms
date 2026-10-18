@@ -1,0 +1,3 @@
+usage: python -m agent_comms.debt_ratchet [-h] --root ROOT --base BASE
+                                          --head HEAD
+python -m agent_comms.debt_ratchet: error: the following arguments are required: --root

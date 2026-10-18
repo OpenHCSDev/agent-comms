@@ -1,0 +1,594 @@
+"""Persistent ACP turn orchestration over existing session/input and S2 owners."""
+
+from __future__ import annotations
+
+import asyncio
+import os
+from contextlib import AsyncExitStack, asynccontextmanager
+from functools import partial
+from typing import TYPE_CHECKING, Any
+from uuid import uuid4
+
+from acp.exceptions import RequestError
+from acp.schema import (
+    PromptResponse,
+    RequestPermissionResponse,
+)
+
+from .image_inputs import prompt_images
+from .following_inputs import OwnerFollowingInputs
+from .queued_input import InitialInput
+from .input_origin import InputOrigin, UnattributedInputOrigin
+from . import agent_events as events
+from .agent_backend import AgentBackend, InputRequest, SendNow, TurnInboxItem
+from .channel_targets import BuiltinChannel
+from .comms import Comms
+from .coordinator import Coordination
+from .errors import RelationViolationError
+from .goal_actions import (
+    GoalPrecondition,
+    OwnerInvocable,
+    PausedGoalAction,
+)
+from .goal_scheduler import GoalScheduler
+from .messages import Message
+from .mro_dispatch import MroDispatch, handles
+from .native_arguments import NativeArguments
+from .native_input_owner import RegistryOwner
+from .routing import TurnRouting
+from .runtime import (
+    ACP_PERMISSION_TIMEOUT_SECONDS,
+    RuntimeServer,
+    SocketClient,
+)
+from .pi_payloads import StateData
+from .threads import Thread
+from .transcript_updates import TurnTranscriptUpdate
+from .turn_effects import TurnEffects
+from .turn_lease import TurnLeaseFence, TurnState
+from .turn_phase import CancellingPhase, TurnPhase
+
+if TYPE_CHECKING:
+    from . import pi_events as pi
+    from .coordinated_runtime import SelectedExecution
+    from .input_drain import InputDrain
+    from .session_lifecycle import SessionLifecycle
+
+
+AGENT_PREFIX = "!agent "
+RELAY_PREFIX = "!relay "
+NO_REPLY_WINDOW = 2.5  # silence: end the turn after this long with nothing
+REPLY_WINDOW = 8.0  # once replies flow, keep collecting at most this long
+REPLY_QUIET = 1.5  # after the last reply, wait this long then end the turn
+REPLY_POLL = 0.25
+ACTIVITY_WINDOW = 60.0  # keep the turn open while a peer is thinking/working
+IDLE_GRACE = 1.0  # peers idle for this long -> drain and end the turn
+
+
+class CompactionObservation(MroDispatch):
+    """All selected/native compaction callers update the existing turn owner."""
+    def __init__(self, runner, session_id, lease, phase):
+        self.runner, self.session_id, self.lease, self.phase = runner, session_id, lease, phase
+
+    async def publish(self, phase):
+        await self.runner.transition_turn(self.session_id, self.lease, phase)
+
+    @handles(events.CompactionStart)
+    async def start(self, event):
+        await self.publish(self.phase.compacting())
+
+    @handles(events.CompactionEnd)
+    async def end(self, event):
+        await self.publish(self.phase.compaction_ended())
+
+
+class TurnRunner:
+    """Own session turn locks/tasks and each session's agent backend."""
+
+    def __init__(
+        self,
+        comms: Comms,
+        runtime: RuntimeServer,
+        effects: TurnEffects,
+        *,
+        agent_bin: str | None,
+        agent_args: list[str] | None,
+        reply_window: float | None,
+        no_reply_window: float | None,
+        reply_quiet: float | None,
+    ):
+        self.comms = comms
+        self.runtime = runtime
+        self.effects = effects
+        self.agent_bin = NativeArguments.configured_binary(agent_bin)
+        self.agent_args = NativeArguments.configured(agent_args)
+        self.turn_tasks: dict[str, asyncio.Task[Any]] = {}
+        # One backend per ACP session, of the bound thread's declared kind.
+        self.persistent_backends: dict[str, AgentBackend] = {}
+        self.turn_locks: dict[str, asyncio.Lock] = {}
+        self.goals = GoalScheduler(comms, effects)
+        self.reply_window = (
+            reply_window
+            if reply_window is not None
+            else float(os.environ.get("AGENT_COMMS_REPLY_WINDOW", str(REPLY_WINDOW)))
+        )
+        self.no_reply_window = (
+            no_reply_window
+            if no_reply_window is not None
+            else float(os.environ.get("AGENT_COMMS_NO_REPLY_WINDOW", str(NO_REPLY_WINDOW)))
+        )
+        self.reply_quiet = (
+            reply_quiet
+            if reply_quiet is not None
+            else float(os.environ.get("AGENT_COMMS_REPLY_QUIET", str(REPLY_QUIET)))
+        )
+
+    def bind(self, sessions: SessionLifecycle, inputs: InputDrain) -> None:
+        self.sessions = sessions
+        self.inputs = inputs
+        self.goals.bind(sessions, inputs)
+
+    def session_busy(self, session_id: str) -> bool:
+        return session_id in self.turn_tasks or self.turn_state(session_id).busy
+
+    def turn_state(self, session_id: str) -> TurnState:
+        name = self.sessions.bindings.get(session_id)
+        return self.comms.registry.require(name).turn_state if name is not None else TurnState()
+
+    def owns_turn(self, session_id: str, turn_id: str) -> bool:
+        state = self.turn_state(session_id)
+        return state.busy and state.managed_id == turn_id
+
+    async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
+        states = await Coordination.run_worker(partial(
+            self.comms.agents.transition_turn, lease, phase
+        ))
+        for state in states:
+            await self.effects._emit_event(session_id, TurnTranscriptUpdate(state=state))
+
+    async def observe_compaction(self, session_id: str, event) -> None:
+        name = self.sessions.bindings.get(session_id)
+        if name is None:
+            return
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+        lease = thread.turn_lease
+        if lease is None:
+            return
+        await CompactionObservation(self, session_id, lease, thread.turn_state.phase).dispatch(event)
+
+    def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
+        """This session's backend, created for the thread's declared backend on first use."""
+        current = self.persistent_backends.get(session_id)
+        if current is None:
+            current = thread.backend.for_worker(self, session_id)
+            self.persistent_backends[session_id] = current
+        elif type(current) is not thread.backend:
+            raise RelationViolationError(
+                f"Session {session_id!r} holds a {type(current).__name__}, but "
+                f"thread {thread.name!r} declares {thread.backend.declared_name}"
+            )
+        return current
+
+    async def observe_selected_preparation(
+        self, session_id: str, thread: Thread, state: StateData, info: events.AgentInfo,
+    ) -> None:
+        """Publish this attested saved owner through the shared info consumer."""
+        state.model.require_selection(thread.model)
+        await events.AgentEventConsumer(comms=self.comms, thread_name=thread.name).dispatch(info)
+        await self.effects._emit_event(session_id, info)
+
+    async def inspect_context(self, session_id, thread):
+        from .pi_commands import AgentCommsInspectContext
+
+        return await self.inspect_native_request(session_id, thread, AgentCommsInspectContext())
+
+    async def inspect_context_segment(self, session_id, thread, manifest):
+        from .pi_commands import AgentCommsInspectContextSegment
+
+        request = AgentCommsInspectContextSegment.for_manifest(manifest)
+        context = await self.inspect_native_request(session_id, thread, request)
+        return context.recorded_public_text(manifest)
+
+    async def inspect_native_request(self, session_id, thread, request):
+        context = await self.backend_for(session_id, thread).inspect(thread, request)
+        return context.require_session_file(thread.require_saved_session())
+
+    async def prompt_owned(
+        self, session_id: str, prompt: list[Any], *, display_text: str | None = None,
+        input_id: str | None = None,
+        origin: InputOrigin = UnattributedInputOrigin(),
+    ) -> PromptResponse:
+        turn_task = asyncio.current_task()
+        assert turn_task is not None
+        self.turn_tasks[session_id] = turn_task
+        try:
+            thread_name = await self.sessions.sync_identity(session_id)
+            await Coordination.run_worker(partial(self.comms.registry.require, thread_name))
+            text = self.effects._prompt_text(prompt)
+            images = prompt_images(prompt)
+            agent_task: str | None = None
+            relay_text: str | None = None
+            if text.startswith(AGENT_PREFIX):
+                agent_task = text[len(AGENT_PREFIX) :].strip()
+            elif text.startswith(RELAY_PREFIX):
+                relay_text = text[len(RELAY_PREFIX) :].strip()
+            elif text.lstrip().startswith(("@", "#")):
+                relay_text = text
+            else:
+                agent_task = text.strip()
+            sent_seq = 0
+            if relay_text:
+                target, body = parse_target(relay_text)
+                message = await Coordination.run_worker(partial(
+                    self.comms.messaging.send_message, thread_name, target, body,
+                ))
+                sent_seq = message.seq
+            self.effects._debug_log(
+                f"prompt:start sender={thread_name} mode={'agent' if agent_task else 'relay'} "
+                f"sent_seq={sent_seq}"
+            )
+            if images or agent_task:
+                await InitialInput.run(self.inputs,
+                    session_id,
+                    thread_name,
+                    agent_task or "",
+                    images=images,
+                    display_text=display_text,
+                    input_id=input_id,
+                    origin=origin,
+                )
+            else:
+                turn_id = uuid4().hex
+                async with AsyncExitStack() as resources:
+                    await Coordination.run_worker(partial(
+                        self.acquire_turn, resources, session_id, thread_name,
+                        turn_id, "Waiting for replies",
+                    ))
+                    await self.effects._emit_event(
+                        session_id, await Coordination.run_worker(partial(
+                            self.current_turn_update, session_id,
+                        )),
+                    )
+                    await self.inputs.drain_inbox(session_id)
+                    await self.collect_replies(session_id, thread_name, sent_seq)
+            self.effects._debug_log("prompt:returning")
+            return PromptResponse(stop_reason="end_turn")
+        except asyncio.CancelledError:
+            self.effects._debug_log("prompt:cancelled")
+            return PromptResponse(stop_reason="cancelled")
+        finally:
+            if self.turn_tasks.get(session_id) is turn_task:
+                self.turn_tasks.pop(session_id, None)
+            self.inputs.ensure_live_drain(session_id)
+
+    async def collect_replies(self, session_id: str, thread_name: str, sent_seq: int = 0) -> None:
+        """Stream inbox messages into the open turn until quiet or timeout.
+
+        While a peer is on it (activity thinking/working, or a peer's read
+        marker past our message), the turn stays open — the client shows
+        its spinner, and replies drain the moment they land.
+        """
+        waited = 0.0
+        quiet = 0.0
+        got_reply = False
+        idle_for = 0.0
+        while True:
+            await asyncio.sleep(REPLY_POLL)
+            waited += REPLY_POLL
+            quiet += REPLY_POLL
+            pushed = await self.inputs.drain_count(session_id)
+            if pushed:
+                got_reply = True
+                quiet = 0.0
+                idle_for = 0.0
+            if got_reply:
+                if quiet >= self.reply_quiet or waited >= self.reply_window:
+                    self.effects._debug_log(f"collect:break got_reply waited={waited}")
+                    break
+                continue
+            # No reply yet: keep waiting while a peer is on it.
+            peer_progress = await Coordination.run_worker(partial(self.peer_progress, thread_name, sent_seq))
+            idle_for = 0.0 if peer_progress else idle_for + REPLY_POLL
+            if idle_for >= IDLE_GRACE and waited >= self.no_reply_window:
+                break
+            if waited >= ACTIVITY_WINDOW:
+                break
+
+    def peer_progress(self, thread_name: str, sent_seq: int) -> bool:
+        """True when a peer is active on, or has read, our message."""
+        snapshot = self.comms.registry.snapshot()
+        running = (
+            thread for name, thread in snapshot.threads.items()
+            if name != thread_name and snapshot.statuses[name].active
+        )
+        for activity in self.comms.agents.all_activity(running, snapshot=snapshot).values():
+            if activity.state.busy:
+                return True
+        if sent_seq:
+            document = self.comms.bus.reads.read()
+            for name in snapshot.threads:
+                if name != thread_name and sent_seq in self.comms.bus.reads.seen_sequences(
+                    name, snapshot, document=document
+                ):
+                    return True
+        return False
+
+    async def cancel(self, session_id: str, **kwargs: Any) -> None:
+        if session_id in self.sessions.proxies:
+            await self.sessions.proxies[session_id].request("cancel")
+            return
+        name = self.sessions.bindings.get(session_id)
+        thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
+        if thread is not None and (goal := thread.goal) and goal.state.active:
+            await Coordination.run_worker(partial(
+                self.comms.goals.update_goal, name,
+                PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            ))
+        task = self.turn_tasks.get(session_id)
+        if task is not None:
+            current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
+            lease = current.turn_lease if current is not None else None
+            if lease is not None:
+                await self.transition_turn(session_id, lease, CancellingPhase())
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        # Selected handling may be the original inbox task. Retire only that
+        # cancelled turn, then let the same drain owner select independent work.
+        # Neither cancellation nor unbound input proves the whole inbox handled.
+        self.inputs.ensure_live_drain(session_id)
+
+    async def extension_ui_permission(
+        self,
+        session_id: str,
+        turn_id: str,
+        controller: Any,
+        request: pi.DialogUiRequest,
+    ) -> pi.ExtensionUiChoice:
+        """Project one bounded Pi UI dialog to exactly the turn's ACP controller.
+
+        No ACP response updates package configuration, launch trust or call grants.
+        The backend revalidates this result before replying to the same Pi child.
+        """
+        from . import pi_events as pi
+
+        if controller is None or not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
+            return pi.CancelledUiChoice()
+        permission = request.permission(turn_id)
+        if permission is None:
+            return pi.CancelledUiChoice()
+        tool_call, options = permission
+        try:
+            if isinstance(controller, SocketClient):
+                reply = await self.runtime.request_permission(
+                    session_id,
+                    controller,
+                    {
+                        "toolCall": tool_call.model_dump(by_alias=True, exclude_none=True),
+                        "options": [
+                            option.model_dump(by_alias=True, exclude_none=True)
+                            for option in options
+                        ],
+                    },
+                )
+                if not isinstance(reply, dict):
+                    return pi.CancelledUiChoice()
+                outcome = reply
+            elif controller is self.sessions.client:
+                response = await asyncio.wait_for(
+                    controller.request_permission(
+                        session_id=session_id, tool_call=tool_call, options=options
+                    ),
+                    timeout=ACP_PERMISSION_TIMEOUT_SECONDS,
+                )
+                outcome = RequestPermissionResponse.model_validate(response).outcome.model_dump(
+                    by_alias=True, exclude_none=True
+                )
+            else:
+                return pi.CancelledUiChoice()
+        except (TimeoutError, ConnectionError, ValueError, RequestError):
+            # An unanswered, disconnected, refusing or invalid controller reply
+            # is denial, never a raw error in Pi RPC/model output or a reason to
+            # resend an uncertain MCP call. Any other failure is a defect.
+            return pi.CancelledUiChoice()
+        if not await Coordination.run_worker(partial(self.owns_turn, session_id, turn_id)):
+            return pi.CancelledUiChoice()
+        if isinstance(controller, SocketClient) and not self.runtime.is_controller(
+            session_id, controller
+        ):
+            return pi.CancelledUiChoice()
+        selected = outcome.get("optionId")
+        if outcome.get("outcome") != "selected" or type(selected) is not str:
+            return pi.CancelledUiChoice()
+        return request.choice(selected)
+
+    def acquire_turn(
+        self, resources: AsyncExitStack, session_id: str, thread_name: str,
+        turn_id: str, detail: str, routing: TurnRouting | None = None, *,
+        task: asyncio.Task[Any] | None = None,
+    ) -> RegistryOwner:
+        """Bind the exact installed lease to cleanup before worker delivery.
+
+        The joined worker may commit admission before its awaiting caller is
+        cancelled. Register on the caller's stack here, while it still owns
+        this operation; no delivered result is needed to retire that lease.
+        """
+        owner = self.comms.agents.begin_turn(thread_name, turn_id, detail, routing)
+        resources.push_async_callback(
+            self.settle_turn, session_id, owner.turn_lease,
+            task=task,
+        )
+        return owner
+
+    def finish_turn(
+        self, resources: AsyncExitStack, session_id: str, lease: TurnLeaseFence,
+    ) -> TurnTranscriptUpdate:
+        """Release the original CAS lease and retain its waiter cleanup."""
+        terminal_fence = self.comms.agents.finish_turn(lease)
+        resources.push_async_callback(
+            Coordination.run_worker,
+            partial(self.comms.goals.release_waits_after_terminal_turn, terminal_fence),
+        )
+        return self.current_turn_update(session_id)
+
+    async def settle_turn(
+        self,
+        session_id: str,
+        lease: TurnLeaseFence,
+        *,
+        task: asyncio.Task[Any] | None = None,
+    ) -> None:
+        """Settle after terminal publication, releasing waiters even if the UI fails.
+
+        Native output completion is not lifecycle settlement. Keep the exact
+        lease until Done, durable input retirement and relay publication finish.
+        """
+        if task is not None and self.turn_tasks.get(session_id) is task:
+            self.turn_tasks.pop(session_id, None)
+        async with AsyncExitStack() as resources:
+            update = await Coordination.run_worker(partial(
+                self.finish_turn, resources, session_id, lease,
+            ))
+            await self.effects._emit_event(session_id, update)
+
+    def current_turn_update(self, session_id: str):
+        return TurnTranscriptUpdate(state=self.turn_state(session_id))
+
+    async def publish_turn_state(self, session_id: str, client: Any = None) -> None:
+        """Publish the registry owner's current turn to this open session."""
+        update = await Coordination.run_worker(partial(self.current_turn_update, session_id))
+        await self.effects._emit_event(session_id, update, client=client)
+
+    async def active_backend_inbox(self, session_id: str) -> asyncio.Queue[TurnInboxItem] | None:
+        state = await Coordination.run_worker(partial(self.turn_state, session_id))
+        return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
+
+    async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
+        async with self.idle_backend(session_id, thread) as persistent:
+            if persistent is not None:
+                await persistent.close()
+
+    @asynccontextmanager
+    async def idle_backend(self, session_id: str, thread: Thread):
+        """Hold this session's turn and child acquisition until an idle effect ends.
+
+        Configuration retirement remains conditional on an idle owner. Source
+        selection uses this same resource and refuses a busy owner. Neither
+        consumer can close a child after a new turn acquired it.
+        """
+        lock = self.turn_locks.setdefault(session_id, asyncio.Lock())
+        if lock.locked():
+            yield None
+            return
+        async with lock:
+            if await Coordination.run_worker(partial(self.session_busy, session_id)):
+                yield None
+                return
+            persistent = self.backend_for(session_id, thread)
+            async with persistent.lock:
+                yield persistent
+
+    async def run_selected(self, session_id: str, execution: SelectedExecution):
+        """Selected work and fresh ACP input share this session's one turn lifetime.
+
+        Only the live inbox transfers to the next native turn. Durable UNKNOWN
+        rows never create input, and selected failure/cancellation retires the
+        inbox without pretending that its pending prompts reached the model.
+        """
+        async with self.turn_locks.setdefault(session_id, asyncio.Lock()):
+            task = asyncio.current_task()
+            assert task is not None
+            inbox: asyncio.Queue[TurnInboxItem] = asyncio.Queue()
+            self.turn_tasks[session_id] = task
+            self.inputs.backend_inboxes[session_id] = inbox
+            try:
+                owner = await Coordination.run_worker(partial(
+                    self.comms.registry.require, execution.owner_name,
+                ))
+                result = await execution.run(
+                    on_compaction=partial(self.effects._emit_event, session_id),
+                    pi_session=self.backend_for(session_id, owner),
+                    following=(following := OwnerFollowingInputs(self.inputs, session_id, owner, inbox)),
+                )
+                await following.pass_on_unread(self)
+                return result
+            finally:
+                try:
+                    await self.inputs.finish_turn_inputs(session_id, inbox)
+                finally:
+                    if self.turn_tasks.get(session_id) is task:
+                        self.turn_tasks.pop(session_id, None)
+                    # SelectedParticipant closed the registry lease while unwinding
+                    # execution. Publish that canonical end on success and failure.
+                    await self.publish_turn_state(session_id)
+
+    async def run_agent_turn(
+        self,
+        session_id: str,
+        thread_name: str,
+        task: str,
+        *,
+        origins: tuple[Message, ...] = (),
+        images: tuple[Any, ...] = (),
+        original_keys: tuple[str, ...] = (),
+        initial_display_text: str | None = None,
+        autonomous_goal: bool = False,
+        original_owner_input: bool = False,
+        original_goal_id: str | None = None,
+        accepted_input_id: str | None = None,
+        dependency_wait_id: str | None = None,
+    ) -> None:
+        from .owned_turn import OwnedTurn
+
+        await OwnedTurn(
+            self,
+            session_id=session_id,
+            thread_name=thread_name,
+            task=task,
+            origins=origins,
+            images=images,
+            original_keys=original_keys,
+            initial_display_text=initial_display_text,
+            autonomous_goal=autonomous_goal,
+            original_owner_input=original_owner_input,
+            original_goal_id=original_goal_id,
+            accepted_input_id=accepted_input_id,
+            dependency_wait_id=dependency_wait_id,
+        ).run()
+
+    async def close(self) -> None:
+        tasks = dict(self.turn_tasks)
+        self.turn_tasks.clear()
+        for task in tasks.values():
+            task.cancel()
+        await asyncio.gather(*tasks.values(), return_exceptions=True)
+        # A relay-only turn never created a backend, so it has no runtime work to stop.
+        await asyncio.gather(
+            *(self.persistent_backends[session_id].abort(task)
+              for session_id, task in tasks.items() if session_id in self.persistent_backends),
+            return_exceptions=True,
+        )
+        for persistent in self.persistent_backends.values():
+            await persistent.close_idle()
+        self.persistent_backends.clear()
+
+
+def parse_target(text: str) -> tuple[str, str]:
+    """Split a leading target prefix off a prompt.
+
+    ``@name body`` -> DM; ``#channel body`` -> channel; empty body with a
+    bare target composes nothing; otherwise the global channel. The prefix
+    is consumed, never broadcast.
+    """
+    stripped = text.strip()
+    if stripped.startswith("@") and len(stripped) > 1:
+        parts = stripped[1:].split(maxsplit=1)
+        name = parts[0].rstrip("@#")
+        if name and len(parts) == 2 and parts[1].strip():
+            return name, parts[1].strip()
+    if stripped.startswith("#") and len(stripped) > 1:
+        parts = stripped[1:].split(maxsplit=1)
+        channel = parts[0].rstrip("@#")
+        if channel and len(parts) == 2 and parts[1].strip():
+            return f"#{channel}", parts[1].strip()
+    return BuiltinChannel.ALL.value, stripped

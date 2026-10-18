@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "turn_id": "406dab8c58f79937fe562e1efd1f19e5",
+  "thread": "beta",
+  "reason": "backend_failed",
+  "sequences": [
+    1
+  ],
+  "measurements": {},
+  "outcome": "failed; inputs must not be replayed automatically",
+  "source_error": "Traceback (most recent call last):\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/selected_request.py\", line 38, in native_failures\n    yield\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/selected_turn.py\", line 214, in run\n    result = await request.admission.execute(\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<7 lines>...\n    )\n    ^\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/private_send_admission.py\", line 151, in execute\n    result = await TrackedTurnSession.execute(\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    ...<24 lines>...\n    )\n    ^\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/tracked_turn.py\", line 299, in execute\n    return await turn.complete()\n           ^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/tracked_turn.py\", line 339, in complete\n    self.admission.raise_native_failure(error, self.native.attestation)\n    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/turn_admission.py\", line 28, in raise_native_failure\n    raise error\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/tracked_turn.py\", line 323, in complete\n    event = await self.next_event()\n            ^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/home/ts/wt/core-doctrine-segment/src/agent_comms/tracked_turn.py\", line 392, in next_event\n    raise NativePiUnavailable(\n    ...<2 lines>...\n    )\nagent_comms.native_pi.NativePiUnavailable: Native Pi RPC record is incomplete; native exit=143; stderr=(empty)\nOriginal native child stderr:\n(empty)\n",
+  "native": {
+    "stderr": ""
+  }
+}

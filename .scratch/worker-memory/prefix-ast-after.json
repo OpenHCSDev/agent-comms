@@ -1,0 +1,247 @@
+{
+  "revision": "fb33f4b0e",
+  "parsed_modules": 309,
+  "parse_omissions": [],
+  "declarations": [
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 186,
+      "kind": "function",
+      "name": "refresh"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 200,
+      "kind": "class",
+      "name": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 324,
+      "kind": "class",
+      "name": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 667,
+      "kind": "class",
+      "name": "UnverifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 696,
+      "kind": "class",
+      "name": "VerifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 734,
+      "kind": "class",
+      "name": "PrivateEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 783,
+      "kind": "function",
+      "name": "_capture_append"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 885,
+      "kind": "function",
+      "name": "_commit_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 912,
+      "kind": "function",
+      "name": "verify_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 80,
+      "kind": "function",
+      "name": "refresh_async"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 90,
+      "kind": "function",
+      "name": "_refresh_owned"
+    }
+  ],
+  "calls": [
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 551,
+      "callee": "refresh",
+      "source": "self.effects.cursors.refresh"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 691,
+      "callee": "verify_snapshot",
+      "source": "source.verify_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 722,
+      "callee": "verify_snapshot",
+      "source": "source.verify_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 746,
+      "callee": "UnverifiedNativeEvidencePrefix",
+      "source": "UnverifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 781,
+      "callee": "UnverifiedNativeEvidencePrefix",
+      "source": "UnverifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 873,
+      "callee": "_capture_append",
+      "source": "self._capture_append"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 879,
+      "callee": "_commit_snapshot",
+      "source": "self._commit_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 892,
+      "callee": "VerifiedNativeEvidencePrefix",
+      "source": "VerifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 897,
+      "callee": "_capture_append",
+      "source": "self._capture_append"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 901,
+      "callee": "VerifiedNativeEvidencePrefix",
+      "source": "VerifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 907,
+      "callee": "_commit_snapshot",
+      "source": "self._commit_snapshot"
+    }
+  ],
+  "imports": [
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 31,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 34,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 117,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 222,
+      "source": "from .native_pi import PrivateEvidenceRead, _private_session_dir"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 34,
+      "source": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 1071,
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 31,
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 17,
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 29,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 113,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 248,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 37,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 120,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 230,
+      "source": "from .native_entries import NativeEvidenceScope"
+    }
+  ],
+  "inheritance": [
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 200,
+      "class": "NativeEvidenceRead",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 324,
+      "class": "NativeEvidenceScope",
+      "bases": [
+        "ExitStack"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 667,
+      "class": "UnverifiedNativeEvidencePrefix",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 696,
+      "class": "VerifiedNativeEvidencePrefix",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 734,
+      "class": "PrivateEvidenceRead",
+      "bases": []
+    }
+  ]
+}

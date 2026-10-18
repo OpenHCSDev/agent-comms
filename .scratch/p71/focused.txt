@@ -1,0 +1,1536 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 52 items
+
+tests/test_captured_input_dispatch.py ...                                [  5%]
+tests/test_acp_input_disposition.py ssssssss.ss                          [ 26%]
+tests/test_selected_owner_followup.py FFFFFFF...FFFFFFFFsF               [ 65%]
+tests/test_private_idle_drain.py ............                            [ 88%]
+tests/test_native_drain_readiness.py ...s                                [ 96%]
+tests/test_input_drain.py ss                                             [100%]
+
+=================================== FAILURES ===================================
+______ test_selected_turn_accepts_and_starts_fresh_input_once[True-none] _______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-gv5aj7b5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc685f8f700>
+goal_mode = 'none', native_ok = True
+
+    @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
+    @pytest.mark.parametrize("native_ok", [True, False])
+    async def test_selected_turn_accepts_and_starts_fresh_input_once(
+        tmp_path, monkeypatch, goal_mode, native_ok
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        starts = []
+        if goal_mode != "none":
+            from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
+            if goal_mode == "standby":
+                comms.agents.begin_turn("sender", "dependency-work")
+                comms.goals.update_goal(
+                    "beta",
+                    StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",)),
+                )
+        before_goal = comms.registry.require("beta").goal
+        before_wait = comms.goals.goal_wait("beta")
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            native_id = "b" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, native_id, args[2])
+            starts.append(args[2])
+            yield events.InputStarted(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=native_ok, text="Fresh owner input completed")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert comms.registry.require("beta").active_turn is not None
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            receipt = accepted_input(response)
+            accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+            assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
+            assert not starts
+            release.set()
+            if native_ok:
+                await asyncio.wait_for(turn, 8)
+            else:
+                from agent_comms.acp_failure import RequestFailure
+    
+                with pytest.raises(RequestError) as failed:
+                    await asyncio.wait_for(turn, 8)
+                assert failed.value.__cause__ is not None
+                request_failure = RequestFailure.from_error(
+                    failed.value.code, str(failed.value), failed.value.data
+                )
+                assert request_failure.notification_published
+                assert request_failure.failure.input_state is type(
+                    stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{receipt.input_id}")
+                )
+>           assert len(starts) == 1 and "Fresh owner input" in starts[0]
+E           assert (0 == 1)
+E            +  where 0 = len([])
+
+tests/test_selected_owner_followup.py:103: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+_____ test_selected_turn_accepts_and_starts_fresh_input_once[True-active] ______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-serk2_fl')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc685f8f850>
+goal_mode = 'active', native_ok = True
+
+    @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
+    @pytest.mark.parametrize("native_ok", [True, False])
+    async def test_selected_turn_accepts_and_starts_fresh_input_once(
+        tmp_path, monkeypatch, goal_mode, native_ok
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        starts = []
+        if goal_mode != "none":
+            from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
+            if goal_mode == "standby":
+                comms.agents.begin_turn("sender", "dependency-work")
+                comms.goals.update_goal(
+                    "beta",
+                    StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",)),
+                )
+        before_goal = comms.registry.require("beta").goal
+        before_wait = comms.goals.goal_wait("beta")
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            native_id = "b" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, native_id, args[2])
+            starts.append(args[2])
+            yield events.InputStarted(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=native_ok, text="Fresh owner input completed")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert comms.registry.require("beta").active_turn is not None
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            receipt = accepted_input(response)
+            accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+            assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
+            assert not starts
+            release.set()
+            if native_ok:
+                await asyncio.wait_for(turn, 8)
+            else:
+                from agent_comms.acp_failure import RequestFailure
+    
+                with pytest.raises(RequestError) as failed:
+                    await asyncio.wait_for(turn, 8)
+                assert failed.value.__cause__ is not None
+                request_failure = RequestFailure.from_error(
+                    failed.value.code, str(failed.value), failed.value.data
+                )
+                assert request_failure.notification_published
+                assert request_failure.failure.input_state is type(
+                    stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{receipt.input_id}")
+                )
+>           assert len(starts) == 1 and "Fresh owner input" in starts[0]
+E           assert (0 == 1)
+E            +  where 0 = len([])
+
+tests/test_selected_owner_followup.py:103: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+_____ test_selected_turn_accepts_and_starts_fresh_input_once[True-standby] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-c83mdteg')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc685f8fa80>
+goal_mode = 'standby', native_ok = True
+
+    @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
+    @pytest.mark.parametrize("native_ok", [True, False])
+    async def test_selected_turn_accepts_and_starts_fresh_input_once(
+        tmp_path, monkeypatch, goal_mode, native_ok
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        starts = []
+        if goal_mode != "none":
+            from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
+            if goal_mode == "standby":
+                comms.agents.begin_turn("sender", "dependency-work")
+                comms.goals.update_goal(
+                    "beta",
+                    StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",)),
+                )
+        before_goal = comms.registry.require("beta").goal
+        before_wait = comms.goals.goal_wait("beta")
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            native_id = "b" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, native_id, args[2])
+            starts.append(args[2])
+            yield events.InputStarted(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=native_ok, text="Fresh owner input completed")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert comms.registry.require("beta").active_turn is not None
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            receipt = accepted_input(response)
+            accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+            assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
+            assert not starts
+            release.set()
+            if native_ok:
+                await asyncio.wait_for(turn, 8)
+            else:
+                from agent_comms.acp_failure import RequestFailure
+    
+                with pytest.raises(RequestError) as failed:
+                    await asyncio.wait_for(turn, 8)
+                assert failed.value.__cause__ is not None
+                request_failure = RequestFailure.from_error(
+                    failed.value.code, str(failed.value), failed.value.data
+                )
+                assert request_failure.notification_published
+                assert request_failure.failure.input_state is type(
+                    stored_inputs(agent.inputs.dispositions.root).lookup(f"acp:{receipt.input_id}")
+                )
+>           assert len(starts) == 1 and "Fresh owner input" in starts[0]
+E           assert (0 == 1)
+E            +  where 0 = len([])
+
+tests/test_selected_owner_followup.py:103: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+______ test_selected_turn_accepts_and_starts_fresh_input_once[False-none] ______
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-pfya1dz9')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc68454b850>
+goal_mode = 'none', native_ok = False
+
+    @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
+    @pytest.mark.parametrize("native_ok", [True, False])
+    async def test_selected_turn_accepts_and_starts_fresh_input_once(
+        tmp_path, monkeypatch, goal_mode, native_ok
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        starts = []
+        if goal_mode != "none":
+            from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
+            if goal_mode == "standby":
+                comms.agents.begin_turn("sender", "dependency-work")
+                comms.goals.update_goal(
+                    "beta",
+                    StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",)),
+                )
+        before_goal = comms.registry.require("beta").goal
+        before_wait = comms.goals.goal_wait("beta")
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            native_id = "b" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, native_id, args[2])
+            starts.append(args[2])
+            yield events.InputStarted(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=native_ok, text="Fresh owner input completed")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert comms.registry.require("beta").active_turn is not None
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            receipt = accepted_input(response)
+            accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+            assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
+            assert not starts
+            release.set()
+            if native_ok:
+                await asyncio.wait_for(turn, 8)
+            else:
+                from agent_comms.acp_failure import RequestFailure
+    
+>               with pytest.raises(RequestError) as failed:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               Failed: DID NOT RAISE RequestError
+
+tests/test_selected_owner_followup.py:93: Failed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+_____ test_selected_turn_accepts_and_starts_fresh_input_once[False-active] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-axq3pakb')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc685f8f930>
+goal_mode = 'active', native_ok = False
+
+    @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
+    @pytest.mark.parametrize("native_ok", [True, False])
+    async def test_selected_turn_accepts_and_starts_fresh_input_once(
+        tmp_path, monkeypatch, goal_mode, native_ok
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        starts = []
+        if goal_mode != "none":
+            from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
+            if goal_mode == "standby":
+                comms.agents.begin_turn("sender", "dependency-work")
+                comms.goals.update_goal(
+                    "beta",
+                    StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",)),
+                )
+        before_goal = comms.registry.require("beta").goal
+        before_wait = comms.goals.goal_wait("beta")
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            native_id = "b" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, native_id, args[2])
+            starts.append(args[2])
+            yield events.InputStarted(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=native_ok, text="Fresh owner input completed")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert comms.registry.require("beta").active_turn is not None
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            receipt = accepted_input(response)
+            accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+            assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
+            assert not starts
+            release.set()
+            if native_ok:
+                await asyncio.wait_for(turn, 8)
+            else:
+                from agent_comms.acp_failure import RequestFailure
+    
+>               with pytest.raises(RequestError) as failed:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               Failed: DID NOT RAISE RequestError
+
+tests/test_selected_owner_followup.py:93: Failed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+____ test_selected_turn_accepts_and_starts_fresh_input_once[False-standby] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-gf7unhz3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc684559be0>
+goal_mode = 'standby', native_ok = False
+
+    @pytest.mark.parametrize("goal_mode", ["none", "active", "standby"])
+    @pytest.mark.parametrize("native_ok", [True, False])
+    async def test_selected_turn_accepts_and_starts_fresh_input_once(
+        tmp_path, monkeypatch, goal_mode, native_ok
+    ):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        starts = []
+        if goal_mode != "none":
+            from agent_comms.goal_actions import GoalPrecondition, SetGoalAction, StandbyGoalAction
+    
+            goal = comms.goals.update_goal("beta", SetGoalAction(text="Unrelated parked goal"))
+            if goal_mode == "standby":
+                comms.agents.begin_turn("sender", "dependency-work")
+                comms.goals.update_goal(
+                    "beta",
+                    StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",)),
+                )
+        before_goal = comms.registry.require("beta").goal
+        before_wait = comms.goals.goal_wait("beta")
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            native_id = "b" * 32
+            with kwargs["send_boundary"](None, native_id, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, native_id, args[2])
+            starts.append(args[2])
+            yield events.InputStarted(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=native_ok, text="Fresh owner input completed")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            assert comms.registry.require("beta").active_turn is not None
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            receipt = accepted_input(response)
+            accepted = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{receipt.input_id}"]
+            assert isinstance(accepted, ReservedInput) and not accepted.has_native_binding
+            assert not starts
+            release.set()
+            if native_ok:
+                await asyncio.wait_for(turn, 8)
+            else:
+                from agent_comms.acp_failure import RequestFailure
+    
+>               with pytest.raises(RequestError) as failed:
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E               Failed: DID NOT RAISE RequestError
+
+tests/test_selected_owner_followup.py:93: Failed
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+___________ test_selected_pending_input_never_replays_unknown[clear] ___________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-w8xj9mrm')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc68447eac0>
+change = 'clear'
+
+    @pytest.mark.parametrize("change", ["clear", "missing_key", "foreign_key", "cancel"])
+    async def test_selected_pending_input_never_replays_unknown(tmp_path, monkeypatch, change):
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def forbidden(*args, **kwargs):
+            raise AssertionError("Revoked or historical input reached native execution")
+            yield
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", forbidden)
+        admission = comms.registry.snapshot().admission_generations["beta"]
+        old_key = "acp:historical-uncertain"
+        agent.inputs.dispositions.record(
+            old_key, seq=None, owner="beta", admission=admission, target="beta", text="Do not replay"
+        )
+        old_row = stored_inputs(agent.inputs.dispositions.root).rows[old_key]
+        comms.messaging.send_message("sender", "beta", "Selected direct message")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            wake = agent.inputs.wake_tasks["beta"]
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            if change == "clear":
+                await agent.inputs.clear_queued_inputs("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(input_id)
+            elif change == "foreign_key":
+                agent.inputs.following_sources["beta"][input_id] = replace(
+                    agent.inputs.following_sources["beta"][input_id], keys=(old_key,)
+                )
+            else:
+                wake.cancel()
+            release.set()
+            assert await asyncio.wait_for(turn, 8) == 1
+            if change == "cancel":
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(wake, 8)
+            else:
+>               await asyncio.wait_for(wake, 8)
+
+tests/test_selected_owner_followup.py:174: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py:488: in wait_for
+    return await fut
+           ^^^^^^^^^
+src/agent_comms/schedule_rules.py:162: in run
+    result = await effects.turns.run_selected(session_id, self.execution)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/turn_runner.py:513: in run_selected
+    await following.pass_on_unread(self)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <[AttributeError("'OwnerFollowingInputs' object has no attribute 'scope'") raised in repr()] OwnerFollowingInputs object at 0x7fc6844ae470>
+turns = <agent_comms.turn_runner.TurnRunner object at 0x7fc685f16450>
+
+    async def pass_on_unread(self, turns: TurnRunner) -> None:
+        """Inputs the ended turn never read start the next turn or are refused, never replayed."""
+        while not self.inbox.empty():
+            # A send-now control carries no input of its own.
+>           for carried in self.inbox.get_nowait().carried_inputs:
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'dict' object has no attribute 'carried_inputs'
+
+src/agent_comms/following_inputs.py:68: AttributeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+___ test_selected_handoff_rechecks_authority_at_native_write[goal_revision] ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-l1d5eehf')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc687825160>
+change = 'goal_revision'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:4d7c77436ac940208a23a97e7a9c9bac', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+___ test_selected_handoff_rechecks_authority_at_native_write[goal_replaced] ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-2_qpu2cp')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc684491080>
+change = 'goal_replaced'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:332a7cebc0ac42969c55769e99607783', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+____ test_selected_handoff_rechecks_authority_at_native_write[goal_paused] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-u6mr6ves')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc685f8d630>
+change = 'goal_paused'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:19750f76b7004d84b08009c59774fd79', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+____ test_selected_handoff_rechecks_authority_at_native_write[wait_cleared] ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-qn7946q6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc68447c4b0>
+change = 'wait_cleared'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:793e3f75ddd1471d905e1b003dd1ae71', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+___ test_selected_handoff_rechecks_authority_at_native_write[owner_replaced] ___
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-rnoebwwz')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc67c9e79a0>
+change = 'owner_replaced'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:53e658956ee34b32862b2a6b3408cb9c', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+___ test_selected_handoff_rechecks_authority_at_native_write[owner_stopped] ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-9k37pjrt')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc67f0d3310>
+change = 'owner_stopped'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:adeff7a5ec7c4a7ebce3bce54c894abd', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+____ test_selected_handoff_rechecks_authority_at_native_write[missing_key] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-x67n92kv')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc67c9e7850>
+change = 'missing_key'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:27996619486440d7a9d938ff6f5d6a89', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+____ test_selected_handoff_rechecks_authority_at_native_write[foreign_key] _____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-yce8bxfd')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc685f8e660>
+change = 'foreign_key'
+
+    @pytest.mark.parametrize(
+        "change",
+        [
+            "goal_revision",
+            "goal_replaced",
+            "goal_paused",
+            "wait_cleared",
+            "owner_replaced",
+            "owner_stopped",
+            "missing_key",
+            "foreign_key",
+        ],
+    )
+    async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, monkeypatch, change):
+        from dataclasses import replace
+    
+        from agent_comms.goal_actions import (
+            ActiveGoalAction,
+            GoalPrecondition,
+            PausedGoalAction,
+            SetGoalAction,
+            StandbyGoalAction,
+        )
+        from agent_comms.owned_turn import OwnedTurn
+    
+        comms, agent, _ = _session(tmp_path)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        goal = comms.goals.update_goal("beta", SetGoalAction(text="Preserve this goal"))
+        comms.agents.begin_turn("sender", "dependency")
+        comms.goals.update_goal(
+            "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
+        )
+        expected = {}
+        prepare = OwnedTurn.prepare_native
+    
+        async def mutate(execution):
+            await prepare(execution)
+            if change == "goal_revision":
+                comms.goals.update_goal(
+                    "beta", ActiveGoalAction(expect=GoalPrecondition(goal_id=goal.id), progress="new")
+                )
+            elif change == "goal_replaced":
+                comms.goals.update_goal("beta", SetGoalAction(text="Replacement goal"))
+            elif change == "goal_paused":
+                comms.goals.update_goal(
+                    "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
+                )
+            elif change == "wait_cleared":
+                wait = comms.goals.goal_wait("beta")
+                assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            elif change == "owner_replaced":
+                owner = comms.registry.require("beta")
+                comms.registry.register(
+                    replace(owner, created_at=owner.created_at + 1, active_turn=None)
+                )
+            elif change == "owner_stopped":
+                comms.registry.unregister("beta")
+            elif change == "missing_key":
+                agent.inputs.following_sources["beta"].pop(execution.accepted_input_id)
+            elif change == "foreign_key":
+                execution.original = replace(execution.original, keys=("acp:historical-uncertain",))
+            expected.update(
+                goal=comms.registry.require("beta").goal, wait=comms.goals.goal_wait("beta")
+            )
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            with kwargs["send_boundary"](None, "e" * 32, args[2]) as allowed:
+                assert allowed is False
+            yield events.InputRefused(id=None)
+            yield events.StreamSettled()
+            yield events.Done(ok=False, text="Authority changed before send")
+    
+        monkeypatch.setattr(OwnedTurn, "prepare_native", mutate)
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            response = await asyncio.wait_for(
+                agent.prompt("beta", [{"type": "text", "text": "Fresh owner input"}]), 2
+            )
+            input_id = accepted_input(response).input_id
+            release.set()
+            await asyncio.wait_for(turn, 8)
+            refused = stored_inputs(agent.inputs.dispositions.root).rows[f"acp:{input_id}"]
+>           assert isinstance(refused, NotSentInput)
+E           AssertionError: assert False
+E            +  where False = isinstance(ReservedInput(key='acp:9ec9f3268aa849dd8a854a0c875ef156', sequence=None, owner='beta', admission=2, target='beta', source_text='Fresh owner input', origin=UnattributedInputOrigin(), notice_dismissed=False, goal_reviews={}), NotSentInput)
+
+tests/test_selected_owner_followup.py:281: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+___ test_selected_handoff_keeps_images_controller_and_future_input_receipts ____
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-8gndryoz')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7fc67f0f2ba0>
+
+    async def test_selected_handoff_keeps_images_controller_and_future_input_receipts(
+        tmp_path, monkeypatch
+    ):
+        from types import SimpleNamespace
+    
+        comms, agent, _ = _session(tmp_path)
+    
+        async def session_update(**_kwargs):
+            pass
+    
+        controller = SimpleNamespace(session_update=session_update)
+        agent.sessions.client = controller
+    
+        async def permission(session_id, turn_id, actual_controller, request):
+            assert session_id == "beta" and turn_id
+            assert actual_controller is controller
+            return request
+    
+        monkeypatch.setattr(agent.turns, "extension_ui_permission", permission)
+        monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
+        monkeypatch.setattr(cohort_foreground, "_trusted_package", lambda _: None)
+        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
+        fake, _ = _fake_model()
+        entered, release = asyncio.Event(), asyncio.Event()
+        started = []
+    
+        async def blocked(package, **kwargs):
+            entered.set()
+            await release.wait()
+            return await fake(package, **kwargs)
+    
+        async def native(*args, **kwargs):
+            request = object()
+            assert await kwargs["ui_request"](request) is request
+            assert kwargs["images"][0].data == "eA=="
+            original_key = agent.inputs.original_sources["beta"].notice_keys[0]
+            first_id = original_key.removeprefix("acp:")
+            with kwargs["send_boundary"](None, "a" * 32, args[2]) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](None, "a" * 32, args[2])
+            started.append(first_id)
+            yield events.InputStarted(id=None)
+            command = kwargs["steering_queue"].get_nowait()
+            second_id = command.input_id.value
+            with kwargs["send_boundary"](second_id, "b" * 32, command.content.text) as allowed:
+                assert allowed is True
+            assert kwargs["native_start"](second_id, "b" * 32, command.content.text)
+            started.append(second_id)
+            yield events.InputStarted(id=second_id)
+            with kwargs["send_boundary"](second_id, "c" * 32, command["message"]) as allowed:
+                assert allowed is False
+            yield events.StreamSettled()
+            yield events.Done(ok=True, text="Both fresh inputs handled")
+    
+        monkeypatch.setattr(TrackedTurnSession, "execute", blocked)
+        monkeypatch.setattr("agent_comms.backend.stream_agent_events", native)
+        comms.messaging.send_message("sender", "beta", "Selected DM")
+        turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))
+        try:
+            await asyncio.wait_for(entered.wait(), 5)
+            first = await agent.prompt(
+                "beta",
+                [
+                    {"type": "text", "text": "First fresh input"},
+                    {"type": "image", "data": "eA==", "mimeType": "image/png"},
+                ],
+            )
+            second = await agent.prompt("beta", [{"type": "text", "text": "Second fresh input"}])
+            expected = [accepted_input(response).input_id for response in (first, second)]
+            release.set()
+            await asyncio.wait_for(turn, 8)
+>           assert started == expected
+E           AssertionError: assert [] == ['86b21932fa8...cda639f276f6']
+E             
+E             Right contains 2 more items, first extra item: '86b21932fa8945458aee38e2a0ecd8d4'
+E             Use -v to get more diff
+
+tests/test_selected_owner_followup.py:515: AssertionError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+=========================== short test summary info ============================
+FAILED tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[True-none]
+FAILED tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[True-active]
+FAILED tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[True-standby]
+FAILED tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[False-none]
+FAILED tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[False-active]
+FAILED tests/test_selected_owner_followup.py::test_selected_turn_accepts_and_starts_fresh_input_once[False-standby]
+FAILED tests/test_selected_owner_followup.py::test_selected_pending_input_never_replays_unknown[clear]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[goal_revision]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[goal_replaced]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[goal_paused]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[wait_cleared]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[owner_replaced]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[owner_stopped]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[missing_key]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_rechecks_authority_at_native_write[foreign_key]
+FAILED tests/test_selected_owner_followup.py::test_selected_handoff_keeps_images_controller_and_future_input_receipts
+================== 16 failed, 22 passed, 14 skipped in 31.45s ==================

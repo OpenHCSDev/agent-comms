@@ -1,0 +1,8 @@
+const fs=require('fs'),path=require('path');
+const acorn=require('internal/deps/acorn/acorn/dist/acorn');
+const walk=require('internal/deps/acorn/acorn-walk/dist/walk');
+const root=process.argv[2], classes=[],sites=[],errors=[];let modules=0;
+const names=new Set(['clearQueue','clearAllQueues','clear','steeringQueue','followUpQueue','_steeringMessages','_followUpMessages','_nativeInputClaims']);
+function scan(dir){for(const ent of fs.readdirSync(dir,{withFileTypes:true})){const p=path.join(dir,ent.name);if(ent.isDirectory())scan(p);else if(/\.(m?js)$/.test(p)){const src=fs.readFileSync(p,'utf8');let tree;try{tree=acorn.parse(src,{ecmaVersion:'latest',sourceType:'module',locations:true,allowHashBang:true});}catch(e){errors.push({path:p,error:String(e)});continue;}modules++;walk.fullAncestor(tree,(n,_,parents)=>{if(n.type==='ClassDeclaration'||n.type==='ClassExpression')classes.push({path:p,line:n.loc.start.line,name:n.id?.name,bases:n.superClass?src.slice(n.superClass.start,n.superClass.end):null});if((n.type==='MemberExpression'&&names.has(n.property.name))||(n.type==='MethodDefinition'&&names.has(n.key.name))){sites.push({path:p,line:n.loc.start.line,kind:n.type,scope:parents.filter(a=>a.type==='ClassDeclaration'||a.type==='MethodDefinition').map(a=>a.id?.name||a.key?.name),source:src.slice(n.start,n.end)});}});}}}
+scan(path.join(root,'dist'));scan(path.join(root,'node_modules/@earendil-works/pi-agent-core/dist'));
+console.log(JSON.stringify({modules,classes,sites,errors,limits:'Acorn syntax and declaration evidence, not live alias resolution. TypeScript .d.ts contracts are read separately; JS parser does not claim to parse them.'},null,2));

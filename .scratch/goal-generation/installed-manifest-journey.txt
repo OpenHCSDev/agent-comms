@@ -1,0 +1,108 @@
+Unhandled exception in client_connected_cb
+transport: <_SelectorSocketTransport closed fd=43>
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/tests/native_backend_fixture.py", line 192, in serve
+    await provider.handle(reader, writer)
+  File "/home/ts/wt/core-doctrine-segment/tests/compaction_loopback.py", line 95, in handle
+    body = b"".join(
+           ~~~~~~~~^
+        event(delta, reason) for delta, reason in self.response_chunks()
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ) + b"data: [DONE]\n\n"
+    ^
+  File "/home/ts/wt/core-doctrine-segment/tests/compaction_loopback.py", line 96, in <genexpr>
+    event(delta, reason) for delta, reason in self.response_chunks()
+                                              ~~~~~~~~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-doctrine-segment/tests/compaction_loopback.py", line 30, in response_chunks
+    assert any(tool["function"]["name"] == name for tool in self.requests[-1]["tools"])
+                                                            ~~~~~~~~~~~~~~~~~^^^^^^^^^
+KeyError: 'tools'
+Runtime request failed (session=project)
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/runtime.py", line 251, in handle
+    await request.apply(context)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/runtime_requests.py", line 88, in apply
+    await ctx.send({"result": await self.result(ctx)})
+                              ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/runtime_requests.py", line 197, in result
+    result = await ctx.server.agent.prompt(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ctx.session_id, self.prompt, field_meta=self.meta or {}
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/acp.py", line 206, in prompt
+    return await AcpRequestConsumer(self, session_id, prompt).run(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py", line 23, in run
+    await self.dispatch(request)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/mro_dispatch.py", line 56, in dispatch
+    return await self.consume_handlers(value, handlers, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/mro_dispatch.py", line 61, in consume_handlers
+    value = self.replace_value(value, await handler(value, *args, **kwargs))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/acp_request_consumer.py", line 46, in prompt_request
+    self.response = await self.agent._prompt_request(self.session_id, self.prompt, request)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/acp.py", line 285, in _prompt_request
+    return await self.turns.prompt_owned(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<2 lines>...
+    )
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/turn_runner.py", line 245, in prompt_owned
+    await InitialInput.run(self.inputs,
+    ...<7 lines>...
+    )
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/queued_input.py", line 283, in run
+    await item.dispatch(inputs.effects.turns, session_id, thread_name)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/queued_input.py", line 208, in dispatch
+    await turns.run_agent_turn(
+    ...<9 lines>...
+    )
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/turn_runner.py", line 561, in run_agent_turn
+    await OwnedTurn(
+    ...<14 lines>...
+    ).run()
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/owned_turn.py", line 420, in run
+    await self.run_native()
+  File "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed/lib/python3.14/site-packages/agent_comms/owned_turn.py", line 451, in run_native
+    raise PromptFailureReceipt(failure, True).request_error()
+acp.exceptions.RequestError: Internal error
+{"saved_native_fixture": "/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/installed-manifest-journey/native/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 1958201, "start_time": 138905014}], "children_retired": true}
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/tests/goal_generation_installed_journey.py", line 72, in until
+    await pilot.pause(.05)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-6e05712f2-core-948fec866/lib/python3.14/site-packages/textual/pilot.py", line 537, in pause
+    await asyncio.sleep(delay)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 702, in sleep
+    return await future
+           ^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/tests/goal_generation_installed_journey.py", line 122, in <module>
+    asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True)))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-doctrine-segment/tests/goal_generation_installed_journey.py", line 83, in run
+    await until(lambda: comms.registry.require(session).goal is not None
+                and comms.registry.require(session).goal.state.declared_name == 'blocked'
+                and not comms.registry.require(session).executing)
+  File "/home/ts/wt/core-doctrine-segment/tests/goal_generation_installed_journey.py", line 70, in until
+    async with asyncio.timeout(35):
+               ~~~~~~~~~~~~~~~^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py", line 114, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError

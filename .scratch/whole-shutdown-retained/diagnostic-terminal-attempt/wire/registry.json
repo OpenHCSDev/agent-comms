@@ -1,0 +1,66 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/tmp/pytest-of-ts/pytest-4465/saved-native-owner0/project",
+      "created_at": 1792111138.0629404,
+      "session_file": "/tmp/pytest-of-ts/pytest-4465/saved-native-owner0/sessions/enrolled-e0bec06fca184948a550fd4048398f6e.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 436005,
+        "start_time": 158677535
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "service_tier": "priority",
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": true,
+      "role": "agent",
+      "active_turn": {
+        "id": "69c32e09888f42118364075e54b7272a",
+        "owner_pid": 436005,
+        "started_at": 1792111140.769503,
+        "routing": {
+          "requests": [],
+          "reply": null
+        },
+        "admission_generation": 2,
+        "turn_generation": 1,
+        "phase": {
+          "kind": "provider_retry",
+          "detail": ""
+        }
+      },
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "project": 1792111140.7695518
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 2,
+    "generations": {
+      "project": 2
+    }
+  },
+  "admissions": {
+    "counter": 2,
+    "generations": {
+      "project": 2
+    }
+  }
+}

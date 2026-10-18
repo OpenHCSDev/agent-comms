@@ -1,0 +1,1 @@
+{"providers": {"selected-offline": {"baseUrl": "http://127.0.0.1:36961/v1", "apiKey": "local-fixture", "api": "openai-completions", "models": [{"id": "fixture", "contextWindow": 32768, "maxTokens": 2048, "compat": {"supportsUsageInStreaming": false}}]}}}

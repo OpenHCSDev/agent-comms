@@ -1,0 +1,116 @@
++ git -C /home/ts/wt/toad-live rev-parse origin/main^{commit}
++ git -C /home/ts/wt/core-doctrine-segment rev-parse fix/native-evidence-cursor-reuse^{commit}
++ uv build --wheel --out-dir /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/toad-8afa9b641cc1b3a41057078bbb799d52a5dca960 /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/export-mkuf5vxa/toad
+Building wheel...
+Successfully built /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/toad-8afa9b641cc1b3a41057078bbb799d52a5dca960/batrachian_toad-0.6.20-py3-none-any.whl
++ uv build --wheel --out-dir /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/core-0ab7f895285697475657433ca7e49292715d9f7e /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/export-mkuf5vxa/core
+Building wheel...
+Successfully built /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/core-0ab7f895285697475657433ca7e49292715d9f7e/agent_comms-0.1.0-py3-none-any.whl
++ uv export --frozen --no-dev --no-header --no-annotate --no-emit-package batrachian-toad --no-emit-package agent-comms --output-file /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/export-mkuf5vxa/requirements.txt
++ uv venv --allow-existing --python /home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14 /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z
+Using CPython 3.14.2 interpreter at: /home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/bin/python3.14
+Creating virtual environment at: /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z
+Activate with: source /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/activate
++ uv pip install --python /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/python --no-deps -r /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/export-mkuf5vxa/requirements.txt /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/toad-8afa9b641cc1b3a41057078bbb799d52a5dca960/batrachian_toad-0.6.20-py3-none-any.whl /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/core-0ab7f895285697475657433ca7e49292715d9f7e/agent_comms-0.1.0-py3-none-any.whl
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z
+Resolved 74 packages in 33ms
+Prepared 2 packages in 24ms
+Installed 74 packages in 28ms
+ + agent-client-protocol==0.12.1
+ + agent-comms==0.1.0 (from file:///home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/core-0ab7f895285697475657433ca7e49292715d9f7e/agent_comms-0.1.0-py3-none-any.whl)
+ + aiohappyeyeballs==2.7.1
+ + aiohttp==3.14.3
+ + aiohttp-jinja2==1.6
+ + aiosignal==1.4.0
+ + aiosqlite==0.22.1
+ + annotated-types==0.8.0
+ + anyio==4.14.2
+ + attrs==26.1.0
+ + bashlex==0.18
+ + batrachian-toad==0.6.20 (from file:///home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/wheels/toad-8afa9b641cc1b3a41057078bbb799d52a5dca960/batrachian_toad-0.6.20-py3-none-any.whl)
+ + certifi==2026.7.22
+ + click==8.4.0
+ + format-currency==0.0.10
+ + formbridge==0.1.0
+ + frozenlist==1.8.0
+ + h11==0.16.0
+ + httpcore==1.0.9
+ + httpx==0.28.1
+ + idna==3.20
+ + jeepney==0.9.0
+ + jinja2==3.1.6
+ + linkify-it-py==2.2.0
+ + loguru==0.6.0
+ + markdown-it-py==4.2.0
+ + markupsafe==3.0.3
+ + mdit-py-plugins==0.6.1
+ + mdurl==0.1.2
+ + metaclass-registry==0.4.0
+ + multidict==6.9.1
+ + nominal-refactor-audit==0.1.0 (from git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@9a98d72e10cd7ebae688b2e70d096f0ddc9a4c10#subdirectory=skills/refactor-audit)
+ + notify-py==0.3.43
+ + objectstate==2.1.1
+ + packaging==26.2
+ + pathspec==1.1.1
+ + platformdirs==4.9.6
+ + propcache==0.5.4
+ + psutil==7.2.2
+ + pydantic==2.13.5
+ + pydantic-core==2.46.5
+ + pygments==2.21.0
+ + pyperclip==1.11.0
+ + python-introspect==0.2.8
+ + rich==15.0.0
+ + setproctitle==1.3.7
+ + terminaltexteffects==0.15.0
+ + textual==8.2.8 (from git+https://github.com/OpenHCSDev/textual.git@97d73d0d5d30d9766d2c5ea9844bfa30ae96a908)
+ + textual-diff-view==0.1.5 (from git+https://github.com/OpenHCSDev/textual-diff-view.git@8fa7d4d0db993ea3b761c2760ca9b6a56a6251e9)
+ + textual-serve==1.1.3
+ + textual-speedups==0.2.1
+ + tree-sitter==0.26.0
+ + tree-sitter-bash==0.25.1
+ + tree-sitter-css==0.25.0
+ + tree-sitter-go==0.25.0
+ + tree-sitter-html==0.23.2
+ + tree-sitter-java==0.23.5
+ + tree-sitter-javascript==0.25.0
+ + tree-sitter-json==0.24.8
+ + tree-sitter-markdown==0.5.1
+ + tree-sitter-python==0.25.0
+ + tree-sitter-regex==0.25.0
+ + tree-sitter-rust==0.24.2
+ + tree-sitter-sql==0.3.11
+ + tree-sitter-toml==0.7.0
+ + tree-sitter-xml==0.7.0
+ + tree-sitter-yaml==0.7.2
+ + typeguard==4.5.2
+ + typing-extensions==4.15.0
+ + typing-inspection==0.4.4
+ + ui-theme==0.1.0 (from git+https://github.com/OpenHCSDev/ui-theme.git@71d088ec78a0e6c88c1fa725160a2da563170eef)
+ + watchdog==6.0.0
+ + xdg-base-dirs==6.0.3
+ + yarl==1.25.1
++ uv pip check --python /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/python
+Using Python 3.14.2 environment at: /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z
+Checked 74 packages in 2ms
+All installed packages are compatible
++ /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/python /home/ts/wt/toad-live/tools/build_runtime.py --inventory
++ /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/python -c from agent_comms.native_package import MANIFEST; print(MANIFEST.parent)
++ /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/python /home/ts/wt/toad-live/tools/build_runtime.py --verify-route
++ /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/toad --version
++ /home/ts/.local/share/agent-comms/runtimes/toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z/bin/python -c import toad.cli, agent_comms.cli, textual, formbridge, objectstate
+Traceback (most recent call last):
+  File "/home/ts/wt/toad-live/tools/build_runtime.py", line 392, in <module>
+    main()
+    ~~~~^^
+  File "/home/ts/wt/toad-live/tools/build_runtime.py", line 383, in main
+    print(build.build())
+          ~~~~~~~~~~~^^
+  File "/home/ts/wt/toad-live/tools/build_runtime.py", line 358, in build
+    record['screenshot'] = str(open_saved_thread(destination, self.thread, self.display, self.scratch / f'acceptance-{destination.name}'))
+                               ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/toad-live/tools/build_runtime.py", line 248, in open_saved_thread
+    raise RuntimeError(f'SavedThreadAcceptanceFailed: {thread}: {observation["error"]}; see {output}')
+RuntimeError: SavedThreadAcceptanceFailed: change-report: Request failed: Session load not admitted for 'change-report': Explicit start is required for a stopped agent.
+Not sent
+Inspect the input delivery status before deciding whether to send again.; see /home/ts/wt/core-doctrine-segment/.scratch/worker-memory/runtime-build-prefix-e27/acceptance-toad-8afa9b641-core-0ab7f8952-native-84d389a90e2228d6-20261014T025724Z

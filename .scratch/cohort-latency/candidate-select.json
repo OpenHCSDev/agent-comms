@@ -1,0 +1,22 @@
+{
+  "lookup": "99c4c74c990e49782017e2034c2f0d24",
+  "after_seq": 5582,
+  "answer": [
+    5583
+  ],
+  "elapsed_ms": 0.103847,
+  "query_plan": [
+    [
+      4,
+      0,
+      47,
+      "SEARCH d USING PRIMARY KEY (wire_root_id=? AND wire_seq>?)"
+    ],
+    [
+      14,
+      0,
+      45,
+      "SEARCH r USING PRIMARY KEY (wire_root_id=? AND wire_seq=?)"
+    ]
+  ]
+}

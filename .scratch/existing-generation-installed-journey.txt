@@ -1,0 +1,88 @@
+Runtime request failed (session=project)
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/runtime.py", line 251, in handle
+    await request.apply(context)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/runtime_requests.py", line 88, in apply
+    await ctx.send({"result": await self.result(ctx)})
+                              ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/runtime_requests.py", line 332, in result
+    goal = await ctx.server.agent.turns.goals.retry_goal(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        ctx.session_id, self.goal_id, self.expected_revision
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_scheduler.py", line 201, in retry_goal
+    resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<9 lines>...
+    ))
+    ^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/coordinator.py", line 34, in run_worker
+    return await join_retirement(pending)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/child_process.py", line 820, in join_retirement
+    await asyncio.shield(task)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_scheduler.py", line 201, in <lambda>
+    resumed = await Coordination.run_worker(lambda: self.comms.goals.update_goal(
+                                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        name,
+        ^^^^^
+    ...<7 lines>...
+        actor=OwnerInvocable,
+        ^^^^^^^^^^^^^^^^^^^^^
+    ))
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_management.py", line 381, in update_goal
+    return action.apply(
+           ~~~~~~~~~~~~^
+        GoalActionContext(self, self.registry.require(name), actor)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_actions.py", line 136, in apply
+    goal = self.change(ctx)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_actions.py", line 450, in change
+    generation = store.require_generation(goal.id)
+  File "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-candidate/installed/lib/python3.14/site-packages/agent_comms/goal_attempts.py", line 665, in require_generation
+    raise MissingGoalGenerationError(goal_id)
+agent_comms.goal_attempts.MissingGoalGenerationError: Goal 29d0ccef7089402ebf4e9f2c3ada485d has no launch authority. Clear this goal and set it again. Retry cannot create a grant.
+{"saved_native_fixture": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-installed-journey/native/wire", "localhost_posts": 0, "native_input_proofs": 0, "children": [{"pid": 2267384, "start_time": 139532014}], "children_retired": true}
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/.scratch/historical-goal-installed-journey.py", line 67, in until
+    await pilot.pause(.05)
+  File "/home/ts/.local/share/agent-comms/runtimes/toad-4033e3611-core-bf5b1ab49-native-21e71cdc648ed997-20261013T190750Z/lib/python3.14/site-packages/textual/pilot.py", line 537, in pause
+    await asyncio.sleep(delay)
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/tasks.py", line 702, in sleep
+    return await future
+           ^^^^^^^^^^^^
+asyncio.exceptions.CancelledError
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/ts/wt/core-doctrine-segment/.scratch/historical-goal-installed-journey.py", line 116, in <module>
+    asyncio.run(run(a.stage.resolve(),a.extension.resolve(strict=True)))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 204, in run
+    return runner.run(main)
+           ~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py", line 127, in run
+    return self._loop.run_until_complete(task)
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py", line 719, in run_until_complete
+    return future.result()
+           ~~~~~~~~~~~~~^^
+  File "/home/ts/wt/core-doctrine-segment/.scratch/historical-goal-installed-journey.py", line 77, in run
+    await until(lambda: any('Clear this goal and set it again' in strip.text
+                for strip in app.screen._compositor.render_strips()))
+  File "/home/ts/wt/core-doctrine-segment/.scratch/historical-goal-installed-journey.py", line 65, in until
+    async with asyncio.timeout(35):
+               ~~~~~~~~~~~~~~~^^^^
+  File "/home/ts/.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/timeouts.py", line 114, in __aexit__
+    raise TimeoutError from exc_val
+TimeoutError

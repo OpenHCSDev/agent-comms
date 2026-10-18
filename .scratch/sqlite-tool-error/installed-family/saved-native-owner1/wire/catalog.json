@@ -1,0 +1,16 @@
+{
+  "tags": [],
+  "preferences": {
+    "#acp": {
+      "order": "created_at",
+      "created_at": 1792118906.4080474,
+      "pinned": false,
+      "parent": null,
+      "archived": false,
+      "any_mode": false,
+      "pinned_threads": []
+    }
+  },
+  "saved_views": {},
+  "list_order": "name"
+}

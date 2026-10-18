@@ -1,0 +1,752 @@
+{
+  "modules": 307,
+  "parse_omissions": [],
+  "sites": {
+    "src/agent_comms/goal_management.py": [
+      {
+        "qualname": "src/agent_comms/goal_management.py::__init__",
+        "size": 7,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "GoalWaits"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::open_goal_store",
+        "size": 6,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "initialize",
+          "mkdir"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::ready_goal_grant_locked",
+        "size": 18,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "GoalLaunchOwner",
+          "StaleAttemptError",
+          "open_goal_store",
+          "ready_grant",
+          "recover_unreserved_ready",
+          "require_ready",
+          "snapshot"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::unresolved_inputs",
+        "size": 12,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "InputDispositions",
+          "_store_lock",
+          "aliases_for",
+          "public",
+          "read",
+          "require",
+          "unknown"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::input_delivery",
+        "size": 20,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "InputDispositions",
+          "_store_lock",
+          "aliases_for",
+          "delivery_overview",
+          "read",
+          "require"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::dismiss_historical_inputs",
+        "size": 12,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "InputDispositions",
+          "_store_lock",
+          "aliases_for",
+          "dismiss_historical",
+          "require"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::goal_input_review",
+        "size": 4,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_goal_input_review",
+          "_store_lock",
+          "public",
+          "require"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::_goal_input_review",
+        "size": 54,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "GoalInputReview",
+          "GoalWaitTarget",
+          "InputDispositions",
+          "ReservedInput",
+          "ValueError",
+          "add",
+          "addressed_sources",
+          "aliases_for",
+          "any",
+          "bus_key",
+          "direct_for",
+          "fromkeys",
+          "frozenset",
+          "lookup",
+          "read",
+          "removeprefix",
+          "require",
+          "require_active_goal",
+          "sent",
+          "set",
+          "snapshot",
+          "sorted",
+          "stable_thread_lookup",
+          "tuple",
+          "unknown",
+          "values"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::goal_history",
+        "size": 6,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_store_lock",
+          "goal_history"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::goal_wait",
+        "size": 3,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "for_goal",
+          "read",
+          "require"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::recover_closed_goal_wait",
+        "size": 44,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_store_lock",
+          "canonical_name",
+          "clear",
+          "closed_wait_group",
+          "current_for",
+          "get",
+          "has_reply",
+          "join",
+          "read",
+          "register",
+          "replace",
+          "snapshot"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::release_waits_after_terminal_turn",
+        "size": 76,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_store_lock",
+          "any",
+          "append",
+          "canonical_name",
+          "clear",
+          "current_for",
+          "enumerate",
+          "get",
+          "has_reply",
+          "matches",
+          "observed_turn",
+          "read",
+          "register",
+          "renamed",
+          "replace",
+          "snapshot",
+          "target_has_active_turn",
+          "tuple",
+          "type",
+          "values"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::goal_execution",
+        "size": 2,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_goal_snapshot"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::goal_changed",
+        "size": 12,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "GoalChanged",
+          "goal_snapshot"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::goal_snapshot",
+        "size": 4,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_goal_snapshot",
+          "_store_lock"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::_goal_snapshot",
+        "size": 9,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "canonical_name",
+          "execution",
+          "read",
+          "snapshot"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::consume_goal_wait",
+        "size": 6,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "bool",
+          "clear",
+          "require"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::consume_reply_wait",
+        "size": 22,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "ValueError",
+          "_store_lock",
+          "certified_read",
+          "clear",
+          "continuation_goal",
+          "delivery",
+          "for_goal",
+          "matches",
+          "read",
+          "require",
+          "require_registry"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::update_goal",
+        "size": 12,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "GoalActionContext",
+          "_store_lock",
+          "apply",
+          "require"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::block_goal_after_failed_turn",
+        "size": 19,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_store_lock",
+          "after_failed_turn",
+          "goal_for",
+          "register",
+          "replace",
+          "require",
+          "status"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/goal_management.py::block_unverified_goal_completion",
+        "size": 19,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_store_lock",
+          "after_unverified_completion",
+          "register",
+          "replace",
+          "require",
+          "status"
+        ]
+      }
+    ],
+    "src/agent_comms/owned_turn.py": [
+      {
+        "qualname": "src/agent_comms/owned_turn.py::thread",
+        "size": 2,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": []
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::turn_lease",
+        "size": 2,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": []
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::backend",
+        "size": 2,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "backend_for"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::attach_native_session",
+        "size": 6,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "partial",
+          "run_worker",
+          "str"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::__init__",
+        "size": 32,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": []
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::admit",
+        "size": 39,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "callback",
+          "capture_local",
+          "goal_wait",
+          "invalid_params",
+          "open_goal_store",
+          "reserve",
+          "snapshot"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::begin",
+        "size": 51,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "AsyncExitStack",
+          "MessageRoute",
+          "ReservedInput",
+          "TurnRouting",
+          "WireInputOrigin",
+          "_store_lock",
+          "acquire_turn",
+          "bus_key",
+          "capture",
+          "incoming",
+          "prepare_prompt",
+          "push_async_callback",
+          "read",
+          "read_metadata_unlocked",
+          "record_originals",
+          "reserve_input",
+          "snapshot",
+          "transcript_checkpoint",
+          "tuple",
+          "uuid4"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::prepare_prompt",
+        "size": 52,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "AutomaticTitleSegment",
+          "OwnerProvenance",
+          "Path",
+          "RecordedContextTurn",
+          "ReplyRouteSegment",
+          "TurnId",
+          "context_goal_segments",
+          "cwd",
+          "for_owner",
+          "is_dir",
+          "native_environment",
+          "peer_relations",
+          "prepend",
+          "read",
+          "snapshot",
+          "str",
+          "thread_views",
+          "tuple"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::reserve_input",
+        "size": 41,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "CapturedInputDependency",
+          "ContinuationGoalPermission",
+          "ExitStack",
+          "InactiveGoalPermission",
+          "NoInputDependency",
+          "OwnerGoalPermission",
+          "TurnId",
+          "_store_lock",
+          "pop_all",
+          "render",
+          "reserve",
+          "source_type"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::open_stream",
+        "size": 41,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "Event",
+          "ExitStack",
+          "TurnGoalAccount",
+          "TurnId",
+          "TurnProgress",
+          "bind_native_turn",
+          "callback",
+          "get",
+          "pop_all",
+          "push_async_callback"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::finish_goals",
+        "size": 2,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "finish"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::close_changed_project",
+        "size": 6,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "close_idle",
+          "get",
+          "partial",
+          "run_worker",
+          "sync_identity"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::prepare_native",
+        "size": 16,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_emit_event",
+          "drain_owned_inbox",
+          "emit_input_delivery_changed",
+          "partial",
+          "run_worker"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::stream",
+        "size": 34,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "InputContent",
+          "OwnedSendAdmission",
+          "PromptAcceptancePhase",
+          "TurnDelivery",
+          "TurnId",
+          "admission",
+          "consume",
+          "extension_ui_permission",
+          "render",
+          "replace",
+          "run_turn",
+          "transition_turn",
+          "tuple"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::acquire",
+        "size": 17,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "ExitStack",
+          "current_task",
+          "open_stream",
+          "partial",
+          "pop",
+          "pop_all",
+          "push_async_callback",
+          "run_worker"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::run",
+        "size": 6,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "AsyncExitStack",
+          "acquire",
+          "run_native"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::settle_unbound",
+        "size": 5,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "_store_lock",
+          "settle_unbound",
+          "shared_state"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_turn.py::run_native",
+        "size": 24,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "CancellingPhase",
+          "PromptCancelled",
+          "PromptFailureReceipt",
+          "_emit_event",
+          "abort",
+          "get",
+          "prepare_native",
+          "publish_result",
+          "report_failure",
+          "request_error",
+          "run_worker",
+          "stream",
+          "transition_turn"
+        ]
+      }
+    ],
+    "src/agent_comms/owned_send_admission.py": [
+      {
+        "qualname": "src/agent_comms/owned_send_admission.py::source",
+        "size": 11,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "RoutedFollowingInput",
+          "get"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_send_admission.py::_check_owner",
+        "size": 34,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "AcceptedInputCheck",
+          "InputKeysCheck",
+          "MissingAcceptedInputCheck",
+          "MissingTurnOwnerCheck",
+          "OrdinaryOwnerCheck",
+          "get",
+          "require_valid"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_send_admission.py::_require_context",
+        "size": 9,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "OrdinaryContextCheck",
+          "OrdinaryGoalGrantCheck",
+          "require_valid"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_send_admission.py::_refusal",
+        "size": 7,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "ReservationViolationError",
+          "info"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_send_admission.py::__call__",
+        "size": 44,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "TurnRouting",
+          "UnboundOrdinaryInputRule",
+          "UnconsumedDependencyRule",
+          "_check_owner",
+          "_refusal",
+          "_require_context",
+          "bind_turn_input",
+          "canonical_name",
+          "consume_wait",
+          "defers_for_goal",
+          "display",
+          "get",
+          "goal_wait",
+          "record_input_display",
+          "snapshot",
+          "source",
+          "tuple"
+        ]
+      },
+      {
+        "qualname": "src/agent_comms/owned_send_admission.py::native_start",
+        "size": 8,
+        "dispatch": {},
+        "keys": {},
+        "type_checks": {},
+        "literal_sets": [],
+        "constructed": [
+          "all",
+          "source",
+          "started",
+          "valid_keys"
+        ]
+      }
+    ]
+  },
+  "semantic": "Goals owns cached store opening. OwnedTurn.stream is the only OwnedSendAdmission constructor. Its direct nullable-cache access is the only external production cache access; other goal-account/scheduler consumers already call the owner. The admission carries a real store and deletes its nullable assertion. Cache rename/lifecycle changes deferred. Temporary carry uses owner create_goal; no new runtime codec or recovery owner."
+}

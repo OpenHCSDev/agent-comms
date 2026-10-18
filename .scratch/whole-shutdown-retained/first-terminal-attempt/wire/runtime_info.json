@@ -1,0 +1,10 @@
+{
+  "project": {
+    "thread": "project",
+    "model": "response-local/fixture",
+    "session_name": null,
+    "context_used": null,
+    "context_size": 2000000,
+    "ts": 1792111010.5724747
+  }
+}

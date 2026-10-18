@@ -1,0 +1,139 @@
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+plugins: asyncio-1.4.0, xdist-3.8.0, cov-7.1.0, platformdirs-4.13.0
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_clear_queue_native.py F                                       [100%]
+
+=================================== FAILURES ===================================
+_____ test_clear_during_selected_start_never_sends_or_replays_fresh_input ______
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd8478e16a0>
+
+    async def test_clear_during_selected_start_never_sends_or_replays_fresh_input(native_backend):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            owner = comms.registry.require(session)
+    
+            def declare_sender():
+                comms.registry.declare(Thread("sender", frozenset(), str(native.project)))
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(owner.incarnation.lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(declare_sender)
+            child = agent.turns.persistent_backends[session].custody.child.proc
+            turn = None
+            try:
+                # Only this fixture's idle, attested child is paused. The selected
+                # owner can open its inbox but cannot commit its native input yet.
+                child.platform.send(child.identity, signal.SIGSTOP)
+                try:
+                    await Coordination.run_worker(partial(
+                        Comms(native.root, private_initial_writes=True).messaging.send_message,
+                        "sender", session, "One selected message",
+                    ))
+                    turn = asyncio.create_task(agent.inputs.drain_inbox(session))
+                    async with asyncio.timeout(8):
+                        while session not in agent.inputs.backend_inboxes:
+                            await asyncio.sleep(.01)
+                    wake = agent.inputs.wake_tasks[session]
+                    response = await agent.prompt(
+                        session, [{"type": "text", "text": "Fresh input cleared before native handoff"}],
+                    )
+>                   accepted = next(update for update in decode_updates(response.field_meta)
+                                    if isinstance(update, InputDeliveryChangedUpdate))
+E                                   StopIteration
+
+tests/test_clear_queue_native.py:50: StopIteration
+
+During handling of the above exception, another exception occurred:
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7fd8478e16a0>
+
+    async def test_clear_during_selected_start_never_sends_or_replays_fresh_input(native_backend):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            owner = comms.registry.require(session)
+    
+            def declare_sender():
+                comms.registry.declare(Thread("sender", frozenset(), str(native.project)))
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(owner.incarnation.lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(declare_sender)
+            child = agent.turns.persistent_backends[session].custody.child.proc
+            turn = None
+            try:
+                # Only this fixture's idle, attested child is paused. The selected
+                # owner can open its inbox but cannot commit its native input yet.
+                child.platform.send(child.identity, signal.SIGSTOP)
+                try:
+                    await Coordination.run_worker(partial(
+                        Comms(native.root, private_initial_writes=True).messaging.send_message,
+                        "sender", session, "One selected message",
+                    ))
+                    turn = asyncio.create_task(agent.inputs.drain_inbox(session))
+                    async with asyncio.timeout(8):
+                        while session not in agent.inputs.backend_inboxes:
+                            await asyncio.sleep(.01)
+                    wake = agent.inputs.wake_tasks[session]
+                    response = await agent.prompt(
+                        session, [{"type": "text", "text": "Fresh input cleared before native handoff"}],
+                    )
+                    accepted = next(update for update in decode_updates(response.field_meta)
+                                    if isinstance(update, InputDeliveryChangedUpdate))
+                    key = "acp:" + accepted.input_id
+                    before = stored_inputs(agent.inputs.dispositions.root).lookup(key)
+                    assert not before.has_native_binding
+                    await agent.inputs.clear_queued_inputs(session)
+                    assert not agent.inputs.queued_inputs[session]
+                    assert stored_inputs(agent.inputs.dispositions.root).lookup(key) == before
+                    assert native.provider.posts == 0
+                finally:
+>                   child.platform.send(child.identity, signal.SIGCONT)
+
+tests/test_clear_queue_native.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/child_process.py:300: in send
+    descriptor = self.open_pidfd(identity.pid)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pid = 772454
+
+    @staticmethod
+    def open_pidfd(pid: int) -> int:
+        """Use libc when a portable Python build omitted Linux wrappers."""
+        if hasattr(os, "pidfd_open"):
+            return os.pidfd_open(pid)
+        libc = ctypes.CDLL(None, use_errno=True)
+        function = getattr(libc, "pidfd_open", None)
+        if function is None:
+            raise NotImplementedError("Linux libc pidfd_open unavailable")
+        function.argtypes = (ctypes.c_int, ctypes.c_uint)
+        function.restype = ctypes.c_int
+        descriptor = function(pid, 0)
+        if descriptor < 0:
+            code = ctypes.get_errno()
+>           raise OSError(code, os.strerror(code))
+E           ProcessLookupError: [Errno 3] No such process
+
+src/agent_comms/child_process.py:91: ProcessLookupError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+--------------------------- Captured stdout teardown ---------------------------
+{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/clear-enabled/saved-native-owner0/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 772454, "start_time": 166402184}], "children_retired": true}
+=========================== short test summary info ============================
+FAILED tests/test_clear_queue_native.py::test_clear_during_selected_start_never_sends_or_replays_fresh_input
+============================== 1 failed in 27.51s ==============================

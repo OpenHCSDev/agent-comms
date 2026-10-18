@@ -1,0 +1,753 @@
+.FFFFFFF......FFFFFFFFFF.FFFFF....F......                                [100%]
+=================================== FAILURES ===================================
+_____ test_context_owner_rejects_invalid_lookup_before_reading_files[None] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_context_owner_rejects_inv0')
+input_id = None
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received NoneType"
+
+tests/test_native_evidence_boundary.py:41: AssertionError
+______ test_context_owner_rejects_invalid_lookup_before_reading_files[1] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_context_owner_rejects_inv1')
+input_id = 1
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received int"
+
+tests/test_native_evidence_boundary.py:41: AssertionError
+_____ test_context_owner_rejects_invalid_lookup_before_reading_files[True] _____
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_context_owner_rejects_inv2')
+input_id = True
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received bool"
+
+tests/test_native_evidence_boundary.py:41: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_context_owner_rejects_inv3')
+input_id = b'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: "Expected <class 'str'>, received bytes"
+
+tests/test_native_evidence_boundary.py:41: AssertionError
+_______ test_context_owner_rejects_invalid_lookup_before_reading_files[] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_context_owner_rejects_inv4')
+input_id = ''
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:41: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_context_owner_rejects_inv5')
+input_id = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:41: AssertionError
+_ test_context_owner_rejects_invalid_lookup_before_reading_files[gggggggggggggggggggggggggggggggg] _
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_context_owner_rejects_inv6')
+input_id = 'gggggggggggggggggggggggggggggggg'
+
+    @pytest.mark.parametrize("input_id", [None, 1, True, b"a" * 32, "", "a" * 31, "g" * 32])
+    def test_context_owner_rejects_invalid_lookup_before_reading_files(tmp_path, input_id):
+>       with pytest.raises(ValueError, match="128-bit input ID"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: '128-bit input ID'
+E         Actual message: 'Native input requires a 128-bit lowercase hex identity'
+
+tests/test_native_evidence_boundary.py:41: AssertionError
+______ test_malformed_saved_denial_marker_never_prepares_launch[marker0] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214dd675f0>
+marker = {'schema': True, 'thinkingLevel': 'high'}
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            {"schema": True, "thinkingLevel": "high"},
+            {"schema": 2, "thinkingLevel": "high"},
+            {"schema": 1, "thinkingLevel": "off"},
+            {"schema": 1, "thinkingLevel": "high", "extra": True},
+            {"schema": 1},
+            [],
+            "high",
+        ],
+    )
+    def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypatch, marker):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+        row = json.loads(fresh.path.read_text())
+        row["agentCommsSelectedFresh"] = marker
+        fresh.path.write_text(json.dumps(row) + "\n")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        with pytest.raises(NativePiUnavailable, match="first-start token"):
+>           NativePiRpcLaunch.tracked(
+                tmp_path,
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                selected_thinking_level="high",
+            )
+
+tests/test_native_evidence_boundary.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma0')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma0'), 'session_dir': PosixPath('/tm...lformed_saved_denial_ma0/sessions/enrolled-d1a5b7618f04450c8e386d995d29f5df.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+______ test_malformed_saved_denial_marker_never_prepares_launch[marker1] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214dd53960>
+marker = {'schema': 2, 'thinkingLevel': 'high'}
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            {"schema": True, "thinkingLevel": "high"},
+            {"schema": 2, "thinkingLevel": "high"},
+            {"schema": 1, "thinkingLevel": "off"},
+            {"schema": 1, "thinkingLevel": "high", "extra": True},
+            {"schema": 1},
+            [],
+            "high",
+        ],
+    )
+    def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypatch, marker):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+        row = json.loads(fresh.path.read_text())
+        row["agentCommsSelectedFresh"] = marker
+        fresh.path.write_text(json.dumps(row) + "\n")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        with pytest.raises(NativePiUnavailable, match="first-start token"):
+>           NativePiRpcLaunch.tracked(
+                tmp_path,
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                selected_thinking_level="high",
+            )
+
+tests/test_native_evidence_boundary.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma1')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma1'), 'session_dir': PosixPath('/tm...lformed_saved_denial_ma1/sessions/enrolled-f8fb47f6b496467e9eed7882aaae86a2.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+______ test_malformed_saved_denial_marker_never_prepares_launch[marker2] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214df1b7f0>
+marker = {'schema': 1, 'thinkingLevel': 'off'}
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            {"schema": True, "thinkingLevel": "high"},
+            {"schema": 2, "thinkingLevel": "high"},
+            {"schema": 1, "thinkingLevel": "off"},
+            {"schema": 1, "thinkingLevel": "high", "extra": True},
+            {"schema": 1},
+            [],
+            "high",
+        ],
+    )
+    def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypatch, marker):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+        row = json.loads(fresh.path.read_text())
+        row["agentCommsSelectedFresh"] = marker
+        fresh.path.write_text(json.dumps(row) + "\n")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        with pytest.raises(NativePiUnavailable, match="first-start token"):
+>           NativePiRpcLaunch.tracked(
+                tmp_path,
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                selected_thinking_level="high",
+            )
+
+tests/test_native_evidence_boundary.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma2')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma2'), 'session_dir': PosixPath('/tm...lformed_saved_denial_ma2/sessions/enrolled-774960c38842490fa8f0729aa5d1dc65.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+______ test_malformed_saved_denial_marker_never_prepares_launch[marker3] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214df1ba70>
+marker = {'schema': 1, 'thinkingLevel': 'high', 'extra': True}
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            {"schema": True, "thinkingLevel": "high"},
+            {"schema": 2, "thinkingLevel": "high"},
+            {"schema": 1, "thinkingLevel": "off"},
+            {"schema": 1, "thinkingLevel": "high", "extra": True},
+            {"schema": 1},
+            [],
+            "high",
+        ],
+    )
+    def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypatch, marker):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+        row = json.loads(fresh.path.read_text())
+        row["agentCommsSelectedFresh"] = marker
+        fresh.path.write_text(json.dumps(row) + "\n")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        with pytest.raises(NativePiUnavailable, match="first-start token"):
+>           NativePiRpcLaunch.tracked(
+                tmp_path,
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                selected_thinking_level="high",
+            )
+
+tests/test_native_evidence_boundary.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma3')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma3'), 'session_dir': PosixPath('/tm...lformed_saved_denial_ma3/sessions/enrolled-9ce1c74c588547d496c92090d87bcac8.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+______ test_malformed_saved_denial_marker_never_prepares_launch[marker4] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214f792570>
+marker = {'schema': 1}
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            {"schema": True, "thinkingLevel": "high"},
+            {"schema": 2, "thinkingLevel": "high"},
+            {"schema": 1, "thinkingLevel": "off"},
+            {"schema": 1, "thinkingLevel": "high", "extra": True},
+            {"schema": 1},
+            [],
+            "high",
+        ],
+    )
+    def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypatch, marker):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+        row = json.loads(fresh.path.read_text())
+        row["agentCommsSelectedFresh"] = marker
+        fresh.path.write_text(json.dumps(row) + "\n")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        with pytest.raises(NativePiUnavailable, match="first-start token"):
+>           NativePiRpcLaunch.tracked(
+                tmp_path,
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                selected_thinking_level="high",
+            )
+
+tests/test_native_evidence_boundary.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma4')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma4'), 'session_dir': PosixPath('/tm...lformed_saved_denial_ma4/sessions/enrolled-62a3cdec52c44587a137d9c855cba32f.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+______ test_malformed_saved_denial_marker_never_prepares_launch[marker5] _______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma5')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214dd8efd0>
+marker = []
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            {"schema": True, "thinkingLevel": "high"},
+            {"schema": 2, "thinkingLevel": "high"},
+            {"schema": 1, "thinkingLevel": "off"},
+            {"schema": 1, "thinkingLevel": "high", "extra": True},
+            {"schema": 1},
+            [],
+            "high",
+        ],
+    )
+    def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypatch, marker):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+        row = json.loads(fresh.path.read_text())
+        row["agentCommsSelectedFresh"] = marker
+        fresh.path.write_text(json.dumps(row) + "\n")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        with pytest.raises(NativePiUnavailable, match="first-start token"):
+>           NativePiRpcLaunch.tracked(
+                tmp_path,
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                selected_thinking_level="high",
+            )
+
+tests/test_native_evidence_boundary.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma5')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma5'), 'session_dir': PosixPath('/tm...lformed_saved_denial_ma5/sessions/enrolled-b2a2525f72814f80b8fb12f7cb0e08ef.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+________ test_malformed_saved_denial_marker_never_prepares_launch[high] ________
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214dbc4950>
+marker = 'high'
+
+    @pytest.mark.parametrize(
+        "marker",
+        [
+            {"schema": True, "thinkingLevel": "high"},
+            {"schema": 2, "thinkingLevel": "high"},
+            {"schema": 1, "thinkingLevel": "off"},
+            {"schema": 1, "thinkingLevel": "high", "extra": True},
+            {"schema": 1},
+            [],
+            "high",
+        ],
+    )
+    def test_malformed_saved_denial_marker_never_prepares_launch(tmp_path, monkeypatch, marker):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(tmp_path / "sessions", worktree=tmp_path)
+        row = json.loads(fresh.path.read_text())
+        row["agentCommsSelectedFresh"] = marker
+        fresh.path.write_text(json.dumps(row) + "\n")
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+        with pytest.raises(NativePiUnavailable, match="first-start token"):
+>           NativePiRpcLaunch.tracked(
+                tmp_path,
+                worktree=tmp_path,
+                session_dir=fresh.path.parent,
+                session_file=fresh.path,
+                selected_thinking_level="high",
+            )
+
+tests/test_native_evidence_boundary.py:105: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma6')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_malformed_saved_denial_ma6'), 'session_dir': PosixPath('/tm...lformed_saved_denial_ma6/sessions/enrolled-0c404e5015e44e3daf73da7f23bce0f1.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+_____ test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[None] ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214dddb7e0>
+level = None
+
+    @pytest.mark.parametrize("level", [None, "low", "high"])
+    def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monkeypatch, level):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level=level
+        )
+        before = fresh.path.read_bytes()
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+>       launch = NativePiRpcLaunch.tracked(
+            tmp_path,
+            worktree=tmp_path,
+            session_dir=fresh.path.parent,
+            session_file=fresh.path,
+            selected_thinking_level=level,
+        )
+
+tests/test_native_evidence_boundary.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a0')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a0'), 'session_dir': PosixPath('/tm...launch_uses_fresh_owner_a0/sessions/enrolled-ae002a294980427faba8bb2e23cf9c8b.jsonl'), 'selected_thinking_level': None}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+______ test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[low] ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214dddbcb0>
+level = 'low'
+
+    @pytest.mark.parametrize("level", [None, "low", "high"])
+    def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monkeypatch, level):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level=level
+        )
+        before = fresh.path.read_bytes()
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+>       launch = NativePiRpcLaunch.tracked(
+            tmp_path,
+            worktree=tmp_path,
+            session_dir=fresh.path.parent,
+            session_file=fresh.path,
+            selected_thinking_level=level,
+        )
+
+tests/test_native_evidence_boundary.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a1')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a1'), 'session_dir': PosixPath('/tm...aunch_uses_fresh_owner_a1/sessions/enrolled-822d5ede8cbb450e96e7013f0689756a.jsonl'), 'selected_thinking_level': 'low'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+_____ test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[high] ______
+
+tmp_path = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214de02d60>
+level = 'high'
+
+    @pytest.mark.parametrize("level", [None, "low", "high"])
+    def test_launch_uses_fresh_owner_and_preserves_exact_saved_marker(tmp_path, monkeypatch, level):
+        import agent_comms.native_pi as native
+    
+        fresh = create_fresh_private_session(
+            tmp_path / "sessions", worktree=tmp_path, selected_thinking_level=level
+        )
+        before = fresh.path.read_bytes()
+        monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
+>       launch = NativePiRpcLaunch.tracked(
+            tmp_path,
+            worktree=tmp_path,
+            session_dir=fresh.path.parent,
+            session_file=fresh.path,
+            selected_thinking_level=level,
+        )
+
+tests/test_native_evidence_boundary.py:124: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+cls = <class 'agent_comms.native_pi.NativePiRpcLaunch'>
+package = PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a2')
+options = {'worktree': PosixPath('/tmp/pytest-of-ts/pytest-3480/test_launch_uses_fresh_owner_a2'), 'session_dir': PosixPath('/tm...unch_uses_fresh_owner_a2/sessions/enrolled-cb3faf1801be4249b2038e273091dd59.jsonl'), 'selected_thinking_level': 'high'}
+
+    @classmethod
+    def tracked(cls, package: Path, **options) -> NativePiRpcLaunch:
+        """Acquire a fresh artifact for a standalone tracked execution."""
+>       return cls.acquire_tracked(package)(**options)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativePiRpcLaunch._tracked() got an unexpected keyword argument 'session_dir'
+
+src/agent_comms/native_pi.py:559: TypeError
+______________ test_fresh_open_after_1001_unrelated_and_over_8mib ______________
+
+tmp_path = PosixPath('/var/tmp/ac-certified-cursor-dijahl0t')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214de02970>
+
+    async def test_fresh_open_after_1001_unrelated_and_over_8mib(tmp_path, monkeypatch):
+        root, root_id, comms = _fresh(tmp_path, 10)
+>       monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E       AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/core-doctrine-segment/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_native_source_cursor_certificate.py:86: AttributeError
+________ test_addressed_no_wake_page_boundary_does_not_become_injection ________
+
+tmp_path = PosixPath('/var/tmp/ac-certified-cursor-q9u98l_g')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214de02dd0>
+
+    async def test_addressed_no_wake_page_boundary_does_not_become_injection(tmp_path, monkeypatch):
+        root, root_id, comms = _fresh(tmp_path)
+>       monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E       AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/core-doctrine-segment/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_native_source_cursor_certificate.py:116: AttributeError
+_______________ test_frozen_n_selected_cursor_provider_free[10] ________________
+
+tmp_path = PosixPath('/var/tmp/ac-certified-cursor-3zphevqv')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214c2cec80>
+recipients = 10
+
+    @pytest.mark.parametrize("recipients", [10, 150])
+    async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, recipients: int):
+        root, root_id, comms = _fresh(tmp_path, recipients)
+>       monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E       AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/core-doctrine-segment/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_native_source_cursor_certificate.py:146: AttributeError
+_______________ test_frozen_n_selected_cursor_provider_free[150] _______________
+
+tmp_path = PosixPath('/var/tmp/ac-certified-cursor-4eqjt7wo')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214c2cdc50>
+recipients = 150
+
+    @pytest.mark.parametrize("recipients", [10, 150])
+    async def test_frozen_n_selected_cursor_provider_free(tmp_path, monkeypatch, recipients: int):
+        root, root_id, comms = _fresh(tmp_path, recipients)
+>       monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E       AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/core-doctrine-segment/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_native_source_cursor_certificate.py:146: AttributeError
+_________ test_certified_cursor_rejects_changed_sidecar_without_replay _________
+
+tmp_path = PosixPath('/var/tmp/ac-certified-cursor-gm9lp3sz')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214c2cedd0>
+
+    async def test_certified_cursor_rejects_changed_sidecar_without_replay(tmp_path, monkeypatch):
+        root, root_id, comms = _fresh(tmp_path)
+>       monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
+E       AttributeError: <module 'agent_comms.coordinated_runtime' from '/home/ts/wt/core-doctrine-segment/src/agent_comms/coordinated_runtime.py'> has no attribute '_trusted_package'
+
+tests/test_native_source_cursor_certificate.py:174: AttributeError
+____________ test_unchanged_observation_tick_skips_all_store_reads _____________
+
+tmp_path = PosixPath('/var/tmp/ac-sealed-test-nb1j1j8v')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f214c169cc0>
+
+    @pytest.mark.asyncio
+    async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkeypatch):
+        from agent_comms import input_drain
+    
+        comms, agent, _root_id = _session(tmp_path)
+        ticks, done = asyncio.Queue(), asyncio.Queue()
+    
+        async def observations(_root, *_args, **_kwargs):
+            while True:
+                await ticks.get()
+                yield None
+                done.put_nowait(None)
+    
+        async def tick():
+            ticks.put_nowait(None)
+            await asyncio.wait_for(done.get(), timeout=10)
+    
+        drains, syncs = [], []
+        drain = agent.inputs.drain_inbox
+    
+        async def counted(session_id):
+            drains.append(session_id)
+            return await drain(session_id)
+    
+        async def no_catalog(session_id):
+            syncs.append(session_id)
+    
+        monkeypatch.setattr(input_drain.WireWatch, "observations", staticmethod(observations))
+        monkeypatch.setattr(agent.inputs, "drain_inbox", counted)
+        monkeypatch.setattr(agent.sessions.config, "sync_thread", no_catalog)
+        observer = asyncio.create_task(agent.inputs.observe("beta"))
+        try:
+            for _ in range(3):
+                await tick()
+            settled = len(drains)
+            assert settled <= 3
+            for _ in range(20):
+                await tick()
+            assert len(drains) == settled, "an unchanged tick re-read the stores"
+            assert len(syncs) == settled
+            # Another thread's declaration, change, stop, coordination row and removal
+            # rewrite the shared stores but not beta's part: the tick decodes only
+            # beta's registry entry and runs nothing else.
+            from agent_comms.registry_document import RegistryDocument
+    
+            decoded = []
+            decode = RegistryDocument.from_wire.__func__
+    
+            def counted_decode(cls, raw):
+                decoded.append(len(raw["threads"]))
+                return decode(cls, raw)
+    
+            monkeypatch.setattr(RegistryDocument, "from_wire", classmethod(counted_decode))
+    
+            async def changed_elsewhere(change):
+                change()
+                # Another process wrote it: this process holds no decoded revision.
+                comms.registry.store.cache.entry = None
+                del decoded[:]
+                await tick()
+                assert set(decoded) <= {1}, "the tick decoded other threads' entries"
+    
+            await changed_elsewhere(
+                lambda: comms.registry.declare(Thread("unrelated", frozenset(), str(tmp_path))))
+>           other = comms.registry.require("sender")
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_private_idle_drain.py:317: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/registration.py:301: in require
+    with self.store.reading() as document:
+         ^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:141: in __enter__
+    return next(self.gen)
+           ^^^^^^^^^^^^^^
+src/agent_comms/locked_store.py:78: in reading
+    yield self._read_unlocked()
+          ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = RegistryStore(path=PosixPath('/var/tmp/ac-sealed-test-nb1j1j8v/wire/registry.json'))
+
+    def _read_unlocked(self) -> RegistryDocument:
+        self.private_guard_unlocked()  # before even a cache hit
+        revision = file_revision(self.path)
+        if revision is None:
+            return self.empty()
+        entry = self.cache.entry
+        if entry is not None and entry.revision == revision:
+            return entry.document
+        with self.cache.decoding:
+            entry = self.cache.entry
+            if entry is not None and entry.revision == revision:
+                return entry.document
+            raw = json.loads(self.path.read_text())
+>           document = RegistryDocument.from_wire(
+                raw, None if entry is None else (entry.raw, entry.document))
+E           TypeError: test_unchanged_observation_tick_skips_all_store_reads.<locals>.counted_decode() takes 2 positional arguments but 3 were given
+
+src/agent_comms/registry_store.py:108: TypeError
+=========================== short test summary info ============================
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[None]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[1]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[True]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa]
+FAILED tests/test_native_evidence_boundary.py::test_context_owner_rejects_invalid_lookup_before_reading_files[gggggggggggggggggggggggggggggggg]
+FAILED tests/test_native_evidence_boundary.py::test_malformed_saved_denial_marker_never_prepares_launch[marker0]
+FAILED tests/test_native_evidence_boundary.py::test_malformed_saved_denial_marker_never_prepares_launch[marker1]
+FAILED tests/test_native_evidence_boundary.py::test_malformed_saved_denial_marker_never_prepares_launch[marker2]
+FAILED tests/test_native_evidence_boundary.py::test_malformed_saved_denial_marker_never_prepares_launch[marker3]
+FAILED tests/test_native_evidence_boundary.py::test_malformed_saved_denial_marker_never_prepares_launch[marker4]
+FAILED tests/test_native_evidence_boundary.py::test_malformed_saved_denial_marker_never_prepares_launch[marker5]
+FAILED tests/test_native_evidence_boundary.py::test_malformed_saved_denial_marker_never_prepares_launch[high]
+FAILED tests/test_native_evidence_boundary.py::test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[None]
+FAILED tests/test_native_evidence_boundary.py::test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[low]
+FAILED tests/test_native_evidence_boundary.py::test_launch_uses_fresh_owner_and_preserves_exact_saved_marker[high]
+FAILED tests/test_native_source_cursor_certificate.py::test_fresh_open_after_1001_unrelated_and_over_8mib
+FAILED tests/test_native_source_cursor_certificate.py::test_addressed_no_wake_page_boundary_does_not_become_injection
+FAILED tests/test_native_source_cursor_certificate.py::test_frozen_n_selected_cursor_provider_free[10]
+FAILED tests/test_native_source_cursor_certificate.py::test_frozen_n_selected_cursor_provider_free[150]
+FAILED tests/test_native_source_cursor_certificate.py::test_certified_cursor_rejects_changed_sidecar_without_replay
+FAILED tests/test_private_idle_drain.py::test_unchanged_observation_tick_skips_all_store_reads
+23 failed, 18 passed in 42.15s

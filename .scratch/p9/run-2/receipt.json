@@ -1,0 +1,25 @@
+{
+  "before_ioctl": [
+    40,
+    0,
+    0,
+    0
+  ],
+  "cell_size": [
+    8,
+    16
+  ],
+  "sixel": true,
+  "first_frame": true,
+  "zero_division": 0,
+  "probe_file": "/home/ts/.local/share/agent-comms/runtimes/toad-2efe00731-core-979bb0f04-native-6468a1979d983e9d-20261016T202541Z/lib/python3.14/site-packages/textual_image/_terminal.py",
+  "textual_image": {
+    "url": "https://github.com/OpenHCSDev/textual-image.git",
+    "vcs_info": {
+      "vcs": "git",
+      "commit_id": "1f1d8b8ea3c30b39da3b14ea0ac0786ce9c49a80",
+      "requested_revision": "1f1d8b8ea3c30b39da3b14ea0ac0786ce9c49a80"
+    }
+  },
+  "runtime": "/home/ts/.local/share/agent-comms/runtimes/toad-2efe00731-core-979bb0f04-native-6468a1979d983e9d-20261016T202541Z"
+}

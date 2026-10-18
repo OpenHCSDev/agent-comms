@@ -1,0 +1,8 @@
+
+==================================== ERRORS ====================================
+___________ ERROR collecting tests/test_native_context_inspection.py ___________
+In tests/test_native_context_inspection.py::test_original_context_query_preserves_native_journal_and_dispatches_no_prompt: function already takes an argument 'recorded_readers' with a default value
+=========================== short test summary info ============================
+ERROR tests/test_native_context_inspection.py - Failed: In tests/test_native_...
+!!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 1.09s

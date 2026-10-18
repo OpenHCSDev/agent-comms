@@ -1,0 +1,10 @@
+src/agent_comms/native_entries.py:200:class NativeEvidenceRead:
+src/agent_comms/native_entries.py:324:class NativeEvidenceScope(ExitStack):
+src/agent_comms/native_pi.py:667:class UnverifiedNativeEvidencePrefix:
+src/agent_comms/native_pi.py:696:class VerifiedNativeEvidencePrefix:
+src/agent_comms/native_pi.py:734:class PrivateEvidenceRead:
+src/agent_comms/native_pi.py:783:    def _capture_append(self):
+src/agent_comms/native_pi.py:885:    def _commit_snapshot(self, size, digest, revision) -> None:
+src/agent_comms/native_pi.py:912:    def verify_snapshot(self, size, expected_digest):
+src/agent_comms/cursor_publication.py:186:    async def refresh(self, session_id: str, thread_name: str) -> None:
+src/agent_comms/native_source_cursor.py:80:    async def refresh_async(

@@ -1,0 +1,3697 @@
+{
+  "revision": "503b9a093e",
+  "parsed_modules": 309,
+  "parse_omissions": [],
+  "sites": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 345,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "capture",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 347,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "capture",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 350,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "capture",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/assignment_store.py",
+      "line": 32,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "accept",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/assignment_store.py",
+      "line": 41,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "accept",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 228,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "offsets",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 231,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "offsets",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 215,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "attest",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 216,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "attest",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 216,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "attest",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 269,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "initial_sideband",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 277,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "initial_sideband",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 278,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "initial_sideband",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/cli_commands.py",
+      "line": 807,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "original_source",
+      "source": "inputs.rows"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 48,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "effective",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 51,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": null,
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 51,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": null,
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 51,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": null,
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 125,
+      "symbol": "refresh_async",
+      "node": "Attribute",
+      "context": "_observe",
+      "source": "NativeSourceCursor.refresh_async"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 129,
+      "symbol": "source_reads",
+      "node": "Attribute",
+      "context": "_observe",
+      "source": "delivery.source_reads"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 195,
+      "symbol": "source_reads",
+      "node": "Attribute",
+      "context": "close",
+      "source": "delivery.source_reads"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 384,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "project_verified_transitions",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 224,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "select",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 255,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "retain",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 277,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "retain",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 428,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "export",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 430,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "export",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 496,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 503,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 91,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "acquire_read_only",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 96,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "acquire_read_only",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 77,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "unresolved_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 82,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "unresolved_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 206,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "recover_closed_goal_wait",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 207,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "recover_closed_goal_wait",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 213,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "recover_closed_goal_wait",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 140,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "record",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 147,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "remove_threads",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 148,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "remove_threads",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 149,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "remove_threads",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 158,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "clear",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 160,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "clear",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 162,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "clear",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 171,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 209,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "closed_wait_group",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 226,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "closed_wait_group",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 257,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "execution",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 105,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 119,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 119,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 119,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 149,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 152,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 154,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 154,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 154,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 156,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 158,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 168,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 184,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read_historical_native_inputs",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 65,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "full_history",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": 65,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "full_history",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 392,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_database",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 399,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_database",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 414,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_database",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 33,
+      "symbol": "rows",
+      "node": "Name",
+      "context": null,
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 37,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "__post_init__",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 41,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "lookup",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 47,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "record",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 49,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "record",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 56,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "originals",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 67,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "settle_unbound",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 79,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "started_for_native",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 97,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "unknown",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 104,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "bound_bus_inputs",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 157,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "record",
+      "source": "document.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 168,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "record_originals",
+      "source": "changed.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 168,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "record_originals",
+      "source": "original.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 190,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "reserve_originals",
+      "source": "document.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 203,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "_transition",
+      "source": "document.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 249,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "bind_originals",
+      "source": "document.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 276,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 276,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "review_for_goal",
+      "source": "document.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 278,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 278,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 280,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 282,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 282,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 282,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 290,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 290,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "review_for_goal",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 307,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "dismiss_historical",
+      "source": "document.rows"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 446,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_shared_changes_concern_other_owners",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 452,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_shared_changes_concern_other_owners",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 551,
+      "symbol": "refresh",
+      "node": "Attribute",
+      "context": "_drain_private_if_changed",
+      "source": "self.effects.cursors.refresh"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 660,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "input_started",
+      "source": "document.rows"
+    },
+    {
+      "path": "src/agent_comms/mentions.py",
+      "line": 38,
+      "symbol": "prefix",
+      "node": "Name",
+      "context": null,
+      "source": "prefix"
+    },
+    {
+      "path": "src/agent_comms/mentions.py",
+      "line": 52,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "candidates",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 336,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_pending_counts",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 342,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_pending_counts",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 343,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_pending_counts",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 410,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "awareness_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 417,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "awareness_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 424,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "awareness_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 424,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "awareness_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 425,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "awareness_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 122,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "append",
+      "source": "window.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 137,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "collect",
+      "source": "window.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 140,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "collect",
+      "source": "window.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 165,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "append",
+      "source": "window.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 193,
+      "symbol": "rows",
+      "node": "Name",
+      "context": null,
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 198,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "messages",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 201,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "full_with",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 202,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "full_with",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 207,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "exceeded",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 207,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "exceeded",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 272,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "indexed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 273,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "indexed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 280,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "indexed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 281,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "indexed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 110,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "open_evidence",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 224,
+      "symbol": "PrivateEvidenceRead",
+      "node": "Name",
+      "context": "open",
+      "source": "PrivateEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 233,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "borrow",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 268,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "_observe",
+      "source": "self.source.rows"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 294,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "decode_rows",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 297,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": null,
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 305,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "decode_rows",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 327,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "borrow",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 278,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_input",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 285,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_input",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 301,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "corroborates_input",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 315,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "read_evidence",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 645,
+      "symbol": "PrivateEvidenceRead",
+      "node": "Name",
+      "context": "_read_private_file",
+      "source": "PrivateEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 646,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "_read_private_file",
+      "source": "evidence.rows"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 651,
+      "symbol": "PrivateEvidenceRead",
+      "node": "Name",
+      "context": "_read_private_header",
+      "source": "PrivateEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 699,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "__init__",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 699,
+      "symbol": "UnverifiedNativeEvidencePrefix",
+      "node": "Name",
+      "context": "__init__",
+      "source": "UnverifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 703,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "size",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 734,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "reverify_from_start",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 734,
+      "symbol": "UnverifiedNativeEvidencePrefix",
+      "node": "Name",
+      "context": "reverify_from_start",
+      "source": "UnverifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 750,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "_capture_append",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 825,
+      "symbol": "_capture_append",
+      "node": "Attribute",
+      "context": "header",
+      "source": "self._capture_append"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 831,
+      "symbol": "_commit_snapshot",
+      "node": "Attribute",
+      "context": "header",
+      "source": "self._commit_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 839,
+      "symbol": "verify_snapshot",
+      "node": "Attribute",
+      "context": "_commit_snapshot",
+      "source": "self.verify_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 844,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "_commit_snapshot",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 844,
+      "symbol": "VerifiedNativeEvidencePrefix",
+      "node": "Name",
+      "context": "_commit_snapshot",
+      "source": "VerifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 851,
+      "symbol": "verify_snapshot",
+      "node": "Attribute",
+      "context": "rows",
+      "source": "self.verify_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 851,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "rows",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 856,
+      "symbol": "_capture_append",
+      "node": "Attribute",
+      "context": "rows",
+      "source": "self._capture_append"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 860,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "rows",
+      "source": "self.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 860,
+      "symbol": "VerifiedNativeEvidencePrefix",
+      "node": "Name",
+      "context": "rows",
+      "source": "VerifiedNativeEvidencePrefix"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 865,
+      "symbol": "_commit_snapshot",
+      "node": "Attribute",
+      "context": "rows",
+      "source": "self._commit_snapshot"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 1000,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "read_tracked_input_digest",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 1025,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "_verify_context",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 1033,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "_verify_context",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 199,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_binding_wire_root",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 208,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_binding_wire_root",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 210,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_binding_wire_root",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 237,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "expected_prompt_matches_journal",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 133,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_native_user",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 137,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_native_user",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 141,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_native_user",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 54,
+      "symbol": "NativeEvidenceRead",
+      "node": "Name",
+      "context": "covers",
+      "source": "NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 43,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "read_async",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 47,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read_async",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 53,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "_read_owned",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 71,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "_advance_owned",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 76,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "_advance_owned",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 82,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "refresh_async",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 86,
+      "symbol": "_refresh_owned",
+      "node": "Attribute",
+      "context": "refresh_async",
+      "source": "cls._refresh_owned"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 86,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "refresh_async",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 95,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "_refresh_owned",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 111,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "advance",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 122,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "advance",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 122,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "advance",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 122,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "advance",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 123,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "advance",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 128,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "_advance_proven",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 132,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "_advance_proven",
+      "source": "sources.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 132,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "_advance_proven",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 220,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "read",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 250,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 250,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 250,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "read",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 251,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 270,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "_require_source",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 272,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "_require_source",
+      "source": "sources.prefix"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 272,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "_require_source",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 113,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "select",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 129,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "select",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 315,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_verify_live_inclusion",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 323,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_verify_live_inclusion",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 160,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "project_delivery_window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 165,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "project_delivery_window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 182,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "project_delivery_window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 182,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "project_delivery_window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 198,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "recent",
+      "source": "AssignedTranscriptSource.for_thread(root, owner, log).rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 194,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "capture_sources",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 207,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "capture_resources",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 227,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "references",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 231,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "references",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 259,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "addressed_sequences",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 267,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "addressed_sequences",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 281,
+      "symbol": "prefix",
+      "node": "Name",
+      "context": "addressed_page",
+      "source": "prefix"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 281,
+      "symbol": "prefix",
+      "node": "Name",
+      "context": "addressed_page",
+      "source": "prefix"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 284,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "addressed_page",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 295,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "addressed_page",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 305,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "addressed_page",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 329,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "conversation_sources",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 344,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "conversation_sources",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 391,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "indexed_context_resources",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 395,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "indexed_context_resources",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 1074,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "addressed_source_pointers_unlocked",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 1085,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "addressed_source_pointers_unlocked",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 112,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "read",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 122,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 122,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 122,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "read",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 152,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "read",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 200,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "_selected_inputs",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 212,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "_selected_inputs",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 219,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "native_inputs",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 224,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "native_inputs",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 228,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "prefix",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 232,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "prefix",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 232,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "prefix",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 232,
+      "symbol": "NativeEvidenceScope",
+      "node": "Name",
+      "context": "prefix",
+      "source": "NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 242,
+      "symbol": "source_reads",
+      "node": "Name",
+      "context": "prefix",
+      "source": "source_reads"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 206,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "project",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 220,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "project",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/registry_document.py",
+      "line": 117,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "entry_from_wire",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 327,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "ordered",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 328,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "ordered",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 234,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 234,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "window",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 236,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 236,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 237,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "window",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 241,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "page_rows",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 280,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "native_events",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 291,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "native_events",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 309,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "native_events",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 562,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "repair_input_routing",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 565,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "repair_input_routing",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 576,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "repair_input_routing",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 328,
+      "symbol": "prefix",
+      "node": "Name",
+      "context": "publish_checkpoint",
+      "source": "prefix"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 332,
+      "symbol": "prefix",
+      "node": "Name",
+      "context": "publish_checkpoint",
+      "source": "prefix"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 545,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "one",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 546,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "one",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 548,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "one",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 42,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "__init__",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 58,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "replace",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 59,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "replace",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 63,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "replace",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 73,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "replace",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 74,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "replace",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 75,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "replace",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 75,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "replace",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/observation.py",
+      "line": 115,
+      "symbol": "prefix",
+      "node": "Attribute",
+      "context": "capture",
+      "source": "sys.prefix"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 71,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "__init__",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 79,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "observed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 81,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "observed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 83,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "observed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 83,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "observed",
+      "source": "self.rows.rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 83,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "observed",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 85,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "observed",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 85,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "observed",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 88,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "clear",
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 237,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_parse_row",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 245,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_parse_row",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 257,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_parse_row",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 271,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_replay_prefix",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 301,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_replay_prefix",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 304,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "_replay_prefix",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 164,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "public_records_for",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 170,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "public_records_for",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 177,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "public_records_for",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 179,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "public_records_for",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 182,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "public_records_for",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/worker.py",
+      "line": 63,
+      "symbol": "rows",
+      "node": "Attribute",
+      "context": "run_startup_input",
+      "source": "agent.inputs.dispositions.read().rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 54,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "calibration",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 56,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "calibration",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 58,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "calibration",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 59,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "calibration",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 90,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 92,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 98,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 98,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "for_segments",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 135,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "correct",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 136,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "correct",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 60,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "answer",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 62,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "answer",
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 65,
+      "symbol": "rows",
+      "node": "Name",
+      "context": "answer",
+      "source": "rows"
+    }
+  ],
+  "inheritance": [
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 200,
+      "class": "NativeEvidenceRead",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 297,
+      "class": "NativeInputEvidenceRead",
+      "bases": [
+        "NativeEvidenceRead"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 313,
+      "class": "NativeEvidenceScope",
+      "bases": [
+        "ExitStack"
+      ]
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 667,
+      "class": "UnverifiedNativeEvidencePrefix",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 678,
+      "class": "VerifiedNativeEvidencePrefix",
+      "bases": []
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 688,
+      "class": "PrivateEvidenceRead",
+      "bases": []
+    }
+  ],
+  "decisions": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 350,
+      "names": [
+        "rows"
+      ],
+      "source": "len(rows) > 32 or any((size > 4096 for size in sizes)) or sum(sizes) > 65536"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 229,
+      "names": [
+        "rows"
+      ],
+      "source": "True"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 216,
+      "names": [
+        "rows"
+      ],
+      "source": "raw.decisions != rows or raw.decisions_digest != decisions_digest(rows)"
+    },
+    {
+      "path": "src/agent_comms/coordination_tables/annotations.py",
+      "line": 48,
+      "names": [
+        "rows"
+      ],
+      "source": "sorted(rows, key=lambda value: value.id)"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 194,
+      "names": [
+        "source_reads"
+      ],
+      "source": "self.deliveries.values()"
+    },
+    {
+      "path": "src/agent_comms/envelope_claim_transitions.py",
+      "line": 384,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 224,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 277,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 429,
+      "names": [
+        "rows"
+      ],
+      "source": "self.limit.select(rows, len(header), self.boundary.export_started_at, stats)"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 503,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows.items()"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows.items()"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 159,
+      "names": [
+        "rows"
+      ],
+      "source": "current is None or (wait_id is not None and current.wait_id != wait_id)"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 202,
+      "names": [
+        "rows"
+      ],
+      "source": "pending"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 216,
+      "names": [
+        "rows"
+      ],
+      "source": "dependencies"
+    },
+    {
+      "path": "src/agent_comms/goal_waits.py",
+      "line": 257,
+      "names": [
+        "rows"
+      ],
+      "source": "(wait := GoalWaits.for_goal(goal, rows))"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 152,
+      "names": [
+        "rows"
+      ],
+      "source": "any((row is None for _source, row in rows))"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 154,
+      "names": [
+        "rows"
+      ],
+      "source": "len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows)"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 158,
+      "names": [
+        "rows",
+        "source_reads"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 176,
+      "names": [
+        "source_reads"
+      ],
+      "source": "binding is not None"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "reversed(pages)"
+    },
+    {
+      "path": "src/agent_comms/historical_views.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 399,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows.items()"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows.values()"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows.values()"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows.values()"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "changed.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 37,
+      "names": [
+        "rows"
+      ],
+      "source": "any((not row.exists or key != row.key for key, row in self.rows.items()))"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 46,
+      "names": [
+        "rows"
+      ],
+      "source": "originals"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 47,
+      "names": [
+        "rows"
+      ],
+      "source": "row.key not in self.rows"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 165,
+      "names": [
+        "rows"
+      ],
+      "source": "changed is not original and custody is not None"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 190,
+      "names": [
+        "rows"
+      ],
+      "source": "any((document.rows[row.key] is not row for row in originals))"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 277,
+      "names": [
+        "rows"
+      ],
+      "source": "observed"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 278,
+      "names": [
+        "rows"
+      ],
+      "source": "row.key not in keys or (row.key in rows and rows[row.key] != row)"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 281,
+      "names": [
+        "rows"
+      ],
+      "source": "any((key not in rows or rows[key].owner not in owners or (not rows[key].unresolved) for key in keys))"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 452,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 550,
+      "names": [
+        "refresh"
+      ],
+      "source": "self._idle_private_revisions.get(session_id) == before"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 659,
+      "names": [
+        "rows"
+      ],
+      "source": "started_keys"
+    },
+    {
+      "path": "src/agent_comms/mentions.py",
+      "line": null,
+      "names": [
+        "prefix"
+      ],
+      "source": "values"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 342,
+      "names": [
+        "rows"
+      ],
+      "source": "rows is not None"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 343,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 417,
+      "names": [
+        "rows"
+      ],
+      "source": "not rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 131,
+      "names": [
+        "rows"
+      ],
+      "source": "records"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 139,
+      "names": [
+        "rows"
+      ],
+      "source": "window.exceeded"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 273,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 281,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 305,
+      "names": [
+        "rows"
+      ],
+      "source": "enumerate(rows)"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 849,
+      "names": [
+        "prefix",
+        "verify_snapshot"
+      ],
+      "source": "previous_size"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 857,
+      "names": [
+        "VerifiedNativeEvidencePrefix",
+        "prefix"
+      ],
+      "source": "size == previous_size"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 208,
+      "names": [
+        "rows"
+      ],
+      "source": "len(rows) != 1"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 137,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 247,
+      "names": [
+        "NativeEvidenceScope",
+        "source_reads"
+      ],
+      "source": "cursor is not None"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 323,
+      "names": [
+        "rows"
+      ],
+      "source": "rows != [_ParticipantOwner(self.expected_participant_generation, True, owner.name)]"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "result.items()"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 165,
+      "names": [
+        "rows"
+      ],
+      "source": "NotificationAssignment.for_deliveries(sources, rows)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "self.capture_resources(rows)"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 130,
+      "names": [
+        "source_reads"
+      ],
+      "source": "initials"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 149,
+      "names": [
+        "source_reads"
+      ],
+      "source": "type(decision) is NoWakeDecision"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 151,
+      "names": [
+        "source_reads"
+      ],
+      "source": "type(decision) is WakeDecision"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 241,
+      "names": [
+        "source_reads"
+      ],
+      "source": "range(self.page_budget)"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 277,
+      "names": [
+        "rows"
+      ],
+      "source": "entry.final_reply"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 278,
+      "names": [
+        "rows"
+      ],
+      "source": "routing is not None and routing.publications"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 289,
+      "names": [
+        "rows"
+      ],
+      "source": "not published and references"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 301,
+      "names": [
+        "rows"
+      ],
+      "source": "events"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 306,
+      "names": [
+        "rows"
+      ],
+      "source": "isinstance(event, UserTranscript) and event.routed"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 576,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 302,
+      "names": [
+        "prefix"
+      ],
+      "source": "self.result is not None and self.result.ok"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 327,
+      "names": [
+        "prefix"
+      ],
+      "source": "notice_targets"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 546,
+      "names": [
+        "rows"
+      ],
+      "source": "len(rows) > 1"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 59,
+      "names": [
+        "rows"
+      ],
+      "source": "previous.keys() - rows.keys()"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 63,
+      "names": [
+        "rows"
+      ],
+      "source": "rows.items()"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 73,
+      "names": [
+        "rows"
+      ],
+      "source": "tuple(previous) != tuple(rows)"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 238,
+      "names": [
+        "rows"
+      ],
+      "source": "verified.deliveries()"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 240,
+      "names": [
+        "rows"
+      ],
+      "source": "zip(initial.audience.recipients, initial.decisions, strict=True)"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 276,
+      "names": [
+        "rows"
+      ],
+      "source": "range(max_rows)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 169,
+      "names": [
+        "rows"
+      ],
+      "source": "saved is not None and saved.covers(self.stream, self.revision)"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 179,
+      "names": [
+        "rows"
+      ],
+      "source": "rows is not None"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "grouped.values()"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": null,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 52,
+      "names": [
+        "rows"
+      ],
+      "source": "originals"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 58,
+      "names": [
+        "rows"
+      ],
+      "source": "captured"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 92,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 136,
+      "names": [
+        "rows"
+      ],
+      "source": "original not in (row.label for row in rows)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 62,
+      "names": [
+        "rows"
+      ],
+      "source": "rows"
+    }
+  ],
+  "writes": [
+    {
+      "path": "src/agent_comms/acp_extension.py",
+      "line": 345,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = items + previous"
+    },
+    {
+      "path": "src/agent_comms/assignment_store.py",
+      "line": 32,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = WakeAssignment.read(db.execute('SELECT * FROM wake_claims WHERE assignment_id=? OR (recipient_lookup=? AND wire_seq=?) LIMIT 1', (assignment.assignment_id, assignment.recipient_lookup, assignment.wire_seq)))"
+    },
+    {
+      "path": "src/agent_comms/bus_page_index.py",
+      "line": 228,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = iter(BusPageRow.iterate(self.connection.execute(query, params)))"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 215,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = decisions_wire(decisions)"
+    },
+    {
+      "path": "src/agent_comms/bus_publication.py",
+      "line": 269,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = decisions_wire(decisions)"
+    },
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 51,
+      "names": [
+        "source_reads"
+      ],
+      "source": "source_reads: NativeEvidenceScope = field(default_factory=NativeEvidenceScope, repr=False)"
+    },
+    {
+      "path": "src/agent_comms/exporting.py",
+      "line": 428,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = self._rows(envelopes, stats)"
+    },
+    {
+      "path": "src/agent_comms/goal_attempts.py",
+      "line": 496,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = GoalProviderUsage.select(conn, where=f'attempt_id IN (SELECT attempt_id FROM {AttemptRecord.declared_name} WHERE goal_id=?)', parameters=(goal_id,))"
+    },
+    {
+      "path": "src/agent_comms/goal_history.py",
+      "line": 91,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = tuple(GoalHistoryEntry.select(connection, order_by=('sequence',)))"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 77,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = InputDispositions(self.root / InputDispositions.filename).read().unknown(self.registry.aliases_for(name))"
+    },
+    {
+      "path": "src/agent_comms/goal_management.py",
+      "line": 206,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = waits.read()"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 149,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = [(source, NativeRuntimeInput.one(db, input_id=source.input_id)) for source in sources]"
+    },
+    {
+      "path": "src/agent_comms/importing.py",
+      "line": 392,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = OpenCodeMessage.iterate(db.execute('SELECT id,data FROM message WHERE session_id=? ORDER BY time_created,id', (session_id,)))"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 33,
+      "names": [
+        "rows"
+      ],
+      "source": "rows: dict[str, StoredInput] = field(default_factory=dict, metadata={'wire_required': True})"
+    },
+    {
+      "path": "src/agent_comms/input_disposition.py",
+      "line": 276,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = dict(document.rows)"
+    },
+    {
+      "path": "src/agent_comms/input_drain.py",
+      "line": 446,
+      "names": [
+        "rows"
+      ],
+      "source": "marker, rows = await Coordination.run_worker(partial(self._addressed_rows_for_owner, stable_thread_lookup(entry.thread.created_at)))"
+    },
+    {
+      "path": "src/agent_comms/mentions.py",
+      "line": 38,
+      "names": [
+        "prefix"
+      ],
+      "source": "prefix: str"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 336,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = self._from_route_index(source, snapshot, deliveries, lambda index, requests: index.unseen_counts(requests, [ActorSeen(actor, sequences) for actor, sequences in seen.items()]))"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 410,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = addressed_source_pointers_unlocked(self.log, marker, stable_thread_lookup(owner.created_at))"
+    },
+    {
+      "path": "src/agent_comms/message_bus.py",
+      "line": 424,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = tuple(sorted(rows, key=lambda row: row.sender_lookup not in first))"
+    },
+    {
+      "path": "src/agent_comms/message_page.py",
+      "line": 193,
+      "names": [
+        "rows"
+      ],
+      "source": "rows: deque[tuple[Message, int]] = field(default_factory=deque)"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 278,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = cls.read(db.execute(f'SELECT {cls._column_list(cls.columns())} FROM {cls.declared_name} WHERE {where} ORDER BY request_generation DESC LIMIT 1', parameters))"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 699,
+      "names": [
+        "prefix"
+      ],
+      "source": "self.prefix = UnverifiedNativeEvidencePrefix()"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 734,
+      "names": [
+        "prefix"
+      ],
+      "source": "self.prefix = UnverifiedNativeEvidencePrefix()"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 844,
+      "names": [
+        "prefix"
+      ],
+      "source": "self.prefix = VerifiedNativeEvidencePrefix(size, digest)"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 860,
+      "names": [
+        "prefix"
+      ],
+      "source": "self.prefix = VerifiedNativeEvidencePrefix(size, digest)"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 199,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = _BindingRoot.read(store.session._connection.execute('SELECT r.wire_root_id FROM claim_batch_members m JOIN claim_batch_receipts r ON r.wire_root_id=m.wire_root_id AND r.wire_seq=m.wire_seq AND r.message_id=? AND r.sealed=1 WHERE m.claim_id=? AND m.recipient_lookup=?', (assignment.message_id, assignment.assignment_id, assignment.recipient_lookup)))"
+    },
+    {
+      "path": "src/agent_comms/native_runtime_input.py",
+      "line": 133,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = cls.select(db, where='input_id=? AND session_file=? AND session_id=?', parameters=(user.input_id, str(reader.path), session_id))"
+    },
+    {
+      "path": "src/agent_comms/notification_assignment.py",
+      "line": 113,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = WakeAssignment.joined(connection.execute(f\"SELECT {columns}, EXISTS (SELECT 1 FROM {NativeRuntimeInput.declared_name} n JOIN ({NativeRuntimeInput.source_membership_sql()}) member ON member.input_id=n.input_id WHERE member.assignment_id=w.assignment_id AND n.stage='triage' AND n.session_entry_id IS NULL) AS triage_inflight, c.execution_id AS current_execution_id FROM {WakeAssignment.declared_name} w LEFT JOIN {CurrentExecutions.declared_name} c ON c.owner_lookup=w.recipient_lookup WHERE {predicate} ORDER BY w.wire_seq {('ASC' if ascending else 'DESC')},w.recipient\" + (' LIMIT ?' if limit else ''), (*parameters, limit) if limit else parameters), AssignmentActivity)"
+    },
+    {
+      "path": "src/agent_comms/optional_awareness_projection.py",
+      "line": 315,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = _ParticipantOwner.read(db.execute('SELECT g.generation,p.committed,g.owner_thread FROM owner_generations g JOIN participants p ON p.participant_lookup=g.owner_lookup WHERE g.owner_lookup=?', (lookup,)))"
+    },
+    {
+      "path": "src/agent_comms/presentation.py",
+      "line": 160,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = NotificationAssignment.select(root, f'w.wire_seq IN ({placeholders})', tuple((key[0] for key in keys)))"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 227,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = DeliverySources.select(self.connection, where=f'seq IN ({marks})', parameters=tuple((ref.seq for ref in references)))"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 259,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = self.connection.execute(f'SELECT a.seq FROM {Addressed.declared_name} a WHERE a.lookup=? AND a.seq>? AND a.seq<=? ORDER BY a.seq', (lookup, after_seq, self.witness.through_seq)).fetchall()"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 284,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = DeliverySources.read(db.execute(f\"SELECT {','.join(('i.' + column for column in DeliverySources.columns()))} FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq WHERE a.lookup=? AND i.seq>? AND i.seq<=? ORDER BY i.seq LIMIT ?\", (request.lookup, request.after_seq, window.through_seq, request.limit + 1)))"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 329,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = DeliverySources.read(db.execute(f\"SELECT w.* FROM {DeliverySources.declared_name} w JOIN (SELECT seq FROM (SELECT w.seq FROM {DeliverySources.declared_name} w WHERE w.sender_lookup=? AND ({predicate}) ORDER BY w.seq {('ASC' if ascending else 'DESC')} LIMIT ?) UNION SELECT seq FROM (SELECT a.seq FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} w ON w.seq=a.seq WHERE a.lookup=? AND ({predicate}) ORDER BY a.seq {('ASC' if ascending else 'DESC')} LIMIT ?)) membership ON membership.seq=w.seq ORDER BY w.seq {('ASC' if ascending else 'DESC')} LIMIT ?\", (lookup, *parameters, limit, lookup, *parameters, limit, limit)))"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 391,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = tuple(ContextManifestSources.select(self.connection, where='thread IN (' + ','.join(('?' for _ in parameters)) + ')', parameters=parameters, order_by=('offset',)))"
+    },
+    {
+      "path": "src/agent_comms/private_bus_checkpoint.py",
+      "line": 1074,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = DeliverySources.read(db.execute(f\"SELECT {','.join(('i.' + column for column in DeliverySources.columns()))} FROM {Addressed.declared_name} a JOIN {DeliverySources.declared_name} i ON i.seq=a.seq WHERE a.lookup=? AND i.seq>? ORDER BY i.seq DESC LIMIT ?\", (lookup, marker.admission_after_seq, limit)))"
+    },
+    {
+      "path": "src/agent_comms/recovery_projection.py",
+      "line": 206,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = cls.read(connection.execute('SELECT e.execution_id, e.origin, e.status, e.current_attempt_ordinal, a.attempt_ordinal, a.phase, a.lease_expires_at_ms, a.backend_done, a.process_dead, (SELECT authorized FROM retry_disposition_basis b WHERE b.execution_id = e.execution_id) AS retry_authorized FROM executions e LEFT JOIN attempts a ON a.execution_id = e.execution_id AND a.attempt_ordinal = e.current_attempt_ordinal AND a.owner_lookup = e.owner_lookup WHERE e.owner_lookup = ? ORDER BY (e.execution_id = ?) DESC, e.updated_at_ms DESC, e.execution_id ASC LIMIT 1', (owner_lookup, pointer.execution_id)))"
+    },
+    {
+      "path": "src/agent_comms/relationships.py",
+      "line": 327,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = tuple((saved for saved in self.orders if saved.identity != row.identity))"
+    },
+    {
+      "path": "src/agent_comms/transcript_receipts.py",
+      "line": 234,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = self.rows(limit=limit)"
+    },
+    {
+      "path": "src/agent_comms/transcripts.py",
+      "line": 562,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = InputDispositions(self.root / InputDispositions.filename).read().bound_bus_inputs()"
+    },
+    {
+      "path": "src/agent_comms/turn_progress.py",
+      "line": 328,
+      "names": [
+        "prefix"
+      ],
+      "source": "prefix = 'Request failed' if target in self.reply_targets else 'Delivery failed'"
+    },
+    {
+      "path": "src/agent_comms/typed_table.py",
+      "line": 545,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = cls.select(db, **key)"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 42,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows: dict[Key, Row] = {}"
+    },
+    {
+      "path": "src/agent_comms/ui_model/changes.py",
+      "line": 75,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows = dict(rows)"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 71,
+      "names": [
+        "rows"
+      ],
+      "source": "self.rows: KeyedModel[str, ThreadStatusModel] = KeyedModel(schedule)"
+    },
+    {
+      "path": "src/agent_comms/ui_model/status.py",
+      "line": 79,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = {name: ThreadStatusModel.known(name, presentation) for name, presentation in result.presentations.items()}"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 237,
+      "names": [
+        "rows"
+      ],
+      "source": "rows: list[Candidate] = []"
+    },
+    {
+      "path": "src/agent_comms/wake_candidate_index.py",
+      "line": 271,
+      "names": [
+        "rows"
+      ],
+      "source": "rows: list[Candidate] = []"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 164,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = None"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 170,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = tuple((row for seq in sorted(sequences) for row in index.offsets(lower=seq - 1, upper=seq + 1, descending=False, targets=None, before_offset=before_offset)))"
+    },
+    {
+      "path": "src/agent_comms/wire_log.py",
+      "line": 177,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = None"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 54,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = SpanAnnotationsRow.select(db, order_by=('id',), **cls.address(original.span, question, classifier))"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 90,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = SpanAnnotationsRow.for_digests(db, tuple(originals), classifier)"
+    },
+    {
+      "path": "src/agent_comms/working_memory_annotations.py",
+      "line": 135,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = tuple(SpanAnnotationsRow.select(db, **key))"
+    },
+    {
+      "path": "src/agent_comms/working_memory_worker.py",
+      "line": 60,
+      "names": [
+        "rows"
+      ],
+      "source": "rows = await Coordination.run_worker(partial(WorkingMemoryAnnotations.labels, self.comms.root / 'coordination.sqlite3', span, version, grant.classifier))"
+    }
+  ],
+  "imports": [
+    {
+      "path": "src/agent_comms/cursor_publication.py",
+      "line": 31,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 34,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/historical_native_inputs.py",
+      "line": 117,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_entries.py",
+      "line": 221,
+      "source": "from .native_pi import PrivateEvidenceRead, _private_session_dir"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 34,
+      "source": "from .native_entries import NativeEntry, NativeEvidenceRead, SessionEntry"
+    },
+    {
+      "path": "src/agent_comms/native_pi.py",
+      "line": 1027,
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_prompt_binding.py",
+      "line": 31,
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_session_reopen.py",
+      "line": 17,
+      "source": "from .native_entries import NativeEvidenceRead"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 29,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 113,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/native_source_cursor.py",
+      "line": 248,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 37,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 120,
+      "source": "from .native_entries import NativeEvidenceScope"
+    },
+    {
+      "path": "src/agent_comms/proven_source_coverage.py",
+      "line": 230,
+      "source": "from .native_entries import NativeEvidenceScope"
+    }
+  ]
+}

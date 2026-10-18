@@ -1,0 +1,53 @@
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:49:    is True for a layer entered with ``mask_with_none``: a ``None`` in it is final,
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:101:def _merge_nested_dataclass(base, override, mask_with_none: bool = False):
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:106:    - If value is None and mask_with_none=False: skip (don't override base)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:107:    - If value is None and mask_with_none=True: override with None (mask base)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:114:        mask_with_none: If True, None values override base values
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:140:            if mask_with_none:
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:150:                merge_values[field_name] = _merge_nested_dataclass(base_value, override_value, mask_with_none)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:168:    mask_with_none: bool = False,
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:182:        mask_with_none: If True, None values override/mask base config values, and
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:227:                    # CRITICAL: When mask_with_none=True, None values override base config
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:229:                    if value is not None or mask_with_none:
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:231:                        if mask_with_none:
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:232:                            # For nested dataclasses, merge with mask_with_none=True
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:236:                                    merged_nested = _merge_nested_dataclass(base_value, value, mask_with_none=True)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:262:                                        merged_nested = _merge_nested_dataclass(base_value, value, mask_with_none=False)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:294:        current_stack.with_layer(ContextLayer(scope_id, obj, mask_with_none))
+/home/ts/wt/objectstate-declared-fields/src/objectstate/context_manager.py:619:            config_context(obj, mask_with_none=mask, use_live_global=use_live, scope_id=scope_id)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/__init__.py:62:    patch_lazy_constructors,
+/home/ts/wt/objectstate-declared-fields/src/objectstate/__init__.py:155:    'patch_lazy_constructors',
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:129:def rebuild_with_none_defaults(
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:137:    This is the UNIFIED approach for both base classes (inherit_as_none) and lazy classes.
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:888:        # Exception: InheritAsNoneMeta is safe to inherit from as it only modifies field defaults
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1006:def patch_lazy_constructors(types: Optional[List[Type]] = None):
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1025:        with patch_lazy_constructors():
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1034:        with patch_lazy_constructors():
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1369:    def global_default_decorator(cls=None, *, optional: bool = False, inherit_as_none: bool = True, ui_hidden: bool = False, preview_label: Optional[str] = None, abbreviation: Optional[str] = None, field_abbreviations: Optional[Dict[str, str]] = None, always_viewable_fields: Optional[List[str]] = None):
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1376:            inherit_as_none: Whether to set all inherited fields to None by default (default: True)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1390:            if inherit_as_none:
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1395:                    actual_cls = rebuild_with_none_defaults(actual_cls, inherited_fields)
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1446:                    'inherit_as_none': inherit_as_none,  # Store the inherit_as_none flag
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1479:            # - Base class: rebuilt via rebuild_with_none_defaults() above
+/home/ts/wt/objectstate-declared-fields/src/objectstate/lazy_factory.py:1521:        """Create field definition with optional and inherit_as_none support."""
+/home/ts/code/projects/openhcs/external/formbridge/src/formbridge/services/function_pattern_code_document.py:20:    patch_lazy_constructors,
+/home/ts/code/projects/openhcs/external/formbridge/src/formbridge/services/function_pattern_code_document.py:339:        with patch_lazy_constructors():
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/windows/config_window.py:22:    patch_lazy_constructors,
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/windows/config_window.py:285:        with patch_lazy_constructors():
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/widgets/shared/abstract_manager_widget.py:37:from objectstate import DottedFieldPath, ObjectStateRegistry, patch_lazy_constructors
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/widgets/shared/abstract_manager_widget.py:255:            patch_lazy_constructors=patch_lazy_constructors,
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/widgets/shared/manager_action_controller.py:54:    patch_lazy_constructors: Callable[[], AbstractContextManager[Any]]
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/widgets/shared/manager_action_controller.py:174:            with operations.patch_lazy_constructors():
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/widgets/function_list_editor.py:1182:    def _patch_lazy_constructors(self):
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/widgets/function_list_editor.py:1184:        from objectstate import patch_lazy_constructors
+/home/ts/code/projects/openhcs/external/pyqt-reactive/src/pyqt_reactive/widgets/function_list_editor.py:1186:        return patch_lazy_constructors()
+/home/ts/code/projects/openhcs/openhcs/pyqt_gui/services/function_step_code_document.py:15:from objectstate import patch_lazy_constructors
+/home/ts/code/projects/openhcs/openhcs/pyqt_gui/services/function_step_code_document.py:60:        with patch_lazy_constructors():
+/home/ts/code/projects/openhcs/openhcs/core/config.py:387:NapariDisplayConfig = global_pipeline_config(ui_hidden=True, inherit_as_none=False)(NapariDisplayConfig)
+/home/ts/code/projects/openhcs/openhcs/core/config.py:416:FijiDisplayConfig = global_pipeline_config(ui_hidden=True, inherit_as_none=False)(FijiDisplayConfig)
+/home/ts/code/projects/openhcs/openhcs/core/config.py:477:    inherit_as_none=False,
+/home/ts/code/projects/openhcs/openhcs/core/config.py:495:    inherit_as_none=False,
+/home/ts/code/projects/openhcs/openhcs/core/config.py:606:    inherit_as_none=False,
+/home/ts/code/projects/openhcs/openhcs/core/config.py:1242:    by @global_pipeline_config(inherit_as_none=True), enabling polymorphic access without
+/home/ts/code/projects/openhcs/openhcs/core/config.py:1392:    inherit_as_none=False,
+/home/ts/code/projects/openhcs/openhcs/pyqt_gui/services/ui_agent_bridge.py:512:        with operations.patch_lazy_constructors():

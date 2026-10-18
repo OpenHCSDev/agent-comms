@@ -1,0 +1,96 @@
+{
+  "threads": {
+    "project": {
+      "name": "project",
+      "tags": [
+        "acp"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/goal-physical-20261013/physical-20261013-191/native/project",
+      "created_at": 1791915980.9987357,
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/goal-physical-20261013/physical-20261013-191/native/sessions/enrolled-dfe97cde462946efae14a7e530c7eb57.jsonl",
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 2091831,
+        "start_time": 139161811
+      },
+      "model": "response-local/fixture",
+      "thinking_level": "off",
+      "goal": {
+        "text": "Model-authored retry objective",
+        "id": "d91e612930494d88be0e9d8c49b62bdc",
+        "progress": "Need an explicit user Retry decision",
+        "revision": 2,
+        "reported_turn": "1f49366438bb43549357eb3101d5176b",
+        "mention_source": {
+          "goal_id": "d91e612930494d88be0e9d8c49b62bdc",
+          "text_revision": 1,
+          "text_digest": "1e6c3204f2299ddd1ceff04eb3e988a92cf122423ea9c4da9fb7367809fb77c3",
+          "owner_name": "project",
+          "owner_created_at": 1791915980.9987357,
+          "bindings": []
+        },
+        "state": {
+          "kind": "blocked",
+          "block_reason": "Need an explicit user Retry decision"
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 1,
+      "last_finished_turn_id": "1f49366438bb43549357eb3101d5176b"
+    },
+    "user": {
+      "name": "user",
+      "tags": [],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/goal-physical-20261013/physical-20261013-191/native/project",
+      "created_at": 1791915987.408467,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "goal": null,
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "user",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "project": {
+      "kind": "running"
+    },
+    "user": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "project": 1791915992.2898781,
+    "user": 1791915987.408678
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 3,
+    "generations": {
+      "project": 2,
+      "user": 3
+    }
+  },
+  "admissions": {
+    "counter": 3,
+    "generations": {
+      "project": 2,
+      "user": 3
+    }
+  }
+}

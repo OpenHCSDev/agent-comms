@@ -1,0 +1,72 @@
+SUMMARY
+  string_dispatch           1  
+  isinstance_switch         5  
+  raw_shape                26  (bypassing an existing class: 8; hand-mapped into one: 0)
+  exact_key_set             5  
+  named_attribute          30  (most probed: O_NOFOLLOW x4, SO_PEERCRED x4, getpeereid x3, pidfd_open x2, pidfd_send_signal x2, type x1)
+  long_condition            1  (leads by dominant term: IMPL-14 1)
+  god_class                 4  
+  god_function             10  
+  legacy_marker             4  
+  positional_insert         0  
+  column_insert             0  
+  embedded_script           1  
+  child_process_site        5  
+  literal_roster            1  
+  dead_module               8  
+
+STRING DISPATCH: one subject compared against several string literals
+    3  src/agent_comms/todos.py::_repo  on piece  ['', '.', '..']
+
+ISINSTANCE SWITCHES: several type checks on one subject
+    7  src/agent_comms/field_codec.py::encode  on value
+    5  src/agent_comms/field_codec.py::_decode  on data
+    3  src/agent_comms/field_codec.py::value_schema  on annotation
+    3  src/agent_comms/field_codec.py::_decode  on target
+    3  src/agent_comms/shared_ledger.py::remove_threads  on value
+
+RAW SHAPES: one subject read by several string keys
+    6  src/agent_comms/cli_commands.py::add_parser  metadata  ['flags', 'group', 'parser_default', 'parser_default_factory', 'parser_options', 'wire_name']  -> unmodeled
+    6  src/agent_comms/registry_document.py::entry_from_wire  raw  ['admissions', 'aliases', 'last_seen', 'owners', 'statuses', 'threads']  -> MATCHES src/agent_comms/registry_document.py::RegistryDocument: a bypass, unless the data is copied into it elsewhere
+    5  src/agent_comms/goal_presentation.py::from_wire  data  ['block_reason', 'goal_id', 'inactive_wait_for', 'state', 'wait_for']  -> MATCHES src/agent_comms/goal_presentation.py::GoalExecution: a bypass, unless the data is copied into it elsewhere
+    5  src/agent_comms/ui_model/delivery.py::from_wire  overview  ['currentScope', 'dismissedHistoricalCount', 'historicalCount', 'historicalInputs', 'inputs']  -> unmodeled
+    4  src/agent_comms/channel_coding_tools.py::decode_request  value  ['arguments', 'call_id', 'name', 'token']  -> unmodeled
+    4  src/agent_comms/cli_commands.py::add_parser  options  ['choices', 'default', 'dest', 'required']  -> unmodeled
+    4  src/agent_comms/goal_attempts.py::for_goal  usage  ['cost', 'input', 'output', 'totalTokens']  -> MATCHES src/agent_comms/pi_payloads.py::PiUsage: a bypass, unless the data is copied into it elsewhere
+    4  src/agent_comms/image_inputs.py::prompt_images  block  ['data', 'mimeType', 'resource', 'type']  -> unmodeled
+    4  src/agent_comms/import_records.py::capture  state  ['error', 'input', 'output', 'status']  -> unmodeled
+    4  src/agent_comms/import_records.py::capture  wire  ['arguments', 'call_id', 'input', 'name']  -> unmodeled
+
+LONG CONDITIONS: syntactic ownership leads, verify before choosing a target
+    6 terms  src/agent_comms/input_drain.py:311  [rule 4, flag 1, predicate 1] -> lead: IMPL-14
+
+GOD CLASSES (over 500 lines)
+    629  src/agent_comms/input_drain.py::InputDrain
+    607  src/agent_comms/wire_log.py::WireLog
+    557  src/agent_comms/thread_management.py::ThreadManagement
+    506  src/agent_comms/publisher.py::Publisher
+
+GOD FUNCTIONS (over 100 lines)
+    206  src/agent_comms/publisher.py::publish_initial_cohort
+    140  src/agent_comms/relationships.py::snapshot
+    137  src/agent_comms/recovery_projection.py::project
+    132  src/agent_comms/thread_management.py::_rename_thread_unlocked
+    116  src/agent_comms/cohort_foreground.py::run_foreground_once
+    108  src/agent_comms/historical_native_inputs.py::read_historical_native_inputs
+    107  src/agent_comms/historical_views.py::attach
+    105  src/agent_comms/cohort_schema.py::triggers
+    103  src/agent_comms/field_codec.py::_decode
+    101  src/agent_comms/fresh_private_session.py::create_fresh_private_session
+
+LITERAL ROSTERS: one set of string literals written in several places
+    2x  ['X', 'Z']
+
+DEAD MODULES: imported by nothing in the package
+    192  src/agent_comms/acp_ingress.py
+     74  src/agent_comms/cohort_send.py
+     12  src/agent_comms/context_segments/response.py  named in a string: check it is not launched by name
+     29  src/agent_comms/delivery_failure.py
+    428  src/agent_comms/recovery_gateway.py  named in a string: check it is not launched by name
+    135  src/agent_comms/recovery_gateway_client.py
+    562  src/agent_comms/todos.py
+     88  src/agent_comms/ui_model/status.py  named in a string: check it is not launched by name

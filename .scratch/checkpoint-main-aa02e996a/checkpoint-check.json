@@ -1,0 +1,9 @@
+{
+  "merged_main": "aa02e996a",
+  "installed_cli_check": true,
+  "nested_nonrepo": "refused",
+  "ancestor_unchanged_on_refusal": true,
+  "real_repo": "pushed",
+  "repeat": "clean",
+  "only_local_git_remote": true
+}

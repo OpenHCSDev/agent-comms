@@ -1,0 +1,14 @@
+{
+  "messages": [
+    {
+      "seq": 1,
+      "id": "86a52f8f2d16",
+      "from": "sender",
+      "to": "recipient",
+      "ts": 1792192067.3461952,
+      "type": "info",
+      "text": "P71_INSTALLED_CLI_DM",
+      "sender_role": "agent"
+    }
+  ]
+}

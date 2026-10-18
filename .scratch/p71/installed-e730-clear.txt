@@ -1,0 +1,3 @@
+Installed Core: /home/ts/.local/share/agent-comms/runtimes/toad-16de888e2-core-e730922ce-native-70f0512abbcfa4e0-20261017T014032Z/lib/python3.14/site-packages/agent_comms/__init__.py
+.                                                                        [100%]
+1 passed in 13.34s

@@ -1,0 +1,120 @@
+Installed Core: /home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-53898dc05-native-70f0512abbcfa4e0-20261016T223529Z/lib/python3.14/site-packages/agent_comms/__init__.py
+============================= test session starts ==============================
+platform linux -- Python 3.14.2, pytest-9.1.1, pluggy-1.6.0
+rootdir: /home/ts/wt/core-doctrine-segment
+configfile: pyproject.toml
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collected 1 item
+
+tests/test_clear_queue_native.py F{"saved_native_fixture": "/home/ts/.cache/agent-scratch/p71-tests/candidate-held-3/saved-native-owner0/wire", "localhost_posts": 1, "native_input_proofs": 1, "children": [{"pid": 1209868, "start_time": 166729721}], "children_retired": true}
+
+
+=================================== FAILURES ===================================
+_______ test_clear_queued_user_keeps_bus_input_for_the_next_native_call ________
+
+native_backend = <native_backend_fixture.NativeBackendFixture object at 0x7f09f18acec0>
+
+    async def test_clear_queued_user_keeps_bus_input_for_the_next_native_call(native_backend):
+        native = native_backend
+        await native.author_history()
+        saved = native.session.read_bytes()
+        gate = asyncio.Event()
+        native.provider.response_gate = gate
+        async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
+            comms = agent._comms
+            owner = comms.registry.require(session)
+    
+            def declare_sender():
+                comms.registry.declare(Thread("sender", frozenset(), str(native.project)))
+                with Coordination(str(native.root / "coordination.sqlite3")) as store:
+                    install_private_cohort_schema(store)
+                    store.participants.register(owner.incarnation.lookup, session, session, committed=True)
+    
+            await Coordination.run_worker(declare_sender)
+            wire = Comms(native.root, private_initial_writes=True)
+            try:
+                await Coordination.run_worker(partial(
+                    wire.messaging.send_message, "sender", session, "P71_SELECTED_ORIGINAL",
+                ))
+                await wait_for(lambda: native.provider.posts == 1)
+                wake = agent.inputs.wake_tasks[session]
+                backend = agent.turns.persistent_backends[session]
+>               forwarding = next(turn.inputs for turn in TurnSession.active.values()
+                                  if turn.native_session is backend.custody)
+E                                 StopIteration
+
+tests/test_clear_queue_native.py:46: StopIteration
+
+The above exception was the direct cause of the following exception:
+
+self = <Coroutine test_clear_queued_user_keeps_bus_input_for_the_next_native_call>
+
+    def runtest(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        runner = self._request.getfixturevalue(runner_fixture_id)
+        context = contextvars.copy_context()
+        synchronized_obj = _synchronize_coroutine(
+            getattr(*self._synchronization_target_attr), runner, context
+        )
+        with MonkeyPatch.context() as c:
+            c.setattr(*self._synchronization_target_attr, synchronized_obj)
+>           super().runtest()
+
+.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:569: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:905: in inner
+    runner.run(coro, context=context)
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <_UnixSelectorEventLoop running=False closed=False debug=False>
+future = <Task finished name='Task-3' coro=<test_clear_queued_user_keeps_bus_input_for_the_next_native_call() done, defined at ...wt/core-doctrine-segment/tests/test_clear_queue_native.py:21> exception=RuntimeError('coroutine raised StopIteration')>
+
+    def run_until_complete(self, future):
+        """Run until the Future is done.
+    
+        If the argument is a coroutine, it is wrapped in a Task.
+    
+        WARNING: It would be disastrous to call run_until_complete()
+        with the same coroutine twice -- it would wrap it in two
+        different Tasks and that can't be good.
+    
+        Return the Future's result, or raise its exception.
+        """
+        self._check_closed()
+        self._check_running()
+    
+        new_task = not futures.isfuture(future)
+        future = tasks.ensure_future(future, loop=self)
+        if new_task:
+            # An exception is raised if the future didn't complete, so there
+            # is no need to log the "destroy pending task" message
+            future._log_destroy_pending = False
+    
+        future.add_done_callback(_run_until_complete_cb)
+        try:
+            self.run_forever()
+        except:
+            if new_task and future.done() and not future.cancelled():
+                # The coroutine raised a BaseException. Consume the exception
+                # to not log a warning, the caller doesn't have access to the
+                # local task.
+                future.exception()
+            raise
+        finally:
+            future.remove_done_callback(_run_until_complete_cb)
+        if not future.done():
+            raise RuntimeError('Event loop stopped before Future completed.')
+    
+>       return future.result()
+               ^^^^^^^^^^^^^^^
+E       RuntimeError: coroutine raised StopIteration
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: RuntimeError
+------------------------------ Captured log call -------------------------------
+WARNING  agent_comms.context_segments.optional_awareness:optional_awareness.py:145 Optional awareness omitted (ProjectionUnavailableError); the original is delivered alone and no read is implied.
+=========================== short test summary info ============================
+FAILED tests/test_clear_queue_native.py::test_clear_queued_user_keeps_bus_input_for_the_next_native_call
+============================== 1 failed in 13.30s ==============================

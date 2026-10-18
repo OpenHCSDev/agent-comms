@@ -1,0 +1,19 @@
+--- /home/ts/.cache/agent-scratch/cutover-814/native-cutover.sh	2026-10-14 00:29:54.227144897 -0400
++++ /home/ts/.cache/agent-scratch/cutover-824/native-cutover.sh	2026-10-14 01:16:21.089395329 -0400
+@@ -3,12 +3,12 @@
+ set -euo pipefail
+ umask 077
+ 
+-CORE_HEAD=28b954c944317134ef9b0696ff01f990dbb3cc39
+-EXPECTED_PIN=8d58a2d9141404e9d1a00e49726277ee0057e8bee2d87e886ab0b5e78c5ee40c
++CORE_HEAD=fed95482d777d3d318f3ea53373b4221832d1714
++EXPECTED_PIN=4d41264a06dbe33652e78551a592e1387186885c478fe5be07cc09610c002616
+ ROOT=/var/tmp/agent-comms-live-20260927-wzjtqhza
+ ROOT_ID=e206f3766e60451a989ca34df0e2a94b
+-OLD_PACKAGE=/home/ts/.local/share/agent-comms/native-current-84d389a90e2228d6/node_modules/@earendil-works/pi-coding-agent
+-NEW_PACKAGE=/home/ts/.local/share/agent-comms/native-current-8d58a2d9141404e9/node_modules/@earendil-works/pi-coding-agent
++OLD_PACKAGE=/home/ts/.local/share/agent-comms/native-current-8d58a2d9141404e9/node_modules/@earendil-works/pi-coding-agent
++NEW_PACKAGE=/home/ts/.local/share/agent-comms/native-current-4d41264a06dbe336/node_modules/@earendil-works/pi-coding-agent
+ ROUTE_DIR=/home/ts/.local/state/agent-comms
+ ROUTE_PATH="$ROUTE_DIR/active-route.json"
+ START_ENV=/home/ts/.cache/agent-scratch/live-build/start-env

@@ -1,0 +1,208 @@
+{
+  "identity": "goal-unknown-revisit-v1",
+  "rounds": [
+    {
+      "identity": "r1",
+      "history": [
+        "User goal event goal-u1: Work on goal repair-alpha; current ticket is ticket-17, revision ticket@r1.",
+        "Constraint event goal-c1: Input input-9 has UNKNOWN disposition. Never replay it or resume a blocked goal from a DM.",
+        "Decision event goal-d1: Choose isolate-evidence. Opening a new ticket is a valid rejected alternative named open-new-ticket.",
+        "Action event goal-a1: Current approved next action is inspect-original-proof.",
+        "Tool call goal-t1: read original proof. Tool result goal-t1: original uncertainty remains unresolved.",
+        "Assistant observation goal-o1: Proof inspection ended; repair-alpha remains unfinished and blocked pending explicit disposition."
+      ],
+      "questions": [
+        {
+          "identity": "goal",
+          "prompt": "What is the current goal identity?",
+          "expected": "repair-alpha",
+          "evidence_ref": "goal-u1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "ticket",
+          "prompt": "What is the exact current ticket?",
+          "expected": "ticket-17",
+          "evidence_ref": "goal-u1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "revision",
+          "prompt": "What is the exact current ticket revision?",
+          "expected": "ticket@r1",
+          "evidence_ref": "goal-u1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "replay",
+          "prompt": "May you replay input-9? Answer yes or no.",
+          "expected": "no",
+          "evidence_ref": "goal-c1",
+          "obsolete": [],
+          "measurement": "prohibition"
+        },
+        {
+          "identity": "alternative",
+          "prompt": "Name the exact currently valid rejected alternative.",
+          "expected": "open-new-ticket",
+          "evidence_ref": "goal-d1",
+          "obsolete": [],
+          "measurement": "alternative"
+        },
+        {
+          "identity": "action",
+          "prompt": "What is the exact approved next action?",
+          "expected": "inspect-original-proof",
+          "evidence_ref": "goal-a1",
+          "obsolete": [],
+          "measurement": "action"
+        }
+      ]
+    },
+    {
+      "identity": "r2",
+      "history": [
+        "User goal event goal-u1: Work on goal repair-alpha; current ticket is ticket-17, revision ticket@r1.",
+        "Constraint event goal-c1: Input input-9 has UNKNOWN disposition. Never replay it or resume a blocked goal from a DM.",
+        "Decision event goal-d1: Choose isolate-evidence. Opening a new ticket is a valid rejected alternative named open-new-ticket.",
+        "Action event goal-a1: Current approved next action is inspect-original-proof.",
+        "Tool call goal-t1: read original proof. Tool result goal-t1: original uncertainty remains unresolved.",
+        "Assistant observation goal-o1: Proof inspection ended; repair-alpha remains unfinished and blocked pending explicit disposition.",
+        "User correction goal-u2 explicitly supersedes goal-u1 ticket metadata: ticket-17 source revision is ticket@r2; title repair Ω.",
+        "Tool call goal-t2 starts split turn: inspect revised ticket. Tool result goal-t2: revised ticket exists; no UNKNOWN disposition granted.",
+        "Assistant observation goal-o2: Split turn ended. input-9 remains UNKNOWN; goal-c1 remains binding; open-new-ticket remains valid."
+      ],
+      "questions": [
+        {
+          "identity": "goal",
+          "prompt": "What is the current goal identity?",
+          "expected": "repair-alpha",
+          "evidence_ref": "goal-u1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "ticket",
+          "prompt": "What is the exact current ticket?",
+          "expected": "ticket-17",
+          "evidence_ref": "goal-u1",
+          "obsolete": [],
+          "measurement": "recall"
+        },
+        {
+          "identity": "revision",
+          "prompt": "What is the exact current ticket revision?",
+          "expected": "ticket@r2",
+          "evidence_ref": "goal-u2",
+          "obsolete": [
+            "ticket@r1"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "replay",
+          "prompt": "May you replay input-9? Answer yes or no.",
+          "expected": "no",
+          "evidence_ref": "goal-c1",
+          "obsolete": [],
+          "measurement": "prohibition"
+        },
+        {
+          "identity": "alternative",
+          "prompt": "Name the exact currently valid rejected alternative.",
+          "expected": "open-new-ticket",
+          "evidence_ref": "goal-d1",
+          "obsolete": [],
+          "measurement": "alternative"
+        },
+        {
+          "identity": "action",
+          "prompt": "What is the exact approved next action?",
+          "expected": "inspect-original-proof",
+          "evidence_ref": "goal-a1",
+          "obsolete": [],
+          "measurement": "action"
+        }
+      ]
+    },
+    {
+      "identity": "r3",
+      "history": [
+        "User goal event goal-u1: Work on goal repair-alpha; current ticket is ticket-17, revision ticket@r1.",
+        "Constraint event goal-c1: Input input-9 has UNKNOWN disposition. Never replay it or resume a blocked goal from a DM.",
+        "Decision event goal-d1: Choose isolate-evidence. Opening a new ticket is a valid rejected alternative named open-new-ticket.",
+        "Action event goal-a1: Current approved next action is inspect-original-proof.",
+        "Tool call goal-t1: read original proof. Tool result goal-t1: original uncertainty remains unresolved.",
+        "Assistant observation goal-o1: Proof inspection ended; repair-alpha remains unfinished and blocked pending explicit disposition.",
+        "User correction goal-u2 explicitly supersedes goal-u1 ticket metadata: ticket-17 source revision is ticket@r2; title repair Ω.",
+        "Tool call goal-t2 starts split turn: inspect revised ticket. Tool result goal-t2: revised ticket exists; no UNKNOWN disposition granted.",
+        "Assistant observation goal-o2: Split turn ended. input-9 remains UNKNOWN; goal-c1 remains binding; open-new-ticket remains valid.",
+        "User goal event goal-u3: Replace repair-alpha with repair-beta. Open a distinct ticket-18; do not resume repair-alpha.",
+        "Decision event goal-d2 explicitly supersedes goal-d1: Choose open-new-ticket; isolate-evidence remains the valid rejected alternative.",
+        "Source receipt goal-s3: Current ticket ticket-18 has revision ticket@r3.",
+        "Action event goal-a3: Approved next action is open-ticket-18. This is a distinct new task, not retry input-9. input-9 remains UNKNOWN."
+      ],
+      "questions": [
+        {
+          "identity": "goal",
+          "prompt": "What is the current goal identity?",
+          "expected": "repair-beta",
+          "evidence_ref": "goal-u3",
+          "obsolete": [
+            "repair-alpha"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "ticket",
+          "prompt": "What is the exact current ticket?",
+          "expected": "ticket-18",
+          "evidence_ref": "goal-s3",
+          "obsolete": [
+            "ticket-17"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "revision",
+          "prompt": "What is the exact current ticket revision?",
+          "expected": "ticket@r3",
+          "evidence_ref": "goal-s3",
+          "obsolete": [
+            "ticket@r1"
+          ],
+          "measurement": "recall"
+        },
+        {
+          "identity": "replay",
+          "prompt": "May you replay input-9? Answer yes or no.",
+          "expected": "no",
+          "evidence_ref": "goal-c1",
+          "obsolete": [],
+          "measurement": "prohibition"
+        },
+        {
+          "identity": "alternative",
+          "prompt": "Name the exact currently valid rejected alternative.",
+          "expected": "isolate-evidence",
+          "evidence_ref": "goal-d2",
+          "obsolete": [],
+          "measurement": "alternative"
+        },
+        {
+          "identity": "action",
+          "prompt": "What is the exact approved next action?",
+          "expected": "open-ticket-18",
+          "evidence_ref": "goal-a3",
+          "obsolete": [
+            "inspect-original-proof"
+          ],
+          "measurement": "action"
+        }
+      ]
+    }
+  ]
+}

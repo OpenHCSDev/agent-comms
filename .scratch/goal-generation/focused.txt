@@ -1,0 +1,2947 @@
+FFF..................FFFFFFFFF.........F..FFFFF..EFFFFFFFFFFFFFFFFEEEEFF [ 92%]
+FF..FF                                                                   [100%]
+==================================== ERRORS ====================================
+_ ERROR at setup of test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal _
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+self = <Coroutine test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal>
+
+    def setup(self) -> None:
+        runner_fixture_id = f"_{self._loop_scope}_scoped_runner"
+        if runner_fixture_id not in self.fixturenames:
+            self.fixturenames.append(runner_fixture_id)
+        # When loop factories are configured, resolve the loop factory
+        # fixture early so that a factory variant change cascades cache
+        # invalidation before any async fixture checks its cache.
+        hook_caller = self.config.hook.pytest_asyncio_loop_factories
+        if hook_caller.get_hookimpls():
+            _ = self._request.getfixturevalue(_asyncio_loop_factory.__name__)
+>       return super().setup()
+               ^^^^^^^^^^^^^^^
+
+.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:558: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:944: in pytest_fixture_setup
+    hook_result = yield
+                  ^^^^^
+.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:407: in _asyncgen_fixture_wrapper
+    result = runner.run(setup(), context=context)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/runners.py:127: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/base_events.py:719: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+.venv/lib/python3.14/site-packages/pytest_asyncio/plugin.py:403: in setup
+    res = await gen_obj.__anext__()
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+tests/test_s1_event_behavior.py:127: in owner_turn
+    session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+_ ERROR at setup of test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling _
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_goal_snapshot_reads_curre0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e0a970>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+>       comms = wire(tmp_path / "wire")
+                ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d82990>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ ERROR at setup of test_goal_actions_check_revision_and_preserve_owner_pause __
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_goal_actions_check_revisi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e0b9a0>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+>       comms = wire(tmp_path / "wire")
+                ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d837a0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ ERROR at setup of test_goal_update_cannot_bypass_blocked_retry_or_replace_owner _
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_goal_update_cannot_bypass0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e1ef20>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+>       comms = wire(tmp_path / "wire")
+                ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d46a30>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+____ ERROR at setup of test_goal_update_rechecks_snapshot_inside_write_lock ____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_goal_update_rechecks_snap0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e1f770>
+
+    @pytest.fixture
+    async def goal_owner(tmp_path, monkeypatch):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+>       comms = wire(tmp_path / "wire")
+                ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_runtime_goal_snapshot.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d46b20>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+=================================== FAILURES ===================================
+___________ test_ui_set_goal_creates_ledger_before_reporting_success ___________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_ui_set_goal_creates_ledge0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e03563ce0>
+
+    async def test_ui_set_goal_creates_ledger_before_reporting_success(tmp_path, monkeypatch):
+>       comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_ui_creation.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_ui_creation.py:30: in _owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e04c92ad0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+________ test_model_goal_has_authority_before_tool_return_and_ui_retry _________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_model_goal_has_authority_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e0270ccb0>
+
+    async def test_model_goal_has_authority_before_tool_return_and_ui_retry(tmp_path, monkeypatch):
+>       comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_ui_creation.py:65: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_ui_creation.py:30: in _owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e0270d7f0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+__________ test_explicit_retry_cannot_invent_missing_launch_authority __________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_explicit_retry_cannot_inv0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e03257020>
+
+    async def test_explicit_retry_cannot_invent_missing_launch_authority(tmp_path, monkeypatch):
+>       comms, owner, proxy, session, wakes = await _owner(tmp_path, monkeypatch)
+                                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_ui_creation.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_ui_creation.py:30: in _owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e0323f750>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_______ test_missing_or_blank_block_reason_rejects_without_side_effects ________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_missing_or_blank_block_re0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04a4a890>
+
+    def test_missing_or_blank_block_reason_rejects_without_side_effects(tmp_path, monkeypatch):
+>       comms, original = _owner(tmp_path)
+                          ^^^^^^^^^^^^^^^^
+
+tests/test_goal_block_reason.py:36: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_block_reason.py:28: in _owner
+    comms = wire(tmp_path)
+            ^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e029a8370>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+________ test_block_reason_round_trips_goal_execution_history_and_tool _________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_block_reason_round_trips_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04a29d30>
+
+    def test_block_reason_round_trips_goal_execution_history_and_tool(tmp_path, monkeypatch):
+>       comms, original = _owner(tmp_path)
+                          ^^^^^^^^^^^^^^^^
+
+tests/test_goal_block_reason.py:71: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_block_reason.py:28: in _owner
+    comms = wire(tmp_path)
+            ^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e029aa9e0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+__________ test_automatic_blocks_record_diagnostic_not_prior_progress __________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_automatic_blocks_record_d0')
+
+    def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
+>       comms, started = _owner(tmp_path)
+                         ^^^^^^^^^^^^^^^^
+
+tests/test_goal_block_reason.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_block_reason.py:28: in _owner
+    comms = wire(tmp_path)
+            ^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e029672f0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+___ test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress ____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_unrecorded_block_is_label0')
+
+    def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_path):
+>       comms, goal = _owner(tmp_path)
+                      ^^^^^^^^^^^^^^^^
+
+tests/test_goal_block_reason.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_block_reason.py:28: in _owner
+    comms = wire(tmp_path)
+            ^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02966df0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_____ test_owner_resume_refusal_persists_bounded_reason_and_prior_progress _____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_owner_resume_refusal_pers0')
+
+    def test_owner_resume_refusal_persists_bounded_reason_and_prior_progress(tmp_path):
+        from agent_comms.goal_attempts import GoalAttemptStore
+    
+>       comms, original = _owner(tmp_path)
+                          ^^^^^^^^^^^^^^^^
+
+tests/test_goal_block_reason.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_goal_block_reason.py:28: in _owner
+    comms = wire(tmp_path)
+            ^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e029677a0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+___ test_ready_recovery_rechecks_executing_owner_before_rotating[admission] ____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_ready_recovery_rechecks_e0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e049ffe70>
+changed = 'admission'
+
+    @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
+    async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+        tmp_path, monkeypatch, changed
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = canonical_goal_wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_standby.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C..._ready_recovery_rechecks_executing_owner_before_rotating[admission] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+______ test_ready_recovery_rechecks_executing_owner_before_rotating[pid] _______
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_ready_recovery_rechecks_e1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e049fcd00>
+changed = 'pid'
+
+    @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
+    async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+        tmp_path, monkeypatch, changed
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = canonical_goal_wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_standby.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C...::test_ready_recovery_rechecks_executing_owner_before_rotating[pid] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_ready_recovery_rechecks_executing_owner_before_rotating[process_birth] __
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_ready_recovery_rechecks_e2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04b7b070>
+changed = 'process_birth'
+
+    @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
+    async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+        tmp_path, monkeypatch, changed
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = canonical_goal_wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_standby.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C...dy_recovery_rechecks_executing_owner_before_rotating[process_birth] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_____ test_ready_recovery_rechecks_executing_owner_before_rotating[rename] _____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_ready_recovery_rechecks_e3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04b78b40>
+changed = 'rename'
+
+    @pytest.mark.parametrize("changed", ["admission", "pid", "process_birth", "rename"])
+    async def test_ready_recovery_rechecks_executing_owner_before_rotating(
+        tmp_path, monkeypatch, changed
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+        comms = canonical_goal_wire(tmp_path / "wire")
+>       agent = canonical_agent(comms, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_goal_standby.py:34: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C...est_ready_recovery_rechecks_executing_owner_before_rotating[rename] (call)', 'AGENT_COMMS_AGENT_MODELS': 'test/model'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+__________ test_recheck_crash_before_wait_clear_keeps_goal_in_standby __________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_recheck_crash_before_wait0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04b789f0>
+
+    def test_recheck_crash_before_wait_clear_keeps_goal_in_standby(tmp_path, monkeypatch):
+        comms = canonical_goal_wire(tmp_path)
+        for name in ("alice", "bob"):
+            comms.registry.declare(
+                Thread(
+                    name,
+                    frozenset(),
+                    str(tmp_path),
+                    process_identity=ProcessIdentity.capture(os.getpid()),
+                )
+            )
+            comms.agents.begin_turn(name, f"{name}-turn")
+        alice = comms.goals.update_goal("alice", SetGoalAction(text="Wait for Bob"))
+        bob = comms.goals.update_goal("bob", SetGoalAction(text="Wait for Alice"))
+        assert alice is not None and bob is not None
+        comms.goals.update_goal(
+            "alice", StandbyGoalAction(expect=GoalPrecondition(goal_id=alice.id), wait_for=("bob",))
+        )
+        GoalWaits(tmp_path / "goal_waits.json").record(
+            GoalWait(
+                bob.id,
+                "bob-wait",
+                bob.revision,
+                0,
+                (GoalWaitTarget("alice", comms.registry.require("alice").created_at),),
+                owner_created_at=comms.registry.require("bob").created_at,
+                target_turn_generations=(comms.registry.require("alice").turn_generation,),
+                report_turn_id="bob-turn",
+                report_turn_generation=comms.registry.require("bob").turn_generation,
+            )
+        )
+        comms.agents.finish_turn(comms.registry.require("alice").turn_lease)
+        comms.agents.finish_turn(comms.registry.require("bob").turn_lease)
+        original_clear = GoalWaits.clear
+    
+        def unavailable(*_args, **_kwargs):
+            raise OSError("injected wait-clear failure")
+    
+        monkeypatch.setattr(GoalWaits, "clear", unavailable)
+        with pytest.raises(OSError, match="wait-clear failure"):
+            comms.goals.recover_closed_goal_wait("alice")
+>       reopened = wire(tmp_path)
+                   ^^^^^^^^^^^^^^
+
+tests/test_goal_standby.py:356: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.owner_lifecycle.OwnerLifecycle object at 0x7f5e02dac250>
+validated_root = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_recheck_crash_before_wait0')
+wire_root_id = 'e206f3766e60451a989ca34df0e2a94b'
+native_package = PosixPath('/home/ts/.local/share/agent-comms/native-current-21e71cdc648ed997/node_modules/@earendil-works/pi-coding-agent')
+
+    def pin_private_nk_launch(
+        self, validated_root: Path, wire_root_id: str, native_package: Path
+    ) -> None:
+        """Bind an already preflighted ACP/worker launch to future owner handoffs.
+    
+        A marker never grants authority. Service factories validate explicit
+        environment pairs; direct composition requires a caller-supplied pin.
+        Recheck the root marker before retaining the exact lexical absolute
+        path; child env is generated from this pin, not a later cwd/env read.
+        """
+        if (
+            not isinstance(validated_root, Path)
+            or not validated_root.is_absolute()
+            or validated_root != self.root
+            or not isinstance(native_package, Path)
+            or not native_package.is_absolute()
+        ):
+            raise ValueError("private owner launch requires the validated absolute root/package")
+        with self.bus.log.locked():
+            marker = self.bus.log._private_marker_unlocked()
+            if marker.root_id != wire_root_id:
+>               raise RelationViolationError("private owner launch root ID changed")
+E               agent_comms.errors.RelationViolationError: private owner launch root ID changed
+
+src/agent_comms/owner_lifecycle.py:188: RelationViolationError
+____ test_unknown_reason_survives_real_history_without_inventing_provenance ____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_unknown_reason_survives_r0')
+
+    def test_unknown_reason_survives_real_history_without_inventing_provenance(tmp_path):
+>       comms = wire(tmp_path)
+                ^^^^^^^^^^^^^^
+
+tests/test_l0_goal_input_closure.py:47: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02b0ea30>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+___ test_retry_requires_existing_private_generation_and_never_adopts[state0] ___
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_retry_requires_existing_p0')
+state = BlockedGoal(block_reason='Inspect the failed attempt')
+
+    @pytest.mark.parametrize(
+        "state", [BlockedGoal("Inspect the failed attempt"), UnrecordedBlockGoal()]
+    )
+    def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, state):
+>       comms = wire(tmp_path / "wire")
+                ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_l0_goal_input_closure.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e031db890>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+___ test_retry_requires_existing_private_generation_and_never_adopts[state1] ___
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_retry_requires_existing_p1')
+state = UnrecordedBlockGoal()
+
+    @pytest.mark.parametrize(
+        "state", [BlockedGoal("Inspect the failed attempt"), UnrecordedBlockGoal()]
+    )
+    def test_retry_requires_existing_private_generation_and_never_adopts(tmp_path, state):
+>       comms = wire(tmp_path / "wire")
+                ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_l0_goal_input_closure.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e031db340>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_____ test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack ______
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_standby_uses_native_recei0')
+
+    def test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack(tmp_path):
+>       comms = wire(tmp_path)
+                ^^^^^^^^^^^^^^
+
+tests/test_l0_goal_input_closure.py:115: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e031d9400>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_____ test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption ______
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_real_owner_socket_preserv0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04b187c0>
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX owner socket")
+    async def test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption(
+        tmp_path, monkeypatch
+    ):
+        monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "test/model")
+>       comms = wire(tmp_path / "wire")
+                ^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_l0_goal_input_closure.py:175: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e031da4e0>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+____ test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin] ____
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f5e0325d310>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_acquired_claim_and_lease_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04928d00>
+failure = 'begin'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+    async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
+        comms, tmp_path, monkeypatch, failure
+    ):
+        """Inject resource faults while all registry, journal and input owners stay real."""
+        owner = CommsAgent(
+            comms, agent_bin="unused",
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+___ test_acquired_claim_and_lease_retire_on_each_pre_native_failure[prepare] ___
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f5e029b5610>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_acquired_claim_and_lease_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e03a13460>
+failure = 'prepare'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+    async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
+        comms, tmp_path, monkeypatch, failure
+    ):
+        """Inject resource faults while all registry, journal and input owners stay real."""
+        owner = CommsAgent(
+            comms, agent_bin="unused",
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+___ test_acquired_claim_and_lease_retire_on_each_pre_native_failure[reserve] ___
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f5e029b6bd0>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_acquired_claim_and_lease_2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e00cda7b0>
+failure = 'reserve'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+    async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
+        comms, tmp_path, monkeypatch, failure
+    ):
+        """Inject resource faults while all registry, journal and input owners stay real."""
+        owner = CommsAgent(
+            comms, agent_bin="unused",
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+_ test_acquired_claim_and_lease_retire_on_each_pre_native_failure[receipt_capture] _
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f5e029b6090>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_acquired_claim_and_lease_3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02ddcd70>
+failure = 'receipt_capture'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+    async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
+        comms, tmp_path, monkeypatch, failure
+    ):
+        """Inject resource faults while all registry, journal and input owners stay real."""
+        owner = CommsAgent(
+            comms, agent_bin="unused",
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+_ test_acquired_claim_and_lease_retire_on_each_pre_native_failure[goal_retirement] _
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f5e029b6ed0>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_acquired_claim_and_lease_4')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02d73460>
+failure = 'goal_retirement'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["begin", "prepare", "reserve", "receipt_capture", "goal_retirement"])
+    async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
+        comms, tmp_path, monkeypatch, failure
+    ):
+        """Inject resource faults while all registry, journal and input owners stay real."""
+        owner = CommsAgent(
+            comms, agent_bin="unused",
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:88: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+____ test_cancelled_acquisition_joins_reserved_input_before_rollback[False] ____
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f5e029b6510>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_cancelled_acquisition_joi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02ddf5b0>
+worker_fails = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("worker_fails", [False, True])
+    async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
+        comms, tmp_path, monkeypatch, worker_fails,
+    ):
+        """Cancellation cannot leave a recorded input after suppressing worker delivery."""
+        owner = CommsAgent(
+            comms, agent_bin="unused", auto_wake=False,
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+____ test_cancelled_acquisition_joins_reserved_input_before_rollback[True] _____
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+>           launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+
+src/agent_comms/pi_commands.py:275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/asyncio/threads.py:25: in to_thread
+    return await loop.run_in_executor(None, func_call)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:86: in run
+    result = ctx.run(self.task)
+             ^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/concurrent/futures/thread.py:73: in run
+    return fn(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:474: in catalog
+    package = cls.package_for_command(command)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:451: in package_for_command
+    package, route = cls._command_selection(command)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/native_pi.py:425: in _command_selection
+    Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('unused'), strict = True
+
+    def resolve(self, strict=False):
+        """
+        Make the path absolute, resolving all symlinks on the way and also
+        normalizing it.
+        """
+    
+>       return self.with_segments(os.path.realpath(self, strict=strict))
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/unused'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:938: FileNotFoundError
+
+The above exception was the direct cause of the following exception:
+
+comms = <agent_comms.comms.Comms object at 0x7f5e029b74d0>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_cancelled_acquisition_joi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02d712b0>
+worker_fails = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("worker_fails", [False, True])
+    async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
+        comms, tmp_path, monkeypatch, worker_fails,
+    ):
+        """Cancellation cannot leave a recorded input after suppressing worker delivery."""
+        owner = CommsAgent(
+            comms, agent_bin="unused", auto_wake=False,
+            private_nk_wire_root_id=comms.messaging.initialize_private_initial_protocol(),
+            private_nk_native_package=tmp_path,
+        )
+>       session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_turn_goal_account.py:149: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+src/agent_comms/acp.py:182: in new_session
+    return await self.sessions.new_session(cwd, mcp_servers, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/session_lifecycle.py:202: in new_session
+    async with self.config.session_options(thread.name) as options:
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:234: in session_options
+    yield await self.options(thread)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:219: in options
+    await self.catalog_for(member).describe(thread)
+src/agent_comms/config_options.py:90: in describe
+    choices = await self.choices(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:83: in choices
+    choices = await self.discover(thread)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/config_options.py:147: in discover
+    data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/pi_commands.py:301: in discover
+    async with self.catalog(agent_bin, arguments) as (channel, writer):
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/contextlib.py:214: in __aenter__
+    return await anext(self.gen)
+           ^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = GetAvailableModels(id=None), agent_bin = 'unused'
+arguments = ('--provider', 'openrouter', '--model', 'z-ai/glm-5.3-flash')
+worktree = None
+
+    @asynccontextmanager
+    async def catalog(
+        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+    ):
+        """Acquire metadata commands without borrowing a saved or executing session."""
+        from .child_process import BoundedRun
+        from .native_pi import NativePiRpcLaunch, NativePiUnavailable
+        from .pi_rpc import PiRpcChannel
+    
+        try:
+            launch = await asyncio.to_thread(
+                NativePiRpcLaunch.catalog,
+                agent_bin,
+                tuple(arguments),
+                worktree=Path.cwd() if worktree is None else worktree,
+            )
+            async with BoundedRun.session(
+                launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
+            ) as child:
+                stderr = asyncio.create_task(child.discard_stderr())
+                try:
+                    yield PiRpcChannel(child.stdout), child.stdin
+                finally:
+                    stderr.cancel()
+                    await asyncio.gather(stderr, return_exceptions=True)
+        except TimeoutError as error:
+            raise NativePiUnavailable(
+                f"Native catalog discovery timed out: no catalog reply from {agent_bin!r} "
+                f"within {CATALOG_TIMEOUT} s"
+            ) from error
+        except (EOFError, ValueError, OSError) as error:
+>           raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
+E           agent_comms.native_pi.NativePiUnavailable: Native catalog discovery failed: FileNotFoundError(2, 'No such file or directory')
+
+src/agent_comms/pi_commands.py:296: NativePiUnavailable
+________ test_idle_owner_original_input_preserves_autonomous_goal_grant ________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_idle_owner_original_input0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02d72970>
+
+    @pytest.mark.asyncio
+    async def test_idle_owner_original_input_preserves_autonomous_goal_grant(tmp_path, monkeypatch):
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:25: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e031dad50>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[activated] _
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_changed_goal_before_origi0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02d70a60>
+existing_goal = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:25: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d42e90>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced] __
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_changed_goal_before_origi1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02ddfe70>
+existing_goal = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("existing_goal", [False, True], ids=["activated", "replaced"])
+    async def test_changed_goal_before_original_turn_does_not_consume_new_grant(
+        tmp_path, monkeypatch, existing_goal
+    ):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:25: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d43d90>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+____________ test_original_goal_input_cannot_send_after_owner_stops ____________
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_original_goal_input_canno0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e00cd9b70>
+
+    @pytest.mark.asyncio
+    async def test_original_goal_input_cannot_send_after_owner_stops(tmp_path, monkeypatch):
+>       agent, comms, _, _ = await owner(tmp_path, monkeypatch)
+                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_original_input.py:140: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_original_input.py:25: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02de6620>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+____ test_origin_goal_allows_only_followup_admitted_after_activation[False] ____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_origin_goal_allows_only_f0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e03a130e0>
+queued_before_activation = False
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5e03327b60>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("queued_before_activation", [False, True])
+    async def test_origin_goal_allows_only_followup_admitted_after_activation(
+        tmp_path, monkeypatch, queued_before_activation, caplog
+    ):
+        caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:32: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02de6710>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+____ test_origin_goal_allows_only_followup_admitted_after_activation[True] _____
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_origin_goal_allows_only_f1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e04b24bb0>
+queued_before_activation = True
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5e03314410>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("queued_before_activation", [False, True])
+    async def test_origin_goal_allows_only_followup_admitted_after_activation(
+        tmp_path, monkeypatch, queued_before_activation, caplog
+    ):
+        caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:110: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:32: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d9a490>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[None] _
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_autonomous_goal_followup_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02d57850>
+change = None
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5e0255e5d0>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change, caplog
+    ):
+        caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:32: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02e03a20>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[clear] _
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_autonomous_goal_followup_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02d577e0>
+change = 'clear'
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5e02767490>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change, caplog
+    ):
+        caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:32: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02e03520>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[replace] _
+
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_autonomous_goal_followup_2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e0aa50>
+change = 'replace'
+caplog = <_pytest.logging.LogCaptureFixture object at 0x7f5e027656e0>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("change", [None, "clear", "replace"])
+    async def test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt(
+        tmp_path, monkeypatch, change, caplog
+    ):
+        caplog.set_level(logging.INFO, logger="agent_comms.owned_send_admission")
+>       agent, comms, session, _ = await owner(tmp_path, monkeypatch)
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_acp_goal_input_authority.py:166: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/test_acp_goal_input_authority.py:32: in owner
+    comms = wire(tmp_path / "wire")
+            ^^^^^^^^^^^^^^^^^^^^^^^
+src/agent_comms/comms.py:69: in wire
+    route.bind_owners(comms.owners)
+src/agent_comms/active_route.py:69: in bind_owners
+    owners.pin_private_nk_launch(
+src/agent_comms/owner_lifecycle.py:186: in pin_private_nk_launch
+    marker = self.bus.log._private_marker_unlocked()
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <agent_comms.wire_log.WireLog object at 0x7f5e02d83160>
+
+    def _private_marker_unlocked(self) -> WireMetadata:
+        self._assert_private_directory()
+        if self.path.parent.lstat().st_uid != os.geteuid():
+            raise RelationViolationError("Private bus directory is not owner-controlled.")
+        sequence_path = self.metadata_path
+        repair_path = self.path.with_name(self.path.name + ".corrupt")
+        for path in (sequence_path, self.path, repair_path):
+            if not path.exists() and not path.is_symlink():
+                continue
+            info = path.lstat()
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o600
+            ):
+                raise RelationViolationError("Private bus files require regular owner-only mode.")
+        if not sequence_path.exists():
+>           raise RelationViolationError("Private bus writer has no durable protocol marker.")
+E           agent_comms.errors.RelationViolationError: Private bus writer has no durable protocol marker.
+
+src/agent_comms/wire_log.py:386: RelationViolationError
+_ test_failed_attempt_preserves_explicit_owner_pause[before_terminal-failed_done] _
+
+wired = <agent_comms.comms.Comms object at 0x7f5e02d4c710>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_failed_attempt_preserves_0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02d379a0>
+outcome = 'failed_done', pause_timing = 'before_terminal'
+
+    @pytest.mark.parametrize("outcome", ["failed_done", "missing_done"])
+    @pytest.mark.parametrize("pause_timing", ["before_terminal", "during_block"])
+    async def test_failed_attempt_preserves_explicit_owner_pause(
+        wired, tmp_path, monkeypatch, outcome, pause_timing
+    ):
+>       agent = canonical_agent(wired, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_backend_failure_owner_pause.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C...ckend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[before_terminal-failed_done] (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_failed_attempt_preserves_explicit_owner_pause[before_terminal-missing_done] _
+
+wired = <agent_comms.comms.Comms object at 0x7f5e02d4d310>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_failed_attempt_preserves_1')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e0e9e0>
+outcome = 'missing_done', pause_timing = 'before_terminal'
+
+    @pytest.mark.parametrize("outcome", ["failed_done", "missing_done"])
+    @pytest.mark.parametrize("pause_timing", ["before_terminal", "during_block"])
+    async def test_failed_attempt_preserves_explicit_owner_pause(
+        wired, tmp_path, monkeypatch, outcome, pause_timing
+    ):
+>       agent = canonical_agent(wired, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_backend_failure_owner_pause.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C...kend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[before_terminal-missing_done] (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_failed_attempt_preserves_explicit_owner_pause[during_block-failed_done] _
+
+wired = <agent_comms.comms.Comms object at 0x7f5e02d4cd10>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_failed_attempt_preserves_2')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e0d1d0>
+outcome = 'failed_done', pause_timing = 'during_block'
+
+    @pytest.mark.parametrize("outcome", ["failed_done", "missing_done"])
+    @pytest.mark.parametrize("pause_timing", ["before_terminal", "during_block"])
+    async def test_failed_attempt_preserves_explicit_owner_pause(
+        wired, tmp_path, monkeypatch, outcome, pause_timing
+    ):
+>       agent = canonical_agent(wired, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_backend_failure_owner_pause.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C..._backend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[during_block-failed_done] (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_ test_failed_attempt_preserves_explicit_owner_pause[during_block-missing_done] _
+
+wired = <agent_comms.comms.Comms object at 0x7f5e02d4cc50>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_failed_attempt_preserves_3')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f5e02e0f310>
+outcome = 'missing_done', pause_timing = 'during_block'
+
+    @pytest.mark.parametrize("outcome", ["failed_done", "missing_done"])
+    @pytest.mark.parametrize("pause_timing", ["before_terminal", "during_block"])
+    async def test_failed_attempt_preserves_explicit_owner_pause(
+        wired, tmp_path, monkeypatch, outcome, pause_timing
+    ):
+>       agent = canonical_agent(wired, agent_bin="pi")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_backend_failure_owner_pause.py:28: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/delivery_owner_fixture.py:60: in canonical_agent
+    package = Path(os.environ["PI_COMPACTION_TEST_PACKAGE"])
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = environ({'SHELL': '/bin/zsh', 'COREPACK_ENABLE_AUTO_PIN': '0', 'WINDOWID': '37748742', 'LESSHISTFILE': '-', 'JUPYTER_C...backend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[during_block-missing_done] (call)'})
+key = 'PI_COMPACTION_TEST_PACKAGE'
+
+>   ???
+E   KeyError: 'PI_COMPACTION_TEST_PACKAGE'
+
+<frozen os>:709: KeyError
+_____ test_nonowner_or_stale_pause_does_not_bypass_failure_block[missing] ______
+
+wired = <agent_comms.comms.Comms object at 0x7f5e02d4d3d0>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_nonowner_or_stale_pause_d2')
+attribution = 'missing'
+
+    @pytest.mark.parametrize("attribution", ["model", "runtime", "missing", "stale_owner"])
+    def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, attribution):
+        wired.registry.declare(Thread(name="project", tags=frozenset(), worktree=str(tmp_path)))
+        initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
+        if attribution == "stale_owner":
+            wired.goals.update_goal(
+                "project",
+                PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+                actor=OwnerInvocable,
+            )
+            wired.goals.update_goal(
+                "project",
+                ActiveGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+                actor=OwnerInvocable,
+            )
+        if attribution == "model":
+            # Current goal declarations deny a model pause before any state change.
+            with pytest.raises(ValueError, match="cannot take goal action 'paused'"):
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+                    actor=ModelInvocable,
+                )
+            assert wired.registry.require("project").goal == initial
+        paused = wired.goals.update_goal(
+            "project", PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id))
+        )
+        if attribution == "missing":
+>           (wired.root / "goal_pause_events.json").unlink()
+
+tests/test_backend_failure_owner_pause.py:137: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_nonowner_or_stale_pause_d2/comms/goal_pause_events.json')
+missing_ok = False
+
+    def unlink(self, missing_ok=False):
+        """
+        Remove this file or link.
+        If the path is a directory, use rmdir() instead.
+        """
+        try:
+>           os.unlink(self)
+E           FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_nonowner_or_stale_pause_d2/comms/goal_pause_events.json'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:1042: FileNotFoundError
+___ test_nonowner_or_stale_pause_does_not_bypass_failure_block[stale_owner] ____
+
+wired = <agent_comms.comms.Comms object at 0x7f5e02d4cad0>
+tmp_path = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_nonowner_or_stale_pause_d3')
+attribution = 'stale_owner'
+
+    @pytest.mark.parametrize("attribution", ["model", "runtime", "missing", "stale_owner"])
+    def test_nonowner_or_stale_pause_does_not_bypass_failure_block(wired, tmp_path, attribution):
+        wired.registry.declare(Thread(name="project", tags=frozenset(), worktree=str(tmp_path)))
+        initial = wired.goals.update_goal("project", SetGoalAction(text="Work"))
+        if attribution == "stale_owner":
+            wired.goals.update_goal(
+                "project",
+                PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+                actor=OwnerInvocable,
+            )
+            wired.goals.update_goal(
+                "project",
+                ActiveGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+                actor=OwnerInvocable,
+            )
+        if attribution == "model":
+            # Current goal declarations deny a model pause before any state change.
+            with pytest.raises(ValueError, match="cannot take goal action 'paused'"):
+                wired.goals.update_goal(
+                    "project",
+                    PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id)),
+                    actor=ModelInvocable,
+                )
+            assert wired.registry.require("project").goal == initial
+        paused = wired.goals.update_goal(
+            "project", PausedGoalAction(expect=GoalPrecondition(goal_id=initial.id))
+        )
+        if attribution == "missing":
+            (wired.root / "goal_pause_events.json").unlink()
+        elif attribution == "stale_owner":
+            # Keep the earlier owner event but no attribution for the current revision.
+            path = wired.root / "goal_pause_events.json"
+>           events = json.loads(path.read_text())
+                                ^^^^^^^^^^^^^^^^
+
+tests/test_backend_failure_owner_pause.py:141: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:787: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_nonowner_or_stale_pause_d3/comms/goal_pause_events.json')
+mode = 'r', buffering = -1, encoding = 'locale', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/home/ts/wt/core-doctrine-segment/.scratch/goal-generation/pytest/test_nonowner_or_stale_pause_d3/comms/goal_pause_events.json'
+
+../../.local/share/uv/python/cpython-3.14.2-linux-x86_64-gnu/lib/python3.14/pathlib/__init__.py:771: FileNotFoundError
+=========================== short test summary info ============================
+FAILED tests/test_goal_ui_creation.py::test_ui_set_goal_creates_ledger_before_reporting_success
+FAILED tests/test_goal_ui_creation.py::test_model_goal_has_authority_before_tool_return_and_ui_retry
+FAILED tests/test_goal_ui_creation.py::test_explicit_retry_cannot_invent_missing_launch_authority
+FAILED tests/test_goal_block_reason.py::test_missing_or_blank_block_reason_rejects_without_side_effects
+FAILED tests/test_goal_block_reason.py::test_block_reason_round_trips_goal_execution_history_and_tool
+FAILED tests/test_goal_block_reason.py::test_automatic_blocks_record_diagnostic_not_prior_progress
+FAILED tests/test_goal_block_reason.py::test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress
+FAILED tests/test_goal_block_reason.py::test_owner_resume_refusal_persists_bounded_reason_and_prior_progress
+FAILED tests/test_goal_standby.py::test_ready_recovery_rechecks_executing_owner_before_rotating[admission]
+FAILED tests/test_goal_standby.py::test_ready_recovery_rechecks_executing_owner_before_rotating[pid]
+FAILED tests/test_goal_standby.py::test_ready_recovery_rechecks_executing_owner_before_rotating[process_birth]
+FAILED tests/test_goal_standby.py::test_ready_recovery_rechecks_executing_owner_before_rotating[rename]
+FAILED tests/test_goal_standby.py::test_recheck_crash_before_wait_clear_keeps_goal_in_standby
+FAILED tests/test_l0_goal_input_closure.py::test_unknown_reason_survives_real_history_without_inventing_provenance
+FAILED tests/test_l0_goal_input_closure.py::test_retry_requires_existing_private_generation_and_never_adopts[state0]
+FAILED tests/test_l0_goal_input_closure.py::test_retry_requires_existing_private_generation_and_never_adopts[state1]
+FAILED tests/test_l0_goal_input_closure.py::test_standby_uses_native_receipts_and_explicit_reviews_not_read_ack
+FAILED tests/test_l0_goal_input_closure.py::test_real_owner_socket_preserves_unknown_and_refuses_grant_adoption
+FAILED tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[begin]
+FAILED tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[prepare]
+FAILED tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[reserve]
+FAILED tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[receipt_capture]
+FAILED tests/test_turn_goal_account.py::test_acquired_claim_and_lease_retire_on_each_pre_native_failure[goal_retirement]
+FAILED tests/test_turn_goal_account.py::test_cancelled_acquisition_joins_reserved_input_before_rollback[False]
+FAILED tests/test_turn_goal_account.py::test_cancelled_acquisition_joins_reserved_input_before_rollback[True]
+FAILED tests/test_acp_goal_original_input.py::test_idle_owner_original_input_preserves_autonomous_goal_grant
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[activated]
+FAILED tests/test_acp_goal_original_input.py::test_changed_goal_before_original_turn_does_not_consume_new_grant[replaced]
+FAILED tests/test_acp_goal_original_input.py::test_original_goal_input_cannot_send_after_owner_stops
+FAILED tests/test_acp_goal_input_authority.py::test_origin_goal_allows_only_followup_admitted_after_activation[False]
+FAILED tests/test_acp_goal_input_authority.py::test_origin_goal_allows_only_followup_admitted_after_activation[True]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[None]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[clear]
+FAILED tests/test_acp_goal_input_authority.py::test_autonomous_goal_followup_checks_current_goal_and_hides_internal_prompt[replace]
+FAILED tests/test_backend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[before_terminal-failed_done]
+FAILED tests/test_backend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[before_terminal-missing_done]
+FAILED tests/test_backend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[during_block-failed_done]
+FAILED tests/test_backend_failure_owner_pause.py::test_failed_attempt_preserves_explicit_owner_pause[during_block-missing_done]
+FAILED tests/test_backend_failure_owner_pause.py::test_nonowner_or_stale_pause_does_not_bypass_failure_block[missing]
+FAILED tests/test_backend_failure_owner_pause.py::test_nonowner_or_stale_pause_does_not_bypass_failure_block[stale_owner]
+ERROR tests/test_turn_goal_account.py::test_failed_origin_claim_retires_unlaunched_origin_and_blocks_goal
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_snapshot_reads_current_pair_without_mutation_or_scheduling
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_actions_check_revision_and_preserve_owner_pause
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_update_cannot_bypass_blocked_retry_or_replace_owner
+ERROR tests/test_runtime_goal_snapshot.py::test_goal_update_rechecks_snapshot_inside_write_lock
+40 failed, 33 passed, 5 errors in 12.44s

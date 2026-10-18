@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"3003ab41c6f94e0a9f69a17294c3db31","timestamp":"2026-10-16T04:11:45.558Z","cwd":"/home/ts/wt/core-doctrine-segment/.scratch/pi-state-name-installed/saved-native-owner5/project"}
+{"type":"model_change","id":"c1ab785c","parentId":null,"timestamp":"2026-10-16T04:11:48.232Z","provider":"response-local","modelId":"fixture"}
+{"type":"thinking_level_change","id":"89174ed5","parentId":"c1ab785c","timestamp":"2026-10-16T04:11:48.241Z","thinkingLevel":"off"}
+{"type":"message","id":"ec2c171b","parentId":"89174ed5","timestamp":"2026-10-16T04:11:48.258Z","message":{"role":"user","content":[{"type":"text","text":"Uncertain input before interrupted owner stop"}],"timestamp":1792123908256,"inputId":"5aa6f5b8de223491508bfdfa96be4dab","inputDigest":"0b83ce002b1ba4807396fa38596e1b945c0d61435318b0c6b42d250662bce6c7"}}

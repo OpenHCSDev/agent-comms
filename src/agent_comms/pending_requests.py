@@ -1,39 +1,48 @@
-"""Typed request correlation shared by internal setting results."""
+"""RPC correlation owns each response future and its original command."""
 
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from .sealed import Sealed
 
+if TYPE_CHECKING:
+    from .pi_commands import PiCommand
+    from .pi_events import Response
+
+
 @dataclass
 class PendingRequest:
-    future: asyncio.Future[Any]
-    request: Any = None
+    future: asyncio.Future[Response]
+    request: PiCommand
+
+    def cancel(self) -> None:
+        self.future.cancel()
 
 
 class PendingRequests(Sealed):
-    """One future per nominal result family and request identity."""
+    """One future per command family and request identity."""
 
     def __init__(self) -> None:
-        self._pending: dict[tuple[type, str], PendingRequest] = {}
+        self._pending: dict[tuple[type[PiCommand], str], PendingRequest] = {}
 
-    def add(
-        self, result_type: type, request_id: str, *, request: Any = None
-    ) -> asyncio.Future[Any]:
-        key = (result_type, request_id)
+    def add(self, command: PiCommand) -> PendingRequest:
+        key = (type(command), command.id or uuid4().hex)
         if key in self._pending:
-            raise ValueError(f"Request already pending: {request_id}")
-        future = asyncio.get_running_loop().create_future()
-        self._pending[key] = PendingRequest(future, request)
-        return future
+            raise ValueError(f"Request already pending: {command.id}")
+        pending = PendingRequest(asyncio.get_running_loop().create_future(), command)
+        self._pending[key] = pending
+        return pending
 
-    def discard(self, result_type: type, request_id: str) -> None:
-        self._pending.pop((result_type, request_id), None)
+    def discard(self, result_type: type[PiCommand], request_id: str) -> None:
+        pending = self._pending.pop((result_type, request_id), None)
+        if pending is not None:
+            pending.cancel()
 
-    def take(self, result_type: type, request_id: str, value: Any) -> Any:
+    def take(self, result_type: type[PiCommand], request_id: str, value: Response) -> PiCommand | None:
         """Resolve a transport result and return its originating command, once."""
         pending = self._pending.pop((result_type, request_id), None)
         if pending is None:
@@ -44,10 +53,10 @@ class PendingRequests(Sealed):
 
     def cancel_all(self) -> None:
         for pending in self._pending.values():
-            pending.future.cancel()
+            pending.cancel()
         self._pending.clear()
 
-    def take_anonymous(self, result_type: type, value: Any) -> Any:
+    def take_anonymous(self, result_type: type[PiCommand], value: Response) -> PiCommand | None:
         for (owner, identity), pending in self._pending.items():
             if owner is result_type and pending.request.id is None:
                 return self.take(owner, identity, value)

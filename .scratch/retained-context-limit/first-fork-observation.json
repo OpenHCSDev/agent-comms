@@ -1,0 +1,6 @@
+{
+  "session_id": "01a138be-4cbb-7332-9c33-f42ab6b2f164",
+  "result": "provider turn completed with FORK_LIMIT_OK and one compaction entry",
+  "assertion": "failed because the completed over-model-window response was classified as OverflowCompactionReason instead of ThresholdCompactionReason",
+  "disposition": "definite completion; no UNKNOWN input; superseded by fresh fork 01a138c2-8088-7732-9a20-2baa3c9bfc8d after reason-owner fix"
+}

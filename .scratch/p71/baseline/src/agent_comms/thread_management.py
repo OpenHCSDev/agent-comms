@@ -1,0 +1,665 @@
+"""Thread registration and cross-store identity transactions."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import re
+import stat
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
+from pathlib import Path
+from typing import TYPE_CHECKING
+from uuid import uuid4
+
+from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
+from agent_comms.coordination_errors import IdentityConflict
+
+from .child_process import ProcessIdentity
+from .registration import Registration
+from .thread_status import StoppedThreadStatus
+
+if TYPE_CHECKING:
+    from .tool_caller import ThreadCaller
+from .agent_activity import AgentActivity
+from .catalog_store import ChannelCatalog
+from .collaboration_ledger import CollaborationLedger
+from .errors import RelationViolationError
+from .importing import ImportFormat, ImportLimits, ImportReceipt
+from .input_disposition import InputDispositions
+from .message_bus import MessageBus
+from .native_arguments import NativeArguments
+from .native_settings import NativeThreadDefaults
+from .native_session_files import NativeSessionFiles
+from .launch_runtime import LaunchRuntime
+from .owner_lifecycle import OwnerLifecycle
+from .pi_vocabulary import ServiceTier, ThinkingLevel
+from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
+from .registry_document import RegistrySnapshot
+from .store_files import _atomic_write_text, _store_lock
+from .thread_owned_state import ThreadOwnedState
+from .threads import Thread, current_thread
+
+_LOG = logging.getLogger(__name__)
+
+
+def _session_model(session_file: Path) -> tuple[str, str] | None:
+    """Read the last model choice from a pi session file.
+
+    Non-interactive pi requires an explicit provider/model, so forks replay the
+    parent's final ``model_change`` entry. Returns ``(provider, model_id)`` or
+    ``None`` when the session carries no model record.
+    """
+    from .native_transcript import NativeTranscript
+
+    for entry in NativeTranscript(session_file).tail():
+        if entry.model_choice is not None:
+            return entry.model_choice
+    return None
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class NewThreadSpec:
+    """Prepares the session outside the wire lock, then registers the thread under it."""
+
+    name: str
+    project: str
+    model: str
+    thinking_level: type[ThinkingLevel]
+    task: str = ""
+    tags: frozenset[str] | None = None
+    prompt: str | None = None
+
+    def __post_init__(self) -> None:
+        if not self.model:
+            raise ValueError("Choose a model for the new thread")
+        provider, separator, model = self.model.partition("/")
+        if not separator or not provider or not model:
+            raise ValueError("Choose a provider-qualified model for the new thread")
+        object.__setattr__(self, "thinking_level", ThinkingLevel.field_value(self.thinking_level))
+
+    @property
+    def initial_prompt(self) -> str:
+        return self.task if self.prompt is None else self.prompt
+
+    @contextmanager
+    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
+        from .fresh_private_session import create_fresh_private_session
+
+        project = Path(self.project).expanduser().resolve(strict=True)
+        if not project.is_dir():
+            raise ValueError(f"Project path is not a directory: {project}")
+        thread = Thread(name=self.name, task=self.task, tags=self.tags or frozenset(),
+                        worktree=str(project), model=self.model,
+                        thinking_level=self.thinking_level)
+        threads.registry.require_declaration_available(thread)
+        fresh = create_fresh_private_session(threads.root / "sessions", worktree=project)
+        with _store_lock(threads._wire_lock_path):
+            yield replace(thread, session_file=str(fresh.path))
+
+
+@dataclass(frozen=True, slots=True, kw_only=True)
+class ForkSpec(NewThreadSpec):
+    """A fork differs only in its parent-derived source and inherited settings."""
+
+    parent: str
+
+    def child(self, parent: Thread, session_file: str) -> Thread:
+        """Derive the child declaration from the exact parent and fork result."""
+        return Thread(
+            name=self.name,
+            tags=parent.tags if self.tags is None else self.tags,
+            worktree=self.project,
+            parent=parent.name,
+            task=self.task,
+            session_file=session_file,
+            process_identity=None,
+            model=self.model,
+            thinking_level=self.thinking_level,
+        )
+
+    def _parent(self, threads: ThreadManagement) -> Thread:
+        parent = threads.registry.require(self.parent)
+        parent.execution.require_native()
+        if threads.registry.name_reserved(self.name):
+            raise RelationViolationError(
+                f"Thread {self.name!r} already exists; reuse it instead of creating it again."
+            )
+        if not parent.session_file:
+            raise RelationViolationError(f"Parent thread {self.parent!r} has no session file to fork.")
+        return parent
+
+    @contextmanager
+    def prepared(self, threads: ThreadManagement, pi_bin: str, runtime: LaunchRuntime) -> Iterator[Thread]:
+        # Copy saved history outside the wire lock, retaining writer→wire order.
+        parent = self._parent(threads)
+        threads.registry.require_declaration_available(self.child(parent, parent.require_saved_session()))
+        location = asyncio.run(parent.backend.fork(parent, pi_bin, runtime))
+        with _store_lock(threads._wire_lock_path):
+            current = self._parent(threads)
+            if current.incarnation != parent.incarnation or current.session_file != parent.session_file:
+                raise RelationViolationError(
+                    f"Parent thread {self.parent!r} changed its saved session during the fork; "
+                    f"the created fork {location.path} was not registered."
+                )
+            yield self.child(current, location.path)
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadDeleted:
+    deleted: str
+    session_bytes_freed: int
+    detached_children: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class RenameThreadResult:
+    previous: str
+    current: str
+    changed: bool
+
+
+@dataclass(frozen=True, slots=True)
+class ProjectChangeResult:
+    thread: str
+    previous: str
+    current: str
+    changed: bool
+
+
+class ThreadManagement:
+    def __init__(
+        self,
+        root: Path,
+        registry: Registration,
+        bus: MessageBus,
+        catalog: ChannelCatalog,
+        agents: AgentActivity,
+        owners: OwnerLifecycle,
+        ledger: CollaborationLedger,
+    ):
+        self.root = root
+        self.registry = registry
+        self.bus = bus
+        self.catalog = catalog
+        self.agents = agents
+        self.owners = owners
+        self.ledger = ledger
+        self._wire_lock_path = root / "wire"
+
+    def import_thread(
+        self,
+        source: Path | str,
+        format: ImportFormat,
+        *,
+        name: str,
+        session_id: str | None = None,
+        worktree: str | None = None,
+        model: str | None = None,
+        tags: frozenset[str] = frozenset(),
+        limits: ImportLimits | None = None,
+    ) -> ImportReceipt:
+        """Import a stopped, resumable snapshot without adopting a source executor."""
+        source_path = Path(source).expanduser().resolve()
+        snapshot = format.read(source_path, limits or ImportLimits(), session_id)
+        directory = worktree or snapshot.project
+        if not directory:
+            raise ValueError("The source has no project directory; supply --worktree.")
+        project = Path(directory).expanduser().resolve()
+        if not project.is_dir():
+            raise ValueError("The imported project does not exist locally; supply --worktree.")
+        session_path = self.root / "imported_sessions" / f"{uuid4().hex}.jsonl"
+        thread = Thread(
+            name,
+            tags,
+            str(project),
+            session_file=str(session_path),
+            title=snapshot.title,
+            model=model,
+        )
+        with _store_lock(self._wire_lock_path):
+            if self.registry.name_reserved(name):
+                raise ValueError(f"Thread name {name!r} is already reserved.")
+            self.registry.require_declaration_available(thread, StoppedThreadStatus())
+            session_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+            # Session output must remain in an owner-controlled directory.
+            info = session_path.parent.lstat()
+            if (
+                not stat.S_ISDIR(info.st_mode)
+                or info.st_uid != os.geteuid()
+                or stat.S_IMODE(info.st_mode) != 0o700
+            ):
+                raise ValueError("Imported session directory is not owner-controlled.")
+            _atomic_write_text(session_path, snapshot.pi_session(project))
+            try:
+                self.registry._declare_unlocked(thread, StoppedThreadStatus())
+                self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())
+            except Exception:
+                if name in self.registry:
+                    self.registry.remove(name)
+                session_path.unlink(missing_ok=True)
+                raise
+        return ImportReceipt(
+            name,
+            str(session_path),
+            format,
+            snapshot.source_id,
+            len(snapshot.messages),
+            snapshot.messages_seen - len(snapshot.messages),
+            snapshot.truncated_messages,
+            snapshot.notices,
+            snapshot.historical_instructions,
+        )
+
+    def restore_stopped(self, source: RegistrySnapshot, names: Sequence[str]) -> tuple[str, ...]:
+        """Restore historical declarations and their private delivery identities.
+
+        Registry restoration owns collision checks and strips execution authority.
+        On a private bus, stopped subscribers still belong to frozen audiences;
+        their coordinator identities must exist before any cohort can be accepted.
+        Repeating this operation repairs an interrupted coordinator registration
+        without replacing existing owners or importing historical delivery state.
+        """
+        from .coordinator import Coordination
+
+        selected = tuple(dict.fromkeys(names))
+        with _store_lock(self._wire_lock_path):
+            restored = self.registry.restore_stopped(source, selected)
+            with _store_lock(self.registry.store.path):
+                private = self.registry.store.private_guard_unlocked() is not None
+            if private:
+                with Coordination(str(self.root / "coordination.sqlite3")) as store:
+                    for name in selected:
+                        thread = self.registry.require(name)
+                        store.participants.register(
+                            thread.incarnation.lookup,
+                            thread.name,
+                            thread.name,
+                            committed=True,
+                        )
+            return restored
+
+    def claim_thread(
+        self,
+        base_name: str,
+        *,
+        tags: frozenset[str],
+        worktree: str,
+        pid: int = 0,
+        model: str | None = None,
+        thinking_level: str | None = None,
+        auto_title_pending: bool = False,
+    ) -> Thread:
+        """Atomically register a unique thread; its inbox starts at its creation."""
+        with _store_lock(self._wire_lock_path):
+            thread = Thread(
+                name=base_name,
+                tags=tags,
+                worktree=worktree,
+                process_identity=ProcessIdentity.capture(pid) if pid > 0 else None,
+                model=model,
+                thinking_level=thinking_level,
+                auto_title_pending=auto_title_pending,
+            )
+            return self.registry._claim_unlocked(thread)
+
+    def rename_self(self, new_name: str, *, caller: ThreadCaller) -> RenameThreadResult:
+        """Rename the bound caller's own thread, retaining its old aliases."""
+        with _store_lock(self._wire_lock_path):
+            if self.registry.require(caller.name).auto_title_pending and (
+                len(new_name) > 48 or len(re.split(r"[-_]+", new_name)) > 6
+            ):
+                raise ValueError("Choose a concise topic title: at most 6 words and 48 characters.")
+            return self._rename_thread_unlocked(
+                caller.name, new_name, title=new_name.replace("-", " ").replace("_", " ")
+            )
+
+    def set_project(self, name: str, path: str) -> ProjectChangeResult:
+        """Move one thread's project, preserving its owner and conversation."""
+        if not path.strip():
+            raise ValueError("Project path cannot be empty.")
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(name)
+            target = Path(path).expanduser()
+            if not target.is_absolute():
+                target = Path(thread.worktree) / target
+            try:
+                target = target.resolve(strict=True)
+            except (OSError, RuntimeError) as error:
+                raise ValueError(f"Cannot open project directory: {target}") from error
+            if not target.is_dir():
+                raise ValueError(f"Project path is not a directory: {target}")
+            previous = str(Path(thread.worktree).expanduser().resolve())
+            current = str(target)
+            if current == previous:
+                return ProjectChangeResult(thread.name, previous, current, False)
+            self.registry.register(
+                thread.moved_to_project(previous, current), self.registry.status(thread.name),
+            )
+            return ProjectChangeResult(thread.name, previous, current, True)
+
+    def rename_managed_thread(
+        self, name: str, display_name: str, *, owner_pid: int
+    ) -> RenameThreadResult:
+        """Rename a locally managed running thread after proving process ownership."""
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(name)
+            if owner_pid <= 0 or thread.process_identity != ProcessIdentity.capture(owner_pid):
+                raise RelationViolationError(
+                    f"Process {owner_pid} does not own thread {thread.name!r}."
+                )
+            base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", display_name).strip("-_") or "session"
+
+            new_name = base_name
+            suffix = 2
+            while self.registry.name_reserved(new_name):
+                if self.registry.canonical_name(new_name) == thread.name:
+                    return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
+                new_name = f"{base_name}-{suffix}"
+                suffix += 1
+            return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
+
+    def _rename_thread(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        # Keep direct callers under the same wire lock as public self/managed
+        # rename. Private owner migration and ordinary publication share it.
+        with _store_lock(self._wire_lock_path):
+            return self._rename_thread_unlocked(name, new_name, title=title)
+
+    def _rename_thread_unlocked(
+        self, name: str, new_name: str, *, title: str | None = None
+    ) -> RenameThreadResult:
+        from .coordinator import Coordination
+
+        before = self.registry.require(name)
+        private_meta = self.root / "bus_meta.json"
+        if private_meta.is_symlink():
+            raise RelationViolationError("Bus metadata cannot be a symlink.")
+        private = False
+        if private_meta.exists():
+            with self.bus.log.locked():
+                metadata = self.bus.log.read_metadata_unlocked(required=True)
+                if metadata.private:
+                    self.bus.log._private_marker_unlocked()
+                    private = True
+        if private:
+            _require_no_private_owner_rename(self.root)
+        coordinator = self.root / "coordination.sqlite3"
+        intent = self.root / PRIVATE_OWNER_RENAME_PENDING
+        intent_created = False
+        if not private or not coordinator.exists() or before.name == new_name:
+            previous, current = self.registry.rename(name, new_name)
+        else:
+            # Validate every deterministic registry/SQL name refusal *before*
+            # advancing a committed private owner's generation. The wire lock
+            # excludes cooperating sends until both authorities agree.
+            if not self.registry.status(before.name).running:
+                raise RelationViolationError("Only a running thread can rename itself.")
+            if (
+                self.registry.name_reserved(new_name)
+                and self.registry.canonical_name(new_name) != before.name
+            ):
+                raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
+            replace(before, name=new_name)
+            if len(new_name) > MAX_IDENTIFIER_CHARS:
+                raise ValueError("Private coordinator owner name exceeds its bound.")
+            with Coordination(str(coordinator)) as store:
+                try:
+                    person = store.participants.get(before.incarnation.lookup)
+                except IdentityConflict as error:
+                    if str(error) != "participant aggregate is not registered":
+                        raise
+                    previous, current = self.registry.rename(name, new_name)
+                else:
+                    if not person.committed or person.owner_thread != before.name:
+                        raise RelationViolationError(
+                            "Private coordinator owner differs from the registered owner."
+                        )
+                    # Persist a fail-closed cross-store intent before SQL or
+                    # registry changes. A crash leaves private publication and
+                    # selected execution unavailable until manual inspection;
+                    # it cannot silently turn an old attempt into a new send.
+                    _atomic_write_text(
+                        intent,
+                        json.dumps(
+                            {
+                                "version": 1,
+                                "lookup": person.lookup,
+                                "old": before.name,
+                                "new": new_name,
+                                "generation": person.participant_generation,
+                                "wireRootId": metadata.root_id,
+                            },
+                            sort_keys=True,
+                        ),
+                        fsync_parent=True,
+                    )
+                    intent_created = True
+                    store.participants.advance_generation(
+                        person.lookup, new_name, expected_generation=person.participant_generation
+                    )
+                    # An old selected attempt stays fenced in its old generation;
+                    # never retry or reassign it after this ownership change.
+                    try:
+                        previous, current = self.registry.rename(name, new_name)
+                    except BaseException as error:
+                        # Registry persistence can fail after the SQL CAS. If
+                        # its atomic snapshot still names the old owner, make
+                        # a NEW generation for that owner instead of leaving
+                        # a committed coordinator pointing at the new name.
+                        # Neither generation may inherit an old native input.
+                        uncertain = RelationViolationError(
+                            "Private owner rename is uncertain; inspect both authorities."
+                        )
+                        try:
+                            actual = self.registry.require(before.name).name
+                            if actual == before.name:
+                                store.participants.advance_generation(
+                                    person.lookup,
+                                    before.name,
+                                    expected_generation=person.participant_generation + 1,
+                                )
+                        except BaseException as compensation:
+                            # Ambiguous dual-store failure: the inspection
+                            # needs both failures, not only the first.
+                            uncertain.add_note(
+                                f"Compensating generation advance failed: {compensation!r}"
+                            )
+                        raise uncertain from error
+        thread = self.registry.require(current)
+        if thread.auto_title_pending or title is not None:
+            self.registry.register(
+                replace(thread, auto_title_pending=False, title=title or thread.title),
+                self.registry.status(current),
+            )
+        if previous == current:
+            return RenameThreadResult(previous, current, False)
+        self.agents.activity.rename_thread(previous, current)
+        self.agents.runtime_info.rename_thread(previous, current)
+        self.ledger.rename_thread(previous, current)
+        with self.catalog.editing() as document:
+            document.rename_thread(previous, current)
+        if intent_created:
+            # Persist completion only after both authorities and ancillary
+            # stores agree. If the subsequent unlink/fsync is uncertain, the
+            # previous durable record already proves a finished transition;
+            # an extant file still blocks all new private sends.
+            completed_intent = json.loads(intent.read_text())
+            completed_intent["completed"] = True
+            _atomic_write_text(
+                intent, json.dumps(completed_intent, sort_keys=True), fsync_parent=True
+            )
+            intent.unlink()
+            directory_fd = os.open(self.root, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        return RenameThreadResult(previous, current, True)
+
+    def heartbeat(self, name: str) -> None:
+        with _store_lock(self._wire_lock_path):
+            self.registry.heartbeat(name)
+
+    def set_thread_configuration(
+        self, original: Thread, *, model: str | None = None,
+        thinking_level: str | None = None, service_tier: ServiceTier | None = None,
+    ) -> Thread:
+        """Publish next-turn settings together against their acquired declaration.
+
+        Progress and goals belong to the current document. A changed selection
+        or project invalidates the native settings result acquired by the caller.
+        """
+        Thread.require_declaration(original)
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(original.name)
+            thread.require_original_model_configuration(original)
+            thread.execution.require_native()
+            updated = thread.with_model_configuration(
+                model=model, thinking_level=thinking_level, service_tier=service_tier,
+            )
+            if updated != thread:
+                self.registry.register(updated, self.registry.status(thread.name))
+            return updated
+
+    def initialize_native_configuration(
+        self, name: str, *, model: str | None, thinking_level: str | None,
+    ) -> Thread:
+        """Persist one first-known producer observation through its declaration."""
+        with _store_lock(self._wire_lock_path):
+            thread = self.registry.require(name)
+            updated = thread.initialized_native_configuration(
+                model=model, thinking_level=thinking_level,
+            )
+            if updated != thread:
+                self.registry.register(updated, self.registry.status(thread.name))
+            return updated
+
+    def resolve_thread_model(self, name: str, default: str = NativeThreadDefaults.model) -> str:
+        """Prefer a saved selection, then the resumed session's last model."""
+        thread = self.registry.require(name)
+        if thread.model is not None:
+            return thread.model
+        if thread.session_file and (model := _session_model(Path(thread.session_file))):
+            return "/".join(model)
+        info = self.agents.agent_info_of(thread.name)
+        return info.model_or(default)
+
+    def attach_session(self, original: Thread, session_file: str, *, pid: int | None = None) -> Thread:
+        """Attach authoritative Pi runtime state to an existing thread."""
+        with _store_lock(self._wire_lock_path):
+            current = self.registry.require(original.name)
+            if current != original:
+                raise RelationViolationError("Original thread changed before native source publication")
+            attached = replace(
+                current,
+                process_identity=(
+                    current.process_identity
+                    if pid is None
+                    else ProcessIdentity.capture(pid)
+                    if pid > 0
+                    else None
+                ),
+                session_file=str(Path(session_file).expanduser().resolve()),
+            )
+            self.registry.register(attached)
+            return attached
+
+    def archive(self, name: str) -> None:
+        """Hide a stopped participant from presence while retaining messages."""
+        with _store_lock(self._wire_lock_path):
+            self._archive_unlocked((self.registry.require(name),))
+
+    def _archive_unlocked(self, originals: Sequence[Thread]) -> None:
+        self.registry.archive_originals(originals)
+        self.agents.runtime_info.remove_threads(originals)
+
+    @property
+    def thread_owned_states(self) -> tuple[ThreadOwnedState, ...]:
+        """Every store whose rows end with a thread declaration."""
+        from .goal_waits import GoalWaits
+        from .relationships import RelationshipStore
+        from .view_unread import transcript_read_state
+
+        states = (
+            self.agents.activity,
+            self.agents.runtime_info,
+            self.ledger,
+            self.catalog,
+            self.owners.releases,
+            self.bus.reads,
+            transcript_read_state(self.bus.reads.path),
+            GoalWaits(self.root / GoalWaits.filename),
+            RelationshipStore(self.root / RelationshipStore.filename),
+        )
+        ThreadOwnedState.require_complete(states)
+        return states
+
+    def delete(self, name: str) -> ThreadDeleted:
+        """Permanently delete one stopped or archived thread."""
+        with _store_lock(self._wire_lock_path):
+            return self._delete_unlocked((self.registry.require(name),))[0]
+
+    def _delete_unlocked(self, originals: Sequence[Thread]) -> tuple[ThreadDeleted, ...]:
+        """Remove stopped declarations and everything they own.
+
+        The bus, goal history and uncertain-input records are the record and
+        stay; their readers resolve a removed name as a deleted thread. Every
+        refusal happens before the registry fences admission.
+        """
+        states = self.thread_owned_states
+        sessions: dict[str, NativeSessionFiles] = {}
+        for original in originals:
+            if original.process_alive:
+                raise RelationViolationError(
+                    f"Thread {original.name!r} still has a live process; stop it first."
+                )
+            if original.session_file:
+                sessions[original.name] = NativeSessionFiles.of(original.session_file)
+                sessions[original.name].require_unreferenced()
+        self.registry.begin_delete_originals(originals)
+        for state in states:
+            state.remove_threads(originals)
+        # A failure from here leaves a Deleting declaration to retry, not orphans.
+        freed = {name: files.delete() for name, files in sessions.items()}
+        detached = self.registry.remove_originals(originals)
+        return tuple(
+            ThreadDeleted(original.name, freed.get(original.name, 0), detached[original.name])
+            for original in originals
+        )
+
+
+    def create(self, spec: NewThreadSpec, pi_bin: str | None = None) -> Thread:
+        """Prepare the session, then register and launch the thread with its first input."""
+        resolved_bin = NativeArguments.configured_binary(pi_bin)
+        runtime = LaunchRuntime.current()
+        with spec.prepared(self, resolved_bin, runtime) as child:
+            # A new incarnation's inbox already starts at its creation time
+            # (DeliveryScope.minimum_timestamp); no history scan marks older rows.
+            child = self.registry._declare_unlocked(child)
+
+            key = f"acp:{uuid4().hex}" if spec.initial_prompt else None
+            try:
+                owned = self.owners._launch_owner_unlocked(
+                    replace(child, model=self.resolve_thread_model(child.name)),
+                    resolved_bin, startup_input_key=key, launch_runtime=runtime,
+                )
+                if key is not None:
+                    InputDispositions(self.root).record(
+                        key, seq=None, owner=owned.name, target=owned.name,
+                        admission=self.registry.snapshot().admission_generations[owned.name],
+                        text=spec.initial_prompt,
+                    )
+                return owned
+            except OSError:
+                self.registry.remove(spec.name)
+                raise
+
+    def adopt_current(self) -> Thread:
+        """Declare and register the current process's thread from env."""
+        thread = current_thread()
+        return self.registry.declare(thread)

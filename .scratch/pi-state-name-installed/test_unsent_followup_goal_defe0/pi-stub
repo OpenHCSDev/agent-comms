@@ -1,0 +1,25 @@
+#!/home/ts/wt/core-doctrine-segment/.scratch/nominal-gateway-candidate/bin/python
+
+import json, pathlib, sys, time
+send = lambda event: print(json.dumps(event), flush=True)
+state = json.loads(sys.stdin.readline())
+send({"type":"response","command":"get_state","id":state["id"],
+      "success":True,"data":{"nativeInputProofCapability":"pi-native-input-v1-live-only"}})
+prompt = json.loads(sys.stdin.readline())
+send({"type":"response","command":"prompt","id":prompt["id"],"success":True})
+send({"type":"message_start","message":{"role":"user","content":prompt["message"],
+      "inputId":prompt["inputId"]}})
+marker = pathlib.Path('/home/ts/wt/core-doctrine-segment/.scratch/pi-state-name-installed/test_unsent_followup_goal_defe0/send-boundary-checked')
+for _ in range(200):
+    if marker.exists(): break
+    time.sleep(0.01)
+assert marker.exists()
+send({"type":"message_end","message":{
+    "role":"assistant","content":[],"stopReason":"stop",
+}})
+send({"type":"agent_settled"})
+for line in sys.stdin:
+    if json.loads(line)["type"] == "get_session_stats":
+        send({"type":"response","command":"get_session_stats","success":True,
+              "data":{"contextUsage":{}}})
+        break

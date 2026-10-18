@@ -1,0 +1,42 @@
+#!/home/ts/wt/core-doctrine-segment/.venv/bin/python
+
+import json, os, sys, time
+send = lambda event: print(json.dumps(event), flush=True)
+delayed_stats = False
+for line in sys.stdin:
+    command = json.loads(line)
+    kind = command["type"]
+    if kind == "get_state":
+        session_id = json.loads(open('/home/ts/wt/core-doctrine-segment/.scratch/pr924-main-comparison/current-branch/test_persistent_pi_reuses_one_0/session.jsonl').readline())["id"]
+        send({"type":"response","command":kind,"id":command.get("id"),
+               "success":True,"data":{"nativeInputProofCapability":
+               "pi-native-input-v1-live-only","sessionId":session_id,
+               "sessionFile":'/home/ts/wt/core-doctrine-segment/.scratch/pr924-main-comparison/current-branch/test_persistent_pi_reuses_one_0/session.jsonl'}})
+    elif kind == "prompt":
+        with open('/home/ts/wt/core-doctrine-segment/.scratch/pr924-main-comparison/current-branch/test_persistent_pi_reuses_one_0/prompt-ids', "a") as output:
+            output.write(command["id"] + " " + command["inputId"] + "\n")
+        if command["message"] == "cancel":
+            time.sleep(5)
+            continue
+        if command.get("images"):
+            sys.stderr.write(command["images"][0]["data"] + "\n")
+            sys.stderr.flush()
+        if command["message"] == "fail after image":
+            sys.stderr.write("nonimage failure\n")
+            sys.stderr.flush()
+            sys.exit(1)
+        delayed_stats = command["message"] == "delayed stats"
+        send({"type":"response","command":kind,"id":command["id"],"success":True})
+        send({"type":"message_start","message":{"role":"user",
+               "content":command["message"],"inputId":command["inputId"]}})
+        send({"type":"message_update","assistantMessageEvent":{
+               "type":"text_delta","delta":"ok"}})
+        send({"type":"message_end","message":{"role":"assistant", "content":[],
+               "stopReason":"stop"}})
+        send({"type":"agent_settled"})
+    elif kind == "get_session_stats":
+        if delayed_stats:
+            open('/home/ts/wt/core-doctrine-segment/.scratch/pr924-main-comparison/current-branch/test_persistent_pi_reuses_one_0/stats-delayed', "w").write("waiting")
+            time.sleep(0.3)
+        send({"type":"response","command":kind,"id":command.get("id"),
+               "success":True,"data":{"contextUsage":{"tokens":10}}})

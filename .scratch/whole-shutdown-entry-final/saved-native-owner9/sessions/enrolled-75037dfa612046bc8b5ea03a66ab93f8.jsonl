@@ -1,0 +1,4 @@
+{"type":"session","version":3,"id":"75037dfa612046bc8b5ea03a66ab93f8","timestamp":"2026-10-16T03:19:41.829Z","cwd":"/home/ts/wt/core-doctrine-segment/.scratch/whole-shutdown-entry-final/saved-native-owner9/project"}
+{"type":"model_change","id":"cd386811","parentId":null,"timestamp":"2026-10-16T03:19:44.915Z","provider":"response-local","modelId":"fixture"}
+{"type":"thinking_level_change","id":"6c33b6c4","parentId":"cd386811","timestamp":"2026-10-16T03:19:44.919Z","thinkingLevel":"off"}
+{"type":"message","id":"d97218d4","parentId":"6c33b6c4","timestamp":"2026-10-16T03:19:44.942Z","message":{"role":"user","content":[{"type":"text","text":"single uncertain input"}],"timestamp":1792120784938,"inputId":"2e3032163b1f9b5ba91f45b777971dc0","inputDigest":"c9b18c41d8463d4559e9e95469210078be085f1647f42ea17dce1a81e048bc0b"}}

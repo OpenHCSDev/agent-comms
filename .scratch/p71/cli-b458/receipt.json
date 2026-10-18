@@ -1,0 +1,83 @@
+{
+  "installed_core": "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/lib/python3.14/site-packages/agent_comms/__init__.py",
+  "installed_python": "/home/ts/.local/share/agent-comms/runtimes/toad-042de4d65-core-b458716c3-native-70f0512abbcfa4e0-20261016T233151Z/bin/python",
+  "native_package": "/home/ts/wt/core-claude/stack/.pi-native-70f0512abbcfa4e0/node_modules/@earendil-works/pi-coding-agent",
+  "provider_requests": 1,
+  "native_users": 1,
+  "assignments": [
+    {
+      "kind": "wake_claims",
+      "claim_id": "cohort-v1:b6c26d6848d67a405866b88c0235bdf7c5278e437459037bdfcf68814c2d5a83",
+      "recipient": "recipient",
+      "recipient_lookup": "a3e44ce9292106ce4782047e8aa0e04b",
+      "wire_seq": 1,
+      "message_id": "0220e63339fc",
+      "audience": "direct",
+      "lifecycle": {
+        "kind": "completed",
+        "decision": {
+          "kind": "full",
+          "execution_id": "wirev1cb3d17a0b26dcac9ec289b0a29c729bfc69f5913b2c773ef7b87faf69e992423",
+          "exact_target": "sender"
+        }
+      },
+      "accepted_at_ms": 1792195231178,
+      "updated_at_ms": 1792195235320,
+      "revision": 3,
+      "resolver_version": "resolver-v1",
+      "policy_version": "policy-v1"
+    }
+  ],
+  "native_inputs": [
+    {
+      "kind": "native_runtime_input",
+      "input_id": "10ace79fa432916d7c711e3c3dd28c80",
+      "stage": "full",
+      "execution_id": "wirev1cb3d17a0b26dcac9ec289b0a29c729bfc69f5913b2c773ef7b87faf69e992423",
+      "attempt_ordinal": 1,
+      "owner_lookup": "a3e44ce9292106ce4782047e8aa0e04b",
+      "owner_thread": "recipient",
+      "owner_generation": 1,
+      "owner_token_digest": "0d049969511ed9cca4beb418822fe9b23f887774c51c9b1d7cb949a5acce12b4",
+      "sent_owner_admission_generation": 3,
+      "session_id": "01a14729-034d-76fb-aac9-34e12751be72",
+      "session_file": "/home/ts/wt/core-doctrine-segment/.scratch/p71/cli-b458/w/native-sessions/a3e44ce9292106ce4782047e8aa0e04b/2026-10-17T00-00-32-590Z_01a14729-034d-76fb-aac9-34e12751be72.jsonl",
+      "session_entry_id": "de0bfea4",
+      "request_generation": 1,
+      "llm_context_digest": "24dd669de81f37c89e49116bb934b697ffdaecb70425fe11aa5d76b86fd3a26c",
+      "committed_at_ms": 1792195234542,
+      "verdict": null
+    }
+  ],
+  "reply": {
+    "seq": 2,
+    "id": "5fc24157c2c0",
+    "from": "recipient",
+    "to": "sender",
+    "ts": 1792195235.204394,
+    "type": "info",
+    "text": "P71_INSTALLED_CLI_REPLY",
+    "sender_role": "agent",
+    "answers": [
+      {
+        "seq": 1,
+        "message_id": "0220e63339fc"
+      }
+    ]
+  },
+  "reader_inbox": {
+    "messages": [
+      {
+        "seq": 1,
+        "id": "0220e63339fc",
+        "from": "sender",
+        "to": "recipient",
+        "ts": 1792195231.0621476,
+        "type": "info",
+        "text": "P71_INSTALLED_CLI_DM",
+        "sender_role": "agent"
+      }
+    ]
+  },
+  "state": "PASS"
+}

@@ -1,0 +1,38 @@
+#!/home/ts/wt/core-doctrine-segment/.scratch/nominal-gateway-candidate/bin/python
+import json, sys
+initial_state = True
+prompt_request = None
+for line in ['{"type": "response", "command": "prompt", "id": "agent-comms-prompt", "success": true}', '{"type": "message_start", "message": {"role": "user", "content": "t"}}', '{"type": "auto_retry_start", "attempt": 1, "maxAttempts": 2}', '{"type": "message_start", "message": {"content": [], "role": "assistant"}}', '{"type": "message_end", "message": {"content": [], "role": "assistant", "stopReason": "error"}}', '{"type": "auto_retry_end", "success": true, "attempt": 1}', '{"type": "message_start", "message": {"content": [], "role": "assistant"}}', '{"type": "message_end", "message": {"content": [], "role": "assistant", "stopReason": "stop"}}', '{"type": "agent_settled"}', '{"type": "response", "command": "get_session_stats", "success": true, "data": {"contextUsage": {}}}']:
+    record = json.loads(line)
+    message = record.get("message", {})
+    if message.get("role") == "assistant":
+        message.setdefault("content", [])
+    command = record.get("command")
+    correlate = record.get("type") == "response" and (
+        record.get("id") == "agent-comms-prompt"
+        or (command == "get_state" and initial_state)
+        or command == "get_session_stats"
+    )
+    if correlate:
+        for request_line in sys.stdin:
+            request = json.loads(request_line)
+            if request.get("type") == command:
+                record["id"] = request["id"]
+                if command == "prompt":
+                    prompt_request = request
+                break
+            if request.get("type") != "get_state":
+                print(json.dumps({
+                    "id": request.get("id"), "type": "response",
+                    "command": request.get("type"), "success": True,
+                }), flush=True)
+    if command == "get_state":
+        initial_state = False
+    if (
+        prompt_request is not None
+        and record.get("type") == "message_start"
+        and message.get("role") == "user"
+        and message.get("content") == prompt_request.get("message")
+    ):
+        message.setdefault("inputId", prompt_request.get("inputId"))
+    print(json.dumps(record), flush=True)

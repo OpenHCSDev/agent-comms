@@ -1,0 +1,16 @@
+{
+  "tags": [],
+  "preferences": {
+    "#team": {
+      "order": "created_at",
+      "created_at": 1792121107.4194524,
+      "pinned": false,
+      "parent": null,
+      "archived": false,
+      "any_mode": false,
+      "pinned_threads": []
+    }
+  },
+  "saved_views": {},
+  "list_order": "name"
+}

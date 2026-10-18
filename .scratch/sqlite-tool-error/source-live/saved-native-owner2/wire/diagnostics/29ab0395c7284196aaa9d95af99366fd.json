@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "turn_id": "29ab0395c7284196aaa9d95af99366fd",
+  "thread": "project",
+  "reason": "model_request_failed",
+  "sequences": [],
+  "measurements": {
+    "exit_code": 0
+  },
+  "outcome": "failed; inputs must not be replayed automatically"
+}

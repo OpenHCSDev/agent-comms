@@ -1,0 +1,189 @@
+{
+  "threads": {
+    "blocked": {
+      "name": "blocked",
+      "tags": [
+        "test"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v2",
+      "created_at": 1791918493.6547601,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 2209720,
+        "start_time": 139413161
+      },
+      "model": null,
+      "thinking_level": null,
+      "goal": {
+        "text": "Legacy blocked",
+        "id": "82ccd7f7cefb4c519acecb23f34a8301",
+        "progress": "",
+        "revision": 0,
+        "reported_turn": null,
+        "mention_source": null,
+        "state": {
+          "kind": "blocked",
+          "block_reason": "Historical missing launch record"
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "paused": {
+      "name": "paused",
+      "tags": [
+        "test"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v2",
+      "created_at": 1791918493.6937733,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 2209720,
+        "start_time": 139413161
+      },
+      "model": null,
+      "thinking_level": null,
+      "goal": {
+        "text": "Legacy paused",
+        "id": "9e59c162af4748b39436d4e871fce2e6",
+        "progress": "",
+        "revision": 0,
+        "reported_turn": null,
+        "mention_source": null,
+        "state": {
+          "kind": "paused",
+          "source": {
+            "kind": "owner"
+          }
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "completed": {
+      "name": "completed",
+      "tags": [
+        "test"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v2",
+      "created_at": 1791918493.7093258,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": {
+        "pid": 2209720,
+        "start_time": 139413161
+      },
+      "model": null,
+      "thinking_level": null,
+      "goal": {
+        "text": "Legacy completed",
+        "id": "64e491389bd148f589a4b2b017de51f0",
+        "progress": "",
+        "revision": 0,
+        "reported_turn": null,
+        "mention_source": null,
+        "state": {
+          "kind": "completed"
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    },
+    "existing": {
+      "name": "existing",
+      "tags": [
+        "test"
+      ],
+      "worktree": "/home/ts/wt/core-doctrine-segment/.scratch/existing-generation-smoke-v2",
+      "created_at": 1791918493.7250423,
+      "session_file": null,
+      "title": null,
+      "parent": null,
+      "task": null,
+      "process_identity": null,
+      "model": null,
+      "thinking_level": null,
+      "goal": {
+        "text": "Existing attempt",
+        "id": "406612a3d55c4210b9733c474efbb8ac",
+        "progress": "",
+        "revision": 0,
+        "reported_turn": null,
+        "mention_source": null,
+        "state": {
+          "kind": "blocked",
+          "block_reason": "Recorded failure"
+        }
+      },
+      "previous_worktrees": [],
+      "auto_title_pending": false,
+      "role": "agent",
+      "active_turn": null,
+      "channel_scope_generation": 0,
+      "turn_generation": 0,
+      "last_finished_turn_id": null
+    }
+  },
+  "statuses": {
+    "blocked": {
+      "kind": "running"
+    },
+    "paused": {
+      "kind": "running"
+    },
+    "completed": {
+      "kind": "running"
+    },
+    "existing": {
+      "kind": "running"
+    }
+  },
+  "last_seen": {
+    "blocked": 1791918493.6732416,
+    "paused": 1791918493.701427,
+    "completed": 1791918493.717079,
+    "existing": 1791918493.7320006
+  },
+  "aliases": {},
+  "owners": {
+    "counter": 4,
+    "generations": {
+      "blocked": 1,
+      "paused": 2,
+      "completed": 3,
+      "existing": 4
+    }
+  },
+  "admissions": {
+    "counter": 4,
+    "generations": {
+      "blocked": 1,
+      "paused": 2,
+      "completed": 3,
+      "existing": 4
+    }
+  }
+}
