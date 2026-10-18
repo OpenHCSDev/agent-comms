@@ -550,7 +550,8 @@ class ApplicationOrderRun(OrderRun):
         return (f"{self.label} {self.text}",)
 
     def require_closing(self, works: str) -> None:
-        if len(works.split()) < self.least_words or not self.phrases(self.text) & self.phrases(works):
+        quoted = self.phrases(self.text) & self.phrases(works)
+        if len(works.split()) < self.least_words or not quoted:
             raise ValueError(f"Describe what worked in {self.least_words}+ words, quoting "
                              f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
 
