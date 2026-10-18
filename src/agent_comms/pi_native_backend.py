@@ -20,8 +20,8 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .agent_backend import (
     AgentBackend,
-    Compacts,
     CompactionOutcome,
+    Compacts,
     ConfiguresModel,
     ContextUsage,
     FailedCompaction,
@@ -34,18 +34,18 @@ from .agent_backend import (
     RuntimeLocation,
     TurnDelivery,
 )
-from .unstarted_runtime import UnstartedRuntime
+from .fresh_private_session import create_fresh_private_session
 from .native_pi import NativePiRpcLaunch
-from .native_transcript import NativeTranscript
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import SessionIdentityHelper
+from .native_transcript import NativeTranscript
 from .selected_session import SavedSelectedSession
-from .fresh_private_session import create_fresh_private_session
+from .unstarted_runtime import UnstartedRuntime
 
 if TYPE_CHECKING:
-    from .launch_runtime import LaunchRuntime
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
+    from .launch_runtime import LaunchRuntime
     from .native_arguments import NativeArguments
     from .native_child import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity

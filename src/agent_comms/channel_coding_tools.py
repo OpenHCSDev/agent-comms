@@ -17,18 +17,18 @@ from typing import Never
 
 from agent_comms.coordinator import Coordination
 
-from .selected_claim import (
-    publish_selected_resource_claim,
-    verify_selected_wake,
-)
 from .comms import Comms
-from .field_codec import FieldCodec, MalformedRecord
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
 )
+from .field_codec import FieldCodec, MalformedRecord
 from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
 from .native_tools import NativeExecutableTool
+from .selected_claim import (
+    publish_selected_resource_claim,
+    verify_selected_wake,
+)
 from .selected_tool_broker import (
     OwnerToolSocket,
     consume_selected_slot,

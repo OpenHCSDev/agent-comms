@@ -14,7 +14,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-
 if TYPE_CHECKING:
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
 

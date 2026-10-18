@@ -12,6 +12,9 @@ import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
 import { CodingTools } from '@earendil-works/pi-durable/tools';
 
+// SQLite evidence and its side files belong to this private host lifetime.
+process.umask(0o077);
+
 // 1.3.0 has no public estimator export. Deliberately pinned internal import;
 // never reproduce the estimator in Core. This is an explicitly retained API gap.
 const { estimateContext } = await import(new URL('./harness/compaction.js', import.meta.resolve('@earendil-works/pi-durable')));

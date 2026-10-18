@@ -10,14 +10,22 @@ import asyncio
 import secrets
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
-from uuid import uuid4
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from . import agent_events as events
 from . import pi_commands as commands
-from .maintenance_barrier import MaintenanceBarrier
 from . import turn_failure as failures
-from .agent_backend import ClearQueue, InputId, InputRequest, SendNow, UseSettings, WhenBusy, TurnInbox, TurnInboxItem
+from .agent_backend import (
+    ClearQueue,
+    InputId,
+    InputRequest,
+    SendNow,
+    TurnInbox,
+    TurnInboxItem,
+    WhenBusy,
+)
+from .maintenance_barrier import MaintenanceBarrier
 
 if TYPE_CHECKING:
     from .backend import TurnSession

@@ -165,7 +165,7 @@ class TurnRunner:
         return context.recorded_public_text(manifest)
 
     async def inspect_native_request(self, session_id, thread, request):
-        context = await self.backend_for(session_id, thread).request(thread, request)
+        context = await self.backend_for(session_id, thread).inspect(thread, request)
         return context.require_session_file(thread.runtime.path)
 
     async def prompt_owned(

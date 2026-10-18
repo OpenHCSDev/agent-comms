@@ -25,6 +25,7 @@ from acp.exceptions import RequestError
 from acp.schema import SessionConfigSelectOption
 
 from .activity import ActivityState
+from .agent_backend import AgentBackend
 from .catalog_document import CatalogDocument
 from .change_report import ChangeReport
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
@@ -60,11 +61,11 @@ from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
 from .message_reference import MessageReference
-from .page_traversal import OlderTraversal, PageCursor
 from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .page_traversal import OlderTraversal, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
 from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
@@ -81,7 +82,6 @@ from .thread_execution import (
     ThreadExecution,
 )
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
-from .agent_backend import AgentBackend
 from .thread_status import ThreadStatus
 from .threads import Thread
 from .tool_caller import ToolCaller

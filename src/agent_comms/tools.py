@@ -5,32 +5,37 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from collections.abc import Mapping
-from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, replace
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
-from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
-from .cli_commands import (
-    ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
-    PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
-    ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
-    _json_object, option,
-)
-from .cli_result import CliResult
-from .thread_execution import (
-    ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
-    StartOwnerControl, ThreadCommandAvailability,
-)
-from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
+from .change_report import ChangeReport
+from .channel_management import KeepThreadsTagDisposition, TagAction, TagDisposition
 from .channel_targets import ChannelTarget
 from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .cli_commands import (
+    ArchiveCliCommand,
+    CliCommand,
+    DeleteViewCliCommand,
+    ForkCliCommand,
+    PinChannelCliCommand,
+    PinThreadCliCommand,
+    StartCliCommand,
+    StopCliCommand,
+    ThreadArchivedResult,
+    ThreadCreatedResult,
+    ThreadsCliCommand,
+    ThreadStoppedResult,
+    _json_object,
+    option,
+)
+from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
@@ -43,38 +48,57 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_waits import StandbyReview, StandbyReviewSummary
-from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
+from .goal_waits import StandbyReview, StandbyReviewSummary
 from .goals import Goal, OrderCheck
+from .input_attempt import UnresolvedInput
+from .launch_runtime import LaunchRuntime
 from .message_reference import MessageReference
-from .messages import Message
-from .owner_lifecycle import OwnerStartResult
-from .presentation import ChannelView
-from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
-from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as enqueue_restart
-from .restart_queue import status as restart_status
-from .thread_management import RenameThreadResult
-from .transcript_events import SentTranscript
-from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
-from .change_report import ChangeReport
-from .messages import InfoKind, MessageKind, NoticeRole
+from .messages import InfoKind, Message, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
-from .tool_result import ToolResult
-from .task_sources import (
-    CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
-    TaskScopeSelection, OriginalTaskChange,
+from .owner_lifecycle import OwnerStartResult
+from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
+from .presentation import ChannelView
+from .relationships import (
+    Collaboration,
+    GoalDerivedContact,
+    GoalMentionDiagnostic,
+    RelationshipEdit,
 )
-from .turn_digests import ThreadTurns, TurnDigestRead
-from .relationships import RelationshipEdit
-from .work_branches import WorkBranch, WorkBranches
+from .restart_queue import QueuedRestart
+from .restart_queue import cancel as cancel_restart
+from .restart_queue import enqueue as enqueue_restart
+from .restart_queue import status as restart_status
+from .task_sources import (
+    Constraint,
+    CurrentTaskScopeSelection,
+    Decision,
+    OriginalTaskChange,
+    Subtask,
+    TaskAttachment,
+    TaskChange,
+    TaskScopeSelection,
+)
+from .thread_execution import (
+    ArchiveOwnerControl,
+    NativeOwnerCommand,
+    OwnerLifecycleControl,
+    StartOwnerControl,
+    ThreadCommandAvailability,
+)
+from .thread_management import RenameThreadResult
+from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
+from .tool_caller import NoThreadCaller, ThreadCaller, ThreadListing, ToolCaller
 from .tool_output import (
     MAX_INLINE_OUTPUT_BYTES,
     materialize_oversized_output,
     serialize_tool_output,
 )
+from .tool_result import ToolResult
+from .transcript_events import SentTranscript
+from .turn_digests import ThreadTurns, TurnDigestRead
+from .work_branches import WorkBranch, WorkBranches
 
 if TYPE_CHECKING:
     from .comms import Comms

@@ -3,41 +3,76 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-from functools import partial
-from contextlib import AsyncExitStack, ExitStack, contextmanager
 from collections.abc import Callable
+from contextlib import AsyncExitStack, ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, AgentBackend, InputContent, InputId, RuntimeLocation, Steers, TurnDelivery, TurnInbox, TurnInboxItem, WhenBusy
-from .agent_events import AgentInfo, Error, Done, OriginalInputStarted, FollowingInputStarted, FollowingInputRefused
-from .turn_inputs import TurnInboxReceiver
+from .agent_backend import (
+    AgentBackend,
+    CompactionOutcome,
+    Compacts,
+    ConfiguresModel,
+    ContextUsage,
+    InputContent,
+    InputId,
+    ReportsContext,
+    RuntimeLocation,
+    Steers,
+    TurnDelivery,
+    TurnInbox,
+    TurnInboxItem,
+    WhenBusy,
+)
+from .agent_events import (
+    AgentInfo,
+    Done,
+    Error,
+    FollowingInputRefused,
+    FollowingInputStarted,
+    OriginalInputStarted,
+)
+from .coordination_errors import IdentityConflict
+from .coordinator import Coordination
+from .diagnostics import record_request_progress
+from .external_transcript import ExternalCut
 from .image_inputs import ImageInput
+from .launch_runtime import RestartEnvironment
 from .maintenance_barrier import MaintenanceBarrier
 from .native_child import PiChild
-from .external_transcript import ExternalCut
 from .native_entries import StoredEntry
+from .native_pi import (
+    DurableContextProof,
+    NativeContextRecord,
+    NativePiUnavailable,
+    NativeTurnResult,
+)
 from .native_session_files import SessionFiles
+from .native_session_reopen import NativeSessionIdentity
+from .native_tool_call import ToolTransport
 from .native_transcript import StoredRecord
-from .pi_commands import Abort, Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
-from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd, ModelRequestProgress
+from .pi_commands import (
+    Abort,
+    Compact,
+    GetAvailableModels,
+    GetSessionStats,
+    GetState,
+    PiCommand,
+    SetModel,
+    SetThinkingLevel,
+)
+from .pi_events import AutoRetryEnd, DurablePiEvent, ModelRequestProgress, RetryEnd
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
-from .transcript_sources import TranscriptSource
-from .unstarted_runtime import UnstartedRuntime
-from .coordinator import Coordination
-from .coordination_errors import IdentityConflict
-from .launch_runtime import RestartEnvironment
-from .native_pi import DurableContextProof, NativeContextRecord, NativePiUnavailable, NativeTurnResult
-from .native_session_reopen import NativeSessionIdentity
 from .selected_session import SelectedSession
 from .send_outcome import GrantedSend
-from .diagnostics import record_request_progress
-from .field_codec import FieldCodec
-from .native_tool_call import ToolTransport
+from .transcript_sources import TranscriptSource
+from .turn_inputs import TurnInboxReceiver
+from .unstarted_runtime import UnstartedRuntime
 
 
 @dataclass(frozen=True)
@@ -377,7 +412,7 @@ class DurableTurn(TurnInboxReceiver):
             await self.child.request(command)
 
     def authority_changed(self, session):
-        raise RuntimeError('Thread changed before durable input write')
+        return asyncio.sleep(0, result=False)
 
     async def submit(self, command):
         command = replace(command, id=uuid4().hex)
@@ -435,7 +470,7 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel, 
             if self.child is None:
                 location = thread.runtime
                 path = location.session
-                path.parent.mkdir(parents=True, exist_ok=True)
+                path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
                 with ExitStack() as resources:
                     lock = resources.enter_context(location.writer_lock.open('a+b'))
                     fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
@@ -498,14 +533,11 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel, 
                 raise IdentityConflict('Durable selected write differs from its original claim')
             yield GrantedSend()
 
-        async def unavailable_ui(request):
-            raise IdentityConflict('Durable selected turns have no UI request channel')
-
         delivery = TurnDelivery(worktree=thread.worktree, environment=environment, inbox=TurnInbox(),
             finish_event=asyncio.Event(), send_boundary=boundary, interrupt_boundary=boundary,
             input_started=lambda public_id, native_id, text: native_id == claim.input_id and text == claim.prompt.text,
             request_progress=partial(record_request_progress, claim.bus.log.path.parent,
-                                     claim.owner.thread.require_turn_lease()), ui_request=unavailable_ui)
+                                     claim.owner.thread.require_turn_lease()), ui_request=None)
         result = NoSelectedAnswer()
         async with AsyncExitStack() as resources:
             turn = DurableTurn(child, delivery, backend.barrier, claim.input_id,
@@ -550,8 +582,9 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel, 
                 await child.request(Watch())
                 try:
                     child.forward_input(lambda: turn.forward(turn), create_task=tasks.create_task)
-                    await turn.submit(SubmitInitial(request_id=turn.input_id,
-                        text=content.text, images=content.images))
+                    if not await turn.submit(SubmitInitial(request_id=turn.input_id,
+                            text=content.text, images=content.images)):
+                        raise IdentityConflict('Thread changed before Durable input write')
                     await turn.initial_written.wait()
                     completion = asyncio.create_task(child.request(AwaitTurn()))
                     try:

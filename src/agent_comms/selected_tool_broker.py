@@ -17,7 +17,7 @@ import re
 import socket
 import stat
 import struct
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from collections.abc import Callable, ValuesView
 from contextlib import ExitStack, suppress
 from dataclasses import dataclass, field
@@ -27,7 +27,6 @@ from typing import Generic, TypeVar
 
 from agent_comms.coordinator import Coordination
 
-from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
@@ -41,13 +40,14 @@ from .native_tool_call import (
     DuplicateToolCallIdentity,
     NativeToolCall,
     NativeToolMode,
-    ToolTransport,
     SelectedToolDenied,
+    ToolTransport,
 )
 from .pi_events import ToolExecutionEnd, ToolExecutionStart
 from .pi_payloads import PiContent, ToolCallContent
 from .private_path import PrivateDirectoryRole, PrivateFileRole, PrivateSocketRole, fsync_directory
 from .selected_actions import SelectedAction
+from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .turn_context import InstructionFile
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).

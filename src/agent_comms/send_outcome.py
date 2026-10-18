@@ -1,8 +1,8 @@
 """Send decisions dispatch effects; their awaitables only control forwarding."""
 import asyncio
 from abc import ABC, abstractmethod
-from contextlib import AbstractContextManager
 from collections.abc import Awaitable, Callable
+from contextlib import AbstractContextManager
 
 
 class SendOutcome(ABC):

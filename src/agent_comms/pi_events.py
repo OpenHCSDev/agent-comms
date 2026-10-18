@@ -3,33 +3,32 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from . import agent_events as events
 from . import turn_phase as phases
-from .tool_declaration import ToolDeclaration
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .pi_vocabulary import CompactionReason, UnknownCompactionReason
-from .request_progress import RequestProgress
 from .native_turn_context import NativeContextManifestData
 from .pi_commands import ExtensionUiResponse, PiCommand, UnknownCommand
 from .pi_payloads import (
     AbsentMessage,
     CompactionData,
-    PiDelta,
-    PiMessage,
     MissingData,
     MissingToolResult,
+    PiDelta,
+    PiMessage,
     PiPayload,
     PiResponseData,
     PiToolResult,
     PiUsage,
     ProviderRetryOutcome,
 )
+from .pi_vocabulary import CompactionReason, UnknownCompactionReason
+from .request_progress import RequestProgress
+from .tool_declaration import ToolDeclaration
 
 if TYPE_CHECKING:
     from .backend import TurnSession

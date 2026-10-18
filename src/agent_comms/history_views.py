@@ -16,8 +16,8 @@ from .goal_waits import GoalWaits
 from .registration import Registration
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .shared_ledger import LedgerDocument
-from .thread_identity import ThreadIncarnation
 from .thread_execution import ConversationPreparation
+from .thread_identity import ThreadIncarnation
 from .transcript_sources import AssignedSourceIdentity
 
 if TYPE_CHECKING:
@@ -31,7 +31,6 @@ from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, CommandTarget
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision, TranscriptChanged
-from .native_transcript import NativeTranscript
 from .errors import UnknownChannelError, UnregisteredThreadError
 from .exporting import (
     WireExportBoundary,
@@ -45,16 +44,17 @@ from .goal_management import Goals
 from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
-from .page_traversal import OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .messaging import Messaging
+from .native_transcript import NativeTranscript
+from .page_traversal import OlderTraversal
 from .presentation import (
     ChannelReadMark,
-    ReadAll,
     ChannelView,
     CoordinationSnapshot,
     MessageNotification,
+    ReadAll,
     ThreadRecord,
     ThreadView,
     WireRevision,

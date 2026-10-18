@@ -23,18 +23,18 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
+from typing import TYPE_CHECKING, Any, ClassVar, Self
 
-from .native_tool_call import NativeToolMode, NoNativeTools
 from .declared_family import DeclaredFamily
+from .native_tool_call import NativeToolMode, NoNativeTools
 from .pi_vocabulary import ThinkingLevelField
 from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .launch_runtime import LaunchRuntime
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
+    from .launch_runtime import LaunchRuntime
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
     from .turn_inputs import TurnInboxReceiver
@@ -298,7 +298,7 @@ class TurnDelivery:
     interrupt_boundary: SendBoundary
     input_started: Callable[..., bool]
     request_progress: Callable[..., None]
-    ui_request: Callable[..., Awaitable[Any]]
+    ui_request: Callable[..., Awaitable[Any]] | None
     selected_tool_mode: NativeToolMode = field(default_factory=NoNativeTools)
 
 

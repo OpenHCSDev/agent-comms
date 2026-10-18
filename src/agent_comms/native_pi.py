@@ -21,17 +21,24 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 from .coordination_database import CoordinationStore
-from .native_arguments import NativeArguments, SelectedModel
-from .native_session_files import NativeSessionFiles
-from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
+from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .native_arguments import NativeArguments, SelectedModel
 from .native_input_record import NativeInputCommit, NativeInputIdText
-from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, pinned_native_package
+from .native_session_files import NativeSessionFiles
 from .native_tool_call import NativeToolMode, NoNativeTools
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
+from .private_path import (
+    FileIdentity,
+    FileRevision,
+    PrivateDirectoryRole,
+    PrivateFileRole,
+    TrustedAncestorRole,
+    fsync_directory,
+)
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -611,8 +618,8 @@ class NativePiRpcLaunch:
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        from .selected_session import SelectedSession, SavedSelectedSession
         from .native_session_reopen import SessionIdentityHelper
+        from .selected_session import SavedSelectedSession, SelectedSession
 
         saved = Path(session_file).absolute() if session_file is not None else None
         directory = saved.parent if saved is not None else cwd

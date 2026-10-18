@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
@@ -28,26 +28,31 @@ if TYPE_CHECKING:
     from .cli_bridges.history import History
     from .tool_caller import ThreadCaller
 from .agent_activity import AgentActivity
+from .agent_backend import RuntimeLocation
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ThreadImported, ImportSnapshot
+from .importing import ImportLimits, ImportSnapshot, ThreadImported
 from .input_disposition import InputDispositions
+from .launch_runtime import LaunchRuntime
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
-from .launch_runtime import LaunchRuntime
-from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
+from .owner_lifecycle import LaunchInput, OwnerLifecycle, TaskLaunchInput
 from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
-    PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
-    RegistryPrivacy, _require_no_private_owner_rename,
+    PRIVATE_OWNER_RENAME_PENDING,
+    PrivateOwnerRenameIntent,
+    PrivateRegistryGuard,
+    PublicRegistry,
+    RegistryPrivacy,
+    _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
-from .agent_backend import RuntimeLocation
+
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class NewThreadSpec:
