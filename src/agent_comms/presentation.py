@@ -411,6 +411,7 @@ class BusPresentation:
                 {}, {}, unread={}, channel_unread={}, show_stopped=show_stopped,
                 show_archived=show_archived, read_marker_notice=basis.document.notice,
             )
+        snapshot = snapshot.with_read_marks(viewer, self.bus.reads, basis.document)
         return replace(
             snapshot, read_marker_notice=self.bus.reads.take_notice(basis.document.notice),
             unread_pending=frozenset(snapshot.threads.keys() | snapshot.channels.keys()),
@@ -590,6 +591,7 @@ class ThreadView:
     last_seen: float
     goal_execution: GoalExecution | None = None
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
+    read_through: int = 0
 
     @classmethod
     def roster(
@@ -691,6 +693,17 @@ class CoordinationSnapshot:
             channel_order=catalog.list_order, show_stopped=show_stopped,
             show_archived=show_archived, read_marker_notice=read_marker_notice,
         )
+
+    def with_read_marks(self, viewer: str, reads: ReadLedger, document: ReadDocument) -> CoordinationSnapshot:
+        """Project this viewer's existing native read marks against the current files."""
+        threads = {}
+        for name, view in self.threads.items():
+            source = view.thread.runtime.read_key
+            revision = FileRevision.capture(Path(source)) if source else None
+            seen = (reads.transcript_seen(viewer, source, revision.identity.inode, document=document)
+                    if revision is not None else 0)
+            threads[name] = replace(view, read_through=seen if revision is not None and seen <= revision.size else 0)
+        return replace(self, threads=threads)
 
     def participants(self, channel: str) -> tuple[ThreadView, ...]:
         view = self.channels.get(channel)

@@ -378,7 +378,8 @@ class HistoryViews:
         for name, view in snapshot.threads.items():
             sources.update((name, key) for key in view.thread.runtime.read_keys())
         unread = self.transcript_reads.counts(captured_viewer, sources, document=basis.document)
-        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
+        return replace(snapshot.with_read_marks(captured_viewer, self.bus.reads, basis.document),
+                       thread_unread=unread.counts, unread_pending=unread.pending)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge only the native transcript boundary actually displayed."""
