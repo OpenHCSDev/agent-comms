@@ -39,7 +39,8 @@ def rows(path):
 
 
 def unjudged():
-    judged = {v.tool_call_id for todo in order.todos() for v in todo.verdicts}
+    judged = {v.tool_call_id for todo in order.COMMS.goals.todos.history_for_commander(
+        order.COMMS.registry.require(ME).incarnation) for v in todo.verdicts}
     return [e for e in rows(EDITS) if e['id'] not in judged]
 
 
@@ -69,7 +70,7 @@ def show(thread=None):
     for e in pending:
         by_thread.setdefault(e['thread'], []).append(e)
     for name, edits in by_thread.items():
-        orders = order.open_todos(name)
+        orders = order.COMMS.goals.todos.held_for_commander(order.COMMS.registry.require(ME).incarnation, name)
         intent = '\n'.join(todo.order.instructions(todo) for todo in orders) or 'NO OPEN ORDER TODO'
         print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
         for e in edits:
@@ -93,7 +94,8 @@ def roast(thread, lines, text, fix, slop):
 
 def edit_order(edit, msg):
     """Resolve an edit to its held order; never record a verdict without that Todo."""
-    candidates = order.open_todos(edit['thread'])
+    candidates = order.COMMS.goals.todos.held_for_commander(
+        order.COMMS.registry.require(ME).incarnation, edit['thread'])
     if msg is not None:
         cited = next((m for m in my_messages(edit['thread']) if m['id'] == msg), None)
         if cited is None:

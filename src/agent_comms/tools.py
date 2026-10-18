@@ -71,7 +71,8 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
-from .turn_digests import ThreadTurns, TurnDigestRead
+from .order_work import OrderWork
+from .turn_digests import LastTurns, ThreadTurns, TurnsSince
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
 from .tool_output import (
@@ -779,7 +780,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
         actor = comms.registry.require(caller.name).incarnation
         orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
-                  if todo.state.open and todo.holder == self.unit]
+                  if todo.holder == self.unit]
         if not orders:
             raise ValueError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
@@ -801,16 +802,17 @@ class CommsTodoListTool(ThreadReadTool):
         listed = tuple(comms.goals.todos.for_commander(actor))
         pulls, storage = PullRequests(), comms.registry.storage_rule
         return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
-                                 for todo in listed if todo.state.open and todo.holder})
+                                 for todo in listed if todo.holder})
 
 
 @dataclass(frozen=True, kw_only=True)
 class CommsStandingRulesTool(ThreadReadTool):
     label = "Read broken standing rules"
     description = "Every standing rule the commander breaks now, one line each, derived on read."
+    after: float = tool_field("Only rules broken since this time; 0 lists every one", default=0.0)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> StandingRulesRead:
-        broken = StandingRule.broken(comms, caller.subject(self.thread))
+        broken = StandingRule.broken(comms, caller.subject(self.thread), self.after)
         return StandingRulesRead(tuple(rule.line() for rule in broken))
 
 
@@ -890,7 +892,7 @@ class CommsProblemCloseTool(ThreadToolRequest):
     label = "Close installed problem"
     description = "Record installed application evidence and close only a problem with no open order."
     problem: str = tool_field("Problem ID")
-    works: str = tool_field("What worked in the installed application, 8+ words")
+    works: str = tool_field("What worked in the app, quoting the order's Works when run")
     artifact: str = tool_field("Existing verification artifact file")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:
@@ -906,10 +908,24 @@ class CommsProblemCloseTool(ThreadToolRequest):
 class CommsTurnsTool(ThreadReadTool):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
-    last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
+    last: int = tool_field("Number of newest turns", default=LastTurns.count)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(caller.subject(self.thread), last=self.last)
+        return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderWorkTool(ReadTool, ToolRequest):
+    label = "Order work"
+    description = ("Read every tool call the problem's assignee made since its order, newest "
+                   "first, from the unit's own turn records.")
+    problem: str = tool_field("Problem ID")
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
+        todo = comms.goals.todos.get(self.problem)
+        since = todo.order.at.recorded_at("An order")
+        turns = comms.transcripts.turns(todo.held().owner, TurnsSince(since))
+        return OrderWork.read(self.problem, turns.thread, since, turns.turns)
 
 
 @dataclass(frozen=True, kw_only=True)

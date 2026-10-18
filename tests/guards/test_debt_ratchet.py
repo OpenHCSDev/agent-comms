@@ -2,6 +2,7 @@
 
 import ast
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -10,7 +11,8 @@ import pytest
 
 from tools.debt_ratchet import (
     BannedVocabulary, BroadExceptDefault, ForeignFieldSpellings,
-    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr, GitMeasure, python_paths,
+    FrozenFieldWrite, FunctionLocalImport, LiteralGetattr, GitMeasure, UncarriedRecordFormat,
+    python_paths,
 )
 
 pytestmark = pytest.mark.refactor_guard
@@ -86,6 +88,31 @@ def test_batch_sources_keep_exact_git_bytes_and_path_names(repo: Repository, mon
     assert GitMeasure.sources(repo.path, revision, set()) == []
     with pytest.raises(ValueError, match='omitted'):
         GitMeasure.sources(repo.path, revision, selected | {f'{repo.root}/missing.py'})
+
+
+def test_format_probe_keeps_parent_dependencies_and_reads_archived_source(tmp_path, monkeypatch):
+    repo = Repository(tmp_path, "src/agent_comms")
+    source = subprocess.check_output(
+        ["git", "archive", "HEAD", "--", "src/agent_comms"], timeout=20
+    )
+    subprocess.run(["tar", "-x", "-C", str(tmp_path)], input=source, check=True, timeout=60)
+    dependency = tmp_path / "dependencies"
+    dependency.mkdir()
+    (dependency / "parent_only_dependency.py").write_text("VERSION = 7\n")
+    inherited = os.pathsep.join((str(dependency), os.environ["PYTHONPATH"]))
+    monkeypatch.setenv("PYTHONPATH", inherited)
+    revision = repo.commit({"probe_record.py": (
+        "from dataclasses import dataclass\nfrom typing import ClassVar\n"
+        "from parent_only_dependency import VERSION\n"
+        "@dataclass(frozen=True)\nclass Record:\n"
+        "    version: ClassVar[int] = VERSION\n    value: str\n"
+    )})
+    (tmp_path / "src/agent_comms/probe_record.py").write_text("raise RuntimeError('not archived')\n")
+    forms = UncarriedRecordFormat.formats(
+        tmp_path, revision, repo.root, {"src/agent_comms/probe_record.py"}
+    )
+    assert forms["agent_comms.probe_record.Record"].version == 7
+    assert os.environ["PYTHONPATH"] == inherited
 
 
 def test_added_type_check_fails(repo: Repository) -> None:

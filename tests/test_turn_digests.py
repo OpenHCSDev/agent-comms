@@ -14,6 +14,7 @@ from agent_comms.comms import wire
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.threads import Thread
 from agent_comms.transcript_events import AssistantTranscript
+from agent_comms.turn_digests import LastTurns
 
 
 def prepared(tmp_path):
@@ -25,7 +26,7 @@ def prepared(tmp_path):
 def endpoint(comms, name, last):
     environment = {key: value for key, value in os.environ.items()
                    if not key.startswith(('AGENT_COMMS_', 'PI_SESSION_', 'OPENCODE_SERVER_'))}
-    command = [sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root), 'invoke',
+    command = [sys.executable, '-m', 'agent_comms.cli', '--root', str(comms.root), 'tool',
                '--tool', 'comms_turns', '--arguments', json.dumps(dict(thread=name, last=last))]
     result = subprocess.run(command, env=environment, text=True, capture_output=True,
                             timeout=15, check=True)
@@ -73,7 +74,7 @@ def test_native_turns_keep_original_calls_results_and_input_identity(tmp_path):
     assert turn['events'][1]['raw_input'] == dict(path='x.py')
     assert turn['events'][2]['text'] == 'contents'
     assert turn['events'][3]['text'] == 'done'
-    assert [turn.turn_id for turn in comms.transcripts.turns('native', last=2).turns] == ['u2', 'u1']
+    assert [turn.turn_id for turn in comms.transcripts.turns('native', LastTurns(2)).turns] == ['u2', 'u1']
 
 
 def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, monkeypatch):
@@ -110,7 +111,7 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
                 async with aclosing(WireWatch.observations(*(
                         WatchSource.modified_file(item) for item in source.source_paths(comms.root)))) as changes:
                     async for _ in changes:
-                        turns = await asyncio.to_thread(comms.transcripts.turns, 'claude')
+                        turns = await asyncio.to_thread(comms.transcripts.turns, 'claude', LastTurns())
                         if any(event == AssistantTranscript('done', timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
                                for turn in turns.turns for event in turn.events):
                             break
@@ -133,6 +134,6 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
 def test_missing_native_session_is_empty_and_nonpositive_count_is_rejected(tmp_path):
     comms = prepared(tmp_path)
     comms.registry.declare(comms.registry.new_thread('new', frozenset(), str(tmp_path)))
-    assert not comms.transcripts.turns('new').turns
+    assert not comms.transcripts.turns('new', LastTurns()).turns
     with pytest.raises(ValueError, match='positive'):
-        comms.transcripts.turns('new', last=0)
+        comms.transcripts.turns('new', LastTurns(0))

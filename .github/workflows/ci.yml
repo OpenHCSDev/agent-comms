@@ -96,6 +96,11 @@ jobs:
         working-directory: extensions/pi-mcp-client
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      # The durable host imports pi-durable, pi-ai and chord from beside it.
+      - name: Install locked runtime host dependencies
+        working-directory: src/agent_comms
+        run: npm ci --ignore-scripts --omit=dev --no-audit --no-fund
+
       # Tests of the native runtime read the pinned package from stack/. The
       # locked install above fills the npm cache that preparation reads offline.
       - name: Prepare pinned native Pi

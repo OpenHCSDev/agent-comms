@@ -225,7 +225,6 @@ its limit triggers the fork.
 
 ## Next (small edits to the commander scripts)
 
-- [ ] `vibe_watch.py`: drop messages a unit sends to its own thread.
 - [ ] `order.py overdue`: raise OVERDUE once per order, not every tick.
 - [ ] Drop the duplicate path so unit reports reach the commander once.
 - [ ] DISK LOW only when crossing a threshold.
@@ -237,7 +236,7 @@ its limit triggers the fork.
 ## Alignment with the native commander (checked 2026-10-18 14:20)
 
 Core already has the commander: `src/agent_comms/commander/` (order, judge,
-rotate, rules, capacity, growth_watch, cli, rules/*.md), installed in the
+rotate, rules, capacity, cli, rules/*.md), installed in the
 current runtime. Design: `docs/design/commander-in-core.md`. Problems are Core
 Todos and orders are Goals (#934/P51, merged 2026-10-17); a wrong strike is
 voided, never deleted (P47, #1498); closing a problem goes through
