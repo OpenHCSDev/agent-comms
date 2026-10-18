@@ -36,8 +36,14 @@ class PlanIdle(StandingRule):
 
     @classmethod
     def violations(cls, todos: Sequence[Todo]) -> tuple[Self, ...]:
-        return tuple(cls(phase) for phase in PlanPhase.members_with(PlanPhase)
-                     if phase.ready(todos) and not phase.ordered(todos))
+        return tuple(
+            cls(phase)
+            for phase in PlanPhase.members_with(PlanPhase)
+            if phase.ready(todos) and not phase.ordered(todos)
+        )
 
     def line(self) -> str:
-        return f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order -> dispatch it this wake"
+        return (
+            f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
+            " -> dispatch it this wake"
+        )
