@@ -405,12 +405,8 @@ class CommsPinThreadTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelView:
-        channel = self.channel
-        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
-        canonical = ChannelTarget.normalize_name(channel)
-        return next(
-            view for view in comms.views.channel_views() if view.channel.name == canonical
-        )
+        PinThreadCliCommand(channel=self.channel, name=self.name, pinned=self.pinned).apply(comms)
+        return comms.views.channel_view(ChannelTarget.normalize_name(self.channel))
 
 
 @dataclass(frozen=True, kw_only=True)
