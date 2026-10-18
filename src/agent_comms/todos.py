@@ -98,6 +98,10 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if base.strip() != head[2]:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
+        parents = await self.run(check, "git", "rev-list", "--parents", "-n", "1", self.delivered)
+        if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
+            raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
+                             "first pushed commit that answers the order.")
         pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
                                 "--list", "origin/*")
         if not pushed.strip():
