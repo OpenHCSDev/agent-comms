@@ -105,8 +105,7 @@ class FieldPlan:
 
     def omitted(self, value):
         metadata = self.declared.metadata
-        return bool(metadata.get("wire_exclude") or (
-            metadata.get("wire_omit_default") and value == self.default()))
+        return bool(metadata.get("wire_omit_default") and value == self.default())
 
     def captured(self, data):
         if not isinstance(data, dict):
@@ -588,7 +587,7 @@ class FieldCodec(Sealed):
         plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
         for field, key in cls.record_fields(type(value)):
             current = getattr(value, field.name)
-            if not plans[field.name].omitted(current):
+            if not field.metadata.get("wire_exclude") and not plans[field.name].omitted(current):
                 result.update(plans[field.name].encoded(cls.encode(current, hints[field.name])))
         result.update(
             (member.wire_name, cls.encode(getattr(value, name)))
@@ -724,7 +723,7 @@ class FieldCodec(Sealed):
             plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
             for field, key in cls.record_fields(type(value)):
                 current = getattr(value, field.name)
-                if not field.metadata.get(f"{view}_exclude") and not cls._omitted(field, current):
+                if not field.metadata.get(f"{view}_exclude") and not plans[field.name].omitted(current):
                     encoded = cls.project(current, view, hints[field.name])
                     result.update(plans[field.name].encoded(
                         encoded, key=field.metadata.get(f"{view}_name", key)
