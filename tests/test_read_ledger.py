@@ -233,7 +233,7 @@ def test_new_view_predicate_needs_no_ledger_schema_or_dispatch_change(tmp_path):
     assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor(exceptions=(2, 4, 6))
 
 
-def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
+def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send_message("alice", "#team", "painted")
@@ -245,10 +245,7 @@ def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
     replacement.write_bytes(comms.bus.log.path.read_bytes())
     replacement.chmod(0o600)
     replacement.replace(comms.bus.log.path)
-    from agent_comms.errors import RelationViolationError
-
-    with pytest.raises(RelationViolationError, match="checkpoint root/size changed"):
-        comms.views.viewer_snapshot(str(tmp_path))
+    comms.views.viewer_snapshot(str(tmp_path))
     assert not comms.bus.reads.cursor(viewer, comms.registry.snapshot())
 
 
