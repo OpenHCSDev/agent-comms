@@ -68,6 +68,7 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
+from .order_work import OrderWork
 from .turn_digests import LastTurns, ThreadTurns, TurnsSince
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
@@ -838,6 +839,22 @@ class CommsTurnsTool(ThreadReadTool):
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
         return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderWorkTool(ReadTool, ToolRequest):
+    label = "Order work"
+    description = ("Read every tool call the problem's assignee made since its order, newest "
+                   "first, from the unit's own turn records.")
+    problem: str = tool_field("Problem ID")
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> OrderWork:
+        todo = comms.goals.todos.get(self.problem)
+        if todo.assignment is None:
+            raise ValueError(f"{self.problem} has no open order.")
+        since = todo.order.at.recorded_at("An order")
+        turns = comms.transcripts.turns(todo.assignment.owner, TurnsSince(since))
+        return OrderWork.read(self.problem, turns.thread, since, turns.turns)
 
 
 @dataclass(frozen=True, kw_only=True)

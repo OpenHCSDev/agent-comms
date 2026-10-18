@@ -57,6 +57,10 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         """What the call names after its label: nothing unless the tool says."""
         return ''
 
+    def digest(self) -> str:
+        """What the call does in one line, enough to judge it."""
+        return f'{self.declared_name} {one_line(self.reads(), 260)}'
+
     @classmethod
     def caption(cls, name: str, tool: ToolDeclaration | None) -> str:
         """A call reads as its label, then what its record names; with no record, its label."""

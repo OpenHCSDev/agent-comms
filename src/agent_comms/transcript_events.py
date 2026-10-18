@@ -95,6 +95,9 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         """This event as portable text in an imported conversation; activity is not conversation."""
         return None
 
+    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+        """Only tool events change a unit's calls."""
+
 
 @dataclass(frozen=True)
 class TranscriptCoverage:
@@ -129,6 +132,11 @@ class TextTranscript(TranscriptEvent):
     @property
     def text_size(self) -> int:
         return len(self.text)
+
+    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+        if self.tool_call_id in calls:
+            calls[self.tool_call_id] = replace(
+                calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState)
 
 
 @dataclass(frozen=True)
@@ -295,6 +303,19 @@ class ToolStartTranscript(ToolTranscript):
     def title(self) -> str:
         return tool_declaration.ToolDeclaration.caption(self.tool_name, self.tool)
 
+    def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
+        """A call dated before ``since`` is not work since then; an undated one is its turn's."""
+        if self.timestamp is None or self.timestamp >= since:
+            calls[self.tool_call_id] = OrderCall(
+                self.tool_call_id, self.tool_name, self.digest, RunningCallState)
+
+    @property
+    def digest(self) -> str:
+        """The call in one line: its record's digest, or its raw arguments when Core decodes none."""
+        if self.tool is not None:
+            return self.tool.digest()
+        return f"{self.tool_name} {tool_declaration.one_line(json.dumps(self.raw_input), 260)}"
+
     def imported(self) -> ImportedMessage:
         return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
                              + json.dumps(self.raw_input, ensure_ascii=False))
@@ -325,6 +346,30 @@ class ToolEndTranscript(ToolTranscript):
     ok: bool = True
     diff: ToolDiff | None = field(default=None, metadata={"wire_omit_default": True})
     sent_message: SentTranscript | None = field(default=None, metadata={"wire_omit_default": True})
+
+
+class CallState(DeclaredFamily, affix="CallState"):
+    """Where one tool call stands in its unit's records."""
+
+
+class RunningCallState(CallState):
+    """Started; no result is recorded yet."""
+
+
+class SucceededCallState(CallState):
+    pass
+
+
+class FailedCallState(CallState):
+    pass
+
+
+@dataclass(frozen=True)
+class OrderCall:
+    tool_call_id: str
+    tool_name: str
+    digest: str
+    state: type[CallState]
 
 
 @dataclass(frozen=True)
