@@ -1615,7 +1615,7 @@ class ImportedContextCliCommand(ContextOptionCliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class SelectedContextCliCommand(ContextOptionCliCommand):
-    turn: int = option("--turn")
+    turn: int
 
     def manifests(self, ctx: Comms) -> Iterator[ContextManifest]:
         return dropwhile(lambda manifest: not manifest.turn.matches_generation(self.turn),
