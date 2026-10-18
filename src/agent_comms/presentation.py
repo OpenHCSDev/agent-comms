@@ -19,7 +19,6 @@ from .tool_result import ToolResult
 from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
-from .bus_route_counts import OpenedRouteCounts
 from .bus_display_index import BusDisplayIndex
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
@@ -832,14 +831,13 @@ class WireRevision(ReadState):
     notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root))
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root))
     expiry_tick: int
-    through_seq: int
 
     expiry_seconds: ClassVar[int] = 30
 
     @classmethod
     def empty(cls) -> WireRevision:
         return cls(**{source.name: () for source in fields(cls) if "paths" in source.metadata},
-                   expiry_tick=0, through_seq=0)
+                   expiry_tick=0)
 
     @classmethod
     def source_paths(cls, views: HistoryViews) -> dict[str, tuple[Path, ...]]:
@@ -849,16 +847,13 @@ class WireRevision(ReadState):
 
     @classmethod
     def capture(cls, views: HistoryViews, *, expiry_tick: int) -> WireRevision:
-        """Every source is a group; missing files contribute no revision."""
-        paths = cls.source_paths(views)
-        with views.bus.log.locked(mode=SharedLock()) as source:
-            through_seq = views.bus.log.committed_sequence_unlocked(source)
-            captured = {
-                name: tuple(revision for path in group
-                            if (revision := FileRevision.capture(path)) is not None)
-                for name, group in paths.items()
-            }
-        return cls(**captured, expiry_tick=expiry_tick, through_seq=through_seq)
+        """Stat sources only; strict content reads belong to the requesting view."""
+        captured = {
+            name: tuple(revision for path in group
+                        if (revision := FileRevision.capture(path)) is not None)
+            for name, group in cls.source_paths(views).items()
+        }
+        return cls(**captured, expiry_tick=expiry_tick)
 
     def changed_threads(self, previous: ThreadsObserved, comms: Comms,
                         activity: Mapping[str, ObservedActivity]) -> frozenset[str]:
@@ -869,13 +864,13 @@ class WireRevision(ReadState):
         if (self.registry != earlier.registry or self.bus_source_changed_since(earlier)
                 or not readable):
             return frozenset(names)
-        if self.through_seq > earlier.through_seq:
+        if self.bus_log != earlier.bus_log:
             snapshot = comms.registry.snapshot()
             with comms.bus.log.opened_wire_snapshot() as source:
                 if source.changed_since(self.bus_log[0]):
                     raise StaleRevision("Wire source changed before route attribution")
-                with OpenedRouteCounts(comms.bus.log.path, source, snapshot, {}) as routes:
-                    actors = routes.participants_between(earlier.through_seq, self.through_seq)
+                actors = {actor for message, _ in source.public_records(earlier.bus_log[0].size)
+                          for actor in (message.sender, message.target)}
             catalog = comms.channels.catalog.read()
             for actor in actors:
                 changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, catalog))
@@ -910,7 +905,7 @@ class WireRevision(ReadState):
         return frozenset(changed & names)
 
     def bus_source_changed_since(self, earlier: WireRevision) -> bool:
-        return self.through_seq < earlier.through_seq or any(
+        return any(
             FileRevision.source_changed(before, current)
             for before, current in zip_longest(earlier.bus_log, self.bus_log))
 
