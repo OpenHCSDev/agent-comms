@@ -20,12 +20,10 @@ from .message_page import (
     ConversationMessagePageRequest,
     MessagePage,
     NEWEST_PAGE,
-    HistoryCursor,
     MessagePageRequest,
-    NewerTraversal,
-    OlderTraversal,
     PageBounds,
 )
+from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .private_path import FileRevision
