@@ -418,7 +418,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
             basis = basis.select(selected)
             painted.update(record(basis))
             if page.newest_seq is not None:
-                pending.append((kind, target, page.newest_seq, replace(proof, displayed=basis)))
+                pending.append((kind, target, max(selected, default=0), replace(proof, displayed=basis)))
         elif operation == "mark" and pending:
             kind, target, through, proof = rng.choice(pending)
             try:
