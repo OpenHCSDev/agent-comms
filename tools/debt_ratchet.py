@@ -440,6 +440,15 @@ class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
             return ast.copy_location(ast.Constant(value=None), node)
         return self.generic_visit(node)
 
+    def visit_Module(self, node: ast.Module) -> ast.AST:
+        # `python -m` runs a module through this guard; it names the interpreter, not a family.
+        for statement in node.body:
+            match statement:
+                case ast.If(test=ast.Compare(left=ast.Name(id="__name__"), ops=[ast.Eq()],
+                                             comparators=[ast.Constant(value="__main__")])):
+                    statement.test = ast.copy_location(ast.Constant(value=None), statement.test)
+        return self.generic_visit(node)
+
     def visit_Call(self, node: ast.Call):
         match node:
             case ast.Call(

@@ -21,7 +21,7 @@ from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDeli
     RecordedCommitDelivery, MechanicalOrderRun,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    DoneTodoState, RecordHuntTodo, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
+    Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -380,12 +380,58 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
         script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
 
 
-def test_todo_voids_carry_keeps_every_stored_strike(commander):
-    """A store from before voids gains the empty column once; its rows, strikes and schema then read as declared."""
+FIRED = 'The unit took two strikes on this problem and its second delivery was late again.'
+
+
+@pytest.mark.parametrize('caller, why, refused', [
+    ('lead', FIRED, None),
+    ('worker', FIRED, pytest.raises(TodoConflict)),
+    ('lead', 'Late twice.', pytest.raises(ValueError, match='plainly in 10')),
+])
+def test_only_the_commander_releases_a_problem_and_its_owner_stays_on_record(commander, caller, why, refused):
+    comms, _ = commander
+    todo = create(commander, 'P1')
+    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
+        todo.assignment, FIRED)).apply(comms, commander[1])
+    struck = comms.goals.todos.get('P1')
+    def release():
+        CommsTodoTool(id='P1', operation=ReleaseTodo(struck.revision, comms.registry.require(caller).incarnation,
+            struck.assignment, StrikeReason(why))).apply(comms, ThreadCaller(caller))
+    if refused:
+        with refused:
+            release()
+        assert comms.goals.todos.get('P1') == struck
+        return
+    release()
+    released = comms.goals.todos.get('P1')
+    assert released.assignment is None and released.revision == struck.revision + 1
+    assert (released.order, released.strikes) == (struck.order, struck.strikes)
+    assert released.released[0].previous == struck.assignment
+    successor = Assignment('other', 3.0, 'lead', 1.0, 'next')
+    assert released.proposed_assignment(successor).previous_owners == (struck.assignment.owner_identity,)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(released)) == released
+
+
+def test_order_fire_releases_every_open_problem_the_unit_holds(commander, commander_script, capsys, tmp_path):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1')
+    create(commander, 'P2', 'printf 2', 2)
+    script.FireVerb(unit='worker', why=FIRED).run()
+    assert [(t.assignment, t.released[0].reason.text) for t in map(comms.goals.todos.get, ('P1', 'P2'))] == [(None, FIRED)] * 2
+    assert capsys.readouterr().out.splitlines() == [f'{pid}: released from worker: {FIRED}' for pid in ('P1', 'P2')]
+    script.board()
+    assert (tmp_path / 'board.md').read_text().count(f'unassigned: released from worker: {FIRED}') == 2
+
+
+@pytest.mark.parametrize('step, name, column', [
+    ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released')])
+def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
+    """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
     import sqlite3
     from contextlib import closing
-    from cutover.carry_todo_voids import TodoVoids
     from agent_comms.todos import TodoStore
+    carry = getattr(importlib.import_module(f'cutover.{step}'), name)
     comms, caller = commander
     todo = create(commander, 'P1')
     CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
@@ -393,13 +439,13 @@ def test_todo_voids_carry_keeps_every_stored_strike(commander):
     struck = comms.goals.todos.get('P1')
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
-        db.execute('ALTER TABLE todo DROP COLUMN voided')
+        db.execute(f'ALTER TABLE todo DROP COLUMN {column}')
         db.commit()
     with pytest.raises(Exception):
         comms.goals.todos.get('P1')
-    assert TodoVoids.carry(comms.root, apply=False).changed == 1
-    assert TodoVoids.carry(comms.root, apply=True).changed == 1
-    assert TodoVoids.carry(comms.root, apply=False).changed == 0
+    assert carry.carry(comms.root, apply=False).changed == 1
+    assert carry.carry(comms.root, apply=True).changed == 1
+    assert carry.carry(comms.root, apply=False).changed == 0
     assert comms.goals.todos.get('P1') == struck
 
 
