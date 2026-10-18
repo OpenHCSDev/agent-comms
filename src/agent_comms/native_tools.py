@@ -7,11 +7,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import ClassVar
 
-from .tool_declaration import ToolDeclaration
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
 from .native_tool_call import SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
+from .tool_declaration import ToolDeclaration
+
+
+def one_line(text: object, limit: int) -> str:
+    return ' '.join(str(text).split())[:limit]
 
 
 class NativeExecutableTool(ToolDeclaration):
@@ -96,6 +100,14 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
     @abstractmethod
     def _parse_resource(self) -> FileClaimPath | None: ...
 
+    def digest(self) -> str:
+        """What the call does in one line, enough to judge it."""
+        fields = (one_line(getattr(self, key), 260) for key in self.preview_fields)
+        return f"{self.declared_name} {' '.join(fields)}"
+
+    def replacements(self) -> tuple[ReplacementEdit, ...]:
+        return ()
+
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]):
         from .channel_coding_tools import CodingCall
@@ -165,6 +177,13 @@ class EditTool(MutatingPathTool, CodingTool):
     def result_diff(cls, result, ok):
         return result.edit_diff(ok)
 
+    def digest(self) -> str:
+        return f'{self.declared_name} {self.path}: ' + ' | '.join(
+            f'-{one_line(e.old_text, 90)} +{one_line(e.new_text, 140)}' for e in self.edits[:2])
+
+    def replacements(self) -> tuple[ReplacementEdit, ...]:
+        return self.edits
+
     claim_type = ExistingFileClaim
 
 
@@ -172,6 +191,12 @@ class EditTool(MutatingPathTool, CodingTool):
 class WriteTool(MutatingPathTool, CodingTool):
     label = "Write"
     content: str
+
+    def digest(self) -> str:
+        return f'{self.declared_name} {self.path}: {one_line(self.content, 160)}'
+
+    def replacements(self) -> tuple[ReplacementEdit, ...]:
+        return (ReplacementEdit(old_text='', new_text=self.content),)
 
     claim_type = WritableFileClaim
 

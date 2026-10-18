@@ -224,6 +224,15 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
 
 
 @pytest.fixture
+def tool_watch(commander_script):
+    """The tool-call watcher reading the commander config commander_script installed."""
+    import importlib
+
+    from agent_comms.commander import tool_watch
+    return importlib.reload(tool_watch)
+
+
+@pytest.fixture
 def thread_registration(tmp_path_factory):
     from agent_comms.registration import Registration
     return Registration(tmp_path_factory.mktemp('thread-registration') / 'registry.json')
