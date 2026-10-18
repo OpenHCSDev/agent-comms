@@ -7,10 +7,12 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from contextlib import closing, contextmanager, suppress
+from contextlib import closing, contextmanager, nullcontext, suppress
 from dataclasses import dataclass, fields
 from pathlib import Path
-from typing import Literal, Self
+from typing import Self
+
+from .declared_family import DeclaredFamily
 
 from agent_comms.coordination_errors import (
     CoordinationReadUnavailable,
@@ -72,6 +74,46 @@ class StoreBusy(StoreContention):
 
 
 DEFAULT_STORE_CONTENTION = StoreWait()
+
+
+class StoreFile(DeclaredFamily):
+    """One decoded file state, with the consumer's result inside its read lifetime."""
+
+    @contextmanager
+    def observing(self, consumer, *arguments):
+        with self._connection() as source:
+            yield self._capture(consumer, source, *arguments)
+
+    def _connection(self):
+        return nullcontext(self)
+
+    @abstractmethod
+    def _capture(self, consumer, source, *arguments): ...
+
+
+@dataclass(frozen=True)
+class MissingStore(StoreFile, declared_name="missing"):
+    def _capture(self, consumer, source, *arguments):
+        return consumer.missing_store(self, *arguments)
+
+
+@dataclass(frozen=True)
+class InvalidStore(StoreFile):
+    reason: str
+
+    def _capture(self, consumer, source, *arguments):
+        return consumer.invalid_store(self, *arguments)
+
+
+@dataclass(frozen=True)
+class ReadableStore(StoreFile):
+    path: Path
+
+    def _connection(self):
+        return CoordinationStore.observing(self.path)
+
+    def _capture(self, consumer, source, *arguments):
+        return consumer.capture(source, *arguments)
 
 
 class CoordinationStore:
@@ -147,7 +189,7 @@ class CoordinationStore:
                 yield db
 
     @staticmethod
-    def observation_failure(path: Path) -> Literal["missing", "invalid_store"] | None:
+    def observed(path: Path) -> StoreFile:
         """Never let a read-only SQLite open create a WAL shared-memory sidecar.
 
         WAL-mode SQLite can create -shm even when opened with mode=ro. Refuse such a
@@ -158,18 +200,18 @@ class CoordinationStore:
         try:
             info = path.lstat()
             if not stat.S_ISREG(info.st_mode):
-                return "invalid_store"
+                return InvalidStore("Coordinator is not a regular file")
             with path.open("rb") as stream:
                 header = stream.read(100)
         except FileNotFoundError:
-            return "missing"
-        except OSError:
-            return "invalid_store"
+            return MissingStore()
+        except OSError as error:
+            return InvalidStore(str(error))
         if len(header) < 100 or header[:16] != b"SQLite format 3\0":
-            return "invalid_store"
+            return InvalidStore("Coordinator has an invalid SQLite header")
         if header[18:20] != b"\x01\x01":
-            return "invalid_store"
-        return None
+            return InvalidStore("Coordinator is not in rollback-journal mode")
+        return ReadableStore(path)
 
     @staticmethod
     @contextmanager
