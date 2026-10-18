@@ -46,7 +46,7 @@ NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain wo
 B = str(CONFIG.root)
 CLI = str(CONFIG.cli)
 
-OUTGOING = (FairText, HierarchyText, PlainText)  # every text the commander sends passes all of these
+OUTGOING = (FairText, HierarchyText, PlainText)  # every commander text passes each one
 
 
 def refuse(text, *families):
@@ -56,7 +56,7 @@ def refuse(text, *families):
 
 
 def post(recipients, body):
-    """Send one message the caller already passed through OUTGOING; judge reads it back from the bus history."""
+    """Send one message its caller refused with OUTGOING; judge reads it back from bus history."""
     command = ['timeout', '300', CLI, '--root', B, 'send', '--from', ME]
     for unit in recipients:
         command += ['--to', unit]
@@ -270,10 +270,8 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, dis
     if problems:
         sys.exit('Refused order:\n  ' + '\n  '.join(problems))
     message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + storage.RULE.replace('<you>', unit) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.' + f'\nDue {due} {time.strftime("%Z")}. Miss it and the task is reassigned.')
-    taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.'
-             for other in holders}
-    for text in (message, *taken.values()):
-        refuse(text, *OUTGOING)  # before any Core write, so a refusal records nothing
+    taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
+    refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before any Core write: a refusal records nothing
     if not mechanical and (fired := [pid for pid in group if pid in listed and struck(listed[pid], unit) >= 2]):
         sys.exit(f'Refused: {unit} has 2 strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
     at = time.time()

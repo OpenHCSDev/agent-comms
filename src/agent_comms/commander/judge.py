@@ -163,7 +163,7 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
         if slop is None:
             sys.exit(order.Slop.USAGE)
         order.refuse(roast_text, BluntText)
-        order.refuse(' '.join((why, roast_text, fix)), *order.OUTGOING)  # the quoted --line slop is the unit's text
+        order.refuse(' '.join((why, roast_text, fix)), *order.OUTGOING)  # --line quotes the unit
         tasks = {}
         for thread in {edits[i]['thread'] for i in ids}:
             if msg not in {m['id'] for m in my_messages(thread)}:
