@@ -17,7 +17,6 @@ import tomllib
 from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
-from typing import ClassVar
 
 ROOT = Path(__file__).resolve().parent.parent
 PACKAGE = "agent_comms"
@@ -52,56 +51,6 @@ LAYERS = (
 
 
 @dataclass(frozen=True)
-class ModuleFile:
-    """One agent_comms source file: a plain module, whose relative imports start at its parent."""
-
-    path: Path
-    src: Path
-    package: ClassVar[bool] = False
-
-    @property
-    def parts(self) -> tuple[str, ...]:
-        return self.path.relative_to(self.src).with_suffix("").parts
-
-    @property
-    def name(self) -> str:
-        return ".".join(self.parts)
-
-    @property
-    def parent(self) -> str:
-        return self.name.rpartition(".")[0]
-
-
-@dataclass(frozen=True)
-class PackageFile(ModuleFile):
-    """A package's __init__.py, named for its package: its relative imports start there."""
-
-    package: ClassVar[bool] = True
-
-    @property
-    def name(self) -> str:
-        return ".".join(self.parts[:-1])
-
-    @property
-    def parent(self) -> str:
-        return self.name
-
-
-@dataclass(frozen=True)
-class Pyproject:
-    """The one part of pyproject.toml the layer map reads: its console scripts."""
-
-    scripts: dict[str, str]
-
-    @classmethod
-    def read(cls, path: Path) -> Pyproject:
-        match tomllib.loads(path.read_text()):
-            case {"project": {"scripts": dict() as scripts}}:
-                return cls(scripts)
-        raise ValueError(f"{path} declares no [project.scripts] table")
-
-
-@dataclass(frozen=True)
 class Import:
     """One import statement inside agent_comms naming another agent_comms module."""
 
@@ -114,9 +63,10 @@ class ImportNames(ast.NodeVisitor):
     """Records each agent_comms module one source file names in an import statement
     or a literal import_module call."""
 
-    def __init__(self, package: Package, source: ModuleFile, found: list[Import]) -> None:
-        self.package, self.module, self.found = package, source.name, found
-        self.parent = source.parent
+    def __init__(self, package: Package, module: str, path: Path, found: list[Import]) -> None:
+        self.package, self.module, self.found = package, module, found
+        # relative imports start at the file's own directory, a package's __init__ included
+        self.parent = ".".join(path.parent.relative_to(package.src).parts)
 
     def record(self, node: ast.stmt | ast.expr, *names: str) -> None:
         for name in names:
@@ -135,8 +85,7 @@ class ImportNames(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         match node:
             case ast.Call(
-                func=ast.Attribute(attr="import_module"),
-                args=[ast.Constant(value=str() as name), *_],
+                func=ast.Attribute(attr="import_module"), args=[ast.Constant(str() as name), *_]
             ):
                 self.record(node, name)
         self.generic_visit(node)
@@ -148,27 +97,16 @@ class Package:
     def __init__(self, root: Path) -> None:
         self.src = root / "src"
         self.pyproject = root / "pyproject.toml"
+        self.root = self.src / PACKAGE / "__init__.py"  # read for reachability, never a unit
 
     @cached_property
-    def sources(self) -> dict[str, ModuleFile]:
-        """Every source file of the package by dotted name, its own __init__.py included."""
-        tree = self.src / PACKAGE
-        packages = set(tree.rglob("__init__.py"))
-        found = (
-            *(PackageFile(path, self.src) for path in packages),
-            *(ModuleFile(path, self.src) for path in set(tree.rglob("*.py")) - packages),
-        )
-        return {source.name: source for source in sorted(found, key=lambda source: source.name)}
-
-    @cached_property
-    def root(self) -> ModuleFile:
-        """agent_comms/__init__.py: read for reachability, never a unit or an import target."""
-        return self.sources[PACKAGE]
-
-    @cached_property
-    def files(self) -> dict[str, ModuleFile]:
-        """Every module and subpackage below the root package, by dotted name."""
-        return {name: source for name, source in self.sources.items() if source is not self.root}
+    def files(self) -> dict[str, Path]:
+        return {
+            ".".join(path.relative_to(self.src).with_suffix("").parts).removesuffix(
+                ".__init__"
+            ): path
+            for path in sorted(set((self.src / PACKAGE).rglob("*.py")) - {self.root})
+        }
 
     @cached_property
     def top_level(self) -> tuple[str, ...]:
@@ -177,7 +115,9 @@ class Package:
 
     @cached_property
     def subpackages(self) -> tuple[str, ...]:
-        return tuple(unit for unit in self.top_level if self.files[unit].package)
+        return tuple(
+            unit for unit in self.top_level if self.src.joinpath(*unit.split(".")).is_dir()
+        )
 
     def unit(self, module: str) -> str:
         return ".".join(module.split(".")[:2])
@@ -191,10 +131,8 @@ class Package:
     @cached_property
     def imports(self) -> tuple[Import, ...]:
         found: list[Import] = []
-        for source in self.sources.values():
-            ImportNames(self, source, found).visit(
-                ast.parse(source.path.read_text(), str(source.path))
-            )
+        for module, path in {PACKAGE: self.root, **self.files}.items():
+            ImportNames(self, module, path, found).visit(ast.parse(path.read_text(), str(path)))
         return tuple(sorted(set(found), key=lambda edge: (edge.source, edge.line, edge.target)))
 
     @cached_property
@@ -232,8 +170,10 @@ class Package:
 
     @cached_property
     def entry_points(self) -> tuple[str, ...]:
-        scripts = Pyproject.read(self.pyproject).scripts
-        return tuple(sorted({target.partition(":")[0] for target in scripts.values()}))
+        match tomllib.loads(self.pyproject.read_text()):
+            case {"project": {"scripts": dict() as scripts}}:
+                return tuple(sorted({target.partition(":")[0] for target in scripts.values()}))
+        raise ValueError(f"{self.pyproject} declares no [project.scripts] table")
 
     @cached_property
     def unreached(self) -> tuple[str, ...]:
@@ -281,7 +221,7 @@ class Package:
             "|---|---|---|---|",
         ]
         for edge in self.violations:
-            path = self.files[edge.source].path.relative_to(self.src.parent)
+            path = self.files[edge.source].relative_to(self.src.parent)
             source, target = (
                 self.layers[self.unit(edge.source)],
                 self.layers[self.unit(edge.target)],
