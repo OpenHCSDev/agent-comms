@@ -271,6 +271,9 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     store = RegistryStore(root / "registry.json")
     with store.locked():
         store._write_unlocked(json.dumps(registry, indent=2))
+    chain = [step.name for step in CarryChain.at(REPO, "HEAD").steps]
+    for earlier in chain[: chain.index("carry_turn_records")]:
+        CarryLedger(root).record(earlier)
     if carried_count is None:
         with pytest.raises(subprocess.CalledProcessError):
             run_step("carry_turn_records", root, "--apply")
