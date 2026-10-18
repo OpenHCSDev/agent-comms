@@ -140,9 +140,11 @@ class RegistryStore(LockedStore[RegistryDocument]):
                 return entry.document
             raw = json.loads(self.path.read_text())
             if entry is None:
-                document = RegistryDocument.from_wire(raw)
+                document = self._decode(raw)
             else:
-                document = RegistryDocument.from_wire(raw, (entry.raw, entry.document))
+                document = self._bind_document(
+                    RegistryDocument.from_wire(raw, (entry.raw, entry.document))
+                )
             self.cache.entry = RegistryRevision(revision, document, raw)
             return document
 
@@ -170,13 +172,26 @@ class RegistryStore(LockedStore[RegistryDocument]):
             if entry is not None and entry.revision == revision[0]:
                 return RegistryEntryRevision(revision, entry.document.entry(name))
             raw = json.loads(self.path.read_text())
-            return RegistryEntryRevision(revision, RegistryDocument.entry_from_wire(raw, name))
+            decoded_entry = RegistryDocument.entry_from_wire(raw, name)
+            return RegistryEntryRevision(
+                revision, replace(decoded_entry, thread=self._bind_thread(decoded_entry.thread))
+            )
 
     def _encode(self, value: RegistryDocument) -> dict:
         return FieldCodec.encode(value)
 
+    def _bind_thread(self, thread: Thread) -> Thread:
+        record = thread.turn_record
+        bound = record.bound_to(self.path, TurnIdentity(thread.incarnation, thread.turn_generation))
+        return thread if bound is record else replace(thread, turn_record=bound)
+
+    def _bind_document(self, document: RegistryDocument) -> RegistryDocument:
+        for name, thread in document.threads.items():
+            document.threads[name] = self._bind_thread(thread)
+        return document
+
     def _decode(self, data: object) -> RegistryDocument:
-        return self.record_type.from_wire(data)
+        return self._bind_document(self.record_type.from_wire(data))
 
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:

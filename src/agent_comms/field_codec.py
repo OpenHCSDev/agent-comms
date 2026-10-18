@@ -395,7 +395,8 @@ class FieldCodec(Sealed):
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
-        declared = [(field, FieldCodec.wire_key(field)) for field in fields(cls) if field.init]
+        declared = [(field, FieldCodec.wire_key(field)) for field in fields(cls)
+                    if field.init and not field.metadata.get("wire_transient")]
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")
