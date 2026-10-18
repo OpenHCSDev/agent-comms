@@ -4,9 +4,13 @@ Writes one line per call to activity.log. At each turn end (or every 25 calls in
 long turn) prints one digest of what the unit did, for the commander to judge by reading it.
 """
 import json, os, time, glob, collections
+from pathlib import Path
 
-from . import order, storage
+from . import order
 from .config import CommanderConfig
+from ..native_tool_call import SelectedToolDenied
+from ..native_tools import NativeExecutableTool
+from ..registration import Registration
 
 CONFIG = CommanderConfig.installed()
 B = str(CONFIG.root)
@@ -74,25 +78,30 @@ def record_edit(thread, name, args):
 STRUCK = {}  # (thread, violation) -> time of the strike, so one repeated command is one strike
 
 
-def enforce_storage(thread, name, args):
-    """Storage rules are hard: a violating call is a public strike on the unit's current task, at once."""
+def enforce_storage(registry, thread, name, args):
+    """Core decodes the call and its StorageRule decides it; a denial is a public strike on the
+    unit's current task, at once."""
     if not isinstance(args, dict) or thread in CONFIG.storage_exempt:
         return
-    if name == 'bash':
-        found = storage.command_violations(thread, str(args.get('command') or ''))
-    elif name in ('write', 'edit'):
-        found = storage.write_violations(thread, str(args.get('path') or args.get('file_path') or ''))
-    else:
+    if thread not in registry or name not in NativeExecutableTool.names():
+        return  # Core knows neither this unit nor this tool, so it decides nothing
+    try:
+        call = NativeExecutableTool.from_call(name, args, call_id='tool_watch')
+    except SelectedToolDenied:
+        return  # Core refuses to decode the call, so it ran nothing
+    try:
+        worktree = Path(registry.require(thread).worktree)
+        registry.decide_storage(thread, call.tool.storage_effects(worktree))
         return
-    task = next((t.id for t in order.open_todos(thread)), None)
-    for violation in found:
-        if time.time() - STRUCK.get((thread, violation), 0) < 600:
-            continue
-        STRUCK[(thread, violation)] = time.time()
-        print(f'VIOLATION storage {thread}: {violation}', flush=True)
-        if task:
-            order.strike(thread, f'{task} broke the storage rule at a tool call: it {violation}; storage waste is banned outright',
-                         'tool_watch at tool call')
+    except SelectedToolDenied as denied:
+        violation = str(denied)
+    if time.time() - STRUCK.get((thread, violation), 0) < 600:
+        return
+    STRUCK[(thread, violation)] = time.time()
+    print(f'VIOLATION storage {thread}: {violation}', flush=True)
+    if task := next((t.id for t in order.open_todos(thread)), None):
+        order.strike(thread, f'{task} broke the storage rule at a tool call: {violation}; '
+                             'storage waste is banned outright', 'tool_watch at tool call')
 
 
 def emit(turns, thread, final=''):
@@ -108,6 +117,7 @@ def emit(turns, thread, final=''):
 
 def main(a):
     names, offsets = thread_names(), {}
+    registry = Registration(Path(B) / 'registry.json')
     turns = collections.defaultdict(list)
     last_names = time.time()
     while True:
@@ -150,7 +160,7 @@ def main(a):
                         log.write(f"{time.strftime('%H:%M:%S')} {thread} {name} {summarize(name, args)}\n")
                     turns[thread].append(digest_line(name, args))
                     record_edit(thread, name, args)
-                    enforce_storage(thread, name, args)
+                    enforce_storage(registry, thread, name, args)
                     if len(turns[thread]) >= 25:
                         emit(turns, thread)
                 if msg.get('stopReason') == 'stop':
