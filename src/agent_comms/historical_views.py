@@ -27,7 +27,7 @@ from .message_page import (
 from .page_traversal import HistoryCursor, NewerTraversal, OlderTraversal
 from .message_reference import MessageReference
 from .messages import Message
-from .private_path import FileRevision
+from .private_path import FileIdentity, FileRevision, PresentPath
 from .private_registry_guard import PrivateRegistryGuard
 from .read_basis import (
     AnonymousViewer, ChannelDisplayScope, ChannelSelection, DisplayBasis, DisplaySelection, DisplayViewer,
@@ -35,6 +35,7 @@ from .read_basis import (
 )
 from .registration import Registration
 from .read_ledger import ReadLedger
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .registry_provenance import RegistryProvenance
 from .response_policy import InformationalPolicy
 from .store_files import _atomic_write_text, _iter_jsonl_records, _store_lock
@@ -207,7 +208,7 @@ class HistorySource:
     root: str
     original_root: str
     wire_root_id: str
-    bus_identity: tuple[int, int]
+    bus_identity: RecordedBusIdentity
     size: int
     snapshot_bus_revision: FileRevision
     snapshot_registry_revision: FileRevision
@@ -239,7 +240,8 @@ class HistorySource:
         log = WireLog(root / "bus.jsonl")
         info = log.path.stat()
         if (log.read_metadata_unlocked(required=True).root_id != self.wire_root_id
-                or (info.st_dev, info.st_ino) != self.bus_identity or info.st_size != self.size):
+                or not self.bus_identity.matches(PresentPath(FileIdentity.from_stat(info)))
+                or info.st_size != self.size):
             raise ValueError("Recorded provenance lost original wire ownership")
 
     @classmethod
@@ -319,7 +321,7 @@ class HistoricalMessage(Message):
             "history": {
                 "source": self.source.original_root,
                 "wire_root_id": self.source.wire_root_id,
-                "bus_identity": self.source.bus_identity,
+                "bus_identity": FieldCodec.encode(self.source.bus_identity),
                 "sender_created_at": self.sender_created_at,
                 "target_created_at": self.target_created_at,
             },
@@ -451,7 +453,7 @@ class HistoryArchive(RootFile):
                     str(stage.resolve()),
                     str(source_root),
                     marker.root_id,
-                    (bus_info.st_dev, bus_info.st_ino) if bus_info else (0, 0),
+                    RecordedBus(FileIdentity.from_stat(bus_info)) if bus_info else NoRecordedBus(),
                     bus_info.st_size if bus_info else 0,
                     FileRevision.capture(stage / "bus.jsonl"),
                     FileRevision.capture(stage / "registry.json"),

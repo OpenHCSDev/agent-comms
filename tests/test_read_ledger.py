@@ -273,6 +273,51 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     assert not comms.bus.reads.cursor(viewer, comms.registry.snapshot())
 
 
+def test_recorded_bus_identity_is_one_member(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.private_path import FileIdentity, ObservedPath
+    from agent_comms.read_ledger import ReadDocument
+    from agent_comms.recorded_bus import NoRecordedBus, RecordedBus
+
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    message = comms.messaging.send_message("alice", viewer, "read before restore")
+    ledger = comms.bus.reads
+    assert ledger.read().bus_identity == NoRecordedBus()
+    assert not ledger.read().bus_identity.matches(ObservedPath.at(comms.bus.log.path))
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 1
+
+    page = comms.views.dm_display_page("alice", worktree=str(tmp_path))
+    comms.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
+        expected_display_basis=page.display_basis)
+    recorded = RecordedBus(FileIdentity.from_stat(comms.bus.log.path.stat()))
+    assert ledger.read().bus_identity == recorded == page.display_basis.bus_identity
+    assert recorded.matches(ObservedPath.at(comms.bus.log.path))
+    old = FieldCodec.encode(ledger.read())
+    assert old["bus_identity"] == [recorded.identity.device, recorded.identity.inode]
+    assert FieldCodec.decode(ReadDocument, old) == ledger.read()
+    unrecorded = FieldCodec.decode(ReadDocument, {**old, "bus_identity": None})
+    assert unrecorded.bus_identity == NoRecordedBus()
+    assert not unrecorded.cursor(viewer, comms.registry.snapshot(), ObservedPath.at(comms.bus.log.path))
+    assert comms.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 0
+
+    replacement = tmp_path / "restored-bus.jsonl"
+    replacement.write_bytes(comms.bus.log.path.read_bytes())
+    replacement.chmod(0o600)
+    replacement.replace(comms.bus.log.path)
+    reopened = wire(tmp_path)
+    assert not recorded.matches(ObservedPath.at(reopened.bus.log.path))
+    assert message.seq not in reopened.bus.reads.cursor(viewer, reopened.registry.snapshot())
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 1
+    with pytest.raises(ValueError, match="bus was replaced"):
+        reopened.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
+            expected_display_basis=page.display_basis)
+    fresh = reopened.views.dm_display_page("alice", worktree=str(tmp_path))
+    reopened.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
+        expected_display_basis=fresh.display_basis)
+    assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 0
+
+
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):
     comms = prepared(tmp_path)
     messages = [comms.messaging.send_message("alice", "#team", f"row {i}") for i in range(5)]
