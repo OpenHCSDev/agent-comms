@@ -46,18 +46,13 @@ MANIFEST = _resource_root() / "pi-native.sha256"
 OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
 
 
-PACKAGE = Path("node_modules/@earendil-works/pi-coding-agent")
-
-
 def pinned_location() -> Path:
-    """Where this installation's pin places its package, prepared or not."""
     build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-    return MANIFEST.parent / f".pi-native-{build}" / PACKAGE
+    return MANIFEST.parent / f".pi-native-{build}" / "node_modules/@earendil-works/pi-coding-agent"
 
 
 def pinned_native_package() -> Path:
-    package = pinned_location()
-    if not package.is_dir():
+    if not (package := pinned_location()).is_dir():
         raise NativePackageError(f"Pinned native package directory is missing: {package}")
     return package
 
@@ -150,7 +145,7 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     current_fence = (root / fence).read_bytes()
     donors = []
     for deployment in sorted(deployments.glob(".pi-native-*")):
-        donor = deployment / PACKAGE
+        donor = deployment / "node_modules/@earendil-works/pi-coding-agent"
         candidate = donor / fence
         if not candidate.is_file() or candidate.is_symlink() or donor == root:
             continue
