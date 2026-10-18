@@ -76,7 +76,7 @@ def test_new_process_uses_reply_index_without_reparsing_history(tmp_path):
         append(source)
     assert completed_snapshot(comms, str(tmp_path)).thread_unread["worker"] == 100
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
-    sources = {"worker": str(source)}
+    sources = {"worker": (str(source),)}
     try:
         # Another process preparing an update must not prevent a fresh reader
         # from opening the already committed index.
@@ -105,7 +105,7 @@ def test_sidebar_native_counts_use_the_original_captured_read_document(tmp_path)
     comms, source = setup_thread(tmp_path)
     append(source)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    completed_counts(comms.views.transcript_reads, viewer, {"worker": str(source)})
+    completed_counts(comms.views.transcript_reads, viewer, {"worker": (str(source),)})
     capture = CoordinationSnapshot.capture
 
     def painted_after_capture(*args, **kwargs):
@@ -128,7 +128,7 @@ def test_ready_native_sources_share_bulk_rows_and_one_predecessor_snapshot(tmp_p
         append(source)
         state.mark_read("viewer", str(source), source.stat().st_size)
         append(source)
-        sources[str(number)] = str(source)
+        sources[str(number)] = (str(source),)
     expected = dict.fromkeys(sources, 1)
     assert completed_counts(state, "viewer", sources).counts == expected
     database = state._database()
@@ -157,7 +157,7 @@ def test_native_preparation_releases_sqlite_and_losing_commit_keeps_original_ord
     append(source)
     path = tmp_path / "read_ledger.json"
     first, other = TranscriptReadState(path), TranscriptReadState(path)
-    sources = {"worker": str(source)}
+    sources = {"worker": (str(source),)}
     try:
         assert completed_counts(first, "viewer", sources).counts == {"worker": 1}
         assert other.counts("viewer", sources, document=other.reads.read()).counts == {"worker": 1}
@@ -200,7 +200,7 @@ def test_many_threads_do_not_reparse_saved_histories_on_attach(tmp_path):
         source = tmp_path / f"session-{number}.jsonl"
         for _ in range(20):
             append(source)
-        sources[f"thread-{number}"] = str(source)
+        sources[f"thread-{number}"] = (str(source),)
     first = TranscriptReadState(comms.views.transcript_reads.path)
     assert set(completed_counts(first, "viewer", sources).counts.values()) == {20}
     first.close()
@@ -222,7 +222,7 @@ def test_reply_index_rebuilds_after_source_replacement(tmp_path):
     replacement.replace(source)
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
     try:
-        assert completed_counts(fresh, str(tmp_path), {"worker": str(source)}).counts == {"worker": 1}
+        assert completed_counts(fresh, str(tmp_path), {"worker": (str(source),)}).counts == {"worker": 1}
     finally:
         fresh.close()
 
@@ -236,7 +236,7 @@ def test_corrupt_derived_index_rebuilds_from_transcript(tmp_path):
     index.write_bytes(b"damaged cache")
     fresh = TranscriptReadState(comms.views.transcript_reads.path)
     try:
-        assert completed_counts(fresh, str(tmp_path), {"worker": str(source)}).counts == {"worker": 1}
+        assert completed_counts(fresh, str(tmp_path), {"worker": (str(source),)}).counts == {"worker": 1}
     finally:
         fresh.close()
 
@@ -312,7 +312,7 @@ def test_bounded_batches_resume_after_process_exit_and_preserve_read_cursor(tmp_
     path = tmp_path / "read_ledger.json"
     first = TranscriptReadState(path)
     first.mark_read("viewer", str(source), source.stat().st_size)
-    sources = {"worker": str(source)}
+    sources = {"worker": (str(source),)}
     partial = first.counts("viewer", sources, document=first.reads.read())
     assert partial.pending == {"worker"} and "worker" not in partial.counts
     first.preparation.result(timeout=10)
@@ -334,7 +334,7 @@ def test_large_first_source_does_not_starve_other_sources(tmp_path):
         source = tmp_path / f"large-{number}.jsonl"
         for _ in range(600):
             append(source)
-        sources[str(number)] = str(source)
+        sources[str(number)] = (str(source),)
     state = TranscriptReadState(tmp_path / "read_ledger.json")
     completed = set()
     try:
@@ -358,7 +358,7 @@ def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
         append(source, content="real native record " * 100)
     state = TranscriptReadState(tmp_path / "read_ledger.json")
     started = monotonic()
-    assert state.counts("viewer", {"worker": str(source)}, document=state.reads.read()).pending == {"worker"}
+    assert state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read()).pending == {"worker"}
     pool = state._pool
     processes = tuple(pool._processes.values())
     state.close()
@@ -366,40 +366,40 @@ def test_close_cancels_executor_without_scanning_rest_of_native_file(tmp_path):
     assert state.preparation is None
     assert not any(process.is_alive() for process in processes)
     with pytest.raises(RuntimeError, match="Transcript reader is closed"):
-        state.counts("viewer", {"worker": str(source)}, document=state.reads.read())
+        state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read())
 
 
 def test_busy_index_is_not_discarded(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
     state = TranscriptReadState(tmp_path / "read_ledger.json")
-    assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 1}
+    assert completed_counts(state, "viewer", {"worker": (str(source),)}).counts == {"worker": 1}
     inode = state.index_path.stat().st_ino
     append(source)
     blocker = sqlite3.connect(state.index_path)
     blocker.execute("BEGIN IMMEDIATE")
     try:
-        busy = state.counts("viewer", {"worker": str(source)}, document=state.reads.read())
+        busy = state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read())
         assert (busy.counts, busy.pending) == ({}, frozenset({"worker"}))
         assert state.index_path.stat().st_ino == inode
     finally:
         blocker.rollback()
         blocker.close()
     try:
-        assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 2}
+        assert completed_counts(state, "viewer", {"worker": (str(source),)}).counts == {"worker": 2}
     finally:
         state.close()
 
 
 @pytest.mark.parametrize("busy_writer", ["wire", "sqlite"])
 def test_pending_publication_does_not_erase_other_committed_counts(tmp_path, busy_writer):
-    sources = {name: str(tmp_path / f"{name}.jsonl") for name in ("ready", "growing")}
-    for source in sources.values():
+    sources = {name: (str(tmp_path / f"{name}.jsonl"),) for name in ("ready", "growing")}
+    for (source,) in sources.values():
         append(Path(source))
     state = TranscriptReadState(tmp_path / "read_ledger.json")
     try:
         assert completed_counts(state, "viewer", sources).counts == {"ready": 1, "growing": 1}
-        append(Path(sources["growing"]))
+        append(Path(sources["growing"][0]))
         assert state.counts("viewer", sources, document=state.reads.read()).pending == {"growing"}
         preparation = state.preparation
         preparation.result(timeout=10)
@@ -425,9 +425,9 @@ def test_oversized_native_record_is_counted_without_truncation_or_input_limit(tm
     append(source, content="Actual text " * 200000)
     state = TranscriptReadState(tmp_path / "read_ledger.json")
     try:
-        first = state.counts("viewer", {"worker": str(source)}, document=state.reads.read())
+        first = state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read())
         assert first.pending == {"worker"} and not first.counts
-        assert completed_counts(state, "viewer", {"worker": str(source)}).counts == {"worker": 1}
+        assert completed_counts(state, "viewer", {"worker": (str(source),)}).counts == {"worker": 1}
     finally:
         state.close()
 
@@ -456,7 +456,7 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
     def observe(state):
         while not done and not failures:
             try:
-                state.counts("viewer", {"worker": str(source)}, document=state.reads.read())
+                state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read())
             except CoordinationReadUnavailable:
                 continue  # The observation owner retries unavailable reads, not fake counts.
             except BaseException as error:
@@ -472,7 +472,7 @@ def test_two_processes_indexing_one_growing_transcript_count_each_reply_once(tmp
         for worker in workers:
             worker.join()
         assert failures == []
-        assert completed_counts(states[0], "viewer", {"worker": str(source)}).counts == {"worker": 300}
+        assert completed_counts(states[0], "viewer", {"worker": (str(source),)}).counts == {"worker": 300}
     finally:
         done = True
         for worker in workers:
@@ -486,7 +486,7 @@ def test_deleted_source_withdraws_the_original_preparation_without_resurrection(
     append(source)
     state = TranscriptReadState(tmp_path / "read_ledger.json")
     try:
-        assert state.counts("viewer", {"worker": str(source)}, document=state.reads.read()).pending == {"worker"}
+        assert state.counts("viewer", {"worker": (str(source),)}, document=state.reads.read()).pending == {"worker"}
         state.preparation.result(timeout=10)
         state.remove_threads((thread_registration.new_thread('worker', frozenset(), str(tmp_path), session_file=str(source)),))
         assert state.counts("viewer", {}, document=state.reads.read()).counts == {}
@@ -499,7 +499,7 @@ def test_append_commit_does_not_scan_or_delete_historical_reply_rows(tmp_path):
     source = tmp_path / "source.jsonl"
     append(source)
     state = TranscriptReadState(tmp_path / "read_ledger.json")
-    sources = {"worker": str(source)}
+    sources = {"worker": (str(source),)}
     try:
         assert completed_counts(state, "viewer", sources).counts == {"worker": 1}
         append(source)

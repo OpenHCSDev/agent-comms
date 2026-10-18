@@ -408,7 +408,7 @@ class TranscriptReadState(ThreadOwnedState):
             )
 
     def counts(
-        self, viewer: str, sources: Mapping[str, str], *, document: ReadDocument
+        self, viewer: str, sources: Mapping[str, tuple[str, ...]], *, document: ReadDocument
     ) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if not self._lock.acquire(blocking=False):
@@ -427,28 +427,27 @@ class TranscriptReadState(ThreadOwnedState):
             self._lock.release()
 
     def _counts_locked(
-        self, viewer: str, sources: Mapping[str, str], document: ReadDocument
+        self, viewer: str, sources: Mapping[str, tuple[str, ...]], document: ReadDocument
     ) -> TranscriptUnread:
         if not sources and self._preparation is None:
             return TranscriptUnread({}, frozenset())
         revisions = {
             source: FileRevision.capture(Path(source))
-            for source in dict.fromkeys(sources.values())
+            for source in dict.fromkeys(source for keys in sources.values() for source in keys)
         }
-        result: dict[str, int] = {}
-        pending: set[str] = set()
+        source_counts: dict[str, int] = {}
+        pending_sources: set[str] = set()
         with self._indexed_sources(revisions) as (database, indexes):
             ends: dict[str, int] = {}
             completed: dict[str, ReplyIndex] = {}
-            for name, source in sources.items():
-                revision = revisions[source]
+            for source, revision in revisions.items():
                 index = indexes[source]
                 if revision is None:
-                    result[name] = 0
+                    source_counts[source] = 0
                 elif not index.covers(revision):
-                    pending.add(name)
+                    pending_sources.add(source)
                 else:
-                    completed[name] = index
+                    completed[source] = index
                     seen = self.reads.transcript_seen(
                         viewer, source, revision.identity.inode, document=document
                     )
@@ -456,9 +455,16 @@ class TranscriptReadState(ThreadOwnedState):
                         seen = 0  # Only truncation invalidates a cursor beyond the indexed prefix.
                     ends[source] = seen
             replies = TranscriptReply.preceding(database, ends)
-            for name, index in completed.items():
-                last = replies.get(index.source)
-                result[name] = index.total - (last.ordinal if last is not None else 0)
+            for source, index in completed.items():
+                last = replies.get(source)
+                source_counts[source] = index.total - (last.ordinal if last is not None else 0)
+        result: dict[str, int] = {}
+        pending: set[str] = set()
+        for name, keys in sources.items():
+            if pending_sources.isdisjoint(keys):
+                result[name] = sum(source_counts[source] for source in keys)
+            else:
+                pending.add(name)
         return TranscriptUnread(result, frozenset(pending))
 
     def mark_read(self, viewer: str, source: str, through: int) -> None:
