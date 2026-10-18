@@ -157,7 +157,7 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
                 assert agent.sessions.worktrees[session_id] == str(new)
                 assert await agent.sessions.sync_identity(session_id) == renamed
                 assert len(sender.updates) == 1
-                assert agent._comms.registry.require(session_id).active_turn is None
+                assert not agent._comms.registry.require(session_id).active_turn.executing
             finally:
                 await proxy.close()
                 await attached.shutdown()

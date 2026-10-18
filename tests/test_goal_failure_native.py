@@ -209,7 +209,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                         # Only the localhost response is controlled. Pause at
                         # the actual provider request of the tracked native turn.
                         current = comms.registry.require(sid)
-                        assert current.executing
+                        assert current.active_turn.executing
                         paused = comms.goals.update_goal(
                             sid, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
                             actor=OwnerInvocable,
@@ -236,7 +236,7 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
             assert stored_inputs(agent.inputs.dispositions.root).rows[key] == unknown
             registry = comms.registry.snapshot()
             owner = registry.threads[sid]
-            assert owner.active_turn is None
+            assert not owner.active_turn.executing
             assert any(
                 json.loads(path.read_text()).get("reason") == FailureReason.MODEL_REQUEST_FAILED
                 for path in (comms.root / "diagnostics").glob("*.json")

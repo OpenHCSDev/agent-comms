@@ -14,6 +14,8 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.turn_lease import NoTurn
+
 from agent_comms.assignment_states import CompletedAssignment
 from agent_comms.attempt_start import AttemptStart
 from agent_comms.attempt_states import ModelRunningAttempt, PromptAcceptedAttempt, SettlingAttempt
@@ -624,7 +626,7 @@ def test_response_requires_current_exact_live_turn(tmp_path, change):
                 witness.thread, process_identity=ProcessIdentity(process.pid, process.start_time + 1)
             ))
         elif change == "turn":
-            witness = replace(witness, thread=replace(witness.thread, active_turn=None))
+            witness = replace(witness, thread=replace(witness.thread, active_turn=NoTurn()))
         else:
             witness = replace(witness, thread=replace(witness.thread, created_at=witness.thread.created_at + 1))
         with pytest.raises(StaleFence):

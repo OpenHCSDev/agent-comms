@@ -72,7 +72,7 @@ async def test_native_preflight_failure_is_visible_and_cannot_mark_started(nativ
         rows = stored_inputs(owner.inputs.dispositions.root).unknown(frozenset({session}))
         assert len(rows) == 1 and not rows[0].has_native_binding
         assert rows[0].public_status == "not_sent"
-        assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not owner.turns.turn_state(session).busy
+        assert not any(state.pending_turns for state in owner.inputs.drained.values()) and not owner.turns.turn_state(session).active.phase.busy
         assert any(isinstance(fact, InputDeliveryChangedUpdate)
                    for update in updates.rows for fact in decode_updates(update.get("_meta")))
         assert Comms(native.root).goals.unresolved_inputs(session) == tuple(UnresolvedInput.of(row) for row in rows)
@@ -173,7 +173,7 @@ async def test_late_owner_socket_observes_unknown_until_exact_native_start(
             assert stored_inputs(owner.inputs.dispositions.root).rows == reopened
             assert (native.session.read_bytes(), native.provider.posts) == before
             assert native.session.read_bytes().startswith(saved)
-            assert not owner.turns.turn_state(session).busy and not any(state.inbox for state in owner.inputs.drained.values())
+            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in owner.inputs.drained.values())
         finally:
             native.provider.response_gate.set()
             turn.cancel()
@@ -216,7 +216,7 @@ async def test_native_steer_keeps_original_input_and_turn_cleanup(native_backend
             assert len({row.native_id for row in rows.values()}) == 2
             assert native.provider.posts == 2 and len(native.saved_inputs()) == 3
             assert native.session.read_bytes().startswith(saved)
-            assert not owner.turns.turn_state(session).busy and not any(state.inbox for state in owner.inputs.drained.values())
+            assert not owner.turns.turn_state(session).active.phase.busy and not any(state.inbox for state in owner.inputs.drained.values())
         finally:
             original_response.set()
             turn.cancel()
@@ -376,7 +376,7 @@ async def test_waiting_message_is_drained_when_following_input_opens(
                 for row in stored_inputs(owner.inputs.dispositions.root).rows.values()
                 if row.has_native_binding
             ))
-            await wait_for(lambda: not owner.turns.turn_state(session).busy)
+            await wait_for(lambda: not owner.turns.turn_state(session).active.phase.busy)
 
             with Coordination(str(native.root / "coordination.sqlite3")) as store:
                 assignments = sealed_cohort_assignments(store, lookup)

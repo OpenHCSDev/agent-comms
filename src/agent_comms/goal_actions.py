@@ -84,7 +84,7 @@ class GoalActionContext:
 
     @property
     def report_turn(self) -> str:
-        return self.thread.turn_state.report_turn
+        return self.thread.active_turn.report_turn
 
     @property
     def model_report(self) -> bool:
@@ -216,7 +216,7 @@ class ActiveGoalAction(
                 replace(thread, goal=blocked), ctx.goals.registry.status(thread.name)
             )
             raise ValueError(refusal)
-        elif not generation.lifecycle.allows_resume(thread.executing):
+        elif not generation.lifecycle.allows_resume(thread.active_turn.executing):
             raise ValueError("The goal attempt is unresolved; inspect it before Retry.")
 
 
