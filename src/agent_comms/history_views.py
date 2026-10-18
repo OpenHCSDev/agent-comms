@@ -32,8 +32,7 @@ from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, CommandTarget
 from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
-from .coordination_errors import StaleRevision, TranscriptChanged
-from .native_transcript import NativeTranscript
+from .coordination_errors import StaleRevision
 from .errors import UnknownChannelError, UnregisteredThreadError
 from .exporting import (
     WireExportBoundary,
@@ -90,11 +89,7 @@ class ThreadViewRead(ConversationPreparation):
     through: TranscriptCursor
 
     def native(self):
-        if self.through.session_file != self.thread.runtime.read_key:
-            raise TranscriptChanged()
-        for key in self.thread.runtime.read_keys():
-            self.views.transcript_reads.mark_read(
-                self.viewer.name, key, self.through.offset, NativeTranscript(Path(key)).cut())
+        self.thread.runtime.mark_read(self.views.transcript_reads, self.viewer.name, self.through)
 
     def external(self):
         self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))

@@ -158,3 +158,38 @@ def test_wire_cursor_keeps_the_furthest_committed_native_prefix_within_it():
     assert cursor.over_native(committed) == WireTranscriptCursor("a.jsonl", 70, wire_at(5))
     assert cursor.over_native(committed[3:]) == WireTranscriptCursor("b.jsonl", 500, wire_at(5))
     assert cursor.over_native(()) == WireTranscriptCursor("a.jsonl", 0, wire_at(5))
+
+
+def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_path):
+    from agent_comms.cli_commands import RegisterCliCommand
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.thread_execution import NativeThreadExecution
+    from agent_comms.transcripts import NoNativeTranscriptCursor, TranscriptCursor
+
+    path = tmp_path / "parent.jsonl"
+    transcript(path, 3)
+    comms = wire(tmp_path / "wire")
+    comms.registry.declare(comms.registry.new_thread(
+        "parent", frozenset(), str(tmp_path), session_file=str(path),
+        execution=NativeThreadExecution,
+    ))
+    RegisterCliCommand(name="child", worktree=str(tmp_path), parent="parent",
+                       execution=NativeThreadExecution).apply(comms)
+    checkpoint = comms.transcripts.transcript_checkpoint("child")
+    inherited = comms.transcripts.thread_transcript_page("child").after
+    painted = checkpoint.over_native((inherited,))
+    assert painted == NoNativeTranscriptCursor(wire=checkpoint.wire)
+    assert FieldCodec.decode(TranscriptCursor, FieldCodec.encode(painted)) == painted
+    ledger = comms.bus.reads.path
+    before = ledger.read_bytes() if ledger.exists() else b""
+    comms.views.mark_thread_view_read("child", worktree=str(tmp_path), through=painted)
+    assert (ledger.read_bytes() if ledger.exists() else b"") == before
+
+    parent = comms.transcripts.transcript_checkpoint("parent")
+    comms.views.mark_thread_view_read("parent", worktree=str(tmp_path), through=parent)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    assert comms.bus.reads.transcript_seen(viewer, str(path), path.stat().st_ino) == path.stat().st_size
+
+    # The same cursor state retains its own external record coordinate, not a parent's.
+    own = NoNativeTranscriptCursor(offset=30, wire=checkpoint.wire)
+    assert own.over_native((replace(own, offset=12), inherited)) == replace(own, offset=12)

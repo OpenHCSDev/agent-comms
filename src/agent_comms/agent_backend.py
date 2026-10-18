@@ -68,6 +68,19 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
     def read_keys(self):
         return (self.read_key,)
 
+    def transcript_cursor(self, frontier, offset):
+        return frontier.cursor(self.read_key, offset)
+
+    def mark_read(self, reads, viewer, through):
+        from pathlib import Path
+        from .coordination_errors import TranscriptChanged
+        from .native_transcript import NativeTranscript
+
+        if through.session_file != self.read_key:
+            raise TranscriptChanged()
+        for key in self.read_keys():
+            reads.mark_read(viewer, key, through.offset, NativeTranscript(Path(key)).cut())
+
     def history_locations(self, thread, registry, visited):
         yield self, False
         yield from thread.inherited_history(registry, visited)
