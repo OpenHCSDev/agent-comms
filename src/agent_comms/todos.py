@@ -1048,6 +1048,12 @@ class Todo(TypedTable):
         return tuple(recorded for recorded in self.strikes
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
 
+    def struck_on_order(self, unit: str) -> bool:
+        """A live strike on ``unit`` recorded since the current order was sent; a send-back that
+        replaces this order is that same miss, so it counts no second strike."""
+        sent = self.order.at.recorded_at("An order")
+        return any(recorded.at.recorded_at("A strike") >= sent for recorded in self.live_strikes(unit))
+
     def struck_out(self, unit: str) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
         orders reach it."""

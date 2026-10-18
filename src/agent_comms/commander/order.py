@@ -292,6 +292,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     if not mechanical and fired:
         sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
                  f'Reassign them; only --mechanical orders on them reach {unit}.')
+    # A miss already struck on the order this replaces is one miss: the send-back records no second strike.
+    struck_already = replaces and listed[group[0]].struck_on_order(unit)
     at = time.time()
     try:
         order = PendingProblemOrder(
@@ -312,7 +314,9 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for other, text in taken.items():
         post([other], text)
     print(order.id)
-    if replaces and not clean:
+    if replaces and not clean and struck_already:
+        print(f'{unit} already struck on this order of {group[0]}; the send-back counts that one miss once')
+    elif replaces and not clean:
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()

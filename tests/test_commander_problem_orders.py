@@ -273,6 +273,25 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
         path.name for path in (repo.parent / 'state').iterdir()}
 
 
+def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
+    """A miss struck with `order strike` and then sent back is one strike; the next send-back strikes again."""
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    (repo / 'count.txt').write_text('0\n')
+    body = repo.parent / 'order.txt'
+    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
+                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
+    script.strike('worker', 'P1 left count.txt at zero and reported it fixed')
+    script.send('worker', '23:59', str(body), 'request')
+    assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
+    script.send('worker', '23:59', str(body), 'request')
+    assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
+
+
 def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(commander, commander_script):
     """A wrong check the commander wrote is corrected on the open order; its id, holder, deadline and strikes stay."""
     comms, _ = commander
