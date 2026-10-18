@@ -863,6 +863,47 @@ class StrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class OrderVerdict(TodoOperation, declared_name=None):
+    """The commander's verdict on one tool call the holder made for this order; it stays on the order."""
+    actor: ThreadIncarnation
+    previous: Assignment
+    tool_call_id: str
+    at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()))
+
+    @abstractmethod
+    def judged(self, current: Todo) -> Todo: ...
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        current.require_assignment(self.previous)
+        _text(self.tool_call_id, "Judged tool call ID", 200)
+        judged = self.judged(current)
+        return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class AcceptedVerdict(OrderVerdict):
+    """The tool call carries out the order clause it quotes."""
+    quote: str
+
+    def judged(self, current: Todo) -> Todo:
+        quoted = " ".join(self.quote.split())
+        if len(quoted.split()) < 4 or quoted not in " ".join(current.order.instructions(current).split()):
+            raise ValueError("Quote 4+ words of the order this tool call carries out.")
+        return current
+
+
+@dataclass(frozen=True)
+class SendBackVerdict(OrderVerdict):
+    """The tool call goes back; the same write strikes the holder and revises the order Goal."""
+    reason: StrikeReason
+
+    def judged(self, current: Todo) -> Todo:
+        return StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text, self.at).apply(current)
+
+
+@dataclass(frozen=True)
 class VoidStrikeTodo(TodoOperation):
     """The commander takes back a strike recorded in error; the strike stays on the record."""
     actor: ThreadIncarnation
@@ -1027,6 +1068,7 @@ class Todo(TypedTable):
     hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
+    verdicts: tuple[OrderVerdict, ...] = ()
 
     @property
     def pending(self):
