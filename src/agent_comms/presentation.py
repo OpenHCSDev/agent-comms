@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .cli_result import CliResult
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, projected
 from .tool_result import ToolResult
 from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
@@ -636,14 +636,19 @@ class ThreadRecord(CliResult):
         ) for thread in threads)
 
     def encoded(self) -> object:
-        return self.to_wire()
+        return FieldCodec.encode(self, view="presence")
 
-    def to_wire(self) -> dict[str, object]:
-        return {**FieldCodec.encode_record(self, "presence"), **self.wire_projections()}
+    @projected(view="presence")
+    def is_fork(self) -> bool:
+        return self.thread.is_fork
 
-    def wire_projections(self) -> dict[str, object]:
-        return dict(is_fork=self.thread.is_fork, activity=self.activity.state.value,
-                    activity_detail=self.activity.detail)
+    @projected(view="presence", name="activity")
+    def activity_state(self) -> ActivityState:
+        return self.activity.state
+
+    @projected(view="presence")
+    def activity_detail(self) -> str:
+        return self.activity.detail
 
 
 @dataclass(frozen=True, slots=True)
@@ -692,9 +697,29 @@ class ThreadView(ThreadRecord):
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 
-    def wire_projections(self) -> dict[str, object]:
-        return dict(ThreadRecord.wire_projections(self), **self.thread.runtime.presentation(),
-                    last_activity=self.activity.timestamp, **self.runtime.wire_fields())
+    @projected(view="presence")
+    def resumable(self) -> bool:
+        return self.thread.runtime.resumable
+
+    @projected(view="presence")
+    def last_activity(self) -> float:
+        return self.activity.timestamp
+
+    @projected(view="presence")
+    def session_name(self) -> str | None:
+        return self.runtime.session_name
+
+    @projected(view="presence")
+    def context_used(self) -> int | None:
+        return self.runtime.context_used
+
+    @projected(view="presence")
+    def context_size(self) -> int | None:
+        return self.runtime.context_size
+
+    @projected(view="presence")
+    def context_percent(self) -> float | None:
+        return self.runtime.context_percent
 
 
 @dataclass(frozen=True, slots=True)

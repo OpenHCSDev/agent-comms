@@ -63,7 +63,7 @@ def test_saved_presence_roundtrip_and_wire_views_preserve_data(tmp_path, status)
     assert reopened.snapshot() == before
     assert reopened.status("owner") == status
     assert FieldCodec.decode(ThreadStatus, FieldCodec.encode(status)) == status
-    assert comms.views.thread_detail("owner").to_wire()["status"] == status.declared_name
+    assert comms.views.thread_detail("owner").encoded()["status"] == status.declared_name
     assert comms.views.list_threads()[0]["status"] == status.declared_name
     activity = Activity("owner", ActivityState.WORKING, "stale or current activity")
     comms.agents.activity.emit(activity)
