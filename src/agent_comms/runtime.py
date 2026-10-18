@@ -32,7 +32,6 @@ from acp.schema import (
 from .jsonl_stream import JsonlStreamReader
 from .field_codec import MalformedRecord
 from .owner_protocol import (
-    ClientLine,
     ClientPermissionResponse,
     IncompatibleOwnerError,
     OwnerFailure,

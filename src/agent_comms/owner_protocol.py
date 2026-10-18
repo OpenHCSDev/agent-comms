@@ -59,7 +59,9 @@ class OwnerAnnouncement(OwnerLine):
 
     def announced(self, thread: str) -> None:
         if self != OwnerAnnouncement():
-            raise IncompatibleOwnerError(OtherCoreOwner(thread=thread, core_commit=self.core_commit))
+            raise IncompatibleOwnerError(
+                OtherCoreOwner(thread=thread, core_commit=self.core_commit)
+            )
 
 
 class ControllerTokenText(TextRepresentation):
@@ -179,8 +181,8 @@ class ClientLine(DeclaredFamily, affix=""):
     def wire(self) -> bytes:
         return (json.dumps(FieldCodec.encode(self)) + "\n").encode()
 
-    @abstractmethod
-    def answer(self, client: SocketClient) -> None: ...
+    def answer(self, client: SocketClient) -> None:
+        raise MalformedRecord(f"The client sent {self.declared_name} to the owner.")
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -195,11 +197,13 @@ class ClientPermissionResponse(ClientLine):
 
     @classmethod
     def cancelled(cls, request_id: str) -> Self:
-        return cls.of(request_id, RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled")))
+        denied = RequestPermissionResponse(outcome=DeniedOutcome(outcome="cancelled"))
+        return cls.of(request_id, denied)
 
     @classmethod
     def of(cls, request_id: str, response: RequestPermissionResponse) -> Self:
-        return cls(id=request_id, outcome=response.outcome.model_dump(by_alias=True, exclude_none=True))
+        outcome = response.outcome.model_dump(by_alias=True, exclude_none=True)
+        return cls(id=request_id, outcome=outcome)
 
     def response(self) -> RequestPermissionResponse:
         return RequestPermissionResponse.model_validate({"outcome": self.outcome})
