@@ -1,7 +1,7 @@
 """Disposable byte offsets for bounded JSONL history pages.
 
-The bus remains authoritative. This index is advanced under its file lock and
-is never used across a changed inode, shortened file, or changed indexed tail.
+The bus remains authoritative. SQLite's writer transaction owns index advancement;
+coverage and offsets are never used across a changed inode, shortened file, or changed tail.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
-from .store_files import SharedLock, _store_lock
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
 
 if TYPE_CHECKING:
@@ -129,25 +128,31 @@ class BusPageIndex:
     def __exit__(self, *_error: object) -> None:
         self._resources.close()
 
-    def covers(self, opened: WireSnapshot) -> bool:
+    @contextmanager
+    def covered_snapshot(self, opened: WireSnapshot):
+        """Admit an existing index and retain the revision proving its coverage."""
         if not self.path.exists():
-            return False
+            yield False
+            return
         with self.snapshot():
             actual, _ = self._schema(self.connection)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
-            return saved is not None and saved.covers(opened)
+            yield saved is not None and saved.covers(opened)
 
+    def covers(self, opened: WireSnapshot) -> bool:
+        with self.covered_snapshot(opened) as covered:
+            return covered
 
     @contextmanager
     def prepared(self, opened: WireSnapshot):
-        with self.snapshot():
-            if self.covers(opened):
+        with self.covered_snapshot(opened) as covered:
+            if covered:
                 yield
                 return
         opened.metadata.access.require_append()
         self.prepare(opened)
-        with self.snapshot():
-            if not self.covers(opened):
+        with self.covered_snapshot(opened) as covered:
+            if not covered:
                 raise StaleBusPageIndexError("Page index does not cover its opened source")
             yield
 
@@ -172,58 +177,39 @@ class BusPageIndex:
         return True
 
     def prepare(self, opened: WireSnapshot) -> None:
-        """Bring this disposable index up to the caller's original source cut."""
-        while opened.complete_prefix.boundary:
-            saved, source, offset, rows = self._prepare(opened)
-            if saved == source:
-                return
-            with self._writing() as db:
-                if offset == 0:
-                    BusPageRow.delete(db)
-                for row in rows:
-                    row.insert(db)
-                source.upsert(db)
-
-    def _prepare(self, opened: WireSnapshot) -> tuple[BusPageSource | None, BusPageSource, int, tuple[BusPageRow, ...]]:
-        """Read and decode the source before taking the SQLite writer lock."""
-        saved, last_rows = None, ()
-        if self.path.exists():
-            with self.snapshot():
-                actual, _ = self._schema(self.connection)
-                if actual:
-                    saved = BusPageSource.one(self.connection, singleton=1)
-                    last_rows = BusPageRow.select(self.connection, order_by=("seq",),
-                                                  descending=True, limit=1)
+        """Advance bounded batches from the coverage held by SQLite's writer lock."""
         revision = opened.revision
         size = opened.complete_prefix.boundary
-        if saved is not None and saved.covers(opened):
-            return saved, saved, saved.revision.size, ()
-        offset = saved.revision.size if saved is not None else 0
-        valid = (
-            saved is not None
-            and saved.revision.holds_cut(revision, offset)
-            and saved.tail == opened.fingerprint(offset)
-        )
-        if not valid:
-            offset = 0
-        rows: list[BusPageRow] = []
-        last_sequence = last_rows[0].seq if valid and last_rows else None
-        through = offset
-        for record, row_offset, through in opened.rows(offset, min(size, offset + self.batch_bytes)):
-            for message in opened.messages(record):
-                if last_sequence is not None and message.seq <= last_sequence:
-                    raise RelationViolationError("Wire sequences are not increasing.")
-                rows.append(BusPageRow(message.seq, row_offset, message.sender, message.target,
-                                       message.timestamp, message.sender_role.page_human_sender(),
-                                       tuple(mention.thread for mention in message.mentions)))
-                last_sequence = message.seq
-        through = opened.position
-        source = BusPageSource(replace(revision, size=through), opened.fingerprint(through))
-        return saved, source, offset, tuple(rows)
+        while size:
+            with self._writing() as db:
+                saved = BusPageSource.one(db, singleton=1)
+                if saved is not None and saved.covers(opened):
+                    return
+                offset = saved.revision.size if saved is not None else 0
+                valid = (
+                    saved is not None
+                    and saved.revision.holds_cut(revision, offset)
+                    and saved.tail == opened.fingerprint(offset)
+                )
+                if not valid:
+                    offset = 0
+                    BusPageRow.delete(db)
+                last_rows = BusPageRow.select(db, order_by=("seq",), descending=True, limit=1)
+                last_sequence = last_rows[0].seq if last_rows else None
+                for record, row_offset, _ in opened.rows(offset, min(size, offset + self.batch_bytes)):
+                    for message in opened.messages(record):
+                        if last_sequence is not None and message.seq <= last_sequence:
+                            raise RelationViolationError("Wire sequences are not increasing.")
+                        BusPageRow(message.seq, row_offset, message.sender, message.target,
+                                   message.timestamp, message.sender_role.page_human_sender(),
+                                   tuple(mention.thread for mention in message.mentions)).insert(db)
+                        last_sequence = message.seq
+                through = opened.position
+                BusPageSource(replace(revision, size=through), opened.fingerprint(through)).upsert(db)
 
     def invalidate(self) -> None:
-        """Discard damaged derived coverage; prepare owns the subsequent rebuild."""
-        with _store_lock(self.bus_path), self._writing() as db:
+        """Discard damaged derived coverage under the index's writer exclusion."""
+        with self._writing() as db:
             BusPageSource.delete(db, singleton=1)
 
     @contextmanager
