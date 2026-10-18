@@ -1,5 +1,0 @@
-Using Python 3.14.2 environment at: /home/ts/.cache/agent-scratch/core-commander-2/p107-runtime/env
-Resolved 1 package in 8ms
-Prepared 1 package in 68ms
-Installed 1 package in 13ms
- + agent-comms==0.1.0 (from file:///home/ts/.cache/agent-scratch/core-commander-2/p107-runtime/wheels/agent_comms-0.1.0-py3-none-any.whl)
