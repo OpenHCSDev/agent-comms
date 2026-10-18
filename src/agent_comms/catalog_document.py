@@ -7,7 +7,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
-from .channels import Channel, SavedView, ViewPredicate
+from .channels import BuiltinChannelView, Channel, SavedView, SavedViewChannel, TagChannel, ViewPredicate
 from .display_order import ChannelSort, CreatedThreadSort, NameChannelSort, ThreadSort
 from .errors import UnknownChannelError
 from .thread_identity import ThreadProvenance
@@ -23,8 +23,8 @@ class ChannelPreferences:
     any_mode: bool = False
     pinned_threads: frozenset[str] = frozenset()
 
-    def channel(self, name: str, tags: frozenset[str], view: SavedView | None = None) -> Channel:
-        return Channel(
+    def channel[C: Channel](self, declaration: type[C], name: str, tags: frozenset[str], **identity) -> C:
+        return declaration(
             name,
             tags,
             self.order,
@@ -33,7 +33,7 @@ class ChannelPreferences:
             self.parent,
             self.archived,
             self.any_mode,
-            view,
+            **identity,
         )
 
 
@@ -94,15 +94,14 @@ class CatalogDocument:
         target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
         view = self.saved_views.get(tag)
-        members = (
-            view.predicate.tags
-            if view
-            else (frozenset() if BuiltinChannel.lookup(target) else frozenset({tag}))
-        )
         preference = self.preferences.get(
             target, ChannelPreferences(created_at=view.created_at if view else created_at)
         )
-        return preference.channel(target, members, view)
+        if builtin := BuiltinChannel.lookup(target):
+            return preference.channel(BuiltinChannelView, target, frozenset(), builtin=builtin)
+        if view is not None:
+            return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
+        return preference.channel(TagChannel, target, frozenset({tag}))
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
         return frozenset(kind.value for kind in BuiltinChannel if kind.matches(tags)) | frozenset(
@@ -180,8 +179,7 @@ class CatalogDocument:
         self, name: str, threads: Mapping[str, ThreadProvenance], *, parent: str | None, archived: bool
     ) -> Channel:
         current = self.require_channel(name, threads)
-        if current.builtin is not None:
-            raise ValueError("Built-in channels cannot be grouped or archived.")
+        current.require_metadata()
         if type(archived) is not bool:
             raise ValueError("Channel archived state must be boolean.")
         if parent is not None:
@@ -190,8 +188,7 @@ class CatalogDocument:
                 parent_channel = self.require_channel(parent, threads)
             except UnknownChannelError as error:
                 raise ValueError(f"Unknown parent channel: {parent!r}") from error
-            if parent_channel.builtin is not None:
-                raise ValueError("Built-in channels cannot be presentation parents.")
+            parent_channel.require_parent()
         result = self.set_preferences(name, threads, parent=parent, archived=archived)
         self.validate_parents()
         return result
@@ -262,7 +259,7 @@ class CatalogDocument:
         missing = {
             name: channel
             for name, channel in source.views(source_threads).items()
-            if name not in self.preferences and (channel.builtin is None or not existing)
+            if name not in self.preferences and channel.can_restore_preferences(existing)
         }
         for name, channel in missing.items():
             self.preferences[name] = source.preferences.get(

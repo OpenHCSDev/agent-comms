@@ -5,7 +5,6 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, ClassVar
 
-from .channel_targets import BuiltinChannel
 from .declared_family import DeclaredFamily
 
 if TYPE_CHECKING:
@@ -84,11 +83,7 @@ class ChannelSort(DisplayOrder, DeclaredFamily, affix="ChannelSort"):
 
     @classmethod
     def key(cls, view: ChannelView) -> tuple[int, int, float, float, str]:
-        builtins = tuple(BuiltinChannel)
-        builtin = view.channel.builtin
-        if builtin is not None:
-            return not view.channel.pinned, builtins.index(builtin), 0, 0, view.channel.name
-        return not view.channel.pinned, len(builtins), *cls.sort_fields(view)
+        return view.channel.sort_key(cls, view)
 
     @classmethod
     def store_channel_order(cls, channels: ChannelManagement, channel: str | None) -> type[ChannelSort]:
