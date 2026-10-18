@@ -160,7 +160,8 @@ def test_work_that_stops_moving_stalls(progress, now, stalled):
 
 def deadline_lines(script, since=0.0):
     """One watch tick's deadline lines: the pending orders and their progress, read once."""
-    pending = [t for t in script.open_todos() if t.pending]
+    held = script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation)
+    pending = [t for t in held if t.pending]
     return script.deadline_lines(pending, script.progress(), since)
 
 

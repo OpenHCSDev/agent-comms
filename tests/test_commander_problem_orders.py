@@ -13,7 +13,7 @@ from contextlib import closing
 from dataclasses import replace
 
 from cutover.carry import CarryChain
-from cutover.carry_todo_verdicts import TodoVerdicts
+from cutover.carry_todo_corrections import TodoCorrections
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
@@ -95,8 +95,7 @@ def test_two_orders_keep_one_original_goal_and_independent_facts(commander):
     assert first.order.check.result == CountCheckResult(1)
     assert second.order.check.result == CountCheckResult(2)
     assert first.order.first_call_deadline == RecordedEventTime(220)
-    rows = comms.goals.todos.for_goal(comms.registry.require('worker').incarnation, goal.id)
-    rendered = goal.instructions(rows)
+    rendered = '\n'.join(goal.instructions_for(comms.goals, comms.registry.require('worker').incarnation))
     assert 'Problem: P1' in rendered and 'Problem: P2' in rendered
     assert 'printf 1' in rendered and 'printf 2' in rendered
     assert 'P1' not in goal.text and 'P2' not in goal.text
@@ -113,9 +112,9 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
         request='request', deadline=RecordedEventTime(3000), commander='lead',
         expected_revision=todo.revision)).apply(comms, caller)
     assert comms.registry.require('worker').goal.text == 'Original commander brief'
-    rows = comms.goals.todos.for_goal(comms.registry.require('worker').incarnation, goal.id)
-    assert 'printf 7' in goal.instructions(rows)
-    assert 'printf 1' not in goal.instructions(rows)
+    worker = comms.registry.require('worker').incarnation
+    rows, rendered = comms.goals.todos.for_goal(worker, goal.id), '\n'.join(goal.instructions_for(comms.goals, worker))
+    assert 'printf 7' in rendered and 'printf 1' not in rendered
     assert rows[0].deadline == RecordedEventTime(3000)
 
 
@@ -148,9 +147,8 @@ def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
     assert not comms.goals.todos.get('P1').pending
     assert comms.goals.todos.get('P1').order.delivery.at.at > 0
     goal = comms.registry.require('worker').goal
-    rows = comms.goals.todos.for_goal(comms.registry.require('worker').incarnation, goal.id)
-    assert 'Problem: P1' not in goal.instructions(rows)
-    assert 'Problem: P2' in goal.instructions(rows)
+    rendered = '\n'.join(goal.instructions_for(comms.goals, comms.registry.require('worker').incarnation))
+    assert 'Problem: P1' not in rendered and 'Problem: P2' in rendered
     CommsOrderDoneTool(problem='P2', delivery=OperationDelivery()).apply(comms, caller)
     assert isinstance(comms.registry.require('worker').goal.state, CompletedGoal)
 
@@ -369,7 +367,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     artifact = repo.parent / 'seen.png'
     artifact.write_text('x')
     script.close('P1', 'the installed app shows the counter at one after restart', str(artifact))
-    assert not comms.goals.todos.get('P1').state.open and script.open_todos() == []
+    assert not comms.goals.todos.get('P1').state.open and script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == ()
     assert not {'problems.json', 'deadlines.json', 'closed.jsonl', 'strikes.jsonl', 'done.jsonl',
                 'sent.jsonl', 'hunts.jsonl'} & {
         path.name for path in (repo.parent / 'state').iterdir()}
@@ -491,7 +489,7 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    assert script.open_todos() == [] and 'Problem: NEW' in body.read_text()
+    assert script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == () and 'Problem: NEW' in body.read_text()
 
 
 def test_commander_refuses_a_check_that_prints_no_count(commander_script):
@@ -504,7 +502,7 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='the check printed no integer'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    assert script.open_todos() == []
+    assert script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == ()
 
 
 def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander):
@@ -557,7 +555,7 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
     monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
     script.withdraw('P1', 'duplicate of P2, which owns the same fix', 'P2')
     withdrawn = comms.goals.todos.get('P1')
-    assert script.open_todos() == [] and not withdrawn.pending and script.struck(withdrawn, 'worker') == 0
+    assert script.COMMS.goals.todos.held_for_commander(script.COMMS.registry.require(script.ME).incarnation) == () and not withdrawn.pending and script.struck(withdrawn, 'worker') == 0
     line = 'P1: order order-P1 withdrawn from worker, no strike: duplicate of P2, which owns the same fix (superseded by P2)'
     assert (tmp_path / 'board.md').read_text().count(line) == 1
     assert line in (tmp_path / 'narrative.md').read_text()
@@ -650,8 +648,6 @@ def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
 
 
 @pytest.mark.parametrize('step, name, column', [
-    ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released'),
-    ('carry_todo_verdicts', 'TodoVerdicts', 'verdicts'),
     ('carry_todo_corrections', 'TodoCorrections', 'corrections')])
 def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
     """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
@@ -768,6 +764,7 @@ def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
         db.execute('ALTER TABLE todo DROP COLUMN verdicts')
+        db.execute('ALTER TABLE todo DROP COLUMN corrections')
         db.commit()
     with (closing(CoordinationStore.read_snapshot(path)) as db,
           pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"')):
@@ -775,17 +772,24 @@ def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
     repo = Path(__file__).parents[1]
     steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
     assert list(steps).index('carry_todo_verdicts') > list(steps).index('carry_problem_goals')
-    held = tmp_path / 'held'
-    held.mkdir()
-    archive = subprocess.run(['git', '-C', str(repo), 'archive', steps['carry_problem_goals'].revision,
-                              'src', 'tools'], capture_output=True, check=True).stdout
-    subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
-    ran = subprocess.run([sys.executable, '-m', 'cutover.carry_problem_goals', str(comms.root)],
-                         capture_output=True, text=True, cwd=held,
-                         env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
-    assert ran.returncode == 0, ran.stderr
-    assert json.loads(ran.stdout.splitlines()[-1])['changed'] == 2
-    assert TodoVerdicts.carry(comms.root, apply=True).changed == 3
+    for name, member, changed in (('carry_problem_goals', 'ProblemGoals', 2),
+                                   ('carry_todo_verdicts', 'TodoVerdicts', 3)):
+        held = tmp_path / name
+        held.mkdir()
+        archive = subprocess.run(['git', '-C', str(repo), 'archive', steps[name].revision,
+                                  'src', 'tools'], capture_output=True, check=True).stdout
+        subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
+        ran = subprocess.run([sys.executable, '-c',
+                              'import importlib, pathlib, sys; '
+                              'm=importlib.import_module(\"cutover.\"+sys.argv[1]); '
+                              'c=getattr(m,sys.argv[2]); '
+                              'import json; print(json.dumps({\"changed\":c.carry(pathlib.Path(sys.argv[3]),apply=True).changed}))',
+                              name, member, str(comms.root)],
+                             capture_output=True, text=True, cwd=held,
+                             env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
+        assert ran.returncode == 0, ran.stderr
+        assert json.loads(ran.stdout.splitlines()[-1])['changed'] == changed
+    assert TodoCorrections.carry(comms.root, apply=True).changed == 3
     with closing(CoordinationStore.read_snapshot(path)) as db:
         assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
 
@@ -833,6 +837,73 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
         lines = rotate.detached(rotate.owed_orders())
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
+
+
+def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script):
+    import json
+    import time
+    from pathlib import Path
+
+    comms, _ = commander
+    create(commander, 'P1')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
+                  hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
+    Path(judge.EDITS).write_text(''.join(json.dumps(edit) + '\n' for edit in edits))
+    judge.OkVerb(ids=tuple(f'{e["id"]}:{judge.check_code(e)}' for e in edits),
+                 why='The changes repair the existing canonical state owner',
+                 serves='Repair the existing owner', lines=('value = 2',)).run()
+    saved = comms.goals.todos.get('P1')
+    assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
+    assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
+    assert not saved.strikes
+    assert importlib.reload(judge).unjudged() == []
+    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+
+
+@pytest.mark.parametrize('verb', ['ok', 'back'])
+def test_judge_refuses_an_edit_without_an_open_order(commander_script, verb):
+    import json
+    from pathlib import Path
+
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    edit = dict(id='orphan-edit', thread='worker', hunks=[dict(old='value = 1', new='value = 2')])
+    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
+    fields = dict(ids=(f'{edit["id"]}:{judge.check_code(edit)}',),
+                  why='The changes repair the existing canonical state owner', lines=('value = 2',))
+    command = judge.OkVerb(**fields) if verb == 'ok' else judge.BackVerb(
+        **fields, slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        derive='delete-copy', by=f'{__file__}:1')
+    with pytest.raises(SystemExit, match='edit orphan-edit.*one open order Todo'):
+        command.run()
+    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
+
+
+def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_script, monkeypatch):
+    import json
+    from pathlib import Path
+
+    comms, _ = commander
+    create(commander, 'P1')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    edit = dict(id='bad-edit', thread='worker', hunks=[dict(old='value = 1', new='value = 2')])
+    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
+    message = comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner')
+    posted = []
+    monkeypatch.setattr(judge.order, 'post', lambda to, body: posted.append((to, body)) or 'sent')
+    why = 'The unit copied the same state into a second writable store'
+    judge.BackVerb(ids=(f'{edit["id"]}:{judge.check_code(edit)}',), why=why, msg=message,
+        lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
+        fix='Delete the copied state and read the value from its existing owner',
+        slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+        derive='delete-copy', by=f'{__file__}:1').run()
+    saved = comms.goals.todos.get('P1')
+    assert len(saved.verdicts) == len(saved.strikes) == 1
+    assert isinstance(saved.verdicts[0], SendBackVerdict)
+    assert why in comms.registry.require('worker').goal.progress
+    assert judge.unjudged() == []
+    assert any(to == ['worker', '#comms'] for to, _ in posted)
+    assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
 def test_an_accepted_verdict_quotes_the_order_it_serves(commander):

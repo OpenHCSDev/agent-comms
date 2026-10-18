@@ -34,9 +34,9 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         root = next(iter(roots), None)
         if root is not None and "family_discriminator" in namespace:
             raise TypeError("Only the family root may declare its discriminator.")
-        if affix is not None and root is not None:
-            raise TypeError("A member cannot start another family.")
-        is_root = affix is not None or (
+        # Explicit child roots reuse family behavior; a slots-rebuilt root
+        # carries its own registry in the copied class namespace.
+        is_root = affix is not None or "__registry__" in namespace or (
             root is None and any(isinstance(base, _FamilyMeta) for base in bases)
         )
         if is_root:
@@ -105,6 +105,14 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     ) -> None:
         # The metaclass consumes these declaration options before ABC creation.
         super().__init_subclass__()
+
+    @classmethod
+    def decodes_tagged_records(cls) -> bool:
+        return True
+
+    def record_tag(self) -> dict[str, str]:
+        """Derive the wire selector from the family's decoding behavior."""
+        return {self.family_discriminator: self.declared_name} if self.decodes_tagged_records() else {}
 
     @classmethod
     def decode(cls, name: str) -> type[Self]:
