@@ -25,7 +25,7 @@ from agent_comms.todos import Todo, TodoStore
 class ProblemGoals(Carry):
     """Every pending Todo is assigned under its owner's current Goal, and that Goal is open."""
 
-    after = "carry_todo_releases"
+    after = "carry_todo_verdicts"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

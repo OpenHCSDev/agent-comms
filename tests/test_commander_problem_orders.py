@@ -712,6 +712,32 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     assert comms.registry.require('worker').goal == goal
 
 
+def test_column_carry_then_goal_carry_reads_todos(commander):
+    """The chain adds the verdicts column before the goal carry reads todos as declared; read
+    before it, the missing column fails as missing rather than as a quoted literal name."""
+    import sqlite3
+    from contextlib import closing
+    from pathlib import Path
+    from cutover.carry import CarryChain
+    from agent_comms.coordination_database import CoordinationStore
+    from cutover.carry_todo_verdicts import TodoVerdicts
+    from agent_comms.todos import Todo, TodoStore
+    comms, _ = commander
+    completed_with_pending(commander)
+    path = TodoStore.path_in(comms.root)
+    with closing(sqlite3.connect(path)) as db:
+        db.execute('ALTER TABLE todo DROP COLUMN verdicts')
+        db.commit()
+    with pytest.raises(sqlite3.OperationalError, match='no such column: verdicts'):
+        ProblemGoals.carry(comms.root, apply=False)
+    names = [step.name for step in CarryChain.at(Path(__file__).parents[1], 'HEAD').steps]
+    assert names.index('carry_todo_verdicts') < names.index('carry_problem_goals')
+    assert TodoVerdicts.carry(comms.root, apply=True).changed == 3
+    assert ProblemGoals.carry(comms.root, apply=True).changed == 2
+    with closing(CoordinationStore.read_snapshot(path)) as db:
+        assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
+
+
 def test_problem_goals_carry_reattaches_pending_problems_and_reopens_their_goal(commander):
     comms, caller = commander
     goal = completed_with_pending(commander)

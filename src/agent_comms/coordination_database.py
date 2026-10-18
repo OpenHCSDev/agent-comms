@@ -149,7 +149,15 @@ class CoordinationStore:
         **options: object,
     ) -> sqlite3.Connection:
         """Open a writer through the store family's typed busy behavior."""
-        return contention.writer(path, options)
+        return CoordinationStore.identifiers_only(contention.writer(path, options))
+
+    @staticmethod
+    def identifiers_only(db: sqlite3.Connection) -> sqlite3.Connection:
+        """A double-quoted name is an identifier, never a string: a missing column fails
+        as missing instead of reading back as a literal named after it."""
+        for option in (sqlite3.SQLITE_DBCONFIG_DQS_DML, sqlite3.SQLITE_DBCONFIG_DQS_DDL):
+            db.setconfig(option, False)
+        return db
 
     @staticmethod
     def begin_snapshot(db: sqlite3.Connection) -> None:
@@ -159,9 +167,10 @@ class CoordinationStore:
         # reclassify BUSY as unsupported data or absent rows.
         _TableName.read(db.execute("SELECT name FROM sqlite_master LIMIT 1"))
 
-    @staticmethod
-    def _configure_reader(db: sqlite3.Connection) -> sqlite3.Connection:
+    @classmethod
+    def _configure_reader(cls, db: sqlite3.Connection) -> sqlite3.Connection:
         try:
+            cls.identifiers_only(db)
             db.row_factory = sqlite3.Row
             db.execute("PRAGMA query_only=ON")
             db.execute("PRAGMA foreign_keys=ON")
