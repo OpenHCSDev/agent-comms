@@ -20,12 +20,13 @@ from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
-    CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
+    CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
 from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
+    AcceptedVerdict, Assignment, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason, StrikeTodo,
+    Todo, TodoConflict, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -449,7 +450,8 @@ def test_order_fire_releases_every_open_problem_the_unit_holds(commander, comman
 
 
 @pytest.mark.parametrize('step, name, column', [
-    ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released')])
+    ('carry_todo_voids', 'TodoVoids', 'voided'), ('carry_todo_releases', 'TodoReleases', 'released'),
+    ('carry_todo_verdicts', 'TodoVerdicts', 'verdicts')])
 def test_todo_record_carries_keep_every_stored_strike(commander, step, name, column):
     """A store from before the column gains it empty once; its rows, strikes and schema then read as declared."""
     import sqlite3
@@ -616,3 +618,34 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
         lines = rotate.detached(rotate.owed_orders())
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
+
+
+def test_an_accepted_verdict_quotes_the_order_it_serves(commander):
+    """An accepted verdict stays on the order only when its quote is 4+ words of that order."""
+    comms, caller = commander
+    todo = create(commander, 'P1')
+    lead = comms.registry.require('lead').incarnation
+    with pytest.raises(ValueError, match='Quote 4\\+ words'):
+        CommsVerdictTool(id='P1', operation=AcceptedVerdict(
+            todo.revision, lead, todo.assignment, 'toolu_1', quote='Delete the whole bus now')).apply(comms, caller)
+    assert comms.goals.todos.get('P1') == todo
+    accepted = AcceptedVerdict(todo.revision, lead, todo.assignment, 'toolu_1', quote='Repair  the existing owner')
+    CommsVerdictTool(id='P1', operation=accepted).apply(comms, caller)
+    judged = comms.goals.todos.get('P1')
+    assert (judged.verdicts, judged.strikes, judged.revision) == ((accepted,), (), todo.revision + 1)
+
+
+def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(commander):
+    """A send-back is one verdict and one strike on the order, and the holder's Goal says why."""
+    comms, caller = commander
+    todo = create(commander, 'P1')
+    goal = comms.registry.require('worker').goal
+    why = 'The unit wrapped the old store in a forwarding class instead of deleting it.'
+    sent_back = SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation, todo.assignment,
+                                'toolu_2', reason=StrikeReason(why))
+    CommsVerdictTool(id='P1', operation=sent_back).apply(comms, caller)
+    judged = comms.goals.todos.get('P1')
+    assert (judged.verdicts, judged.revision, judged.strike_count) == ((sent_back,), todo.revision + 1, 1)
+    assert judged.strikes[0].reason == why
+    revised = comms.registry.require('worker').goal
+    assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')

@@ -27,7 +27,7 @@ from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
-from .todos import DeliverTodo, GoalRef, PendingProblemOrder, Todo
+from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
 
 if TYPE_CHECKING:
     from .goal_presentation import GoalSnapshot
@@ -343,10 +343,13 @@ class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, 
 
 
 @dataclass(frozen=True, kw_only=True)
-class DeliveredOrderGoalAction(GoalAction, RuntimeInvocable):
+class HeldOrderGoalAction(GoalAction, RuntimeInvocable):
+    """A Todo operation on a held order and the revision of the holder's Goal, in one write."""
     problem: str
-    operation: DeliverTodo
-    progress: str = ""
+    operation: TodoOperation
+
+    @abstractmethod
+    def revised(self, goal: Goal, ctx: GoalActionContext) -> Goal: ...
 
     def prepare(self, goals, name, actor):
         ctx = GoalActionContext(goals, goals.registry.require(name), actor)
@@ -360,9 +363,25 @@ class DeliveredOrderGoalAction(GoalAction, RuntimeInvocable):
     def change(self, ctx):
         ctx.goals.todos.apply(self.problem, self.operation)
         goal = ctx.require_goal()
+        return replace(self.revised(goal, ctx), revision=goal.revision + 1)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DeliveredOrderGoalAction(HeldOrderGoalAction):
+    operation: DeliverTodo
+    progress: str = ""
+
+    def revised(self, goal, ctx):
         pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
-        return replace(goal, state=goal.state.after_order_delivery(pending),
-                       progress=self.progress, revision=goal.revision + 1)
+        return replace(goal, state=goal.state.after_order_delivery(pending), progress=self.progress)
+
+
+@dataclass(frozen=True, kw_only=True)
+class SentBackOrderGoalAction(HeldOrderGoalAction):
+    operation: SendBackVerdict
+
+    def revised(self, goal, ctx):
+        return replace(goal, progress=f"Sent back on {self.problem}: {self.operation.reason.text}")
 
 
 @dataclass(frozen=True, kw_only=True)

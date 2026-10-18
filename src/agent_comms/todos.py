@@ -820,6 +820,10 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def prepare(self, goals, current):
         return self
 
+    def record(self, goals, problem: str) -> Todo:
+        """Write this operation; one that also revises the holder's Goal routes through it."""
+        return goals.apply_problem(problem, self)
+
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
@@ -901,6 +905,13 @@ class SendBackVerdict(OrderVerdict):
 
     def judged(self, current: Todo) -> Todo:
         return StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text, self.at).apply(current)
+
+    def record(self, goals, problem: str) -> Todo:
+        from .goal_actions import GoalPrecondition, SentBackOrderGoalAction
+
+        goals.update_goal(self.previous.owner, SentBackOrderGoalAction(
+            expect=GoalPrecondition(goal_id=self.previous.generation), problem=problem, operation=self))
+        return goals.todos.get(problem)
 
 
 @dataclass(frozen=True)

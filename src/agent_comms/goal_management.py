@@ -56,9 +56,11 @@ class Goals:
         actor = self.registry.require(commander).incarnation
         current = self.todos.get(problem)
         current.require_commander(actor)
-        prepared = operation.prepare(self, current)
+        return operation.prepare(self, current).record(self, problem)
+
+    def apply_problem(self, problem, operation):
         with _store_lock(self._wire_lock_path):
-            return self.todos.apply(problem, prepared)
+            return self.todos.apply(problem, operation)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
