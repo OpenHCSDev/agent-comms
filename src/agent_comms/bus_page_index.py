@@ -26,7 +26,7 @@ from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .bus_display_index import DisplayMetricScope, DisplayMetrics
-    from .wire_log import OpenedWireSnapshot
+    from .wire_log import OpenedWireSnapshot, WireSnapshot
 
 
 class StaleBusPageIndexError(ValueError):
@@ -47,12 +47,14 @@ class BusPageSource(PageIndexTable, TypedTable):
     tail: str
     singleton: Literal[1] = field(default=1, metadata={"sql": Column(primary_key=True)})
 
-    def covers(self, stream: BinaryIO, source: FileRevision) -> bool:
+    def covers(self, snapshot: OpenedWireSnapshot) -> bool:
         """A later append index may lend offsets within this original cut."""
-        opened = FileRevision.from_stat(os.fstat(stream.fileno()))
+        stream = snapshot.stream
+        source = replace(snapshot.revision, size=snapshot.complete_boundary)
+        opened = FileRevision.from_file(stream)
         return (
             source.holds_cut(opened, source.size)
-            and self.revision.identity == opened.identity
+            and snapshot.same_file(self.revision.identity)
             and source.size <= self.revision.size <= opened.size
             and self.tail == AppendCheckpoint.fingerprint(stream, self.revision.size)
         )
@@ -129,17 +131,19 @@ class BusPageIndex:
     def __exit__(self, *_error: object) -> None:
         self._resources.close()
 
-    def covers(self, opened: OpenedWireSnapshot) -> bool:
+    def covers(self, opened: WireSnapshot) -> bool:
+        return opened.read(self._covers, absent=lambda: False)
+
+    def _covers(self, opened: OpenedWireSnapshot) -> bool:
         if not self.path.exists():
             return False
         with self.snapshot():
             actual, _ = self._schema(self.connection)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
-            return saved is not None and saved.covers(
-                opened.stream, replace(opened.revision, size=opened.complete_boundary))
+            return saved is not None and saved.covers(opened)
 
     @contextmanager
-    def prepared(self, opened: OpenedWireSnapshot):
+    def prepared(self, opened: WireSnapshot):
         with _store_lock(self.bus_path, shared=True):
             if self.covers(opened):
                 with self.snapshot():
@@ -172,13 +176,10 @@ class BusPageIndex:
             self.prepare(source)
         return True
 
-    def prepare(self, opened: OpenedWireSnapshot) -> None:
+    def prepare(self, opened: WireSnapshot) -> None:
         """Bring this disposable index up to the caller's original source cut."""
         while True:
-            prepared = self._prepare(opened)
-            if prepared is None:
-                raise RelationViolationError("Cannot prepare a page index from an incomplete wire cut")
-            saved, source, offset, rows = prepared
+            saved, source, offset, rows = self._prepare(opened.opened)
             if saved == source:
                 return
             with self._writing() as db:
@@ -188,7 +189,7 @@ class BusPageIndex:
                     row.insert(db)
                 source.upsert(db)
 
-    def _prepare(self, opened: OpenedWireSnapshot) -> tuple[BusPageSource | None, BusPageSource, int, tuple[BusPageRow, ...]] | None:
+    def _prepare(self, opened: OpenedWireSnapshot) -> tuple[BusPageSource | None, BusPageSource, int, tuple[BusPageRow, ...]]:
         """Read and decode the source before taking the SQLite writer lock."""
         saved, last_rows = None, ()
         if self.path.exists():
@@ -199,10 +200,8 @@ class BusPageIndex:
                     last_rows = BusPageRow.select(self.connection, order_by=("seq",),
                                                   descending=True, limit=1)
         stream, revision = opened.stream, opened.revision
-        if stream is None:
-            return None
         size = opened.complete_boundary
-        if saved is not None and saved.covers(stream, revision):
+        if saved is not None and saved.covers(opened):
             return saved, saved, saved.revision.size, ()
         offset = saved.revision.size if saved is not None else 0
         valid = (
@@ -223,7 +222,7 @@ class BusPageIndex:
                 message="Bus row exceeds its declared byte limit",
             )
             if not raw.endswith(b"\n"):
-                return None
+                raise RelationViolationError("Cannot prepare a page index from an incomplete wire cut")
             if not raw.strip():
                 continue
             record = json.loads(raw)

@@ -31,7 +31,7 @@ from .typed_table import Column, ForeignKey, Index, SQLiteJournalMode, TypedRow,
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
-    from .wire_log import OpenedWireSnapshot
+    from .wire_log import WireSnapshot
 
 
 class RouteTable:
@@ -455,7 +455,7 @@ class OpenedRouteCounts(BusRouteCounts):
     blocking: ClassVar[bool] = False
 
     def __init__(
-        self, bus_path: Path, source: OpenedWireSnapshot,
+        self, bus_path: Path, source: WireSnapshot,
         registry: RegistryProvenance, deliveries: Mapping[str, DeliveryScope],
     ):
         super().__init__(bus_path)
@@ -471,8 +471,10 @@ class OpenedRouteCounts(BusRouteCounts):
         return tuple(DeliveryMessage.from_wire(record, root_id=self.source.metadata.root_id))
 
     def _sync_source(self) -> RouteIndexState:
-        return self.sync(
-            self.source.stream, self.source.revision, self._decode, blocking=self.blocking
+        return self.source.read(
+            lambda opened: self.sync(opened.stream, opened.revision, self._decode,
+                                     blocking=self.blocking),
+            absent=lambda: self.sync(None, None, self._decode, blocking=self.blocking),
         )
 
     def _acquire(self) -> OpenedRouteCounts:
@@ -495,17 +497,13 @@ class OpenedRouteCounts(BusRouteCounts):
 
     def _appended_deliveries(self) -> tuple[DeliveryMessage, ...]:
         """The bounded part of this cut still missing from the SQLite snapshot."""
-        stream = self.source.stream
         size = self.source.boundary
         if size == 0:
             return ()
+        stream = self.source.opened.stream
         records = RouteSourceRow.select(self.connection)
         recorded = records[0] if records else None
         through = recorded.revision.size if recorded and recorded.revision else 0
-        if stream is None:
-            if through:
-                self._preparation.defer_read(0, size)
-            return ()
         if recorded is not None and not recorded.matches_file(stream):
             self._preparation.defer_read(0, size)
         if size - through > self.rebuild_bytes:

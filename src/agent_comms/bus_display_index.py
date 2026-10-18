@@ -13,7 +13,7 @@ from .read_basis import ChannelDisplayScope, ReadCursor
 from .read_ledger import ReadLedger
 
 if TYPE_CHECKING:
-    from .wire_log import OpenedWireSnapshot
+    from .wire_log import OpenedWireSnapshot, WireSnapshot
 
 DisplayMetrics = tuple[dict[str, tuple[float, float]], dict[str, int]]
 
@@ -87,12 +87,15 @@ class BusDisplayIndex(BusAppendIndex[DisplayCheckpoint]):
         path = bus_path.with_name(f"bus_display_{self.record_type.schema}_{digest}.json")
         super().__init__(bus_path, path)
 
-    def snapshot(self, opened: OpenedWireSnapshot,
+    def snapshot(self, opened: WireSnapshot,
                  semantics: DisplayMetricScope) -> DisplayCheckpoint | EmptyDisplaySnapshot:
+        return opened.read(lambda source: self._snapshot(source, semantics),
+                           absent=lambda: EmptyDisplaySnapshot(semantics))
+
+    def _snapshot(self, opened: OpenedWireSnapshot,
+                  semantics: DisplayMetricScope) -> DisplayCheckpoint:
         boundary = opened.complete_boundary
         source, stream = opened.revision, opened.stream
-        if source is None:
-            return EmptyDisplaySnapshot(semantics)
         checkpoint = opened.append_checkpoint(self)
         if checkpoint is not None and checkpoint.current_for(source, semantics):
             return checkpoint

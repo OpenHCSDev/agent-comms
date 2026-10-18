@@ -12,7 +12,7 @@ from agent_comms.messages import InfoKind, Message
 from agent_comms.private_path import FileRevision
 from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.message_bus import MessageBus
-from agent_comms.wire_log import OpenedWireSnapshot
+from agent_comms.wire_log import AbsentWireSnapshot, OpenedWireSnapshot
 from agent_comms.wire_metadata import WireMetadata
 
 
@@ -55,7 +55,7 @@ def test_complete_line_cut_is_not_the_physical_cut(tmp_path, data, complete):
 
 
 def test_absent_bus_has_a_named_empty_display_result(tmp_path):
-    source = OpenedWireSnapshot(WireMetadata(), 0, None, None)
+    source = AbsentWireSnapshot(WireMetadata(), 0)
     result = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer").snapshot(source, semantics())
     assert isinstance(result, EmptyDisplaySnapshot)
     assert result.metrics == ({"#team": (0.0, 0.0)}, {"#team": 0})
@@ -65,10 +65,6 @@ def test_unavailable_opened_source_is_not_empty_metrics(tmp_path):
     path = tmp_path / "bus.jsonl"
     path.write_bytes(row(1))
     with opened(path) as source:
-        with pytest.raises(StaleRevision, match="no stream"):
-            _ = OpenedWireSnapshot(source.metadata, 0, None, source.revision).complete_boundary
-        with pytest.raises(StaleRevision, match="captured revision"):
-            _ = OpenedWireSnapshot(source.metadata, 0, source.stream, None).complete_boundary
         path.write_bytes(b"")
         with pytest.raises(StaleRevision, match="captured revision"):
             BusDisplayIndex(path, "viewer").snapshot(source, semantics())

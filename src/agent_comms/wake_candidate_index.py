@@ -373,10 +373,9 @@ class WakeCandidateIndex(TypedStore):
         """Replay one bounded prefix; never scan or rebuild on the send/wake path."""
         self._validate_limits(max_rows, max_bytes)
         try:
-            with self.log._opened_wire_snapshot(need_sequence=False) as source:
+            with self.log._opened_wire_snapshot(need_sequence=False) as snapshot:
+                source = snapshot.opened
                 stream = source.stream
-                if stream is None:
-                    raise ProjectionUnavailableError("candidate bus source is missing")
                 root_id = source.metadata.root_id
                 stat = os.fstat(stream.fileno())
                 with self.writing() as db:
