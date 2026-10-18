@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .goals import GoalRevision
+from .goals import GoalDeclaration, GoalRevision
 from .message_reference import MessageReference
 from .thread_identity import (
     RecordedThreadIncarnation,
@@ -32,6 +32,13 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, kw_only=True)
 class TaskScope(DeclaredFamily, affix="TaskScope"):
     project: str
+
+    @classmethod
+    def for_goal(cls, project: str, goal: GoalDeclaration) -> TaskScope:
+        return goal.active().project(
+            lambda current: GoalTaskScope(project=project, goal=current.checkpoint),
+            lambda: TurnTaskScope(project=project),
+        )
 
     def require_current(self, owner: Thread) -> None:
         if self.project != owner.worktree:

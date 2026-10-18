@@ -15,7 +15,8 @@ from acp import RequestError
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
-from .goal_attempts import LaunchPermit
+from .goal_attempts import GoalTurnPermit, NoLaunchPermit
+from .goals import Goal
 from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
@@ -121,10 +122,10 @@ class OwnedTurn:
         elif not wait.allows_routed_input() and not self.original_owner_input:
             return
         if self.original_owner_input and self.original_goal_id != (
-            active_goal.id if active_goal else None
+            active_goal.reported_id()
         ):
             raise RequestError.invalid_params({"reason": "input_authority_changed"})
-        self.goal_permit: LaunchPermit | None = None
+        self.goal_permit: GoalTurnPermit = NoLaunchPermit()
         return True
 
     def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
@@ -141,19 +142,9 @@ class OwnedTurn:
             self.turn_id, self.task[:80], self.routing,
         )
         active_goal = self.thread.goal.active()
-        if self.autonomous_goal and not active_goal:
+        prepared_goal = active_goal.project(lambda goal: self._prepare_goal_permit(goal, permits), lambda: False)
+        if self.autonomous_goal and not prepared_goal:
             return False
-        if active_goal and not self.original_owner_input:
-            self.goal_permit = TurnGoalAccount.reserve(
-                owner=self.thread,
-                comms=self.runner.comms,
-                autonomous=self.autonomous_goal,
-            )
-            if self.goal_permit is None:
-                return False
-            permits.callback(
-                self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
-            )
         self.input_cleanup = AsyncExitStack()
         resources.push_async_callback(self.input_cleanup.aclose)
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
@@ -193,6 +184,14 @@ class OwnedTurn:
         self.reserve_input(batch)
         return True
 
+    def _prepare_goal_permit(self, goal: Goal, permits: ExitStack) -> bool:
+        if self.original_owner_input:
+            return True
+        self.goal_permit = TurnGoalAccount.reserve(
+            owner=self.thread, goal=goal, comms=self.runner.comms, autonomous=self.autonomous_goal,
+        )
+        return self.goal_permit.prepare_launch(permits, self.runner.comms.goals.open_goal_store())
+
     def prepare_prompt(self, batch: InputBatch):
         self.worktree = (
             self.thread.worktree if Path(self.thread.worktree).is_dir() else str(Path.cwd())
@@ -219,9 +218,7 @@ class OwnedTurn:
             tuple(origin.reference for origin in self.origins),
             batch.originals,
         )
-        if self.goal_permit is not None:
-            for segment in self.thread.context_goal_segments(self.runner.comms.goals):
-                self.context = self.context.prepend(segment)
+        self.context = self.goal_permit.add_context(self.context, self.thread, self.runner.comms.goals)
         if self.thread.auto_title_pending:
             self.context = self.context.prepend(AutomaticTitleSegment.capture(
                 (OwnerProvenance(self.thread.incarnation, self.turn_id),)))
@@ -234,10 +231,10 @@ class OwnedTurn:
         """Acquire the original durable input before opening loop capabilities."""
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.thread.goal)
-        elif active_goal := self.thread.goal.active():
-            permission = ContinuationGoalPermission(active_goal)
         else:
-            permission = InactiveGoalPermission()
+            permission = self.thread.goal.active().project(
+                ContinuationGoalPermission, InactiveGoalPermission,
+            )
         if self.original_owner_input:
             source_type = OwnerOriginalInput
         elif not self.origins:

@@ -14,6 +14,7 @@ from .reservation_rules import ReservationRule, ReservationViolationError, RuleC
 from .routing import ScheduledTurn
 
 if TYPE_CHECKING:
+    from .goals import Goal
     from .coordinated_runtime import SelectedExecution
     from .input_drain import InputDrain
     from .thread_identity import OwnerIdentity
@@ -92,8 +93,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.goal.active()
-                if goal.is_set():
-                    pending = [turn for turn in pending if turn.goal_id == goal.id]
+                goal.project(lambda current: self._retain_goal_turns(pending, current), lambda: None)
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -110,12 +110,14 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         dependency_wait_id=pending[0].goal_wait_id,
                     )
                 except RequestError as error:
-                    if not goal.is_set():
-                        raise
+                    try:
+                        started_goal = goal.require()
+                    except RelationViolationError as missing:
+                        raise error from missing
                     pending[0].require_dependency_wake(error)
                     await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
                         owner.name,
-                        started_goal=goal,
+                        started_goal=started_goal,
                         expected_worktree=owner.worktree,
                         diagnostic=(
                             "Standby wake launch authority unavailable; inspect the UNKNOWN "
@@ -125,6 +127,10 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     await inputs.effects.turns.goals.sync_goal_execution(session_id, owner.name)
                 finally:
                     inputs.effects.turns.turn_tasks.pop(session_id, None)
+
+    @staticmethod
+    def _retain_goal_turns(pending: list[ScheduledTurn], goal: "Goal") -> None:
+        pending[:] = [turn for turn in pending if turn.goal_id == goal.id]
 
 
 @dataclass(frozen=True, kw_only=True)

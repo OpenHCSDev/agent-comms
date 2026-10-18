@@ -23,7 +23,7 @@ from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
-from .goals import GoalMentionBinding
+from .goals import Goal, GoalMentionBinding
 from .locked_store import LockedStore, RootFile
 from .messages import Message
 from .peer_relevance import (
@@ -722,20 +722,23 @@ class ThreadRelationships:
             for thread in registry.threads.values()
             for executor in thread.role.executor(thread)
         ):
-            goal = owner.goal.active()
-            if not goal.is_set():
-                continue
-            source = goal.mention_source
-            # Missing historical evidence grants no contact or current-name binding.
-            if source is None:
-                continue
-            if not source.matches(goal, owner, registry):
-                continue
-            for binding in source.bindings:
-                projected, issues = binding.project(registry, owner, goal, source)
-                contacts.extend(projected)
-                diagnostics.extend(issues)
+            owner.goal.active().project(lambda goal: ThreadRelationships._project_goal_contacts(
+                goal, owner, registry, contacts, diagnostics,
+            ), lambda: None)
         return tuple(contacts), tuple(diagnostics)
+
+    @staticmethod
+    def _project_goal_contacts(goal: Goal, owner: Thread, registry: RegistrySnapshot,
+                               contacts: list[GoalDerivedContact],
+                               diagnostics: list[GoalMentionDiagnostic]) -> None:
+        source = goal.mention_source
+        # Missing historical evidence grants no contact or current-name binding.
+        if source is None or not source.matches(goal, owner, registry):
+            return
+        for binding in source.bindings:
+            projected, issues = binding.project(registry, owner, goal, source)
+            contacts.extend(projected)
+            diagnostics.extend(issues)
 
     def goal_contacts(
         self, owner: str

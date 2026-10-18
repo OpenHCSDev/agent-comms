@@ -16,7 +16,7 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal
+from agent_comms.goals import Goal, NoGoal
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import ToolRequest
 
@@ -46,7 +46,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         )
     assert comms.registry.require("worker").goal == replacement
     comms.goals.update_goal("worker", ClearGoalAction())
-    assert not wire(tmp_path).registry.require("worker").goal.is_set()
+    assert wire(tmp_path).registry.require("worker").goal == NoGoal()
     with pytest.raises(ValueError, match="No goal"):
         comms.goals.update_goal("worker", ActiveGoalAction())
     with pytest.raises(ValueError, match="requires"):

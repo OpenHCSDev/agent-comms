@@ -40,6 +40,7 @@ from .thread_identity import (
     TurnIdentity,
 )
 from .turn_lease import NoTurnRecord, TurnFence, TurnLeaseFence, TurnRecord, TurnState
+from .task_sources import TaskScope
 
 if TYPE_CHECKING:
     from .launch_runtime import ThreadLaunch
@@ -134,7 +135,7 @@ class Thread(ThreadProvenance):
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
-        return self.project_resume_due and not self.executing and not self.goal.active()
+        return self.project_resume_due and not self.executing and not self.goal.accepts_following_handoff()
 
     @property
     def turn_state(self) -> TurnState:
@@ -266,11 +267,8 @@ class Thread(ThreadProvenance):
         return self.goal.require_checkpoint(checkpoint)
 
     @property
-    def task_scope(self):
-        return self.goal.active().task_scope(self.worktree)
-
-    def context_goal_segments(self, goals):
-        return self.goal.active().context_segments(self, goals)
+    def task_scope(self) -> TaskScope:
+        return TaskScope.for_goal(self.worktree, self.goal)
 
     def wake_context(self) -> dict[str, object]:
         return {
@@ -278,9 +276,6 @@ class Thread(ThreadProvenance):
             "original_assignment": self.task,
             "current_goal": self.goal.wake_context(),
         }
-
-    def retained_task_facts(self):
-        return self.goal.task_facts()
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
         """The current active goal still belongs to this captured project/goal."""

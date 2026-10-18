@@ -19,24 +19,19 @@ from ..todos import Todo
 from .order import COMMS, ME, CommanderVerb, RuledVerb, hhmm
 
 
-def open_request() -> tuple[Goal, tuple[Todo, ...]] | None:
-    """The commander's active Goal when it is an owner request, with the orders serving it."""
+def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
+    """The commander's open owner requests and their undelivered orders."""
     thread = COMMS.registry.require(ME)
-    selected = thread.goal.active()
-    if not selected.is_set():
-        return None
-    goal = selected.require()
-    served = goal.order.serving(goal, COMMS.goals, thread.incarnation)
-    return None if served is None else (goal, served)
+    return thread.goal.active().project(
+        lambda goal: goal.order.open_requests(goal, COMMS.goals, thread.incarnation), tuple,
+    )
 
 
 def stalled() -> list[str]:
-    match open_request():
-        case (goal, ()):
-            return [
-                f"REQUEST STALLED: {goal.id} {goal.text} -> order its next step or mark it done"
-            ]
-    return []
+    return [
+        f"REQUEST STALLED: {goal.id} {goal.text} -> order its next step or mark it done"
+        for goal, served in open_requests() if not served
+    ]
 
 
 class RequestVerb(CommanderVerb):
@@ -69,14 +64,13 @@ class RequestListVerb(RequestVerb, declared_name="list"):
     help = "the open request and the open orders serving it"
 
     def run(self) -> None:
-        request = open_request()
-        if request is None:
+        requests = open_requests()
+        if not requests:
             print("No open request.")
-            return
-        goal, served = request
-        print(f"{goal.id} {goal.text}")
-        for todo in served:
-            print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
+        for goal, served in requests:
+            print(f"{goal.id} {goal.text}")
+            for todo in served:
+                print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
 
 
 def main(a: list[str]) -> None:

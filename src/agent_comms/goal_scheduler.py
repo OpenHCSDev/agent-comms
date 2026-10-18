@@ -36,6 +36,8 @@ from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 from .store_files import _store_lock
 
 if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
+    from .threads import Thread
     from .comms import Comms
     from .input_drain import InputDrain
     from .session_lifecycle import SessionLifecycle
@@ -88,31 +90,38 @@ class GoalScheduler:
                     thread.turn_record.read().require_idle()
                 except RelationViolationError:
                     return
-                goal = thread.goal.active()
-                if not goal.is_set():
-                    return
-                if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
-                    return
-                if self.pending_goal_origins.get(thread.name) == goal.id:
-                    return
-                store = self.comms.goals.open_goal_store()
-                generation = store.require_generation(goal.id)
-                generation.lifecycle.require_ready()
-                self.comms.goals.ready_goal_grant_locked(thread, snapshot.claimed_generations[thread.name], generation)
+                scheduled = thread.goal.active().project(
+                    lambda goal: self._prepare_declared_goal(goal, thread, snapshot), tuple,
+                )
+                return next(iter(scheduled), None)
         except StaleAttemptError:
             return
+
+    def _prepare_declared_goal(self, goal: Goal, thread: Thread,
+                               snapshot: RegistrySnapshot) -> tuple[ScheduledTurn, ...]:
+        if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
+            return ()
+        if self.pending_goal_origins.get(thread.name) == goal.id:
+            return ()
+        try:
+            store = self.comms.goals.open_goal_store()
+            generation = store.require_generation(goal.id)
+            generation.lifecycle.require_ready()
+            self.comms.goals.ready_goal_grant_locked(thread, snapshot.claimed_generations[thread.name], generation)
+        except StaleAttemptError:
+            return ()
         except MissingGoalGenerationError as error:
             self.comms.goals.block_goal_after_failed_turn(
                 thread.name, started_goal=goal, expected_worktree=thread.worktree,
                 diagnostic=str(error),
             )
-            return
+            return ()
         except UnresolvedAttemptError:
             self.comms.goals.block_goal_after_failed_turn(
                 thread.name, started_goal=goal, expected_worktree=thread.worktree,
                 diagnostic="Goal attempt unresolved; inspect diagnostics before Retry.",
             )
-            return
+            return ()
         except GoalAttemptError:
             self.comms.goals.block_goal_after_failed_turn(
                 thread.name,
@@ -120,8 +129,8 @@ class GoalScheduler:
                 expected_worktree=thread.worktree,
                 diagnostic="Goal launch grant unavailable; explicit Retry required.",
             )
-            return
-        return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
+            return ()
+        return (ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id),)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""
@@ -133,7 +142,6 @@ class GoalScheduler:
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
         ))
-        assert goal
         await self.schedule_goal(session_id)
         return goal
 
@@ -158,7 +166,6 @@ class GoalScheduler:
             ),
             actor=OwnerInvocable,
         ))
-        assert edited is not None
         await self.sessions.config.sync_thread(session_id)
         return edited
 

@@ -19,12 +19,12 @@ from .goal_presentation import (
 from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import LockedStore, RootFile
-from .registry_document import RegistrySnapshot
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .wire_log import WireLog
 
 if TYPE_CHECKING:
+    from .registry_document import RegistrySnapshot
     from .agent_activity import AgentActivity
     from .threads import Thread
 
@@ -303,6 +303,9 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         self.update(change)
         return removed
 
+    def resolve(self, goal: GoalDeclaration) -> GoalWait:
+        return goal.project(lambda current: self.for_goal(current, self.read()), NoGoalWait)
+
     @staticmethod
     def for_goal(goal: Goal, rows: dict[str, RecordedGoalWait]) -> GoalWait:
         if not goal.state.active:
@@ -315,12 +318,20 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""
-        if not goal.is_set():
-            return IdleGoalExecution()
-        return cls.for_goal(goal, rows).project(goal, snapshot, agents)
+        return goal.project(
+            lambda current: cls.for_goal(current, rows).project(current, snapshot, agents),
+            IdleGoalExecution,
+        )
 
     @staticmethod
+    def current_waits(goal: Goal, rows: dict[str, RecordedGoalWait],
+                      owner: RecordedThreadIncarnation) -> tuple[RecordedGoalWait, ...]:
+        wait = rows.get(goal.id)
+        return (wait,) if wait is not None and wait.current_for(goal, owner) else ()
+
+    @classmethod
     def closed_wait_group(
+        cls,
         owner: str,
         targets: tuple[GoalWaitTarget, ...],
         rows: dict[str, RecordedGoalWait],
@@ -343,12 +354,10 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
             seen.add(name)
             thread = snapshot.threads[name]
             goal = thread.goal.active()
-            wait = rows.get(goal.id) if goal.is_set() else None
-            if wait is not None and (
-                not goal.is_set()
-                or not wait.current_for(goal, thread.incarnation.require_recorded())
-            ):
-                wait = None
+            wait = next(iter(goal.project(
+                lambda current: cls.current_waits(current, rows, thread.incarnation.require_recorded()),
+                tuple,
+            )), None)
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
             for target in dependencies:
                 canonical = snapshot.canonical_name(target.incarnation.name)
@@ -359,16 +368,10 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                     pending.append(owner)
                     continue
                 peer_goal = peer.goal.active()
-                peer_wait = (
-                    rows.get(peer_goal.id)
-                    if peer_goal.is_set()
-                    else None
-                )
-                if peer_wait is not None and (
-                    not peer_goal.is_set()
-                    or not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded())
-                ):
-                    peer_wait = None
+                peer_wait = next(iter(peer_goal.project(
+                    lambda current: cls.current_waits(current, rows, peer.incarnation.require_recorded()),
+                    tuple,
+                )), None)
                 if agents.is_working(target.incarnation, snapshot):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before

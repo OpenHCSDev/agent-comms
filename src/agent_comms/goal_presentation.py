@@ -35,6 +35,9 @@ class ExecutionPresentation(ABC):
     @abstractmethod
     def render(self, execution: GoalExecution) -> tuple[str, str]: ...
 
+    def details_heading(self, execution: GoalExecution, heading: str) -> str:
+        return heading
+
     def represents(self, state: GoalState) -> bool:
         return False
 
@@ -58,8 +61,8 @@ class StateExecutionPresentation(ExecutionPresentation):
 class StandbyExecutionPresentation(ExecutionPresentation):
     waiting = True
 
-    def standby_detail(self, execution: GoalExecution) -> str:
-        return self.render(execution)[1]
+    def details_heading(self, execution: GoalExecution, heading: str) -> str:
+        return f"{heading} · {self.render(execution)[1]}"
 
     def waiting_presentation(self, execution: GoalExecution, ordinary: ThreadPresentation) -> ThreadPresentation:
         return execution.presentation(ordinary.title)
@@ -121,6 +124,9 @@ class ThreadGoalExecution(SubclassUnion):
 
     __slots__ = ()
 
+    def details_heading(self, heading: str) -> str:
+        return heading
+
     @abstractmethod
     def waiting_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation: ...
 
@@ -141,6 +147,9 @@ class GoalExecution(RecordMember, ThreadGoalExecution):
     wait_for: tuple[GoalWaitTarget, ...] = ()
     inactive_wait_for: tuple[GoalWaitTarget, ...] = ()
     block_reason: str | None = None
+
+    def details_heading(self, heading: str) -> str:
+        return self.state.view.details_heading(self, heading)
 
     def presentation(self, title: str) -> ThreadPresentation:
         glyph, summary = self.state.view.render(self)

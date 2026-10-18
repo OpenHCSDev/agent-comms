@@ -897,7 +897,7 @@ class PeerState:
     name: str
     relevance: type[PeerRelevance]
     note: str
-    goal: str | None
+    goal: tuple[str, ...]
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
@@ -906,7 +906,7 @@ class PeerState:
             view.thread.name,
             relation.relevance,
             relation.note,
-            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal.is_set() else None,
+            goal.instructions_for(goals, view.thread.incarnation),
         )
 
 
@@ -958,6 +958,10 @@ class CoordinationSegment(InstructionSegment):
 class GoalSegment(InstructionSegment):
     goal: Goal
     orders_text: str = ""
+
+    @classmethod
+    def for_owner(cls, owner: Thread, goals) -> tuple[GoalSegment, ...]:
+        return owner.goal.active().project(lambda goal: (cls.capture(owner, goal, goals),), tuple)
 
     @classmethod
     def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
@@ -1169,9 +1173,13 @@ class TurnContext(DeclaredReply):
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)
-        for segment in owner.context_goal_segments(comms.goals):
+        return context.with_goal(owner, comms.goals).with_awareness(comms, owner, relations, blocking=True)
+
+    def with_goal(self, owner: Thread, goals) -> TurnContext:
+        context = self
+        for segment in GoalSegment.for_owner(owner, goals):
             context = context.prepend(segment)
-        return context.with_awareness(comms, owner, relations, blocking=True)
+        return context
 
     def with_awareness(
         self, comms, owner: Thread, relations: tuple[PeerRelation, ...], *, blocking: bool = False

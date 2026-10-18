@@ -32,7 +32,7 @@ from .turn_input_source import (
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goal_attempts import GoalAttemptStore, LaunchPermit
+    from .goal_attempts import GoalAttemptStore, GoalTurnPermit
     from .goal_waits import GoalWait
     from .input_drain import InputDrain
     from .registry_document import RegistrySnapshot
@@ -51,7 +51,7 @@ class OwnedSend:
     turn: TurnId
     claim_scope: int
     original: OriginalTurnInput
-    goal_permit: LaunchPermit | None
+    goal_permit: GoalTurnPermit
 
     def source(self, public_id: str | None) -> TurnInputSource:
         if public_id is None:
@@ -108,8 +108,10 @@ class OwnedSend:
         OrdinaryContextCheck(
             source=source, owner=current, goal=current.goal, wait=wait, comms=self.comms
         ).require_valid()
-        if not source.bypasses_goal_permit and self.goal_permit is not None:
-            OrdinaryGoalGrantCheck(permit=self.goal_permit, store=self.goal_store).require_valid()
+        if not source.bypasses_goal_permit:
+            self.goal_permit.perform(lambda permit: OrdinaryGoalGrantCheck(
+                permit=permit, store=self.goal_store,
+            ).require_valid())
 
     def _refusal(self, rule: ReservationRule, defer: bool) -> SendOutcome:
         _LOG.info(

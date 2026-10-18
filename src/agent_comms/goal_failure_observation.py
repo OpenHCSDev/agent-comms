@@ -246,11 +246,18 @@ def read_failed_turn_projection(
     never be used for dispatch or as evidence of absence of an owner pause.
     """
 
+    return owner.goal.project(
+        lambda goal: _read_goal_failure(path, owner, owner_status, claim_scope, goal),
+        lambda: FailedTurnProjection("unavailable", "owner_or_goal_changed"),
+    )
+
+
+def _read_goal_failure(path: Path, owner: Thread, owner_status: ThreadStatus,
+                       claim_scope: int, goal: Goal) -> FailedTurnProjection:
     def unavailable(reason: str) -> FailedTurnProjection:
         return FailedTurnProjection("unavailable", reason)
 
-    goal = owner.goal
-    if not goal.is_set() or not owner.process_identity.allows_goal_observation(owner_status):
+    if not owner.process_identity.allows_goal_observation(owner_status):
         return unavailable("owner_or_goal_changed")
     try:
         # Resolve lifecycle eligibility before reading the ledger; active goals

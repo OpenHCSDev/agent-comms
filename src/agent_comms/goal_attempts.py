@@ -18,12 +18,13 @@ import os
 import secrets
 import sqlite3
 import stat
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from contextlib import closing, suppress
+from contextlib import ExitStack, closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal, TypeVar
+from typing import TYPE_CHECKING, Literal, TypeVar
 from uuid import uuid4
 
 from .coordination_database import CoordinationStore
@@ -51,6 +52,16 @@ from .goal_generation import (
     ReservedGeneration,
 )
 from .typed_table import Column, SQLiteJournalMode, SQLiteSchemaObject, TypedTable
+
+
+if TYPE_CHECKING:
+    from .agent_events import Done
+    from .goal_management import Goals
+    from .goals import GoalDeclaration
+    from .thread_identity import TurnId
+    from .threads import Thread
+    from .turn_context import TurnContext
+    from .turn_goal_account import TurnGoalAccount, VerifiedGoalSettlement
 
 
 class GoalAttemptError(RuntimeError):
@@ -343,9 +354,107 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
         raise StorageUncertainError("Unsupported goal attempt schema declaration.")
 
 
+class GoalTurnPermit(ABC):
+    """The turn's launch authority, including a turn that has no goal claim."""
+
+    @abstractmethod
+    def perform(self, work: Callable[[LaunchPermit], object]) -> None: ...
+
+    @abstractmethod
+    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool: ...
+
+    @abstractmethod
+    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None: ...
+
+    @abstractmethod
+    def block(self, account: TurnGoalAccount, diagnostic: str) -> None: ...
+
+    @abstractmethod
+    def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
+                    goal: GoalDeclaration, turn: TurnId) -> None: ...
+
+    @abstractmethod
+    def has_verified_progress(self, store: GoalAttemptStore) -> bool: ...
+
+    @abstractmethod
+    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
+
+    @abstractmethod
+    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+                   usage: Mapping[str, object]) -> bool: ...
+
+    @abstractmethod
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
+
+
+class NoLaunchPermit(GoalTurnPermit):
+    def perform(self, work: Callable[[LaunchPermit], object]) -> None:
+        pass
+
+    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
+        return False
+
+    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None:
+        pass
+
+    def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
+        pass
+
+    def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
+                    goal: GoalDeclaration, turn: TurnId) -> None:
+        pass
+
+    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
+        return False
+
+    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
+        generation = store.snapshot(goal_id)
+        if generation and generation.lifecycle.allows_resume(True):
+            store.retire_goal(goal_id, expected_generation=generation.number,
+                              attempt_id=generation.attempt_id)
+
+    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+                   usage: Mapping[str, object]) -> bool:
+        return False
+
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+        return context
+
+
 @dataclass(frozen=True, slots=True)
-class LaunchPermit:
+class LaunchPermit(GoalTurnPermit):
     reservation: Reservation
+
+    def perform(self, work: Callable[[LaunchPermit], object]) -> None:
+        work(self)
+
+    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
+        claims.callback(self.retire_unverified, store)
+        return True
+
+    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None:
+        account.settle_original(self, terminal)
+
+    def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
+        account._block_active_goal(diagnostic)
+
+    def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
+                    goal: GoalDeclaration, turn: TurnId) -> None:
+        goal.settle(settlement, store, self, turn)
+
+    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
+        with suppress(StaleAttemptError):
+            self.reservation.fail(store, "Goal origin turn did not finish successfully.")
+
+    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
+                   usage: Mapping[str, object]) -> bool:
+        if goal_id != self.reservation.goal_id:
+            return False
+        self.record_provider_usage(goals.open_goal_store(), response, usage)
+        return True
+
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+        return context.with_goal(owner, goals)
 
     def retire_unverified(self, store: GoalAttemptStore) -> None:
         """Release this acquired claim; settled or superseded attempts stay intact."""
