@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import ABC, ABCMeta
+from collections.abc import Iterable
 from typing import Any, ClassVar, Self, cast
 
 from metaclass_registry import (  # type: ignore[import-untyped]
@@ -108,10 +109,10 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
 
     @classmethod
     def decode(cls, name: str) -> type[Self]:
-        try:
-            member = cls.__registry__[name]
-        except (KeyError, TypeError):
-            raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+        member = next((member for member in cls._member_declarations()
+                       if member.declared_name == name), None)
+        if member is None:
+            raise ValueError(f"Unknown {cls.__name__} name: {name!r}")
         if not issubclass(member, cls):
             raise ValueError(f"{name!r} is not a member of {cls.__name__}")
         return cast(type[Self], member)
@@ -141,8 +142,14 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
 
     @classmethod
     def members_with(cls, capability: type) -> tuple[type[Self], ...]:
+        return cls._members_with(capability, cls._member_declarations())
+
+    @classmethod
+    def _members_with(
+        cls, capability: type, members: Iterable[type[DeclaredFamily]],
+    ) -> tuple[type[Self], ...]:
         return tuple(
             cast(type[Self], member)
-            for member in cls._member_declarations()
+            for member in members
             if issubclass(member, cls) and issubclass(member, capability)
         )
