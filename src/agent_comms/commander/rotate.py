@@ -44,12 +44,12 @@ def owed_orders() -> dict[str, list[Todo]]:
 
 
 def detached(owed: dict[str, list[Todo]]) -> list[str]:
-    """A unit holding orders whose status says it reads nothing now; a thread gone from the registry reads nothing."""
+    """Each unit holding orders whose status reads nothing now, or whose thread is gone."""
     statuses = order.COMMS.registry.snapshot().statuses
     away = [u for u in sorted(owed) if u not in statuses or not statuses[u].receiving]
     unread = order.COMMS.bus.pending_counts_all(tuple(u for u in away if u in statuses))
-    return [f"DETACHED {u}: {unread.get(u, 0)} unread, orders {', '.join(t.id for t in owed[u])} -> wake it or reassign"
-            for u in away]
+    return [f"DETACHED {u}: {unread.get(u, 0)} unread, orders {', '.join(t.id for t in owed[u])}"
+            " -> wake it or reassign" for u in away]
 
 
 def main(a):
