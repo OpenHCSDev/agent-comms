@@ -26,7 +26,6 @@ start path, which never replays uncertain inputs.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import json
 import os
@@ -46,7 +45,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cutover.carry import CarryChain, CarryLedger, Step
 
+from agent_comms.active_route import acquire_exclusive_route_lock
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -260,18 +261,14 @@ class Backup:
 
 
 def route_readers() -> None:
-    """Toad and ACP clients hold the route directory shared; an upgrade needs them closed."""
+    """Toad and ACP clients hold the route directory shared; an upgrade waits for them to close.
+    Bus watches close on their own once the maintenance phase is declared."""
     directory = Path.home() / ".local/state/agent-comms"
     if not directory.exists():
         return
     descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
     try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except BlockingIOError:
-        from agent_comms.active_route import route_lock_holders
-
-        holders = "; ".join(f"PID {holder.pid}: {holder.command}" for holder in route_lock_holders(descriptor))
-        raise UpgradeRefused(f"Close the Agent Comms clients first: {holders}") from None
+        acquire_exclusive_route_lock(descriptor)
     finally:
         os.close(descriptor)
 
@@ -315,6 +312,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
                if thread["role"] == "agent" and thread["status"] == "running"]
     before_stop(root, pending, staged, revisions)
+    maintenance = MaintenanceBarrier(root / "registry.json")
+    held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
     for name in running:
         installed.cli(root, "stop", "--name", name)
     lock = checkout / "stack/uv.lock"
@@ -322,6 +321,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         route_readers()
         backup = Backup.take(root, ROUTE)
     except BaseException:
+        maintenance.clear(held)
         start(installed, root, running)
         raise
     shutil.copy2(lock, backup.path / "uv.lock") if lock.exists() else None
@@ -339,8 +339,10 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
             shutil.copy2(backup.path / "uv.lock", lock)
         run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=checkout)
         installed.prepare_native()
+        maintenance.clear(held)
         start(installed, root, running)
         raise
+    maintenance.clear(held)
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
             "backup": str(backup.path)}
