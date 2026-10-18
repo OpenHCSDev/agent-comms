@@ -282,7 +282,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     @classmethod
     def context_bindings(cls) -> dict[str, type[ContextBinding]]:
         return {
-            declared.metadata.get("wire_name", declared.name): declared.metadata["context_binding"]
+            FieldCodec.wire_key(declared): declared.metadata["context_binding"]
             for declared in fields(cls)
             if "context_binding" in declared.metadata
         }

@@ -83,19 +83,18 @@ class EnvironmentRecord:
 
     @classmethod
     def variable(cls, name: str) -> str:
-        variable: str = cls.__dataclass_fields__[name].metadata["wire_name"]
-        return variable
+        return FieldCodec.record_key(cls, name)
 
     @classmethod
     def inherited(cls, environment: Mapping[str, str]) -> dict[str, str]:
-        names = (cls.variable(declaration.name) for declaration in fields(cls))
+        names = (FieldCodec.wire_key(declaration) for declaration in fields(cls))
         return {name: environment[name] for name in names if name in environment}
 
     @classmethod
     def strip[Environment: MutableMapping[str, str]](cls, environment: Environment) -> Environment:
         """Remove every variable this record declares."""
         for declaration in fields(cls):
-            environment.pop(cls.variable(declaration.name), None)
+            environment.pop(FieldCodec.wire_key(declaration), None)
         return environment
 
     def encode(self) -> dict[str, str]:
@@ -197,8 +196,9 @@ class RestartEnvironment(EnvironmentRecord):
 
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
-        return {f.metadata["wire_name"]: encoded[f.metadata["wire_name"]]
-                for f in fields(self) if f.metadata.get("native")}
+        native = (FieldCodec.wire_key(declared) for declared in fields(self)
+                  if declared.metadata.get("native"))
+        return {key: encoded[key] for key in native}
 
     def auth_revision(self) -> tuple[int, int]:
         """Observe this owner's credentials, never an ambient or fork directory."""
@@ -214,7 +214,7 @@ class RestartEnvironment(EnvironmentRecord):
         encoded = self.encode()
         for declaration in fields(self):
             if declaration.metadata.get("runtime"):
-                name = declaration.metadata.get("wire_name")
+                name = FieldCodec.wire_key(declaration)
                 result.pop(name, None)
                 if name in encoded:
                     result[name] = encoded[name]
@@ -272,6 +272,8 @@ class ThreadLaunch(EnvironmentRecord):
     def current(cls, environment: Mapping[str, str] = os.environ) -> ThreadLaunch:
         """Decode this process's launch; an unset worktree is the working directory."""
         values = cls.inherited(environment)
+        if not values.get(cls.variable("name")):
+            raise CallingThreadUnavailable(f"Calling thread requires {cls.variable('name')}.")
         values.setdefault(cls.variable("worktree"), os.getcwd())
         return FieldCodec.decode(cls, values)
 
