@@ -851,8 +851,9 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
     Path(judge.EDITS).write_text(''.join(json.dumps(edit) + '\n' for edit in edits))
+    message = comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner')
     judge.OkVerb(ids=tuple(f'{e["id"]}:{judge.check_code(e)}' for e in edits),
-                 why='The changes repair the existing canonical state owner',
+                 why='The changes repair the existing canonical state owner', msg=message,
                  serves='Repair the existing owner', lines=('value = 2',)).run()
     saved = comms.goals.todos.get('P1')
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
@@ -863,17 +864,19 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
 
 
 @pytest.mark.parametrize('verb', ['ok', 'back'])
-def test_judge_refuses_an_edit_without_an_open_order(commander_script, verb):
+def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script, verb):
     import json
     from pathlib import Path
 
+    comms, _ = commander
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='orphan-edit', thread='worker', hunks=[dict(old='value = 1', new='value = 2')])
     Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
     fields = dict(ids=(f'{edit["id"]}:{judge.check_code(edit)}',),
-                  why='The changes repair the existing canonical state owner', lines=('value = 2',))
-    command = judge.OkVerb(**fields) if verb == 'ok' else judge.BackVerb(
-        **fields, slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+                  why='The changes repair the existing canonical state owner', lines=('value = 2',),
+                  msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner'))
+    command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
+        **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
     with pytest.raises(SystemExit, match='edit orphan-edit.*one open order Todo'):
         command.run()
