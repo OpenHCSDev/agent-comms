@@ -29,6 +29,7 @@ from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 from .storage_rules import StorageRule
+from .plan_phases import OrderPhase, UnplannedPhase
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -96,6 +97,10 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if base.strip() != head[2]:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
+        parents = await self.run(check, "git", "rev-list", "--parents", "-n", "1", self.delivered)
+        if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
+            raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
+                             "first pushed commit that answers the order.")
         pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
                                 "--list", "origin/*")
         if not pushed.strip():
@@ -530,6 +535,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
     run: OrderRun
+    serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -924,6 +930,19 @@ class CorrectCheckTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
+class ServeTodo(TodoOperation):
+    """The commander names the plan phase an open order serves; it keeps its id and holder."""
+    actor: ThreadIncarnation
+    serves: type[OrderPhase]
+
+    def apply(self, current: Todo) -> Todo:
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        return replace(current, order=replace(current.order, serves=self.serves),
+                       revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
 class RecordFirstCallTodo(TodoOperation):
     actor: ThreadIncarnation
     event: type[FirstCallEvent]
@@ -1059,6 +1078,13 @@ class Todo(TypedTable):
         taken_back = tuple(void.strike for void in self.voided)
         return tuple(recorded for recorded in self.strikes
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
+
+    def struck_on_order(self, unit: str) -> bool:
+        """A live strike on ``unit`` recorded since the current order was sent; a send-back that
+        replaces this order is that same miss, so it counts no second strike."""
+        sent = self.order.at.recorded_at("An order")
+        return any(recorded.at.recorded_at("A strike") >= sent
+                   for recorded in self.live_strikes(unit))
 
     def struck_out(self, unit: str) -> bool:
         """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
