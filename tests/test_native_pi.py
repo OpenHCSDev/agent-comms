@@ -18,6 +18,8 @@ from tempfile import TemporaryDirectory
 import pytest
 
 from agent_comms.attempt_start import AttemptStart
+from agent_comms.coordination_errors import IdentityConflict
+from agent_comms.native_arguments import SelectedModel
 from agent_comms.child_process import AttachedChild, Platform
 from agent_comms.native_pi import (
     CAPABILITY,
@@ -606,13 +608,12 @@ def test_missing_native_model_fails_before_any_session_side_effect(
     tmp_path: Path, monkeypatch, provider: str, model: str
 ) -> None:
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: Path("/bin/true"))
-    with pytest.raises(NativePiUnavailable, match="explicit provider and model"):
+    with pytest.raises(IdentityConflict):
         NativePiRpcLaunch.tracked(
             tmp_path,
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
-            provider=provider,
-            model=model,
+            model=SelectedModel(provider, model),
         )
     assert not (tmp_path / "sessions").exists()
 
@@ -867,8 +868,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             prompt="Respond with X, fixture only",
             worktree=worktree,
             session=SelectedSession(sessions),
-            provider=provider,
-            model=model,
+            model=SelectedModel(provider, model),
         )
         if outcome in {"cancel-large", "eof-large"}:
             task = asyncio.create_task(TrackedTurnSession.execute(package, **request))
@@ -1124,7 +1124,7 @@ def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detai
 
     assert output.declared_failure == ModelRequestFailed(detail)
     with pytest.raises(NativePiTerminalFailure, match=detail) as caught:
-        output.raise_if_failed(None, "provider", "model")
+        output.raise_if_failed(None, SelectedModel("provider", "model"))
     assert caught.value.failure == output.declared_failure
 
 
@@ -1136,13 +1136,13 @@ def test_provider_failure_notice_does_not_broadcast_untrusted_error_body(tmp_pat
         INPUT_ID, "session", "entry", 1, DIGEST, 1_791_964_800_001, tmp_path / "session.jsonl"
     )
     failed = NativePiTerminalFailure(
-        "SECRET provider response including prompt data", context, "provider", "model",
+        "SECRET provider response including prompt data", context, SelectedModel("provider", "model"),
         ModelRequestFailed("SECRET provider response including prompt data"),
     )
     assert failed.public_message == "provider/model: provider request failed."
     assert "SECRET" not in failed.public_message
     usage = NativePiTerminalFailure(
-        "Codex error: The usage limit has been reached", context, "openai-codex", "gpt-6-sol",
+        "Codex error: The usage limit has been reached", context, SelectedModel("openai-codex", "gpt-6-sol"),
         ModelRequestFailed("Codex error: The usage limit has been reached"),
     )
     assert "The usage limit has been reached" in usage.public_message
