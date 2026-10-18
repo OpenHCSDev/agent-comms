@@ -19,6 +19,7 @@ from agent_comms.acp_extension import (
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveAcknowledgement
+from agent_comms.owner_protocol import OwnerLine, OwnerPermissionRequest
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 from delivery_owner_fixture import canonical_agent
 from pi_session_turn import one_turn_events
@@ -299,7 +300,7 @@ async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission
     server_writer = await attached
     subscriber = SocketClient(server_writer)
     try:
-        pending = asyncio.create_task(subscriber.permission({"toolCall": {}, "options": []}))
+        pending = asyncio.create_task(subscriber.permission({"toolCallId": "call"}, []))
         for _ in range(10):
             if subscriber.pending:
                 break
@@ -309,7 +310,7 @@ async def test_explicit_owner_cancellation_is_not_swallowed_by_socket_permission
         with pytest.raises(asyncio.CancelledError):
             await pending
         assert not subscriber.pending
-        assert "permissionRequest" in json.loads(await reader.readline())
+        assert isinstance(OwnerLine.read(await reader.readline()), OwnerPermissionRequest)
     finally:
         writer.close(); server_writer.close()
         await writer.wait_closed(); await server_writer.wait_closed()

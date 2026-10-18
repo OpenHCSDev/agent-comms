@@ -22,7 +22,7 @@ from agent_comms.agent_backend import CompactionOutcome, PlacedCompaction
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
-from agent_comms.owner_protocol import OwnerAnnouncement
+from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
 from agent_comms.runtime import RuntimeProxy, RuntimeServer, present_session, socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
@@ -100,7 +100,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
             await proxy.request("prompt", **request)
         assert caught.value.code == -32602
         assert "invalid" in caught.value.data["reason"]
-        # The older, already-running proxy reads only the string field.
+        # The pi project extension reads only the failure text.
         reader, writer = await asyncio.open_unix_connection(proxy.path)
         try:
             writer.write(
@@ -111,7 +111,7 @@ async def test_owner_prompt_rejection_preserves_reason_and_rpc_code(tmp_path):
             )
             await writer.drain()
             result = json.loads(await reader.readline())
-            assert "invalid" in result["error"]
+            assert result["kind"] == "owner_failure" and "invalid" in result["error"]
         finally:
             writer.close()
             await writer.wait_closed()
@@ -223,26 +223,19 @@ async def test_existing_proxy_follows_renamed_owner_restart_and_resubscribes(
             calls.append((owner, request["action"], request["thread"]))
             if request["action"] == "subscribe":
                 connections.append(writer)
-                writer.write((json.dumps(FieldCodec.encode(OwnerAnnouncement())) + "\n").encode())
+                writer.write(OwnerAnnouncement().wire())
                 writer.write(
-                    (
-                        json.dumps(
-                            {
-                                "controllerToken": "a" * 64,
-                                "ready": {
-                                    "agentComms": {"updates": []},
-                                    "configOptions": [{"id": "model", "currentValue": owner}],
-                                },
-                            }
-                        )
-                        + "\n"
-                    ).encode()
+                    OwnerReady(
+                        ready={"agentComms": {"updates": []}},
+                        config_options=[{"id": "model", "currentValue": owner}],
+                        controller_token="a" * 64,
+                    ).wire()
                 )
-                writer.write((json.dumps({"update": {"owner": owner}}) + "\n").encode())
+                writer.write(OwnerUpdate(update={"owner": owner}).wire())
                 await writer.drain()
                 await reader.read()
             else:
-                writer.write((json.dumps({"result": {"owner": owner}}) + "\n").encode())
+                writer.write(OwnerResult(result={"owner": owner}).wire())
                 await writer.drain()
             writer.close()
 
@@ -343,7 +336,7 @@ async def test_request_only_proxy_never_replays_after_request_was_received(
     async def new_owner(reader, writer):
         request = json.loads(await reader.readline())
         received.append(("new", request["action"]))
-        writer.write(b'{"result": {"ok": true}}\n')
+        writer.write(OwnerResult(result={"ok": True}).wire())
         await writer.drain()
         writer.close()
 
