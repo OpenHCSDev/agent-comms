@@ -15,6 +15,7 @@ import time
 import asyncio
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, replace
+from functools import cached_property
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 
@@ -134,21 +135,48 @@ class OperationDelivery(OrderDelivery):
 @dataclass(frozen=True)
 class PullRequest:
     number: int
-    title: str
+    branch: str
     head: str
     merge: str | None = None
     merged_at: float | None = None
     updated_at: float = 0.0
 
     @classmethod
-    def listed(cls, number: str, title: str, head: str, merge: str, merged: str,
+    def listed(cls, number: str, branch: str, head: str, merge: str, merged: str,
                updated: str) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
-        return cls(int(number), title, head, merge or None,
+        return cls(int(number), branch, head, merge or None,
                    _github_time(merged) if merged else None, _github_time(updated))
 
-    def names(self, problem: str) -> bool:
-        return re.search(rf"\b{re.escape(problem)}\b", self.title) is not None
+
+@dataclass(frozen=True)
+class OrderBranch(DeclaredFamily, affix="Branch"):
+    """The branch an order's checkout works on: the one link from an order to its pull requests."""
+
+    @classmethod
+    def checked_out(cls, checkout: Path) -> OrderBranch:
+        named = subprocess.run(("git", "-C", str(checkout), "symbolic-ref", "--short", "-q", "HEAD"),
+                               capture_output=True, text=True, timeout=30)
+        return NoOrderBranch() if named.returncode else CheckedOutBranch(named.stdout.strip())
+
+    @abstractmethod
+    def carries(self, pr: PullRequest) -> bool: ...
+
+
+@dataclass(frozen=True)
+class CheckedOutBranch(OrderBranch):
+    name: str
+
+    def carries(self, pr: PullRequest) -> bool:
+        return pr.branch == self.name
+
+
+@dataclass(frozen=True)
+class NoOrderBranch(OrderBranch):
+    """No checkout, or one with a detached HEAD: no pull request is the order's."""
+
+    def carries(self, pr: PullRequest) -> bool:
+        return False
 
 
 def _github_time(text: str) -> float:
@@ -169,8 +197,8 @@ class PullRequests:
     def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
         listed = subprocess.run(
             ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
-             "--json", "number,title,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
-             '.[] | [.number, .title, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
+             "--json", "number,headRefName,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
+             '.[] | [.number, .headRefName, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
              " .updatedAt] | @tsv"),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
@@ -193,10 +221,14 @@ class ProgressSource:
     def since(self) -> float:
         return self.todo.order.at.recorded_at("An order")
 
+    @cached_property
+    def branch(self) -> OrderBranch:
+        return OrderBranch.checked_out(self.checkout)
+
     def requests(self, state: str) -> list[PullRequest]:
-        """PRs naming the problem touched since the order; an older one served an earlier order."""
+        """PRs from the order's branch touched since the order; an older one served an earlier order."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state)
-                if pr.names(self.todo.id) and pr.updated_at >= self.since]
+                if self.branch.carries(pr) and pr.updated_at >= self.since]
 
     def commit(self, *excluded: str) -> tuple[str, float] | None:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
@@ -244,6 +276,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     @property
     def moved(self) -> float | None:
         return None
+
+    def untouched(self, now: float) -> bool:
+        """An open pull request nobody has touched for five minutes."""
+        return False
 
 
 @dataclass(frozen=True)
@@ -330,6 +366,9 @@ class OpenPrProgress(FoundProgress):
     @property
     def line(self) -> str:
         return f"PR #{self.number} open at {self.head}"
+
+    def untouched(self, now: float) -> bool:
+        return now - self.at > 300
 
 
 @dataclass(frozen=True)
