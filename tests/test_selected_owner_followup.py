@@ -206,6 +206,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
         StandbyGoalAction,
     )
     from agent_comms.owned_turn import OwnedTurn
+    from agent_comms.turn_input_source import CapturedInputDependency
 
     comms, agent, _ = _session(tmp_path)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
@@ -218,6 +219,7 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
     comms.goals.update_goal(
         "beta", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("sender",))
     )
+    captured_wait = comms.goals.goal_wait("beta")
     expected = {}
     prepare = OwnedTurn.prepare_native
 
@@ -234,8 +236,12 @@ async def test_selected_handoff_rechecks_authority_at_native_write(tmp_path, mon
                 "beta", PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id))
             )
         elif change == "wait_cleared":
-            wait = comms.goals.goal_wait("beta")
-            assert comms.goals.consume_goal_wait("beta", wait.wait_id)
+            # The selected reply consumed this wait. Model a stale source that
+            # still requires it; normal accepted owner input has no dependency.
+            assert not comms.goals.goal_wait("beta").matches_id(captured_wait.wait_id)
+            execution.original = replace(
+                execution.original, dependency=CapturedInputDependency(captured_wait.wait_id),
+            )
         elif change == "owner_replaced":
             owner = comms.registry.require("beta")
             comms.registry.register(
