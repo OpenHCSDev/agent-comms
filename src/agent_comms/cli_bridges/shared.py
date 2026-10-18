@@ -40,6 +40,7 @@ from agent_comms.native_tools import (
 from agent_comms.messages import Message, MessageKind, InfoKind
 from agent_comms.message_reference import MessageReference
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceHeldError
 from agent_comms.recorded_time import EventTime, UnrecordedEventTime
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.tool_declaration import ToolDeclaration
@@ -872,18 +873,23 @@ class CliBridge(ABC, Generic[BridgeOptions]):
     async def watch(self) -> None:
         await self.prepare_delivery()
         print(f'Watching {self.binding.bus} → {self.binding.thread}; unconfirmed attempts retained without replay', file=sys.stderr, flush=True)
-        child = await AttachedChild.start((
-            str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
-            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-            stdio=StreamingChildStdio(input_enabled=False))
-        try:
-            async for item in WatchLine.stream(child):
-                await item.handle(self, child)
-            await raise_child_exit(child, '')
-        finally:
-            await child.stop()
+        while True:
+            child = await AttachedChild.start((
+                str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
+                '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
+                '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+                stdio=StreamingChildStdio(input_enabled=False))
+            try:
+                async for item in WatchLine.stream(child):
+                    await item.handle(self, child)
+                await raise_child_exit(child, '')
+            except MaintenanceHeldError:
+                print(f'Bus maintenance: {self.binding.bus} paused until it clears',
+                      file=sys.stderr, flush=True)
+            finally:
+                await child.stop()
+            await self.comms.bus.resumed()
 
     async def run(self) -> None:
         current = asyncio.current_task()
