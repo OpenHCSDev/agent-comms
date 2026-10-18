@@ -18,6 +18,7 @@ from agent_comms.goal_actions import (
 )
 from agent_comms.goal_history import GoalHistoryError, GoalHistoryStore
 from agent_comms.goal_states import ActiveGoal
+from agent_comms.goals import AbsentGoal
 from agent_comms.threads import Thread
 from agent_comms.tools import ToolRequest
 from agent_comms.tool_caller import ThreadCaller
@@ -58,7 +59,7 @@ def test_goal_history_records_transitions_replacement_clear_and_rename(tmp_path,
     reopened = Comms(comms.root)
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition"] * 6
-    assert [entry.after for entry in entries] == [first, paused, resumed, completed, second, None]
+    assert [entry.after for entry in entries] == [first, paused, resumed, completed, second, AbsentGoal()]
     assert entries[0].after.text == "Ask @reviewer about the release"
     assert entries[4].before == completed
     assert entries[5].before == second
@@ -91,7 +92,7 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
     baseline = reopened.goals.goal_history("worker")
     assert len(baseline) == 1
     assert baseline[0].kind == "baseline"
-    assert baseline[0].before is None and baseline[0].after == current
+    assert baseline[0].before == AbsentGoal() and baseline[0].after == current
     assert Comms(comms.root).goals.goal_history("worker") == baseline
     paused = reopened.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))
@@ -152,7 +153,7 @@ def test_crash_after_registry_write_reconciles_pending_history(tmp_path, monkeyp
 
     reopened = Comms(comms.root)
     paused = reopened.registry.require("worker").goal
-    assert paused is not None and paused.state.declared_name == "paused"
+    assert paused != AbsentGoal() and paused.state.declared_name == "paused"
     entries = reopened.goals.goal_history("worker")
     assert [entry.kind for entry in entries] == ["transition", "transition"]
     assert entries[-1].before == current and entries[-1].after == paused
