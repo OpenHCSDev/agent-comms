@@ -86,11 +86,11 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     pending = comms.bus.pending_count("owner")
     snapshot = comms.relationships.snapshot("owner")
     groups = snapshot.groups_by_type
-    assert [row.target for row in groups[InboundRelationshipGroup].entries] == ["peer", "#team"]
-    assert [row.target for row in groups[OutboundRelationshipGroup].entries] == ["peer"]
-    assert groups[ParentRelationshipGroup].entries[0].target == "origin"
-    assert groups[ChildrenRelationshipGroup].entries[0].target == "child"
-    assert groups[CollaboratingRelationshipGroup].entries == ()
+    assert list(groups[InboundRelationshipGroup].entries) == ["peer", "#team"]
+    assert list(groups[OutboundRelationshipGroup].entries) == ["peer"]
+    assert groups[ParentRelationshipGroup].entries["origin"].target == "origin"
+    assert groups[ChildrenRelationshipGroup].entries["child"].target == "child"
+    assert groups[CollaboratingRelationshipGroup].entries == {}
     assert comms.bus.pending_count("owner") == pending
     assert not snapshot.history_limited
     assert "Current delivery scope" in snapshot.incoming_basis
@@ -173,11 +173,11 @@ def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkey
     service.snapshot("owner")
     assert service._recent is cached
     comms.messaging.send("owner", "peer", "New output")
-    assert service.snapshot("owner").groups[1].entries[0].detail.endswith("New output")
+    assert service.snapshot("owner").groups[1].entries["peer"].detail.endswith("New output")
 
 
 def collaboration_rows(comms, owner="owner"):
-    return comms.relationships.snapshot(owner).groups_by_type[CollaboratingRelationshipGroup].entries
+    return tuple(comms.relationships.snapshot(owner).groups_by_type[CollaboratingRelationshipGroup].entries.values())
 
 
 def test_deleted_peer_survives_unrelated_edit_and_explicit_remove(tmp_path):
@@ -359,8 +359,8 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         group = next(group for group in snapshot.sortable_groups if type(group) is SortedInboundRelationshipGroup)
         assert FieldCodec.encode(group)["key"] == "sorted_inbound"
         assert group.order is LastActivityThreadSort
-        assert group.entries[0].target == "peer"
-        earlier = group.entries[0]
+        assert group.entries["peer"].target == "peer"
+        earlier = group.entries["peer"]
         assert snapshot.groups_by_type[SortedInboundRelationshipGroup] is group
         assert snapshot.current_entry(SortedInboundRelationshipGroup, earlier) is earlier
         # The inbound capability is not the exact sorted-inbound group identity.
@@ -376,7 +376,7 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
             SortedInboundRelationshipGroup, replace(earlier, person=reused)
         ) is None
         unavailable = replace(selected, groups=(replace(
-            group, entries=(replace(earlier, available=False),)
+            group, entries={earlier.target: replace(earlier, available=False)}
         ),))
         assert unavailable.current_entry(SortedInboundRelationshipGroup, earlier) is None
         assert all(group.order is None for group in snapshot.groups if not group.selectable())

@@ -7,7 +7,6 @@ from collections.abc import Callable
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
-from pydantic import JsonValue
 
 from . import agent_events as events
 from . import turn_phase as phases
@@ -869,7 +868,7 @@ class ToolExecutionEnd(NativePiEvent, DurablePiEvent, ends=phases.ToolRunningPha
 class ToolExecutionStart(NativePiEvent, DurablePiEvent, starts=phases.ToolRunningPhase):
     accepts_prompt = True
 
-    args: dict[str, JsonValue] = field(default_factory=dict, metadata={"wire_name": "args", "wire_nonnull": True})
+    args: object = field(default_factory=dict, metadata={"wire_name": "args"})
     tool_call_id: str | None = field(default=None, metadata={"wire_name": "toolCallId"})
     tool_name: str | None = field(default=None, metadata={"wire_name": "toolName"})
 

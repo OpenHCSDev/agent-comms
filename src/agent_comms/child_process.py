@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec, UnionDecoder, ValueDecoder, WireValue
+from .field_codec import FieldCodec, NullMember, SubclassUnion
 from .errors import RelationViolationError
 from .sealed import Sealed
 
@@ -60,25 +60,8 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
-class ProcessState(WireValue):
+class ProcessState(SubclassUnion):
     """An exact recorded process or a worker which has never started."""
-
-    accepts_null = True
-    external_json_shape = True
-    _decoder: ClassVar[UnionDecoder[ProcessState]]
-
-    def __init_subclass__(cls) -> None:
-        super().__init_subclass__()
-        if ProcessState in cls.__bases__:
-            ProcessState._decoder = ValueDecoder.for_members(tuple(ProcessState.__subclasses__()))
-
-    @classmethod
-    def from_wire(cls, data: object) -> ProcessState:
-        return cls._decoder.decode(data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(cls._decoder.target)
 
     def to_wire(self) -> object:
         return FieldCodec.encode_record(self)
@@ -140,19 +123,7 @@ class ProcessState(WireValue):
 
 
 @dataclass(frozen=True)
-class NoProcess(ProcessState):
-    @classmethod
-    def from_wire(cls, data: object) -> NoProcess:
-        FieldCodec.decode(type(None), data)
-        return cls()
-
-    def to_wire(self) -> None:
-        return None
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.value_schema(type(None))
-
+class NoProcess(NullMember, ProcessState):
     def allows_owner_start(self) -> bool:
         return True
 

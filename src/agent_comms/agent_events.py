@@ -155,11 +155,11 @@ class ToolEvent(AgentEvent):
 @dataclass(frozen=True)
 class ToolStart(ToolEvent):
     title: str = ""
-    args: dict[str, Any] | None = None
+    args: object = None
     kind: str = "other"
 
     @classmethod
-    def from_call(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
+    def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:
         declaration = ToolDeclaration.for_name(name)
         title = ToolDeclaration.caption(name, ToolDeclaration.record(name, arguments))
         return cls(call_id, name, title, arguments, declaration.acp_kind)
