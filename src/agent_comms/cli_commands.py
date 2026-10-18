@@ -65,6 +65,8 @@ from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
+from .thread_status import ThreadStatus
+from .threads import Thread
 from .thread_execution import (
     ArchiveOwnerControl, ExternalThreadExecution, NativeOwnerCommand,
     OwnerLifecycleControl, StartOwnerControl, ThreadCommandAvailability, ThreadExecution,
@@ -1298,12 +1300,14 @@ class ActivityCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+    def thread_bindings(cls, comms: Comms, thread: Thread, status: ThreadStatus,
+                        channel: str | None = None, *,
+                        catalog: CatalogDocument | None = None) -> tuple[Self, ...]:
         return (cls.thread_binding(thread),) if cls.available_for_thread(thread, status) else ()
 
     @classmethod
     @abstractmethod
-    def thread_binding(cls, thread): ...
+    def thread_binding(cls, thread: Thread) -> Self: ...
 
 
 @dataclass(frozen=True, kw_only=True)
