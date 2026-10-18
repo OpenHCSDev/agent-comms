@@ -31,7 +31,7 @@ from .read_basis import (
     WatchAcknowledgment, ReadCursor,
 )
 from .routing import DeliveryScope
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 
 if TYPE_CHECKING:
     from .presentation import DisplaySelection
@@ -101,7 +101,7 @@ class MessageBus:
 
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
-            with _store_lock(self.log.path.parent / "wire", shared=True):
+            with _store_lock(self.log.path.parent / "wire", mode=SharedLock()):
                 source = stack.enter_context(self.log._opened_wire_snapshot(
                     prepared_indexes=prepared,
                 ))

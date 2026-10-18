@@ -20,7 +20,7 @@ from .channel_targets import CommandTarget
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
-from .store_files import _store_lock
+from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 class DisplayViewer(ABC):
@@ -373,7 +373,7 @@ class DMDisplayBasis:
         that the corresponding inbound tail was contiguous and visibly painted.
         """
         peer = CommandTarget.named(peer).require_dm_peer()
-        with _store_lock(root / "wire", shared=True):
+        with _store_lock(root / "wire", mode=SharedLock()):
             snapshot = registry.snapshot()
             viewer_name = snapshot.canonical_name(viewer)
             peer_name = snapshot.canonical_name(peer)
@@ -393,7 +393,7 @@ class DMDisplayBasis:
             older_unread = bus.conversation_older_unread(
                 scope, before=page.messages[0].seq, seen=seen
             )
-        with _store_lock(root / "wire", shared=True), registry.store.reading() as document:
+        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading() as document:
             # Read progress is not page identity. It only adds seen messages
             # while these incarnations live; an older-unread result can become
             # conservative, but another view cannot invalidate this page.
@@ -458,7 +458,7 @@ class DMDisplayBasis:
         """
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
-        with _store_lock(root / "wire", shared=True), _store_lock(registry.store.path):
+        with _store_lock(root / "wire", mode=SharedLock()), _store_lock(registry.store.path):
             snapshot = registry.store._read_unlocked().snapshot()
             self.validate_for(
                 root,

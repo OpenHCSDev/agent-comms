@@ -16,6 +16,7 @@ from agent_comms.locked_store import LockedStore
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
+from agent_comms.store_files import SharedLock
 from agent_comms.thread_status import RunningThreadStatus
 from agent_comms.threads import Thread
 
@@ -109,7 +110,7 @@ def test_registry_readers_share_lock_and_exclude_writer(tmp_path):
     registry.register(owner(tmp_path, registry=registry))
     other = RegistryStore(registry.store.path)
     with registry.store.reading():
-        with other.locked(shared=True, blocking=False):
+        with other.locked(mode=SharedLock(), blocking=False):
             assert other._read_unlocked().threads["owner"].name == "owner"
         with pytest.raises(BlockingIOError), other.locked(blocking=False):
             pytest.fail("writer entered during reader")

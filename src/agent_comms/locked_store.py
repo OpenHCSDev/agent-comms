@@ -15,7 +15,7 @@ from inspect import isabstract
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec
-from .store_files import StoreLock, _store_lock
+from .store_files import ExclusiveLock, LockMode, SharedLock, StoreLock, _store_lock
 
 T = TypeVar("T")
 
@@ -163,15 +163,15 @@ class LockedStore(JsonDocument[T]):
             raise TypeError(f"{cls.__name__} must declare its own lock_rank")
 
     @contextmanager
-    def locked(self, *, shared: bool = False, blocking: bool = True) -> Iterator[int]:
+    def locked(self, *, mode: LockMode = ExclusiveLock(), blocking: bool = True) -> Iterator[int]:
         """Canonical lock, including a descriptor for scoped child authority."""
-        with _store_lock(self.path, shared=shared, blocking=blocking) as lock:
+        with _store_lock(self.path, mode=mode, blocking=blocking) as lock:
             yield lock.descriptor
 
     @contextmanager
     def reading(self, *sources, blocking: bool = True) -> Iterator[T]:
         """Retain dependent source owners before this document's shared lock."""
-        with StoreLock.ordered(dict.fromkeys((*sources, self), True), blocking=blocking):
+        with StoreLock.ordered(dict.fromkeys((*sources, self), SharedLock()), blocking=blocking):
             yield self._read_unlocked()
 
     def read(self) -> T:
