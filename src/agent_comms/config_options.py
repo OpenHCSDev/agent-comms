@@ -78,8 +78,6 @@ class CatalogConfigOption(ConfigOption):
     def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
-        # The selected bus whose launch owns the native package catalogued here.
-        self.root = None if configuration.root is None else Path(configuration.root)
         self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
@@ -172,7 +170,7 @@ class ModelConfigOption(CatalogConfigOption):
         if not values:
             from .pi_commands import GetAvailableModels
 
-            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv, self.root)
+            data = await GetAvailableModels().discover(self.agent_bin, self.agent_args.argv, self.configuration.root)
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
             SessionConfigSelectOption(value=value, name=value) for value in dict.fromkeys(values)
@@ -201,7 +199,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.root
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root
         )
         levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]

@@ -252,7 +252,7 @@ class CatalogQuery(NativeQuery):
     @asynccontextmanager
     async def catalog(
         self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
-        root: Path | None = None,
+        root: Path | str | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
@@ -280,7 +280,7 @@ class CatalogQuery(NativeQuery):
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
     async def discover(
-        self, agent_bin: str, arguments: Sequence[str], root: Path | None = None,
+        self, agent_bin: str, arguments: Sequence[str], root: Path | str | None = None,
     ) -> PiResponseData:
         from .native_pi import NativePiUnavailable
 
@@ -331,7 +331,7 @@ class SettingCommand(CatalogQuery):
 
     async def configure(
         self, agent_bin: str, arguments: Sequence[str], *, worktree: Path,
-        root: Path | None = None,
+        root: Path | str | None = None,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
 

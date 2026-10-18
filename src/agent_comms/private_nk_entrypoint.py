@@ -22,7 +22,7 @@ class PrivateNkLaunch:
     native_package: Path
 
     @classmethod
-    def derive(cls, root: Path | None = None) -> PrivateNkLaunch | None:
+    def derive(cls, root: Path | str | None = None) -> PrivateNkLaunch | None:
         """This root's launch from the owners of its facts, or None for an ordinary root.
 
         Without a root, the process's selected route names it. The marker owns

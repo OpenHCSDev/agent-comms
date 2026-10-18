@@ -427,7 +427,7 @@ class NativePiRpcLaunch:
         return cls(argv, cwd, env, session, package, configuration=configuration, runtime=runtime)
 
     @classmethod
-    def _command_selection(cls, command: str, runtime: LaunchRuntime, root: Path | None = None):
+    def _command_selection(cls, command: str, runtime: LaunchRuntime, root: Path | str | None = None):
         """Decode the original launcher selection without acquiring its package.
 
         Executable names never establish capability. Configured commands must
@@ -458,7 +458,7 @@ class NativePiRpcLaunch:
 
     @classmethod
     def package_for_command(
-        cls, command: str, runtime: LaunchRuntime, root: Path | None = None,
+        cls, command: str, runtime: LaunchRuntime, root: Path | str | None = None,
     ) -> Path:
         """Acquire the original reviewed artifact before any new native execution.
 
@@ -473,7 +473,7 @@ class NativePiRpcLaunch:
 
     @classmethod
     def catalog(
-        cls, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path | None = None,
+        cls, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path | str | None = None,
     ) -> NativePiRpcLaunch:
         """Metadata-only RPC owns an in-memory session, never a saved selection.
 
