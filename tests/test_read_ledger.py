@@ -247,7 +247,7 @@ def test_replaced_bus_cannot_inherit_sequence_read_facts(tmp_path):
     replacement.replace(comms.bus.log.path)
     from agent_comms.errors import RelationViolationError
 
-    with pytest.raises(RelationViolationError, match="checkpoint root/inode/size changed"):
+    with pytest.raises(RelationViolationError, match="checkpoint root/size changed"):
         comms.views.viewer_snapshot(str(tmp_path))
     assert not comms.bus.reads.cursor(viewer, comms.registry.snapshot())
 
