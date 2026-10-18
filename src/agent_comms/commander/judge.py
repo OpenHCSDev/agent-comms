@@ -21,13 +21,14 @@ the commander to that unit. Nothing here judges code; it only refuses to let an 
 """
 import hashlib, json, os, re, sys, time
 
+from ..todos import BluntText, FairText, PlainText
+from . import order
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
 RTS = str(CONFIG.state)
 EDITS, VERDICTS = f'{RTS}/edits.jsonl', f'{RTS}/verdicts.jsonl'
-SENT = f'{RTS}/sent.jsonl'  # written by order post()
 BUS = f'{CONFIG.root}/bus.jsonl'
 
 
@@ -44,12 +45,9 @@ def unjudged():
 
 
 def my_messages(thread):
-    """The commander's messages to thread, newest first, from the log order writes at every send.
-
-    Rescanning 300 MB of the bus per verdict scaled with bus size; the send site is the one
-    place every order passes through, so its own record cannot miss one.
-    """
-    return [dict(id=m['id'], text=m['text']) for m in rows(SENT) if thread in m['to']][::-1]
+    """The commander's messages to thread, newest first: one bounded page of the bus's DM history."""
+    page = order.COMMS.views.dm_history_page(ME, thread)
+    return [dict(id=m.message_id, text=m.body) for m in reversed(page.messages) if m.sender == ME]
 
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
@@ -103,7 +101,6 @@ def roast(thread, lines, text, fix, slop):
     """Every send-back is a fleet lesson, sent to the unit that wrote the slop and to #comms: the quoted slop,
     the required fact it restates and the declaration that derives it (paper 1's definition), why that is
     stupid, and what replaces it."""
-    from . import order
     body = (f'{thread}, this is stupid slop and it is going back:\n'
             + '\n'.join(f'    {l.strip()}' for l in lines)
             + f'\nThe slop: {slop.render()}'
@@ -118,8 +115,7 @@ def strike_task(thread, msg):
     """
     if found := re.search(r'\bP\d+\b', next(m['text'] for m in my_messages(thread) if m['id'] == msg)):
         return found.group()
-    with open(f'{RTS}/deadlines.json') as f:
-        open_facts = sorted({p for d in json.load(f).get(thread, []) for p in (d.get('facts') or [d.get('fact')]) if p})
+    open_facts = sorted(t.id for t in order.open_todos(thread))
     if len(open_facts) != 1:
         sys.exit(f'Refused: {msg} names no P-number and {thread} has open tasks {open_facts}; cite the order message for the task')
     return open_facts[0]
@@ -143,7 +139,6 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
         if not any(l in text for l in lines):
             sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
     if kind == 'ok':
-        from . import order
         for i in ids:
             diff = ''.join(''.join('+' + l + '\n' for l in h['new'].splitlines()) for h in edits[i]['hunks'])
             path = edits[i].get('path') or ''
@@ -163,16 +158,13 @@ def verdict(kind, tokens, why, msg=None, serves=None, lines=(), peer=None, roast
     if kind == 'back':
         if not roast_text or len(roast_text.split()) < 12 or not re.search(r'\bbecause\b', roast_text):
             sys.exit('Refused: --roast (12+ words, with "because"): why this is stupid, naming the fact it restates or guesses and the thing that already answers it')
-        from . import order
-        if not order.BLUNT.search(roast_text):
-            sys.exit('Refused: --roast is polite; call it stupid, slop, lazy or useless and say why')
         if not fix or len(fix.split()) < 8:
             sys.exit('Refused: --fix (8+ words): the owner and the exact shape that replaces the slop')  # the strike's own wording rule, checked before the verdict is written
         if slop is None:
             sys.exit(order.Slop.USAGE)
-        order.refuse_dogma(' '.join((why, roast_text, fix, *lines)))
-        if jargon := order.jargon_in(why + ' ' + roast_text):
-            sys.exit(f'Refused: --why is the strike text and contains jargon {jargon}; say it plainly')
+        order.refuse(roast_text, BluntText)
+        order.refuse(' '.join((why, roast_text, fix, *lines)), FairText)
+        order.refuse(why + ' ' + roast_text, PlainText)
         tasks = {}
         for thread in {edits[i]['thread'] for i in ids}:
             if msg not in {m['id'] for m in my_messages(thread)}:
@@ -221,7 +213,6 @@ def main(args):
         peer = args[args.index('--peer') + 1] if '--peer' in args else None
         roast_text = args[args.index('--roast') + 1] if '--roast' in args else None
         fix = args[args.index('--fix') + 1] if '--fix' in args else None
-        from . import order
         slop = order.Slop.from_args(args) if args[0] == 'back' else None
         no_owner = args[args.index('--no-owner') + 1] if '--no-owner' in args else None
         verdict(args[0], ids, why, msg, serves, lines, peer, roast_text, fix, slop, no_owner)

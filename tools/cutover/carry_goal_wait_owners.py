@@ -1,11 +1,11 @@
-"""One-time P236 wait carry; run with OLD wait readers/writers quiesced.
+"""Goal wait owners (P236).
 
-Use the new Core Python before starting new owners. Dry-run by default. This
-only carries goal_waits.json; it never changes registry, sessions or inputs.
+Old rows named their owner by creation date only; each is resolved once to the
+owner's recorded incarnation. Only goal_waits.json changes; registry, sessions
+and inputs are never touched.
 """
 from __future__ import annotations
 
-import argparse
 import json
 from pathlib import Path
 
@@ -13,13 +13,16 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistrySnapshot
-from agent_comms.store_files import _store_lock
+
+from cutover.carry import Carried, Carry
 
 
 def carry_rows(raw: dict, snapshot: RegistrySnapshot) -> dict[str, RecordedGoalWait]:
-    """Resolve old date-only rows once at cutover, never on the runtime path."""
-    pending = dict(raw)
-    carried = {}
+    """Resolve old date-only rows once at cutover, never on the runtime path.
+    A row that already names its owner is kept as it is."""
+    pending = {goal: row for goal, row in raw.items() if "owner" not in row}
+    carried = {goal: FieldCodec.decode(RecordedGoalWait, row)
+               for goal, row in raw.items() if "owner" in row}
     for thread in snapshot.threads.values():
         goal = thread.goal
         if goal is None or goal.id not in pending:
@@ -34,25 +37,21 @@ def carry_rows(raw: dict, snapshot: RegistrySnapshot) -> dict[str, RecordedGoalW
     return carried
 
 
-def carry_locked(root: Path, *, apply: bool = False) -> dict:
-    """Carry under the caller's retained wire lock; use the existing wait writer."""
-    waits = GoalWaits.at(root)
-    registry = Registration(root / "registry.json")
-    raw = json.loads(waits.path.read_text()) if waits.path.exists() else {}
-    carried = carry_rows(raw, registry.snapshot())
-    if apply:
-        waits.replace(carried)
-    return {"waits": len(carried), "applied": apply}
+class GoalWaitOwners(Carry):
+    """Each recorded goal wait names its owner's incarnation."""
 
+    after = "carry_goal_publications"
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("root", type=Path)
-    parser.add_argument("--apply", action="store_true", help="Publish only after old readers/writers stop")
-    args = parser.parse_args()
-    with _store_lock(args.root / "wire"):
-        print(json.dumps(carry_locked(args.root, apply=args.apply)))
+    @classmethod
+    def carry(cls, root: Path, *, apply: bool) -> Carried:
+        waits = GoalWaits.at(root)
+        raw = json.loads(waits.path.read_text()) if waits.path.exists() else {}
+        changed = sum("owner" not in row for row in raw.values())
+        carried = carry_rows(raw, Registration(root / "registry.json").snapshot())
+        if apply and changed:
+            waits.replace(carried)
+        return Carried(changed, {"waits": len(carried)}, (waits.path.name,) if changed else ())
 
 
 if __name__ == "__main__":
-    main()
+    GoalWaitOwners.main()

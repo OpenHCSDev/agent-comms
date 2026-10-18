@@ -11,16 +11,14 @@ until Core's restart queue can stop them while idle.
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from importlib.metadata import distribution
 import os
 from pathlib import Path
 import subprocess
 import sys
 
-from agent_comms.active_route import (read_active_route, active_route_path,
-    acquire_exclusive_route_lock, _publish_active_route_locked)
-from agent_comms.native_package import pinned_native_package
+from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
 from agent_comms.comms import wire
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.owner_restart import OwnerRestartRequest
@@ -69,14 +67,11 @@ class RuntimePublication:
         previous_route = read_active_route(path)
         if previous_route is None or previous_route.root != root.resolve():
             raise ValueError('Publication requires the selected active root')
-        route = replace(previous_route, native_package=pinned_native_package())
         directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
         try:
             acquire_exclusive_route_lock(directory)
             if read_active_route(path) != previous_route:
                 raise ValueError('Active route changed during CLI check')
-            if route != previous_route:
-                _publish_active_route_locked(route, path, directory, expected=previous_route)
             self.publish_links()
         finally:
             os.close(directory)

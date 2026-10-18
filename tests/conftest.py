@@ -64,6 +64,19 @@ def private_directory():
 
 
 @pytest.fixture
+def declared_native_package(tmp_path_factory, monkeypatch) -> Path:
+    """This test's own pin and the package directory it names; nothing is prepared."""
+    from agent_comms import native_package
+
+    manifest = tmp_path_factory.mktemp("declared-stack") / native_package.MANIFEST.name
+    manifest.write_text("# a test-owned pin\n")
+    monkeypatch.setattr(native_package, "MANIFEST", manifest)
+    package = native_package.pinned_location()
+    package.mkdir(parents=True)
+    return package
+
+
+@pytest.fixture
 def private_comms(private_directory):
     """One throwaway private bus, built as production builds one.
 
@@ -145,6 +158,43 @@ def root(tmp_path: Path) -> Path:
 @pytest.fixture
 def comms(root: Path) -> Comms:
     return Comms(root)
+
+
+@pytest.fixture
+def commander(comms: Comms, tmp_path: Path):
+    """A commander thread "lead" and a unit "worker" holding an ordinary goal, called as lead."""
+    from agent_comms.goal_actions import SetGoalAction
+    from agent_comms.tool_caller import ThreadCaller
+
+    for created, name in enumerate(("lead", "worker"), 1):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path), created_at=float(created)))
+    comms.goals.update_goal("worker", SetGoalAction(text="Original commander brief", goal_id="ongoing"))
+    return comms, ThreadCaller("lead")
+
+
+@pytest.fixture
+def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """The order script installed for lead on the commander bus, with a git checkout its orders check."""
+    import importlib
+    import subprocess
+    import sys
+
+    from agent_comms.commander.config import CommanderConfig
+
+    comms, _ = commander
+    monkeypatch.setenv("HOME", str(tmp_path))
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for command in (("init", "-q"), ("remote", "add", "origin", "https://github.com/OpenHCSDev/agent-comms.git")):
+        subprocess.run(["git", "-C", str(repo), *command], check=True)
+    CommanderConfig(commander="lead", root=comms.root, cli=Path(sys.executable).parent / "agent-comms",
+        state=tmp_path / "state", board=tmp_path / "board.md", narrative=tmp_path / "narrative.md",
+        skill=tmp_path / "skill.md", rules=(), repos=(), worktrees=tmp_path / "wt", scratch=tmp_path / "scratch",
+        disk=tmp_path).write(tmp_path)
+    CommanderConfig.installed.cache_clear()
+    from agent_comms.commander import order
+    yield importlib.reload(order), repo
+    CommanderConfig.installed.cache_clear()
 
 
 @pytest.fixture

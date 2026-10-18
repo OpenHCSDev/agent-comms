@@ -56,7 +56,7 @@ from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .harness_install import Harness
 from .importing import ImportLimits
 from .historical_views import HistoryCursor
-from .launch_runtime import RestartEnvironment
+from .tool_caller import ToolCaller
 from .turn_context import ContextSegment
 from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersion
 from .working_memory_questions import SpanAnswer
@@ -1066,7 +1066,7 @@ class HistoryCliCommand(CliCommand):
     with_thread: str | None = option("--with", help="DM with this thread", default=None)
     channel: str | None = option("--channel", help="Channel (#all, #tag)", default=None)
     everything: bool = option("--everything", help="Every message scope (the default)", default=False)
-    me: str | None = option("--as", help="DM participant (default: calling thread)", default=None)
+    me: str | None = option("--as", help="DM participant; required with --with", default=None)
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
     before: int | HistoryCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
@@ -1075,7 +1075,7 @@ class HistoryCliCommand(CliCommand):
             raise ValueError("history takes at most one of --with, --channel, --everything")
         paging = {"before": self.before, "limit": self.limit}
         if self.with_thread:
-            page = ctx.views.dm_history_page(self.me or RestartEnvironment.calling_thread(), self.with_thread, **paging)
+            page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, **paging)
         elif self.channel:
             page = ctx.views.channel_history_page(self.channel, **paging)
         else:
