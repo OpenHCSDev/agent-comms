@@ -233,24 +233,6 @@ class OwnerLifecycle:
         with _store_lock(self._wire_lock_path) as lock:
             yield lock.descriptor
 
-    def pin_private_nk_launch(
-        self, validated_root: Path, wire_root_id: str, native_package: Path
-    ) -> None:
-        """Retain this root's derived launch after rechecking the root marker."""
-        if (
-            not isinstance(validated_root, Path)
-            or not validated_root.is_absolute()
-            or validated_root != self.root
-            or not isinstance(native_package, Path)
-            or not native_package.is_absolute()
-        ):
-            raise ValueError("private owner launch requires the validated absolute root/package")
-        with self.bus.log.certified_read() as source:
-            marker = source.marker
-            if marker.root_id != wire_root_id:
-                raise RelationViolationError("private owner launch root ID changed")
-        self._private_nk_launch = PrivateNkLaunch(validated_root, wire_root_id, native_package)
-
     def acquire_thread(self, name: str, *, owner_pid: int) -> Thread:
         """Bind only this calling process; stored birth time is signal authority."""
         if owner_pid != os.getpid():
@@ -317,7 +299,11 @@ class OwnerLifecycle:
             launch = PrivateNkLaunch.derive(self.root)
             if launch is None:
                 return None
-            self.pin_private_nk_launch(launch.validated_root, launch.wire_root_id, launch.native_package)
+            # A published route's root ID must still be the marker's.
+            with self.bus.log.certified_read() as source:
+                if source.marker.root_id != launch.wire_root_id:
+                    raise RelationViolationError("private owner launch root ID changed")
+            self._private_nk_launch = launch
         return self._private_nk_launch
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:

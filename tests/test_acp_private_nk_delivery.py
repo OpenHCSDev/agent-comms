@@ -61,7 +61,7 @@ def _session(tmp_path, *, package=True):
             RecordedThreadIncarnation("fixture", owner.created_at).lookup, "beta", "beta", committed=True
         )
     if package:
-        comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+        pass
     agent = CommsAgent(comms, runtime_enabled=True)
     agent.sessions.bindings["beta"] = "beta"
     agent.sessions.titles["beta"] = "beta"
@@ -90,8 +90,7 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     comms.registry.declare(
         comms.registry.new_thread('sender', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
+    comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(
         comms,
         runtime_enabled=True,
@@ -740,7 +739,6 @@ async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monk
 
 async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, monkeypatch):
     comms, first, root_id = _session(tmp_path)
-    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     second = CommsAgent(
         comms,
         runtime_enabled=True,

@@ -66,7 +66,6 @@ async def test_fork_runs_selected_python_before_copying_saved_history(tmp_path, 
     package = pinned_native_package()
     comms = Comms(tmp_path / "wire")
     root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     environment = {}
     PrivateNkLaunch(comms.root, root_id, package).apply_environment(environment)
     for name, value in environment.items():

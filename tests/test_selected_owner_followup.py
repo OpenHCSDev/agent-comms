@@ -287,8 +287,6 @@ async def test_actual_native_selected_and_followup_use_one_live_input_lifetime(
         ]
     )
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(comms.root))
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_WIRE_ROOT_ID", root_id)
-    monkeypatch.setenv("AGENT_COMMS_PRIVATE_NK_NATIVE_PACKAGE", package)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     comms.messaging.send_message("sender", "beta", "First local selected instruction")
     turn = asyncio.create_task(agent.inputs.drain_inbox("beta"))

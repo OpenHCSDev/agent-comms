@@ -87,8 +87,7 @@ def test_owner_configuration_requires_nominal_intent_and_private_binding(
         CommsAgent(comms, private_selected_tool_intent=object())
     with pytest.raises(PublicationActivationBlocked, match="private bus root"):
         CommsAgent(comms, private_selected_tool_intent=intent_type())
-    root_id = comms.messaging.initialize_private_initial_protocol()
-    comms.owners.pin_private_nk_launch(comms.root, root_id, private_root)
+    comms.messaging.initialize_private_initial_protocol()
     agent = CommsAgent(comms, private_selected_tool_intent=intent_type())
     assert type(agent._private_selected_tool_intent) is intent_type
 
