@@ -555,17 +555,15 @@ class Transcripts:
         self.page_reads += 1
         thread, runtime = page.thread, page.runtime
         cursor = before or after
-        if cursor and cursor.session_file != runtime.read_key:
+        if cursor and (cursor.session_file != runtime.read_key or cursor.offset < 0):
             raise TranscriptChanged()
-        if before is not None:
-            page.records.prepare_earlier(before.offset)
         source = page.projection
         with page.records.reading() as reader:
             size = reader.cut().offset
-            if cursor and not reader.contains_offset(cursor.offset):
+            if cursor and cursor.offset > size:
                 raise TranscriptChanged()
             if through is not None:
-                if through.session_file != runtime.read_key or not reader.contains_offset(through.offset):
+                if through.session_file != runtime.read_key or not 0 <= through.offset <= size:
                     raise TranscriptChanged()
                 size = through.offset
                 if cursor and cursor.offset > size:
@@ -582,15 +580,14 @@ class Transcripts:
                     max_messages=max_messages, max_bytes=max_bytes,
                 )
             draft = reader.current_draft()
-            start, end = traversal.bounds(initial, consumed)
-            has_older = reader.has_older(start.offset) or start.wire.sequence > 0
+        start, end = traversal.bounds(initial, consumed)
         events = traversal.finish(records)
         if page.inherited and not after and (cursor is None or cursor == frontier):
             events = (*events, *self._fork_start_events(thread))
         return (
             TranscriptPage(
                 events, start, end,
-                has_older,
+                start.offset > 0 or start.wire.sequence > 0,
                 end != frontier,
             ),
             draft,

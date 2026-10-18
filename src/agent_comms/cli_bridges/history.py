@@ -10,9 +10,7 @@ itself outside the family, because it follows a session rather than reading one 
 """
 from __future__ import annotations
 
-import asyncio
 import json
-from dataclasses import dataclass, field, replace
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterable, Iterator
 from pathlib import Path
@@ -22,7 +20,6 @@ from pydantic import TypeAdapter
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.harness_install import ClaudeCodeHarness, CodexHarness, Harness, OpenCodeHarness
-from agent_comms.typed_table import Column, TypedTable, TypedStore
 
 from .shared import EarlierRequest, HistoryNotice, SessionFacts, TranscriptUpdate
 
@@ -107,11 +104,6 @@ class OfflineHistory(ReadAtOnce, History):
 class OnlineHistory(History):
     """Asks the running harness for a session it holds."""
 
-    has_earlier = False
-
-    async def earlier(self, transcript):
-        return self
-
     @classmethod
     @abstractmethod
     def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
@@ -121,41 +113,6 @@ class OnlineHistory(History):
     def of(cls, harness: type[Harness], thread: str, address: str | None, directory: Path) -> OnlineHistory:
         reader, = cls.readers(harness)
         return reader.connected(thread, address, directory)
-
-
-@dataclass(frozen=True)
-class HistoryCursor(TypedTable):
-    thread: str = field(metadata={'sql': Column(primary_key=True)})
-    source: OnlineHistory
-
-
-@dataclass(frozen=True)
-class HistoryCursors(TypedStore):
-    root: Path
-    filename = 'external_history_sources.sqlite3'
-    rows = (HistoryCursor,)
-
-    def attach(self, thread, source):
-        with self.writing() as connection:
-            if HistoryCursor.one(connection, thread=thread) is None:
-                HistoryCursor(thread, source).insert(connection)
-
-    def has_earlier(self, thread):
-        if not self.path.exists():
-            return False
-        with self.snapshot() as connection:
-            row = HistoryCursor.one(connection, thread=thread)
-            return row is not None and row.source.has_earlier
-
-    def prepare(self, transcript, before):
-        with transcript.reading() as reader:
-            if before > reader.oldest_offset() or not self.path.exists():
-                return
-        with self.writing() as connection:
-            row = HistoryCursor.one(connection, thread=transcript.lookup)
-            if row is not None and row.source.has_earlier:
-                source = asyncio.run(row.source.earlier(transcript))
-                replace(row, source=source).upsert(connection)
 
 
 class JsonLines:

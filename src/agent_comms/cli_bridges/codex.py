@@ -5,7 +5,7 @@ import argparse
 import asyncio
 from collections import deque
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import AsyncIterator, Self
 from uuid import uuid4
@@ -13,15 +13,15 @@ from uuid import uuid4
 import aiohttp
 from pydantic import JsonValue
 from agent_comms.coordination_database import CoordinationStore
-from agent_comms.external_transcript import EarlierExternalTranscript
 from agent_comms.messages import Message
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 from .history import CodexHistory, OnlineHistory
-from .shared import AttachedHistory, Binding, IncomingFrame, SessionFacts, TranscriptBridge, Options, TranscriptUpdate, run_bridge
+from .shared import Binding, IncomingFrame, SessionFacts, TranscriptBridge, Options, TranscriptUpdate, run_bridge
 from .codex_protocol import (
     Capabilities, ClientInfo, DisplayOutput, Initialize, Initialized, MessageInput,
     Request, RPC_RESPONSE, RpcReply, RpcNotification, TextInput,
     ToolOutput, RequestParams, ResumeThread, ResumedThread, ItemsList, ItemsPage, ItemStream, BusInput,
+    ItemEntry,
 )
 
 
@@ -86,30 +86,14 @@ class CodexOptions(Options):
     socket: str
 
 
-@dataclass
 class CodexAppServer(CodexHistory, OnlineHistory):
     """A thread the running Codex app-server can resume, read through its item list."""
 
     SOCKET = Path.home() / '.codex/app-server-control/app-server-control.sock'
 
-    thread: str
-    socket: str
-    cursor: str | None = None
-
-    @property
-    def has_earlier(self) -> bool:
-        return self.cursor is not None
-
-    async def earlier(self, transcript):
-        async with CodexConnection.open(self.socket) as codex:
-            page = ItemsPage.model_validate(await codex.call(
-                ItemsList(threadId=self.thread, cursor=self.cursor)))
-        earlier = EarlierExternalTranscript(transcript.root, transcript.incarnation)
-        for entry in page.data:
-            if entry.completed:
-                earlier.finish(turn_id=entry.turnId, item_id=entry.item.id,
-                               events=entry.publication().events)
-        return replace(self, cursor=page.nextCursor)
+    def __init__(self, thread: str, socket: str) -> None:
+        self.thread = thread
+        self.socket = socket
 
     @classmethod
     def connected(cls, thread: str, address: str | None, directory: Path) -> Self:
@@ -120,9 +104,9 @@ class CodexAppServer(CodexHistory, OnlineHistory):
             async for update in self.seen(codex):
                 yield update
 
-    async def entries(self, codex: CodexConnection) -> ItemsPage:
-        """The newest page, newest first, with its source-owned continuation."""
-        return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread)))
+    async def entries(self, codex: CodexConnection) -> list[ItemEntry]:
+        """The newest page, newest first; older published items stay in Core's transcript."""
+        return ItemsPage.model_validate(await codex.call(ItemsList(threadId=self.thread))).data
 
     async def seen(self, codex: CodexConnection) -> AsyncIterator[TranscriptUpdate]:
         resumed = ResumedThread.model_validate(await codex.call(ResumeThread(threadId=self.thread)))
@@ -130,11 +114,9 @@ class CodexAppServer(CodexHistory, OnlineHistory):
         # Only completed snapshots. An active item's deltas must be assembled
         # from its actual start, not appended to an overlapping snapshot
         # fetched concurrently with those deltas.
-        page = await self.entries(codex)
-        for entry in reversed(page.data):
+        for entry in reversed(await self.entries(codex)):
             if entry.completed:
                 yield entry.publication()
-        yield AttachedHistory(CodexAppServer(self.thread, self.socket, page.nextCursor))
         # Codex's own thread status says whether its newest turn still runs.
         yield resumed.thread.status.update()
 

@@ -541,48 +541,6 @@ def test_codex_app_server_reads_only_newest_page_and_keeps_bus_inputs():
     assert [call.method for call in codex.calls] == ["thread/resume", "thread/items/list"]
 
 
-def test_codex_older_page_extends_the_existing_transcript_pager(tmp_path, monkeypatch):
-    from contextlib import asynccontextmanager
-    from agent_comms.cli_bridges.codex import CodexConnection
-    from agent_comms.cli_bridges.shared import ThreadOutput
-    from agent_comms.comms import Comms
-    from agent_comms.thread_execution import ExternalThreadExecution
-
-    newest = {"data": [codex_entry("new", {"type": "agentMessage", "id": "new", "text": "newest"})],
-              "nextCursor": "older"}
-    older = {"data": [codex_entry("old", {"type": "agentMessage", "id": "old", "text": "oldest"})]}
-    client = FakeCodex({None: newest, "older": older})
-
-    @asynccontextmanager
-    async def connect(socket):
-        yield client
-
-    monkeypatch.setattr(CodexConnection, "open", connect)
-    comms = Comms(tmp_path)
-    comms.registry.declare(comms.registry.new_thread(
-        "cli", frozenset(), str(tmp_path), execution=ExternalThreadExecution))
-    output = ThreadOutput(comms.transcripts.external("cli"), comms.agents)
-
-    async def seed():
-        async for update in CodexAppServer("thread", "unused").history():
-            output.publish_batch([update])
-
-    asyncio.run(seed())
-    latest = comms.transcripts.thread_transcript_page("cli")
-    assert [event.text for event in latest.events] == ["newest"]
-    assert latest.has_older
-    past = comms.transcripts.thread_transcript_page("cli", before=latest.before)
-    assert [event.text for event in past.events] == ["oldest"]
-    assert not past.has_older
-    assert [call.cursor for call in client.calls if call.method == "thread/items/list"] == [None, "older"]
-    # The old page did not move an already displayed position or refetch on return.
-    returned = comms.transcripts.thread_transcript_page("cli")
-    assert returned.after == latest.after
-    assert [event.text for event in returned.events] == ["oldest", "newest"]
-    assert [call.method for call in client.calls] == [
-        "thread/resume", "thread/items/list", "thread/items/list"]
-
-
 # OpenCode
 
 

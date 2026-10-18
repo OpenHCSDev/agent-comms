@@ -164,7 +164,7 @@ class TranscriptTraversal(ABC):
         # interrupted call (its result record never arrives) from growing a page.
         open_rounds: set[str] = set()
         round_grace = 0
-        native = self.native(reader, initial, frontier)
+        native = self.native(reader, initial, frontier) if frontier.offset else (record for record in ())
         projected = project(native, max_records=max_messages + 1, max_bytes=max_bytes)
         try:
             record, events = next(projected, (None, ()))
@@ -205,7 +205,7 @@ class TranscriptTraversal(ABC):
                     consumed = consumed.at_sequence(self.receipt_position(message.message))
                     message = next(source_rows, None)
             if record is None:
-                consumed = consumed.at_offset(frontier.offset if self.ascending else reader.oldest_offset())
+                consumed = consumed.at_offset(frontier.offset if self.ascending else 0)
             if message is None:
                 consumed = consumed.at_sequence(frontier.wire.sequence if self.ascending else 0)
             return consumed, records
@@ -274,18 +274,6 @@ class TranscriptSource:
     Native and external stores supply their original records. An assigned
     source adds the separately acquired wire/publication capability below.
     """
-
-    def oldest_offset(self):
-        return 0
-
-    def contains_offset(self, offset):
-        return self.oldest_offset() <= offset <= self.cut().offset
-
-    def has_older(self, before):
-        return before > self.oldest_offset()
-
-    def prepare_earlier(self, before):
-        """Saved local sources already contain their earlier records."""
 
     def turns(self, last: int):
         """Read input-bounded turns under one original record-source cut."""

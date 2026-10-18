@@ -25,11 +25,6 @@ from .typed_table import Column, TypedRow, TypedStore, TypedTable
 
 
 @dataclass(frozen=True)
-class ExternalPosition(TypedRow):
-    seq: int
-
-
-@dataclass(frozen=True)
 class ExternalTurn(TypedRow):
     turn_id: str
 
@@ -152,17 +147,6 @@ class ExternalTranscriptRead(TranscriptSource):
                 for event in row.events))
             for turn_id in ExternalItemRow.recent_turn_ids(self.connection, self.lookup, last))
 
-    def oldest_offset(self) -> int:
-        if self.connection is None:
-            return 0
-        rows = ExternalItemRow.select(self.connection, row_type=ExternalPosition,
-                                      thread=self.lookup, order_by=('seq',), limit=1)
-        return rows[0].seq - 1 if rows else 0
-
-    def has_older(self, before: int) -> bool:
-        from .cli_bridges.history import HistoryCursors
-        return before > self.oldest_offset() or HistoryCursors(self.transcript.root).has_earlier(self.lookup)
-
     def forward(self, after: int, through: int) -> Iterator[ExternalRecord]:
         return self._records("seq > ? AND seq <= ?", (after, through), descending=False)
 
@@ -195,16 +179,9 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         with self.writing() as connection:
             if events and ExternalItemRow.one(connection, **key) is None:
-                ExternalItemRow(seq=self._next_position(connection), events=events,
+                ExternalItemRow(seq=self._cut(connection).offset + 1, events=events,
                                 **key).insert(connection)
             ExternalDraftRow.delete(connection, **key)
-
-    def _next_position(self, connection):
-        return self._cut(connection).offset + 1
-
-    def prepare_earlier(self, before):
-        from .cli_bridges.history import HistoryCursors
-        HistoryCursors(self.root).prepare(self, before)
 
     def draft(self, *, turn_id: str, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:
@@ -236,12 +213,5 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def cut(self) -> ExternalCut:
         with self.reading() as records:
             return records.cut()
-
-
-class EarlierExternalTranscript(ExternalTranscript):
-    """Publish an older item without moving any existing item's position."""
-
-    def _next_position(self, connection):
-        return ExternalTranscriptRead(self, connection).oldest_offset()
 
 
