@@ -236,7 +236,6 @@ class TokenTotal:
         """Only a reported total confirms the context usage."""
 
     def settle(self, session: TurnSession) -> Iterator[AgentEvent]:
-        """A stop keeps only a confirmed total; an unconfirmed provisional one is withdrawn."""
         if session.usage.provisional:
             session.usage.rollback()
             yield session.context_info()
@@ -291,7 +290,6 @@ class PiUsage(PiPayload):
         return TokenTotal.reported(self.total_tokens)
 
     def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
-        """A usage Pi reported is charged once to the turn's account."""
         return (account.charge(self),)
 
 
