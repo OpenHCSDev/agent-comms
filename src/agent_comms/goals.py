@@ -356,21 +356,25 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         return incoming.registration_value(previous)
 
     def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
-        return previous
+        return self.project(lambda goal: goal, lambda: previous)
 
     @abstractmethod
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T: ...
 
-    @abstractmethod
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None: ...
+               permit: LaunchPermit, turn: TurnId) -> None:
+        self.project(lambda goal: settlement(store, permit, goal, turn).dispatch_sync(goal.state),
+                     lambda: None)
 
-    @abstractmethod
     def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration: ...
+                                diagnostic: str) -> GoalDeclaration:
+        return self.project(lambda goal: goals.block_goal_after_failed_turn(
+            name, started_goal=goal, expected_worktree=worktree, diagnostic=diagnostic,
+        ), lambda: self)
 
-    @abstractmethod
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]: ...
+    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
+        return self.project(lambda goal: (goal.render_instructions(
+            goal.order.instructions(goal.order.todos(goals, owner, goal.id))),), tuple)
 
     def after_failed_turn(self, diagnostic: str) -> GoalDeclaration:
         return self
@@ -389,12 +393,12 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         return self
 
     @property
-    @abstractmethod
-    def shows_document(self) -> bool: ...
+    def shows_document(self) -> bool:
+        return self.visible
 
     @property
-    @abstractmethod
-    def shows_progress(self) -> bool: ...
+    def shows_progress(self) -> bool:
+        return bool(self.progress)
 
     @property
     @abstractmethod
@@ -404,26 +408,23 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     @abstractmethod
     def progress(self) -> str: ...
 
-    def unavailable_heading(self) -> str:
-        return "Goal state unavailable"
+    unavailable_heading: ClassVar[str] = "Goal state unavailable"
 
     def wake_context(self):
-        return None
+        return self.project(lambda goal: {"text": goal.text, "status": goal.state.declared_name,
+                           "progress": goal.progress}, lambda: None)
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
 
-    def require_replacement(self, goals: Goals, owner: ThreadIncarnation) -> None:
-        pass
-
     def require(self) -> Goal:
         raise RelationViolationError("No goal is set for this thread.")
 
-    @abstractmethod
-    def reported_id(self) -> str | None: ...
+    def reported_id(self) -> str | None:
+        return self.project(lambda goal: goal.id, lambda: None)
 
-    @abstractmethod
-    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool: ...
+    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
+        return self.project(lambda goal: waits.clear(goal.id, wait_id=wait_id), lambda: False)
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -457,27 +458,8 @@ class NoGoal(NullMember, GoalDeclaration):
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T:
         return on_absent()
 
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
-        pass
-
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
-        return self
-
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
-        return ()
-
-    def reported_id(self) -> None:
-        return None
-
-    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
-        return False
-
     can_control: ClassVar[bool] = False
     visible: ClassVar[bool] = False
-    shows_document: ClassVar[bool] = False
-    shows_progress: ClassVar[bool] = False
     objective: ClassVar[str] = ""
     progress: ClassVar[str] = ""
 
@@ -505,24 +487,8 @@ class Goal(RecordMember, GoalDeclaration):
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
 
-    def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
-        return self
-
     def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T:
         return on_goal(self)
-
-    def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-               permit: LaunchPermit, turn: TurnId) -> None:
-        settlement(store, permit, self, turn).dispatch_sync(self.state)
-
-    def block_after_failed_turn(self, goals: Goals, name: str, worktree: str,
-                                diagnostic: str) -> GoalDeclaration:
-        return goals.block_goal_after_failed_turn(
-            name, started_goal=self, expected_worktree=worktree, diagnostic=diagnostic,
-        )
-
-    def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
-        return (self.instructions(self.order.todos(goals, owner, self.id)),)
 
     def check_expected(self, current: GoalDeclaration) -> None:
         if self != current:
@@ -533,12 +499,6 @@ class Goal(RecordMember, GoalDeclaration):
 
     def defers_following_to(self, current: GoalDeclaration) -> bool:
         return not self.state.active and super().defers_following_to(current)
-
-    shows_document: ClassVar[bool] = True
-
-    @property
-    def shows_progress(self) -> bool:
-        return self.progress != Goal.progress
 
     @property
     def objective(self) -> str:
@@ -560,11 +520,7 @@ class Goal(RecordMember, GoalDeclaration):
     def action_failure(self, error: Exception) -> str:
         return str(error)
 
-    def unavailable_heading(self) -> str:
-        return "Goal state unavailable · last confirmed snapshot"
-
-    def wake_context(self):
-        return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+    unavailable_heading: ClassVar[str] = "Goal state unavailable · last confirmed snapshot"
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return current.matching(self.id)
@@ -577,15 +533,9 @@ class Goal(RecordMember, GoalDeclaration):
             raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
         return self
 
-    def reported_id(self) -> str:
-        return self.id
-
     def require_state(self, expected: GoalState) -> None:
         if self.state != expected:
             raise ValueError(self.state.activity_refusal())
-
-    def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
-        return waits.clear(self.id, wait_id=wait_id)
 
     def matching(self, goal_id: str) -> GoalDeclaration:
         return self if self.id == goal_id else NoGoal()
@@ -600,23 +550,12 @@ class Goal(RecordMember, GoalDeclaration):
     def captured(self) -> GoalCheckpoint:
         return PresentGoalCheckpoint(self.checkpoint)
 
-    def instructions(self, todos: Sequence[Todo]) -> str:
-        return self.render_instructions(self.order.instructions(todos))
-
     def render_instructions(self, orders_text: str) -> str:
         return "\n\n".join(part for part in (self.text, orders_text) if part)
 
-    def require_order(self, goals: Goals, owner: ThreadIncarnation) -> None:
-        self.order.require_order(self, goals, owner)
-
-    def require_replacement(self, goals: Goals, owner: ThreadIncarnation) -> None:
-        self.order.require_replacement(self, goals, owner)
-
     def after_failed_turn(self, diagnostic: str) -> Goal:
         progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
-        return self._failure_projection(self.state.after_failed_turn(diagnostic), progress)
-
-    def _failure_projection(self, state: GoalState, progress: str) -> Goal:
+        state = self.state.after_failed_turn(diagnostic)
         if state is self.state:
             return self
         return replace(self, state=state, progress=progress, revision=self.revision + 1)

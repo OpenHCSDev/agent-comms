@@ -168,7 +168,7 @@ class TransitionGoalAction(GoalAction[Goal]):
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState: ...
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        goal.require_order(ctx.goals, ctx.thread.incarnation)
+        goal.order.require_order(goal, ctx.goals, ctx.thread.incarnation)
         state = self.next_state(goal, ctx)
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
         self.before_transition(goal, ctx)
@@ -420,10 +420,10 @@ class SetGoalAction(ReplacementGoalAction[Goal], OwnerInvocable, RuntimeInvocabl
             if (goal.text, goal.order) != (self.text.strip(), self.order):
                 raise ValueError("Goal identity already has different instructions.")
             return goal
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
         return self.create(ctx)
 
     def create(self, ctx: GoalActionContext) -> Goal:
-        ctx.thread.goal.require_replacement(ctx.goals, ctx.thread.incarnation)
         goal = Goal(
             text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
             published_seq=ctx.goals.bus.log.latest_sequence(),
@@ -452,6 +452,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         """An unfinished goal accepts the assignment; a finished one is replaced."""
         if goal.state.terminal:
+            goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
             return self.create(ctx)
         request = self.request_ref(ctx)
         self.reserve(ctx, goal.id, request)
@@ -502,7 +503,7 @@ class ClearGoalAction(
     ReplacementGoalAction[NoGoal], OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
     def change(self, goal: Goal, ctx: GoalActionContext) -> NoGoal:
-        goal.require_replacement(ctx.goals, ctx.thread.incarnation)
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
         return self.create(ctx)
 
     def create(self, ctx: GoalActionContext) -> NoGoal:
@@ -515,7 +516,7 @@ class EditGoalAction(GoalAction[Goal], OwnerInvocable, RuntimeInvocable):
     preserve_wait = True
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
-        goal.require_replacement(ctx.goals, ctx.thread.incarnation)
+        goal.order.require_replacement(goal, ctx.goals, ctx.thread.incarnation)
         text = self.text.strip()
         if not text:
             raise ValueError("A goal requires text.")

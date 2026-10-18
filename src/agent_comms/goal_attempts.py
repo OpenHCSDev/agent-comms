@@ -483,38 +483,30 @@ class GoalTurnPermit(ABC):
         for permit in self.claims:
             goal.settle(settlement, store, permit, turn)
 
-    @abstractmethod
-    def has_verified_progress(self, store: GoalAttemptStore) -> bool: ...
+    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
+        return any(permit.has_verified_progress(store) for permit in self.claims)
 
     @abstractmethod
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None: ...
 
-    @abstractmethod
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool: ...
+                   usage: Mapping[str, object]) -> bool:
+        return any(permit.charge_for(goal_id, goals, response, usage) for permit in self.claims)
 
-    @abstractmethod
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+        for permit in self.claims:
+            context = permit.add_context(context, owner, goals)
+        return context
 
 
 class NoLaunchPermit(GoalTurnPermit):
     claims: ClassVar[tuple[LaunchPermit, ...]] = ()
-
-    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
-        return False
 
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
         generation = store.snapshot(goal_id)
         if generation and generation.lifecycle.allows_resume(True):
             store.retire_goal(goal_id, expected_generation=generation.number,
                               attempt_id=generation.attempt_id)
-
-    def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool:
-        return False
-
-    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
-        return context
 
 
 @dataclass(frozen=True, slots=True)
@@ -525,9 +517,12 @@ class LaunchPermit(GoalTurnPermit):
     def claims(self) -> tuple[LaunchPermit, ...]:
         return (self,)
 
-    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
-        with suppress(StaleAttemptError):
-            self.reservation.fail(store, "Goal origin turn did not finish successfully.")
+    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
+        with closing(store._connect()) as conn:
+            original = AttemptRecord.read_in(conn, self.reservation.attempt_id)
+        return original.reserved_by(self.reservation, StaleAttemptError(
+            "Original launch attempt changed or is unavailable.",
+        )).phase.verified_progress
 
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
                    usage: Mapping[str, object]) -> bool:
@@ -538,6 +533,10 @@ class LaunchPermit(GoalTurnPermit):
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
         return context.with_goal(owner, goals)
+
+    def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
+        with suppress(StaleAttemptError):
+            self.reservation.fail(store, "Goal origin turn did not finish successfully.")
 
     def retire_unverified(self, store: GoalAttemptStore) -> None:
         """Release this acquired claim; settled or superseded attempts stay intact."""
@@ -556,15 +555,6 @@ class LaunchPermit(GoalTurnPermit):
                 attempt.attempt_id,
             ),
         )
-
-    def has_verified_progress(self, store: GoalAttemptStore) -> bool:
-        """Read the original attempt, even after its successor generation advances."""
-        with closing(store._connect()) as conn:
-            original = AttemptRecord.read_in(conn, self.reservation.attempt_id)
-        return original.reserved_by(
-            self.reservation,
-            StaleAttemptError("Original launch attempt changed or is unavailable."),
-        ).phase.verified_progress
 
     def record_verified_progress(
         self, store: GoalAttemptStore, progress_witness: str

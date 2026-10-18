@@ -56,4 +56,4 @@ class GoalUnavailable(GoalDisplay):
         return str(error)
 
     def heading(self, execution: ThreadGoalExecution) -> str:
-        return self.last_confirmed.unavailable_heading()
+        return self.last_confirmed.unavailable_heading

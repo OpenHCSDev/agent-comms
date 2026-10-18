@@ -18,9 +18,7 @@ from .launch_runtime import RestartEnvironment
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
 from .goals import (
-    Goal,
     GoalDeclaration,
-    GoalRevision,
     NoGoal,
 )
 from .pi_vocabulary import (
@@ -276,9 +274,6 @@ class Thread(ThreadProvenance):
         lease = self.turn_lease
         if lease is None or not lease.can_attest(claim_scope) or TurnId(lease.turn_id) != turn_id:
             raise RelationViolationError("live owner does not hold the requested turn")
-
-    def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
-        return self.goal.require_checkpoint(checkpoint)
 
     @property
     def task_scope(self) -> TaskScope:
