@@ -34,11 +34,7 @@ class PartnerGoalChange:
             return None
         entry = history[-1]
         goal = entry.after
-        return goal.project(
-            lambda current: cls(peer, entry.observed_at, current.checkpoint,
-                                type(current.state), current.progress),
-            lambda: cls(peer, entry.observed_at, None, None, ""),
-        )
+        return cls(peer, entry.observed_at, *goal.peer_change_values())
 
 
 @dataclass(frozen=True, kw_only=True)

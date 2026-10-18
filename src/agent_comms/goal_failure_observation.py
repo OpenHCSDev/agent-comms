@@ -18,15 +18,15 @@ from .diagnostics import FailureReason
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, Id128Text
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
-from .goals import Goal
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
 from .thread_status import ThreadStatus
-from .threads import Thread
 from .turn_lease import TurnFence, TurnLeaseFence
 from .typed_table import Column, ForeignKey, TypedTable
 
 if TYPE_CHECKING:
     from .goal_attempts import Reservation
+    from .goals import Goal
+    from .threads import Thread
 
 
 class GoalLedgerTable:
@@ -224,6 +224,21 @@ class FailedTurnProjection:
         state, explanation = goal.state.failure_projection(row.reason.value)
         return cls(state, explanation)
 
+    @classmethod
+    def read_for_goal(cls, path: Path, owner: Thread, owner_status: ThreadStatus,
+                      claim_scope: int, goal: Goal) -> FailedTurnProjection:
+        if not owner.process_identity.allows_goal_observation(owner_status):
+            return cls("unavailable", "owner_or_goal_changed")
+        try:
+            # Read lifecycle eligibility before opening the passive ledger.
+            goal.state.failure_projection("")
+        except FailureNotObserved as error:
+            return cls("unavailable", str(error))
+        if type(claim_scope) is not int or claim_scope <= 0:
+            return cls("unavailable", "owner_or_goal_changed")
+        with CoordinationStore.observed(path).observing(cls, goal, owner, claim_scope) as result:
+            return result
+
 
 def read_failed_turn_projection(
     path: Path,
@@ -239,28 +254,4 @@ def read_failed_turn_projection(
     never be used for dispatch or as evidence of absence of an owner pause.
     """
 
-    return owner.goal.project(
-        lambda goal: _read_goal_failure(path, owner, owner_status, claim_scope, goal),
-        lambda: FailedTurnProjection("unavailable", "owner_or_goal_changed"),
-    )
-
-
-def _read_goal_failure(path: Path, owner: Thread, owner_status: ThreadStatus,
-                       claim_scope: int, goal: Goal) -> FailedTurnProjection:
-    def unavailable(reason: str) -> FailedTurnProjection:
-        return FailedTurnProjection("unavailable", reason)
-
-    if not owner.process_identity.allows_goal_observation(owner_status):
-        return unavailable("owner_or_goal_changed")
-    try:
-        # Resolve lifecycle eligibility before reading the ledger; active goals
-        # must not surface a historical failure, even from a damaged store.
-        goal.state.failure_projection("")
-    except FailureNotObserved as error:
-        return unavailable(str(error))
-    if type(claim_scope) is not int or claim_scope <= 0:
-        return unavailable("owner_or_goal_changed")
-    with CoordinationStore.observed(path).observing(
-        FailedTurnProjection, goal, owner, claim_scope
-    ) as result:
-        return result
+    return owner.goal.failed_turn_projection(FailedTurnProjection, path, owner, owner_status, claim_scope)

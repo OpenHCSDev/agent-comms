@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from abc import abstractmethod
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
@@ -14,6 +14,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
 from .goal_states import ActiveGoal, GoalState
+from .turn_goal_permission import ContinuationGoalPermission, InactiveGoalPermission, TurnGoalPermission
 from .registration_inheritance import RegistrationInheritance
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .text_digest import TextDigest
@@ -21,8 +22,15 @@ from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext
+    from .goal_failure_observation import FailedTurnProjection
     from .goal_presentation import ThreadGoalExecution
-    from .goal_waits import GoalWaits
+    from .goal_waits import GoalWait, GoalWaits
+    from .agent_activity import AgentActivity
+    from .registry_document import RegistrySnapshot
+    from .task_sources import TaskScope
+    from .threads import Thread
+    from .thread_status import ThreadStatus
+    from .turn_context import TurnContext
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -366,7 +374,25 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
     def apply_action[R: GoalDeclaration](self, action: GoalAction[R], ctx: GoalActionContext) -> R: ...
 
     @abstractmethod
-    def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T: ...
+    def following_permission(self) -> TurnGoalPermission: ...
+
+    @abstractmethod
+    def task_scope(self, scope: TaskScope) -> TaskScope: ...
+
+    @abstractmethod
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
+
+    @abstractmethod
+    def describe_execution(self, wait: GoalWait, snapshot: RegistrySnapshot,
+                           agents: AgentActivity) -> ThreadGoalExecution: ...
+
+    @abstractmethod
+    def peer_change_values(self) -> tuple[GoalRevision | None, type[GoalState] | None, str]: ...
+
+    @abstractmethod
+    def failed_turn_projection(self, projection: type[FailedTurnProjection], path: Path,
+                               owner: Thread, owner_status: ThreadStatus,
+                               claim_scope: int) -> FailedTurnProjection: ...
 
     @abstractmethod
     def settle(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
@@ -489,8 +515,26 @@ class NoGoal(NullMember, GoalDeclaration):
     shows_document: ClassVar[bool] = False
     shows_progress: ClassVar[bool] = False
 
-    def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T:
-        return on_absent()
+    def following_permission(self) -> TurnGoalPermission:
+        return InactiveGoalPermission()
+
+    def task_scope(self, scope: TaskScope) -> TaskScope:
+        return scope
+
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+        return context
+
+    def describe_execution(self, wait: GoalWait, snapshot: RegistrySnapshot,
+                           agents: AgentActivity) -> ThreadGoalExecution:
+        return wait.idle_execution()
+
+    def peer_change_values(self) -> tuple[None, None, str]:
+        return None, None, ""
+
+    def failed_turn_projection(self, projection: type[FailedTurnProjection], path: Path,
+                               owner: Thread, owner_status: ThreadStatus,
+                               claim_scope: int) -> FailedTurnProjection:
+        return projection("unavailable", "owner_or_goal_changed")
 
     can_control: ClassVar[bool] = False
     visible: ClassVar[bool] = False
@@ -559,8 +603,26 @@ class Goal(RecordMember, GoalDeclaration):
     def shows_progress(self) -> bool:
         return bool(self.progress)
 
-    def project[T](self, on_goal: Callable[[Goal], T], on_absent: Callable[[], T]) -> T:
-        return on_goal(self)
+    def following_permission(self) -> TurnGoalPermission:
+        return ContinuationGoalPermission(self)
+
+    def task_scope(self, scope: TaskScope) -> TaskScope:
+        return scope.with_goal(self.checkpoint)
+
+    def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
+        return context.prepend_goal(owner, self, goals)
+
+    def describe_execution(self, wait: GoalWait, snapshot: RegistrySnapshot,
+                           agents: AgentActivity) -> ThreadGoalExecution:
+        return wait.project(self, snapshot, agents)
+
+    def peer_change_values(self) -> tuple[GoalRevision, type[GoalState], str]:
+        return self.checkpoint, type(self.state), self.progress
+
+    def failed_turn_projection(self, projection: type[FailedTurnProjection], path: Path,
+                               owner: Thread, owner_status: ThreadStatus,
+                               claim_scope: int) -> FailedTurnProjection:
+        return projection.read_for_goal(path, owner, owner_status, claim_scope, self)
 
     def check_expected(self, current: GoalDeclaration) -> None:
         if self != current:

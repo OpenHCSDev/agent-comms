@@ -90,9 +90,8 @@ class GoalScheduler:
                     thread.turn_record.read().require_idle()
                 except RelationViolationError:
                     return
-                scheduled = thread.goal.active().project(
-                    lambda goal: self._prepare_declared_goal(goal, thread, snapshot), tuple,
-                )
+                scheduled = (turn for goal in thread.goal.active()
+                             for turn in self._prepare_declared_goal(goal, thread, snapshot))
                 return next(iter(scheduled), None)
         except StaleAttemptError:
             return
