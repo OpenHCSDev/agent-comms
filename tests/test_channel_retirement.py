@@ -1,5 +1,6 @@
 """Saved audience retirement retains addressed history, never routing authority."""
 
+from agent_comms.messages import Membership
 import json
 from dataclasses import replace
 
@@ -121,8 +122,8 @@ def test_private_initial_rejects_view_but_routes_exact_tags_and_membership(tmp_p
     comms.messaging.send_user_message("#team", "exact", worktree=str(comms.root))
     comms.channels.update_tags("bob", remove=frozenset({"team"}))
     rows = list(comms.views.channel_history_page("#team").messages)
-    assert [row.body for row in rows if row.membership is None] == ["exact"]
-    assert any(row.membership is not None for row in rows)
+    assert [row.body for row in rows if not isinstance(row.role, Membership)] == ["exact"]
+    assert any(isinstance(row.role, Membership) for row in rows)
     assert not any(row.target == "#team-view" for row in rows)
 
 

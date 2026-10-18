@@ -1,5 +1,6 @@
 """Original authored ingress and neutral historical evidence share one input store."""
 
+from agent_comms.messages import NoticeRole
 from contextlib import ExitStack
 
 import asyncio
@@ -218,7 +219,7 @@ async def test_direct_human_input_pin_shares_original_source_lineage_without_rep
     original_inputs = inputs.path.read_bytes()
     subject = row.context_provenance()
     pin = comms.messaging.pin_input_constraint('beta', subject, worktree=origin.project)
-    assert pin.notice and not pin.starts_turn and exact not in pin.body
+    assert isinstance(pin.role, NoticeRole) and not pin.role.response_policy(pin).starts_turn and exact not in pin.body
     assert 'source_turn' not in FieldCodec.encode(pin.task)
     assert FieldCodec.decode(type(pin), FieldCodec.encode(pin)) == pin
 

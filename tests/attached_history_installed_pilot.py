@@ -140,7 +140,7 @@ async def exercise_ui(app,root,me,session):
         words=[word[:12] for word in message.body.split() if len(word)>=8]
         assert words,'The actual source message must have a visible text witness'
         await until(pilot,lambda: any(word in viewport_text(historical) for word in words))
-        assert not message.starts_turn
+        assert not message.role.response_policy(message).starts_turn
         app.save_screenshot('historical-channel.svg',path=os.environ['EVIDENCE_ROOT'])
         # Follow the real Saved sessions button, then select the original identity.
         from textual.widgets import Button

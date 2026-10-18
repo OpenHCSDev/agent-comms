@@ -295,16 +295,13 @@ class HistoricalMessage(Message):
             )
 
         return cls(
-            **{f.name: getattr(message, f.name) for f in fields(Message)},
+            **{**{f.name: getattr(message, f.name) for f in fields(Message)},
+               "role": message.role.as_historical()},
             source=source,
             source_order=order,
             sender_created_at=creation(message.sender),
             target_created_at=creation(message.target),
         )
-
-    def __post_init__(self) -> None:
-        super(HistoricalMessage, self).__post_init__()
-        object.__setattr__(self, "role", self.role.as_historical())
 
     @property
     def history_source(self) -> HistorySource:

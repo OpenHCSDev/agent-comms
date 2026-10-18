@@ -1,6 +1,4 @@
-from dataclasses import dataclass
-
-from agent_comms.messages import Message, InfoKind
+from agent_comms.messages import ConversationRole, Message, InfoKind
 from agent_comms.response_policy import ResponseEligibility, ResponsePolicy
 from agent_comms.routing import ScheduledTurn
 
@@ -23,17 +21,15 @@ def test_new_policy_drives_eligibility_guidance_and_batching(tmp_path):
     try:
         policy = ReviewPolicy()
 
-        @dataclass(frozen=True)
-        class ReviewMessage(Message):
-            @property
-            def response_policy(self):
+        class ReviewRole(ConversationRole):
+            def response_policy(self, message):
                 return policy
 
-        message = ReviewMessage("sender", "#review", "inspect", InfoKind, seq=17)
+        message = Message("sender", "#review", "inspect", InfoKind, seq=17, role=ReviewRole())
         assert ResponseEligibility(policy, ("reviewer1",)).policy is policy
         assert message.response_eligibility(("reader", "reviewer1")).recipients == ("reviewer1",)
-        assert message.starts_turn and message.starts_turn_for("reviewer1")
-        assert not message.starts_turn_for("reader")
+        assert message.role.response_policy(message).starts_turn and message.role.response_policy(message).starts_turn_for(message, "reviewer1")
+        assert not message.role.response_policy(message).starts_turn_for(message, "reader")
         turn = ScheduledTurn.incoming(message)
         assert "review; only reviewers respond" in turn.prompt
         assert ScheduledTurn.take_batch([turn, turn]) == ([turn], [turn])
