@@ -478,9 +478,8 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     @handles(pi.Response)
     async def response(self, event: pi.Response) -> None:
-        request = self.native.reader.correlate(event)
         if event.id == self.command.id:
-            if request is not self.command:
+            if self.native.reader.correlate(event) is not self.command:
                 raise NativePiUnavailable("Native Pi prompt acknowledgement differs")
             if event.success is not True:
                 raise NativePiPromptRejected(event)
@@ -488,7 +487,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         elif issubclass(event.command, commands.MutatesSession):
             raise NativePiUnavailable("Native Pi session identity changed during a turn")
         else:
-            async for update in event.command.on_response(event, self):
+            async for update in event.apply(self):
                 if self.observe_event is not None:
                     await self.observe_event(update)
 
