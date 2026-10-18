@@ -7,7 +7,7 @@ import { requestOwnerTool } from './owner_tool_socket.mjs';
 import { BACKGROUND_CONTEXT as context } from '@earendil-works/chord/context';
 import { InMemoryCredentialStore } from '@earendil-works/pi-ai';
 import { builtinModels } from '@earendil-works/pi-ai/providers/all';
-import { Harness, ROOT_CONVERSATION_ID, GenerationTask, ToolTask, createRegistry, defineDoc, defineExtension, defineTool, hook, watchEvents } from '@earendil-works/pi-durable';
+import { Harness, ROOT_CONVERSATION_ID, GenerationTask, wrapTool, createRegistry, defineDoc, defineExtension, defineTool, hook, watchEvents } from '@earendil-works/pi-durable';
 import { openNodeSqliteStorage } from '@earendil-works/pi-durable/storage/sqlite/node';
 import { NodeExecutionEnv } from '@earendil-works/pi-durable/env/node';
 import { CodingTools } from '@earendil-works/pi-durable/tools';
@@ -18,17 +18,23 @@ const { estimateContext } = await import(new URL('./harness/compaction.js', impo
 const Recovery = defineDoc({ kind: 'core.recovery', version: 1, scope: 'session', initial: () => ({ decisions: {} }) });
 let harness, root, turn, models, registry;
 const comms = args => JSON.parse(execFileSync('agent-comms', args, { encoding: 'utf8', timeout: 30000 }));
-const CoreTools = defineExtension({ name: 'core-tools', hooks: [hook(ToolTask, {
-  async beforeTool(call) {
-    const path = process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
-    const token = process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
-    if (!path) return;
-    const response = await requestOwnerTool(path, Buffer.from(JSON.stringify({ token,
-      call_id: call.id, name: call.name, arguments: call.arguments }) + '\n'), 16384,
-      'Tool claim outcome UNKNOWN; inspect before retrying.');
-    if (response.ok !== true) return { block: response.error };
-  },
-})] });
+function ownerGuard(tool) {
+  return wrapTool(tool.name, original => ({ ...original,
+    async execute(args, api, context) {
+      const path = process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
+      const token = process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
+      if (path) {
+        const request = Buffer.from(JSON.stringify({ token,
+          call_id: api.callId, name: tool.name, arguments: args }) + '\n');
+        if (request.length > 1024 * 1024) throw new Error('Core tool request exceeds the record bound');
+        const response = await requestOwnerTool(path, request, 16384,
+          'Tool claim outcome UNKNOWN; inspect before retrying.');
+        if (response.ok !== true) throw new Error(response.error ?? 'Core owner refused this tool');
+      }
+      return original.execute(args, api, context);
+    },
+  }));
+}
 let resumed = false;
 const CoreContext = defineExtension({ name: 'core-context', hooks: [hook(GenerationTask, {
   async beforeRequest({ messages }, api) {
@@ -133,7 +139,6 @@ const handlers = {
     registry = createRegistry();
     registry.install(CodingTools);
     registry.install(CoreContext);
-    registry.install(CoreTools);
     harness = await Harness.open(await openNodeSqliteStorage(request.path), {
       models, registry, env: ({ cwd }) => new NodeExecutionEnv({ cwd: cwd ?? request.cwd }),
       onReport: error => process.stderr.write(`${error.stack ?? error}\n`),
@@ -142,7 +147,7 @@ const handlers = {
     if (request.provider) agent.model = { provider: request.provider, modelId: request.modelId };
     if (request.thinkingLevel) agent.thinkingLevel = request.thinkingLevel;
     root = await harness.root(context, { agent });
-    await root.configure({ extensions: { add: [CoreContext, CoreTools] } }, context);
+    await root.configure({ extensions: { add: [CoreContext] } }, context);
     return { work: workItems(await harness.inspect(context)) };
   },
   async open_history(request) {
@@ -233,7 +238,10 @@ const handlers = {
       },
     })) });
     registry.install(commands);
-    await root.configure({ extensions: { add: [commands] }, tools: request.tools }, context);
+    const owner = defineExtension({ name: 'core-tools',
+      wraps: [...CodingTools.tools, ...commands.tools].map(ownerGuard) });
+    registry.install(owner);
+    await root.configure({ extensions: { add: [commands, owner] }, tools: request.tools }, context);
     const actual = new Set((await root.agent(context)).callable.map(tool => tool.name));
     for (const name of request.tools) if (!actual.has(name)) throw new Error(`Durable tool is unavailable: ${name}`);
     return ack;
