@@ -18,14 +18,14 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
 from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
-    RecordedCommitDelivery,
+    RecordedCommitDelivery, MechanicalOrderRun,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     DoneTodoState, RecordHuntTodo, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
-    return PendingProblemOrder(id=identity, owner=FileLine(__file__, 1),
+    return PendingProblemOrder(id=identity, owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(root), command, CountCheckResult(expected)),
         edits=('Repair the existing owner',), banned=('No second store',), report='Report the result',
         at=RecordedEventTime(100), first_call_deadline=RecordedEventTime(220))

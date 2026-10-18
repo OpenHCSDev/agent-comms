@@ -258,6 +258,32 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
+class OrderRun(DeclaredFamily, affix="OrderRun"):
+    label: ClassVar[str] = "Works when:"
+
+    @abstractmethod
+    def instructions(self) -> tuple[str, ...]: ...
+
+
+@dataclass(frozen=True)
+class MechanicalOrderRun(OrderRun):
+    def instructions(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class ApplicationOrderRun(OrderRun):
+    text: str
+
+    def __post_init__(self):
+        if len(self.text.split()) < 8:
+            raise ValueError(f'Add "{self.label} <the user-visible closing run, 8+ words>"; '
+                             'a grep never closes a problem.')
+
+    def instructions(self) -> tuple[str, ...]:
+        return (f"{self.label} {self.text}",)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """One checked order lives on its Todo, independently of the unit's Goal."""
@@ -273,17 +299,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     first_call: FirstCall = field(default_factory=AwaitingFirstCall)
     check_corrections: tuple[CorrectCheckTodo, ...] = field(
         default=(), metadata={"wire_omit_default": True})
-    works_when: str = field(default="", metadata={"wire_omit_default": True})
-    works_label: ClassVar[str] = "Works when:"
-
-    @classmethod
-    def require_works_when(cls, text: str) -> None:
-        if len(text.split()) < 8:
-            raise ValueError(f'Add "{cls.works_label} <the user-visible closing run, 8+ words>"; a grep never closes a problem.')
+    run: OrderRun
 
     def __post_init__(self):
-        if self.works_when:
-            self.require_works_when(self.works_when)
         if not self.edits or not self.banned:
             raise ValueError("An order requires edits and banned actions.")
         if any(not text.strip() for text in (self.id, self.report, *self.edits, *self.banned)):
@@ -303,7 +321,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
             f"Owner: {self.owner.to_wire()}",
             f"Check: {self.check.directory} :: {self.check.command}",
-            *((f"{self.works_label} {self.works_when}",) if self.works_when else ()),
+            *self.run.instructions(),
             f"Deadline: {FieldCodec.encode(todo.deadline)}",
             *(f"{n}. {edit}" for n, edit in enumerate(self.edits, 1)),
             "Banned: " + "; ".join(self.banned), "Report: " + self.report))
@@ -461,7 +479,8 @@ class Assignment:
     def require_trace(self, owner: str, traced: FileLine | None) -> None:
         owners = {self.owner, *(previous.name for previous in self.previous_owners)}
         if owner != self.owner and len(owners) >= 2 and traced is None:
-            raise ValueError(f"This problem has had {sorted(owners)}; read the failing path and pass --traced PATH:LINE.")
+            raise ValueError(f"This problem has had {sorted(owners)}; read the failing path "
+                             "and pass --traced PATH:LINE.")
         if traced is not None:
             traced.require_exists()
 
@@ -482,7 +501,7 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         pass
 
     @classmethod
-    def assign(cls, current: Todo, proposed: Assignment) -> Todo:
+    def assign(cls, current: Todo, proposed: Assignment, traced: FileLine | None = None) -> Todo:
         raise TodoConflict(current)
 
     @classmethod
@@ -501,8 +520,8 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
 class OpenTodoState(TodoState):
     @classmethod
-    def assign(cls, current, proposed):
-        return current.assigned(proposed)
+    def assign(cls, current, proposed, traced=None):
+        return current.assigned(proposed, traced)
 
 
 class BlockedTodoState(TodoState):
@@ -550,16 +569,13 @@ class AssignTodo(TodoOperation):
 
     def apply(self, current):
         self.deadline.require_deadline()
-        proposed = self.proposed
-        if current.assignment is not None:
-            proposed = replace(proposed, previous_owners=current.assignment.previous_owners)
+        proposed = current.proposed_assignment(self.proposed)
         if (current.assignment, current.deadline, current.order) == (proposed, self.deadline, self.order):
             return current
         current.require_revision(self.expected_revision)
         current.require_commander(proposed.parent_identity)
-        if current.assignment is not None:
-            current.assignment.require_trace(proposed.owner, self.traced)
-        assigned = current if current.assignment == proposed else current.state.assign(current, proposed)
+        assigned = (current if current.assignment == proposed
+                    else current.state.assign(current, proposed, self.traced))
         return replace(assigned, deadline=self.deadline, order=self.order, revision=current.revision + 1)
 
 
@@ -738,8 +754,14 @@ class Todo(TypedTable):
         if self.assignment is None or not self.assignment.owned_by(actor, generation):
             raise TodoConflict(self)
 
-    def assigned(self, proposed: Assignment) -> Todo:
+    def proposed_assignment(self, proposed: Assignment) -> Assignment:
         if self.assignment is not None:
+            return replace(proposed, previous_owners=self.assignment.previous_owners)
+        return proposed
+
+    def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
+        if self.assignment is not None:
+            self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 

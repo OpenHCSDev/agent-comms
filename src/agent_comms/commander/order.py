@@ -32,7 +32,7 @@ from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
                      CommsTodoCreateTool, CommsTodoTool)
-from ..todos import (BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, StrikeTodo, VoidStrikeTodo)
 from . import capacity, rules, storage
@@ -209,12 +209,11 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
-    works = re.search(rf'(?m)^{re.escape(PendingProblemOrder.works_label)}\s*(.+)$', body)
-    if not mechanical:
-        try:
-            PendingProblemOrder.require_works_when(works[1] if works else '')
-        except ValueError as refused:
-            problems.append(str(refused))
+    works = re.search(rf'(?m)^{re.escape(OrderRun.label)}\s*(.+)$', body)
+    try:
+        run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
+    except ValueError as refused:
+        problems.append(str(refused))
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -287,7 +286,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
         order = PendingProblemOrder(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
-            report=report[1], works_when=works[1] if works and not mechanical else '',
+            report=report[1], run=run,
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
