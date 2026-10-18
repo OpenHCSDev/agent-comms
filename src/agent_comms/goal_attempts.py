@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Literal, TypeVar
 from uuid import uuid4
 
-from .field_codec import MalformedRecord
 from .coordination_database import CoordinationStore
+from .field_codec import MalformedRecord
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,

@@ -409,7 +409,9 @@ class TypedRow:
         cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]
     ) -> Self:
         values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
-        instance = FieldCodec.construct(cls, {item.name: values[item.name] for item in cls._fields() if item.init})
+        instance = FieldCodec.construct(
+            cls, {item.name: values[item.name] for item in cls._fields() if item.init}
+        )
         for item in cls._fields():
             if not item.init:
                 object.__setattr__(instance, item.name, values[item.name])

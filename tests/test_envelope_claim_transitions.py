@@ -10,7 +10,7 @@ from agent_comms.envelope_claim_transitions import (
     ClaimConflict, ClaimOwner, ClaimProjection, ClaimRelease, ClaimTransition,
     ClaimTransitionError, ExistingFileClaim, WakeClaim,
 )
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.messages import Message, InfoKind
 
 G1 = "a" * 32
@@ -203,12 +203,14 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
             ClaimRelease(alias, G1)
         claiming_row = FieldCodec.encode(transition(2, owner="competitor", claims=(a,), generation=G2))
         claiming_row[FieldCodec.record_key(ClaimTransition, "claims")] = [alias]
-        with pytest.raises(ClaimTransitionError, match="canonical absolute"):
+        with pytest.raises(MalformedRecord, match="canonical absolute") as refused:
             FieldCodec.decode(ClaimTransition, claiming_row)
+        assert type(refused.value.__cause__) is ClaimTransitionError
         releasing_row = FieldCodec.encode(transition(2, releases=(ClaimRelease(a, G1),)))
         releasing_row["releases"][0]["resource"] = alias
-        with pytest.raises(ClaimTransitionError, match="canonical absolute"):
+        with pytest.raises(MalformedRecord, match="canonical absolute") as refused:
             FieldCodec.decode(ClaimTransition, releasing_row)
+        assert type(refused.value.__cause__) is ClaimTransitionError
         assert list(held) == [a] and held[a].owner == "owner" and held.last_seq == 1
     with pytest.raises(ClaimConflict) as loser:
         transition(2, owner="competitor", claims=(a,), generation=G2).apply(held)

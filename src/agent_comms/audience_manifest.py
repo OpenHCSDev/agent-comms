@@ -178,7 +178,9 @@ def freeze_audience(
     _bounded_text(sender_lookup, "sender_lookup")
     _bounded_text(sender_name, "sender_name", thread_name=True)
     if prepared_message.sender != sender_name:
-        raise MalformedRecord("sender_name must be the externally captured canonical message sender")
+        raise MalformedRecord(
+            "sender_name must be the externally captured canonical message sender"
+        )
     _bounded_text(source_revision, "source_revision")
     if not BuiltinChannel.exact_stored_target(prepared_message.target):
         raise MalformedRecord("only exact stored routable targets may be frozen")

@@ -239,7 +239,9 @@ class RegistryDocument(RegistryPresence):
             else:
                 earlier_raw, decoded = earlier
                 thread_rows = cls.thread_rows()
-                if not isinstance(raw, dict) or any(type(raw.get(section)) is not dict for section in thread_rows):
+                if not isinstance(raw, dict) or any(
+                    not isinstance(raw.get(section), dict) for section in thread_rows
+                ):
                     raise MalformedRecord("registry thread sections must be objects")
                 kept = {
                     section: {

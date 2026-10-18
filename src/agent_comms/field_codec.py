@@ -45,20 +45,16 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
 
     @classmethod
     @contextmanager
-    def refusing(cls, subject: str, *parse_errors: type[ValueError]) -> Iterator[None]:
-        """A plain ValueError from a declared check, or a named parser error, refuses the record.
+    def refusing(cls, subject: str) -> Iterator[None]:
+        """Any check that refuses decoded data with ValueError refuses a malformed record.
 
-        A ValueError subclass the domain declares keeps its own meaning and passes through.
+        A domain error raised by the record's own checks stays the cause.
         """
         try:
             yield
         except cls:
             raise
-        except parse_errors as error:
-            raise cls(f"{subject}: {error}") from error
         except ValueError as error:
-            if type(error) is not ValueError:
-                raise
             raise cls(f"{subject}: {error}") from error
 
 
@@ -488,7 +484,7 @@ class FieldCodec(Sealed):
     @staticmethod
     def parse(text: str | bytes) -> object:
         """External JSON text is data: strict UTF-8, syntax and duplicate keys refuse it."""
-        with MalformedRecord.refusing("Invalid JSON", json.JSONDecodeError, UnicodeDecodeError):
+        with MalformedRecord.refusing("Invalid JSON"):
             return json.loads(
                 text.decode("utf-8") if isinstance(text, bytes) else text,
                 object_pairs_hook=_unique_object,
@@ -769,10 +765,7 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
 
     @classmethod
     def decode(cls, data):
-        from pydantic import ValidationError
-
-        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers",
-                                      ValidationError):
+        with MalformedRecord.refusing("Expected a JSON value with string keys and finite numbers"):
             return cls.validator().validate_python(data, strict=True)
 
     @classmethod
@@ -921,9 +914,11 @@ def _object_or_pair_entries(data):
     """Keys that are not strings travel as an array of [key, value] pairs."""
     if isinstance(data, dict):
         return data.items()
-    if not isinstance(data, list) or any(not isinstance(pair, list) or len(pair) != 2 for pair in data):
+    pairs = isinstance(data, list) and all(isinstance(pair, list) and len(pair) == 2 for pair in data)
+    if not pairs:
         raise MalformedRecord("Expected a JSON object or an array of key-value pairs.")
     return data
+
 
 @dataclass(frozen=True, slots=True)
 class _DictDecoder(ValueDecoder[Any]):

@@ -145,8 +145,8 @@ def terminal_failure_reason(event: dict) -> FailureReason:
     if not isinstance(measurements, dict):
         measurements = {}
     try:
-        value = measurements.get("reason") or event.get("reason_code")
-        return FieldCodec.decode(FailureReason, value) if isinstance(value, str) else FailureReason.BACKEND_FAILED
+        reason = measurements.get("reason") or event.get("reason_code")
+        return FieldCodec.decode(FailureReason, reason)
     except MalformedRecord:
         return FailureReason.BACKEND_FAILED
 

@@ -105,7 +105,8 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
 
         try:
             return FieldCodec.decode(
-                NativeSessionIdentity, {"sessionId": self.session_id, "sessionFile": self.session_file}
+                NativeSessionIdentity,
+                {"sessionId": self.session_id, "sessionFile": self.session_file},
             )
         except MalformedRecord as error:
             raise IdentityConflict("Native input has no recorded selected session") from error

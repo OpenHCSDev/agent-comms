@@ -12,7 +12,13 @@ from .assignment_states import FailedAssignment, IgnoredAssignment, TriagePendin
 from .coordination_tables.assignments import WakeAssignment
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember, MalformedRecord, TextRepresentation
+from .field_codec import (
+    FieldCodec,
+    JsonShapeFamily,
+    JsonShapeMember,
+    MalformedRecord,
+    TextRepresentation,
+)
 from .typed_table import TextStorage
 
 

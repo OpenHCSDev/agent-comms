@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
 from abc import abstractmethod
+from collections import defaultdict
 from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -15,8 +15,8 @@ if TYPE_CHECKING:
     from .thread_identity import RecordedThreadIncarnation
 
 from .coordination_errors import TranscriptChanged
-from .field_codec import MalformedRecord
 from .declared_family import DeclaredFamily
+from .field_codec import MalformedRecord
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .private_path import FileRevision
