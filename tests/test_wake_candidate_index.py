@@ -25,7 +25,8 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
 from agent_comms.typed_table import TypedTable
 from agent_comms.wake_candidate_index import (
-    CandidateTable, ProjectionRebuildRequiredError, ProjectionUnavailableError, WakeCandidateIndex, FirstBuild, RebuildIndex, ResumeIndex,
+    CandidateCheckpoint, CandidateTable, ProjectionRebuildRequiredError,
+    ProjectionUnavailableError, WakeCandidateIndex, FirstBuild, RebuildIndex, ResumeIndex,
 )
 from agent_comms.wake_policy import FullWake
 
@@ -417,7 +418,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
                 index.writing() as db,
             ):
                 index._commit_batch(
-                    db, first_batch, stat, root_id,
+                    db, first_batch, CandidateCheckpoint.initial(root_id, stat),
                     index._source_end(stream, first_batch.next_offset), start=RebuildIndex(),
                 )
             with index.snapshot() as db:
@@ -425,7 +426,7 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
         else:
             with index.writing() as db:
                 index._commit_batch(
-                    db, first_batch, stat, root_id,
+                    db, first_batch, CandidateCheckpoint.initial(root_id, stat),
                     index._source_end(stream, first_batch.next_offset), start=RebuildIndex(),
                 )
             first = index.page(root_id=root_id, recipient_lookup=lookup["Alice"],
@@ -448,8 +449,8 @@ def test_duplicate_private_response_key_rejected_by_unique_constraint(
                 index.writing() as db,
             ):
                 index._commit_batch(
-                    db, second_batch, stat, root_id,
-                    index._source_end(stream, second_batch.next_offset), rebuild=False,
+                    db, second_batch, CandidateCheckpoint.current(db).require_source(stream, stat, root_id),
+                    index._source_end(stream, second_batch.next_offset), start=ResumeIndex(),
                 )
             with index.snapshot() as db:
                 assert all(db.execute(f'SELECT * FROM "{table}"').fetchall() == values
