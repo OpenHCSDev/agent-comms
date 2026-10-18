@@ -30,6 +30,7 @@ from typing import (
     get_type_hints,
 )
 
+from .locked_store import RootFile
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, ValueDecoder, compile_decoder
@@ -762,7 +763,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class TypedStore:
+class TypedStore(RootFile):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
     Members name the file and their rows. A transaction installs an absent
@@ -770,14 +771,13 @@ class TypedStore:
     store whose schema differs from its declaration raises.
     """
 
-    filename: ClassVar[str]
     rows: ClassVar[tuple[type[TypedTable], ...]]
     synchronous: ClassVar[str] = "FULL"
     root: Path
 
     @property
     def path(self) -> Path:
-        return self.root / self.filename
+        return self.path_in(self.root)
 
     @classmethod
     def declared_schema(cls) -> dict[str, str]:

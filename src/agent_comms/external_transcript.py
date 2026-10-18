@@ -166,7 +166,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
-        database = root / cls.filename
+        database = cls.path_in(root)
         return database, database.with_name(database.name + "-wal")
 
     @property

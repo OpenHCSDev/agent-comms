@@ -11,7 +11,7 @@ from .bus_publication import CommittedDelivery
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget
 from .goals import Goal
 from .input_attempt import InputAttempt
-from .locked_store import LockedStore
+from .locked_store import LockedStore, RootFile
 from .registry_document import RegistrySnapshot
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
@@ -198,7 +198,7 @@ class GoalInputReview:
 
 
 @dataclass(frozen=True, slots=True)
-class GoalWaits(ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
+class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWait]]):
     lock_rank = 9
     filename: ClassVar[str] = "goal_waits.json"
 

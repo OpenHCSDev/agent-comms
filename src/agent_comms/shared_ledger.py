@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from .field_codec import FieldCodec
-from .locked_store import LockedStore
+from .locked_store import LockedStore, RootFile
 from .thread_owned_state import ThreadOwnedState
 
 if TYPE_CHECKING:
@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class SharedLedger(ThreadOwnedState, LockedStore[dict[str, Any]]):
+class SharedLedger(RootFile, ThreadOwnedState, LockedStore[dict[str, Any]]):
     """One free-form JSON document; no in-memory mirror or closed value family."""
 
     lock_rank = 8

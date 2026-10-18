@@ -109,7 +109,7 @@ print(json.dumps(FieldCodec.encode(result)), flush=True)
         launch = RetainedOwnerLaunch.capture(original, comms.registry.snapshot(),
                                             interpreter=source_python)
         files = (native.session, native.config/'settings.json', native.config/'models.json',
-                 native.config/'auth.json', native.root/InputDispositions.filename)
+                 native.config/'auth.json', InputDispositions.path_in(native.root))
         baseline = {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in files}
         target_environment = dict(environment)
         target_environment.update(PATH=str(Path(sys.executable).parent)+os.pathsep+os.defpath,

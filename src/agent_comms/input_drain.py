@@ -90,7 +90,7 @@ class TickRevision:
             ),
             bus=(bus, bus_marker),
             checkpoint=root / "private_bus_checkpoint.sqlite3",
-            goal_waits=root / GoalWaits.filename,
+            goal_waits=GoalWaits.path_in(root),
             goal_attempts=(
                 root / "goal-private" / "goal_attempts.sqlite3",
                 root / "goal-private" / "goal_attempts.sqlite3-wal",

@@ -39,7 +39,7 @@ def main() -> None:
     parser.add_argument("root", type=Path)
     parser.add_argument("--apply", action="store_true", help="Publish only after old readers/writers stop")
     args = parser.parse_args()
-    waits = GoalWaits(args.root / GoalWaits.filename)
+    waits = GoalWaits.at(args.root)
     with _store_lock(args.root / "wire"):
         registry = Registration(args.root / "registry.json")
         raw = json.loads(waits.path.read_text()) if waits.path.exists() else {}

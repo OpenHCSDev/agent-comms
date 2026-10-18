@@ -135,6 +135,21 @@ class JsonDocument(ABC, Generic[T]):
                 backup.unlink(missing_ok=True)
 
 
+class RootFile:
+    """A declared file location, with construction for file-taking owners."""
+
+    __slots__ = ()
+    filename: ClassVar[str]
+
+    @classmethod
+    def path_in(cls, root: Path | str) -> Path:
+        return Path(root) / cls.filename
+
+    @classmethod
+    def at(cls, root: Path | str, *args, **kwargs):
+        return cls(cls.path_in(root), *args, **kwargs)
+
+
 @dataclass(frozen=True, slots=True)
 class LockedStore(JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
