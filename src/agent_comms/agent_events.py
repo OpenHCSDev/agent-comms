@@ -83,7 +83,7 @@ class OriginalInputStarted(InputStarted):
     id: ClassVar[None] = None
 
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput:
-        return OriginalStartedInput(inputs.original_sources[session_id])
+        return OriginalStartedInput(inputs.first_sources[session_id])
 
 
 @dataclass(frozen=True)
