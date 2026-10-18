@@ -228,11 +228,15 @@ class ThreadProvenance:
     def display_title(self) -> str:
         return self.name if self.title is None else self.title
 
+    @staticmethod
+    def require_name(name: str) -> None:
+        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
+        if not name or not set(name) <= allowed:
+            raise ValueError(f"Thread name {name!r} must be alphanumeric with hyphens/underscores.")
+
     def __post_init__(self) -> None:
         self.incarnation
-        allowed = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_")
-        if not self.name or not set(self.name) <= allowed:
-            raise ValueError(f"Thread name {self.name!r} must be alphanumeric with hyphens/underscores.")
+        self.require_name(self.name)
         if not self.worktree:
             raise ValueError("Thread worktree cannot be empty.")
         for tag in self.tags:

@@ -17,12 +17,17 @@ next write reuses the abandoned slot.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import stat
 import struct
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
+from .private_path import fsync_directory
+from .store_files import _atomic_write_text
 
 _MAGIC = b"ACRG"
 _VERSION = 1
@@ -282,6 +287,32 @@ class PrivateRegistryGuard:
 
 
 PRIVATE_OWNER_RENAME_PENDING = ".private-owner-rename.pending"
+
+
+@dataclass(frozen=True, kw_only=True)
+class PrivateOwnerRenameIntent:
+    """Written before a private owner rename changes either store; while it exists, private
+    publication and selected execution stay blocked."""
+
+    lookup: str
+    old: str
+    new: str
+    generation: int
+    wire_root_id: str = field(metadata={"wire_name": "wireRootId"})
+    version: int = 1
+    completed: bool = False
+
+    def write(self, root: Path) -> None:
+        _atomic_write_text(root / PRIVATE_OWNER_RENAME_PENDING,
+                           json.dumps(FieldCodec.encode(self), sort_keys=True), fsync_parent=True)
+
+    @classmethod
+    def complete(cls, root: Path) -> None:
+        """A completed record proves a finished transition if the unlink is uncertain."""
+        intent = root / PRIVATE_OWNER_RENAME_PENDING
+        replace(FieldCodec.decode(cls, json.loads(intent.read_text())), completed=True).write(root)
+        intent.unlink()
+        fsync_directory(root)
 
 
 def _require_no_private_owner_rename(root: Path) -> None:

@@ -47,6 +47,10 @@ class IdentityConflict(CoordinationError):  # noqa: N818
     """A requested operation conflicts with frozen coordination identity."""
 
 
+class ParticipantNotRegistered(IdentityConflict):  # noqa: N818 - nominal outcome name
+    """No participant aggregate is recorded for the lookup."""
+
+
 class StaleRevision(CoordinationError):  # noqa: N818 - nominal outcome name
     """The supplied CAS revision is not the authoritative revision."""
 
