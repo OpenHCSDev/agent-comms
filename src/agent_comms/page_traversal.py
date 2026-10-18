@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 type PageOffsets = Generator[BusPageRow]
 
 
-class PageCursor(SubclassUnion):
+class PageCursor(SubclassUnion, affix=""):
     sequence: int
 
     @abstractmethod

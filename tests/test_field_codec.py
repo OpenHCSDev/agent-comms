@@ -82,10 +82,10 @@ def test_new_value_owns_wire_form_everywhere_without_a_codec_adapter():
 def test_subclass_union_slots_replacement_decodes_once_and_keeps_unions_independent():
     calls = []
 
-    class First(SubclassUnion):
+    class First(SubclassUnion, affix=""):
         pass
 
-    class Second(SubclassUnion):
+    class Second(SubclassUnion, affix=""):
         pass
 
     def declare_number(union):

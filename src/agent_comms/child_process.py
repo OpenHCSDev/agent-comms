@@ -60,7 +60,7 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
-class ProcessState(SubclassUnion):
+class ProcessState(SubclassUnion, affix=""):
     """An exact recorded process or a worker which has never started."""
 
     def to_wire(self) -> object:
