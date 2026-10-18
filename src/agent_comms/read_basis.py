@@ -724,14 +724,14 @@ class MessageDisplayScope(ABC):
                              predicate=self.index_predicate, before_offset=before_offset)
 
     @property
+    @abstractmethod
     def index_predicate(self) -> tuple[str, tuple]:
-        targets = self.index_targets
-        return "target IN (" + ",".join("?" for _ in targets) + ")", tuple(targets)
+        """Declare the candidates covered by this scope's index query."""
 
     @property
     @abstractmethod
     def index_targets(self) -> frozenset[str] | None:
-        """None means that target alone cannot exclude a candidate."""
+        """The target reduction used by conversation-cursor counting."""
 
     @abstractmethod
     def includes(self, message: Message) -> bool:

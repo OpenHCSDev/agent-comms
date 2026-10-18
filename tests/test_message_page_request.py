@@ -13,6 +13,8 @@ from agent_comms.threads import Thread
 @dataclass(frozen=True)
 class ReviewScope(MessageDisplayScope):
     prefix: str
+    index_targets = None
+
     @property
     def index_predicate(self):
         return "1", ()

@@ -11,14 +11,29 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from agent_comms.field_codec import FieldCodec
-from agent_comms.read_basis import Conversation, ConversationCursor, ReadCursor
+from agent_comms.read_basis import ChannelConversation, DMConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True)
+class PreviousConversation:
+    target: str = ''
+    participants: tuple[RecordedThreadIncarnation, ...] = ()
+
+    def current(self):
+        if self.participants:
+            if len(self.participants) != 2 or self.target:
+                raise ValueError('Invalid previous direct conversation')
+            return DMConversation(self.participants)
+        if not self.target.startswith('#'):
+            raise ValueError('Invalid previous channel conversation')
+        return ChannelConversation(self.target)
+
+
+@dataclass(frozen=True)
 class PreviousReadDocument:
-    messages: dict[RecordedThreadIncarnation, dict[Conversation, ConversationCursor]] = field(default_factory=dict)
+    messages: dict[RecordedThreadIncarnation, dict[PreviousConversation, ConversationCursor]] = field(default_factory=dict)
     bus_identity: tuple[int, int] | None = None
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
@@ -30,7 +45,8 @@ def carry(root: Path, backup: Path) -> None:
         original = ledger.path.read_bytes()
         previous = FieldCodec.decode(PreviousReadDocument, FieldCodec.parse(original))
         current = ReadDocument(
-            {owner: ReadCursor(conversations) for owner, conversations in previous.messages.items()},
+            {owner: ReadCursor({key.current(): value for key, value in conversations.items()})
+             for owner, conversations in previous.messages.items()},
             previous.bus_identity, previous.transcripts, previous.notice,
         )
         with backup.open('xb') as stream:

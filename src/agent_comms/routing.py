@@ -180,6 +180,11 @@ class DeliveryScope(MessageDisplayScope):
             name for name in (self.actor, *self.aliases) if self.canonical(name) == self.actor
         )
 
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        targets = tuple(self.index_targets)
+        return "target IN (" + ",".join("?" for _ in targets) + ")", targets
+
     def includes(self, message: Message) -> bool:
         return self.delivers(message.sender, message.target)
 
