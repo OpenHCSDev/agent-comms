@@ -223,7 +223,8 @@ class TypeErrors(CheckedRevision):
         """Module names start at the source directory, as they do when the package is installed.
         Tools import the same revision's ``src`` (``upgrade_bus.py`` puts it first), never the
         installed one."""
-        return {**os.environ, "MYPYPATH": os.pathsep.join(dict.fromkeys((Path(root).parts[0], "src")))}
+        paths = dict.fromkeys((Path(root).parts[0], "src"))
+        return {**os.environ, "MYPYPATH": os.pathsep.join(paths)}
 
 
 class SourceLines(Measure):
