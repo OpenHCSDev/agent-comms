@@ -88,7 +88,7 @@ class RetiredOwnerLaunch:
             raise RelationViolationError('Retired owner claim_scope changed')
         thread = snapshot.threads[self.name]
         thread.require_local_process(self.launch.process)
-        thread.active_turn.require_idle()
+        thread.turn_record.read().require_idle()
         snapshot.statuses[self.name].require_stopped()
         if thread.process_alive:
             raise RelationViolationError('Original owner survived retirement')

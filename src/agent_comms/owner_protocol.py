@@ -1,13 +1,15 @@
 """Owner and frontend change in lockstep: the built Core commit is the protocol."""
 from __future__ import annotations
 
+import re
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Annotated
 
 from acp import RequestError
 
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
 from .package_stamp import STAMP
 
 CORE_COMMIT = STAMP.commit()
@@ -24,6 +26,30 @@ class OwnerAnnouncement:
         owner = FieldCodec.decode(OwnerAnnouncement, message)
         if owner != self:
             raise IncompatibleOwnerError(OtherCoreOwner(thread=thread, core_commit=owner.core_commit))
+
+
+class ControllerTokenText(TextRepresentation):
+    """The owner issues each attachment a 32-byte hex controller token."""
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise MalformedRecord("Owner subscription ready requires a valid controllerToken.")
+        return value
+
+
+@dataclass(frozen=True)
+class OwnerReady:
+    """The subscription line that completes attachment: session metadata and its controller."""
+
+    ready: dict[str, object]
+    controller_token: Annotated[str, ControllerTokenText] = field(
+        metadata={"wire_name": "controllerToken"}
+    )
 
 
 @dataclass(frozen=True, kw_only=True)

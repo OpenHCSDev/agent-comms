@@ -20,10 +20,9 @@ from pathlib import Path
 from typing import Annotated, Literal
 from uuid import uuid4
 
-from .bus_publication import unique_wire_object
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, TextRepresentation
+from .field_codec import FieldCodec, MalformedRecord, TextRepresentation
 from .lifecycle import LifecycleState
 from .send_outcome import GrantedSend, HeldSend
 from .store_files import (
@@ -240,12 +239,10 @@ class MaintenanceBarrier(MaintenanceIngress):
                 or info.st_size > 4096
             ):
                 raise RelationViolationError("Maintenance witness is not private and regular")
-            with os.fdopen(descriptor, "r", encoding="utf-8") as stream:
+            with os.fdopen(descriptor, "rb") as stream:
                 descriptor = -1
-                value = FieldCodec.decode(
-                    declaration, json.load(stream, object_pairs_hook=unique_wire_object)
-                )
-        except (OSError, UnicodeError, ValueError) as error:
+                value = FieldCodec.decode(declaration, FieldCodec.parse(stream.read()))
+        except (OSError, MalformedRecord) as error:
             raise RelationViolationError("Maintenance witness is invalid") from error
         finally:
             if descriptor >= 0:

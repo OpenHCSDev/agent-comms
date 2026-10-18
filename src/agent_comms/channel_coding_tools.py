@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 from abc import abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import InitVar, dataclass, field, replace
@@ -23,6 +22,7 @@ from .selected_claim import (
     verify_selected_wake,
 )
 from .comms import Comms
+from .field_codec import FieldCodec, MalformedRecord
 from .envelope_claim_transitions import (
     ClaimOwner,
     WakeClaim,
@@ -64,7 +64,7 @@ class CodingCall(NativeToolCall):
             raise SelectedToolDenied("Malformed native coding call identity")
         try:
             return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
-        except (ValueError, TypeError, KeyError) as error:
+        except MalformedRecord as error:
             return RefusedCodingCall(call_id, name, arguments, str(error))
 
     def slot(self, input_id: str, round_number: int) -> str:
@@ -226,9 +226,7 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
     def decode_request(self, raw: bytes) -> CodingCall:
         if not raw.endswith(b"\n") or len(raw) > self.max_request:
             raise SelectedToolDenied("Coding request incomplete or oversized")
-        from .jsonl_stream import unique_fields
-
-        value = json.loads(raw, object_pairs_hook=unique_fields)
+        value = FieldCodec.parse(raw)
         if (
             type(value) is not dict
             or set(value) != {"token", "call_id", "name", "arguments"}

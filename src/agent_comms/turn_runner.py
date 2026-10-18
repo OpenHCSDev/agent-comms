@@ -128,7 +128,7 @@ class TurnRunner:
         lease = thread.turn_lease
         if lease is None:
             return
-        await CompactionObservation(self, session_id, lease, thread.active_turn.phase).dispatch(event)
+        await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""

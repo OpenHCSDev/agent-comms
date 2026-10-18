@@ -16,7 +16,7 @@ from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .cli_result import CliResult
 from .field_codec import FieldCodec, WireValue
 from .tool_result import ToolResult
-from .coordination_errors import StaleRevision
+from .coordination_errors import DMPaintedBoundChanged, StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
@@ -445,7 +445,7 @@ class ReadThrough(ChannelReadMark):
         ) as basis:
             displayed = self.expected_scope.require_displayed()
             if basis.scope(target) != self.expected_scope:
-                raise ValueError("Channel display changed; refresh the displayed page.")
+                raise DMPaintedBoundChanged()
             displayed.validate(
                 basis.require_viewer(), basis.registry, presentation.bus.reads.bus_identity(presentation.bus.log.path),
             )
@@ -709,7 +709,7 @@ class ThreadView(ThreadRecord):
         return ordinary
 
     def _idle_presentation(self, ordinary: ThreadPresentation) -> ThreadPresentation:
-        if self.thread.active_turn.executing:
+        if self.thread.turn_record.read().executing:
             return ActivityState.WORKING.presentation(ordinary.title, "In a turn")
         return self.goal_execution.waiting_presentation(ordinary)
 

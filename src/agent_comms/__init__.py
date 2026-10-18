@@ -15,7 +15,7 @@ from .historical_views import (
     HistoricalThread,
     HistorySource,
 )
-from .message_page import HistoryCursor
+from .page_traversal import HistoryCursor
 from .importing import ImportLimits, ThreadImported, ImportSnapshot
 from .mentions import MentionQuery
 from .read_basis import Conversation, DisplayedConversation, HistoricalDisplay

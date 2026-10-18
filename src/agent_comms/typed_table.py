@@ -33,7 +33,7 @@ from typing import (
 from .locked_store import RootFile
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, ValueDecoder, compile_decoder
+from .field_codec import FieldCodec, MalformedRecord, ValueDecoder, compile_decoder
 
 RelatedRow = TypeVar("RelatedRow", bound="TypedRow")
 
@@ -168,7 +168,7 @@ class BooleanStorage(SqlStorage):
     @classmethod
     def from_sql(cls, value: object) -> bool:
         if type(value) is not int or value not in (0, 1):
-            raise ValueError("SQLite boolean must be 0 or 1")
+            raise MalformedRecord("SQLite boolean must be 0 or 1")
         return bool(value)
 
 
@@ -234,8 +234,8 @@ class JsonStorage(SqlStorage):
     @classmethod
     def from_sql(cls, value: object) -> object:
         if type(value) is not str:
-            raise ValueError("SQLite JSON must be text")
-        return json.loads(value)
+            raise MalformedRecord("SQLite JSON must be text")
+        return FieldCodec.parse(value)
 
 
 @dataclass(frozen=True)
@@ -316,7 +316,7 @@ class SqlValue:
         """Read a single-column projection without losing empty or nullable results."""
         try:
             if cursor.description is None or len(cursor.description) != 1:
-                raise ValueError("Scalar projection requires exactly one SQLite column")
+                raise MalformedRecord("Scalar projection requires exactly one SQLite column")
             return [self.decode(row[0]) for row in cursor]
         finally:
             cursor.close()
@@ -401,7 +401,7 @@ class TypedRow:
         names = tuple(item[0] for item in cursor.description)
         projection = {**cls.column_projection(), **extra}
         if len(set(names)) != len(names) or set(names) != set(projection.values()):
-            raise ValueError(f"Query columns do not match {cls.__name__}: {names!r}")
+            raise MalformedRecord(f"Query columns do not match {cls.__name__}: {names!r}")
         return {key: names.index(column) for key, column in projection.items()}
 
     @classmethod
@@ -409,7 +409,9 @@ class TypedRow:
         cls, row: sqlite3.Row | tuple[object, ...], positions: Mapping[str, int]
     ) -> Self:
         values = {item.name: item.decode(row[positions[item.name]]) for item in cls._fields()}
-        instance = cls(**{item.name: values[item.name] for item in cls._fields() if item.init})
+        instance = FieldCodec.construct(
+            cls, {item.name: values[item.name] for item in cls._fields() if item.init}
+        )
         for item in cls._fields():
             if not item.init:
                 object.__setattr__(instance, item.name, values[item.name])
@@ -667,7 +669,7 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
     def one(cls, db: sqlite3.Connection, **key: object) -> Self | None:
         rows = cls.select(db, **key)
         if len(rows) > 1:
-            raise ValueError(f"Expected one {cls.declared_name} for {tuple(key)}")
+            raise MalformedRecord(f"Expected one {cls.declared_name} for {tuple(key)}")
         return next(iter(rows), None)
 
     @classmethod
