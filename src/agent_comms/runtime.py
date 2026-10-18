@@ -163,12 +163,23 @@ class RuntimeServer:
         self._resources = ExitStack()
 
     def background(self, work: Coroutine[Any, Any, None]) -> asyncio.Task[None]:
-        """Launch owner work without inheriting an attached human controller."""
+        """Launch owner work without inheriting an attached human controller.
+
+        Nobody awaits most owner work, so its failure is logged here; an
+        awaiter still receives the exception.
+        """
         token = self.controller.set(UNBOUND_CONTROLLER)
         try:
-            return asyncio.create_task(work)
+            task = asyncio.create_task(work, name=work.__qualname__)
         finally:
             self.controller.reset(token)
+        task.add_done_callback(self._report_failure)
+        return task
+
+    @staticmethod
+    def _report_failure(task: asyncio.Task[None]) -> None:
+        if not task.cancelled() and (error := task.exception()) is not None:
+            _LOG.error("Owner work %s failed", task.get_name(), exc_info=error)
 
     async def start(self) -> None:
         if self.server is not None or os.name == "nt":
