@@ -58,6 +58,8 @@ class ToolCaller(ABC):
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
+    name: str = ""  # A declared caller outside the registry, such as claude-ai.
+
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
 
