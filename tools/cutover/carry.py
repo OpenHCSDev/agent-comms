@@ -294,11 +294,12 @@ class CarryChain:
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
-        """A step no longer in the tree, at the revision that last wrote it: the source it
-        was written against, not the later source beside its deletion. None if that
-        revision held a plain script rather than a step."""
+        """A step no longer in the tree, at the main-line revision that last wrote it: the
+        source it was written against, not the later source beside its deletion. None if
+        that revision held a plain script rather than a step."""
         path = f"{STEPS}/{name}.py"
-        written = git(repo, "log", "--no-renames", "-1", "--format=%H", "--diff-filter=AM", revision, "--", path).decode().strip()
+        written = git(repo, "log", "-m", "--first-parent", "--no-renames", "-1", "--format=%H",
+                      "--diff-filter=AM", revision, "--", path).decode().strip()
         return Step.declared(name, git(repo, "show", f"{written}:{path}"), written)
 
     def require_next(self, name: str, applied: tuple[str, ...]) -> None:
