@@ -218,7 +218,7 @@ class ExternalTranscriptRead(TranscriptSource):
 
 
 @dataclass(frozen=True, slots=True)
-class NoStoreRead(ExternalTranscriptRead):
+class NoStoreRead(ExternalTranscriptRead, NoItems):
     def cut(self) -> ExternalCut:
         return ExternalCut(0)
 
@@ -226,12 +226,6 @@ class NoStoreRead(ExternalTranscriptRead):
         yield from ()
 
     def turns(self, last):
-        return ()
-
-    def pending(self, request) -> bool:
-        return False
-
-    def frames(self) -> tuple:
         return ()
 
     def end_turn(self) -> None:
@@ -385,13 +379,4 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalItemRow.select(connection, row_type=ExternalCut, thread=self.lookup)[0]
-
-    def current_draft(self) -> ExternalDraftRow | None:
-        with self.reading() as records:
-            return records.current_draft()
-
-    def cut(self) -> ExternalCut:
-        with self.reading() as records:
-            return records.cut()
-
 

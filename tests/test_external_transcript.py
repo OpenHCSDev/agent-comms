@@ -80,7 +80,8 @@ def test_page_and_draft_hold_one_external_read_transaction(tmp_path, monkeypatch
 
     assert captured_page.events == ()
     assert captured_draft.events[0].text == "Writing"
-    assert transcript.current_draft() is None
+    with transcript.reading() as records:
+        assert records.current_draft() is None
 
 
 def test_absent_store_reads_stay_empty_without_creating_storage(tmp_path):
@@ -112,11 +113,13 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     comms.registry.declare(comms.registry.new_thread('codex', frozenset(), str(tmp_path)))
     transcript = comms.transcripts.external("codex")
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hel"),))
-    assert transcript.current_draft().events[0].text == "Hel"
-    assert transcript.cut().offset == 0
+    with transcript.reading() as records:
+        assert records.current_draft().events[0].text == "Hel"
+        assert records.cut().offset == 0
     transcript.draft(turn_id="t", item_id="a", events=(AssistantTranscript("Hello"),))
     transcript.finish(turn_id="t", item_id="other", events=(NoticeTranscript("Tool"),))
-    assert transcript.current_draft().item_id == "a"
+    with transcript.reading() as records:
+        assert records.current_draft().item_id == "a"
     read = comms.transcripts.capture_page_read("codex")
     snapshot = TranscriptSnapshotUpdate.from_read(read)
     assert snapshot.draft.events[0].text == "Hello"
@@ -125,8 +128,10 @@ def test_draft_is_current_state_and_finishes_atomically(tmp_path):
     transcript.finish(turn_id="t", item_id="a", events=(AssistantTranscript("Hello!"),))
     with pytest.raises(StaleRevision):
         read.current_draft()
-    assert transcript.current_draft() is None
+    with transcript.reading() as records:
+        assert records.current_draft() is None
     assert [e.text for e in comms.transcripts.thread_transcript_page("codex").events] == ["Tool", "Hello!"]
     transcript.draft(turn_id="t2", item_id="b", events=(AssistantTranscript("Interrupted"),))
     transcript.end_turn()
-    assert transcript.current_draft() is None
+    with transcript.reading() as records:
+        assert records.current_draft() is None
