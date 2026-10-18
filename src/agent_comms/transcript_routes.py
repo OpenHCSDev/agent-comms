@@ -7,6 +7,7 @@ from contextlib import closing
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from .field_codec import MalformedRecord
 from .locked_store import RootFile
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
@@ -221,7 +222,7 @@ class TranscriptRoutes(RootFile):
         floor = checkpoint.offset if thread.runtime.read_key == checkpoint.session_file else 0
         try:
             final, user = reader.publication_input(after=floor, through=revision.size)
-        except (ValueError, TypeError) as error:
+        except MalformedRecord as error:
             raise RelationViolationError("Native publication evidence is invalid") from error
         ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
         inputs = InputDispositions(log.path.parent)

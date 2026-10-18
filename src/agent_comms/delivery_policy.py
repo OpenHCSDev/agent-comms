@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .audience_manifest import FrozenAudience
-from .wake_policy import MessageAudience
 from .coordination_tables.publications import canonical_publication_key
 from .declared_family import DeclaredFamily
+from .field_codec import MalformedRecord
 from .wake import ControlClassification, resolve_wake_cohort
-from .wake_policy import WakeDecision
+from .wake_policy import MessageAudience, WakeDecision
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ class KeyedResponseAcknowledgement:
 
     def add_unique(self, seen_keys: set[str]) -> None:
         if self.publication_key in seen_keys:
-            raise ValueError("Duplicate response publication key.")
+            raise MalformedRecord("Duplicate response publication key.")
         seen_keys.add(self.publication_key)
 
 

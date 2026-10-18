@@ -34,7 +34,7 @@ class NativeExecutableTool(ToolDeclaration):
     def from_call(cls, name: str, arguments: object, *, call_id: str):
         cls._member_declarations()
         decoded = FieldCodec.decode(dict[str, object], arguments)
-        return cls.decode(name).create_call(call_id, decoded)
+        return cls.field_value(name).create_call(call_id, decoded)
 
 
 class NativeRequestTools:

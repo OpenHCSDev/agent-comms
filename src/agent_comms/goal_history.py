@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Literal
 
 from .coordination_database import CoordinationStore
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .goals import Goal
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 
@@ -101,7 +101,7 @@ class GoalHistoryStore:
                     != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)):
                 raise GoalHistoryError("Original goal history changed during acquisition.")
             return rows
-        except (OSError, sqlite3.Error, ValueError, TypeError) as error:
+        except (OSError, sqlite3.Error, MalformedRecord) as error:
             raise GoalHistoryError("Cannot acquire original goal history read-only.") from error
 
     def _connect(self) -> sqlite3.Connection:
@@ -234,7 +234,7 @@ class GoalHistoryStore:
                     parameters=(owner_created_at,),
                     order_by=("sequence",),
                 )
-        except (sqlite3.Error, ValueError, TypeError) as error:
+        except (sqlite3.Error, MalformedRecord) as error:
             raise GoalHistoryError("Cannot read goal history.") from error
 
     def observe(self, owner_created_at: float, current: Goal | None) -> None:

@@ -35,7 +35,7 @@ from .coordination_tables.publications import PublicationIntents
 from .errors import HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
@@ -383,9 +383,7 @@ class CertifiedSourceRead:
                     yield original
 
             return replace(witness, latest_source_seq=latest), decoded(), len(rows) > request.limit
-        except RelationViolationError:
-            raise
-        except (sqlite3.Error, OSError, ValueError, TypeError) as error:
+        except (sqlite3.Error, OSError, MalformedRecord) as error:
             raise RelationViolationError("Certified initial page is unavailable.") from error
 
     def conversation_frontier(self, lookup: str) -> int:
@@ -708,16 +706,14 @@ class DeliverySources(WireSourcePointer["CommittedDelivery"], CheckpointTable, T
 
     def decode_bytes(self, raw: bytes, root_id: str) -> CommittedDelivery:
         """One frozen seq/id/audience relation for locked and snapshot readers."""
-        from .bus_publication import CommittedDelivery, unique_wire_object
+        from .bus_publication import CommittedDelivery
 
         try:
-            record = json.loads(raw, object_pairs_hook=unique_wire_object)
+            record = FieldCodec.parse(raw)
             if not isinstance(record, Mapping):
-                raise ValueError("Certified initial JSON must be an object.")
+                raise MalformedRecord("Certified initial JSON must be an object.")
             original = CommittedDelivery.from_wire(record, root_id)
-        except RelationViolationError:
-            raise
-        except (ValueError, TypeError) as error:
+        except MalformedRecord as error:
             raise RelationViolationError("Certified initial row is invalid.") from error
         if (
             original.message.reference != self.reference
@@ -812,7 +808,7 @@ class ContextManifestReference:
         page = RecordedContextManifestSources.for_owner(log, name, registry,
             cursor=BeforeContextManifest(self.source, self.offset + 1), limit=1)
         if len(page.resources) != 1 or page.resources[0].pointer.offset != self.offset:
-            raise ValueError("Recorded context reference is absent from this owner")
+            raise MalformedRecord("Recorded context reference is absent from this owner")
         return page.resources[0].value
 
 
@@ -1126,22 +1122,23 @@ class PrefixCertificate(CheckpointTable, TypedTable):
             if row is None:
                 raise RelationViolationError("Private bus checkpoint certificate is missing.")
             return row.witness()
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise RelationViolationError("Private bus checkpoint identity is malformed.") from error
 
     def witness(self) -> PrefixWitness:
-        return PrefixWitness(
-            self.root_id,
-            FileRevision(
-                FileIdentity(self.device, self.inode),
-                self.offset,
-                self.mtime_ns,
-                self.ctime_ns,
-            ),
-            self.through_seq,
-            self.digest,
-            self.tail,
-        )
+        with MalformedRecord.refusing("Invalid prefix certificate"):
+            return PrefixWitness(
+                self.root_id,
+                FileRevision(
+                    FileIdentity(self.device, self.inode),
+                    self.offset,
+                    self.mtime_ns,
+                    self.ctime_ns,
+                ),
+                self.through_seq,
+                self.digest,
+                self.tail,
+            )
 
     @classmethod
     def capture(

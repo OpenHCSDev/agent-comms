@@ -12,6 +12,7 @@ import logging
 import sqlite3
 from dataclasses import dataclass, field
 
+from .field_codec import MalformedRecord
 from agent_comms.assignment_states import AssignmentState, PendingNotification
 from agent_comms.bus_publication import CommittedDelivery
 from agent_comms.cohort_schema import (
@@ -215,7 +216,7 @@ def _record_optional_owner_generations(
                 canonical_thread=assignment.recipient,
                 owner_generation=current.generation,
             ).insert(db)
-    except (sqlite3.Error, SchemaVersionError, IdentityConflict, ValueError, TypeError) as error:
+    except (sqlite3.Error, SchemaVersionError, IdentityConflict, MalformedRecord) as error:
         db.execute("ROLLBACK TO optional_awareness_claims")
         _LOG.warning("Optional generation provenance omitted: %r", error, exc_info=error)
     finally:

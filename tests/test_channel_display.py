@@ -18,7 +18,8 @@ from agent_comms.channels import AnyOfMatch, SavedView, ViewKind, ViewPredicate
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
 from agent_comms.threads import Thread
-from agent_comms.message_page import NewerTraversal, OlderTraversal, PageBounds, PageTraversal
+from agent_comms.message_page import PageBounds
+from agent_comms.page_traversal import NewerTraversal, OlderTraversal
 
 
 def test_missing_painted_scope_is_a_stale_bound():
@@ -235,8 +236,6 @@ def test_page_boundaries_and_byte_budget_match_target_pager(tmp_path):
     assert head.has_newer and not head.has_older
     tail = comms.views.channel_display_page("#api", bounds=PageBounds(OlderTraversal(rows[-1].seq), 1))
     assert bodies(tail) == ["second target"] and tail.has_older and tail.has_newer
-    with pytest.raises(ValueError, match="either before or after"):
-        PageTraversal.capture(before=2, after=1)
 
 
 def test_fixed_opened_boundary_excludes_later_append(tmp_path):

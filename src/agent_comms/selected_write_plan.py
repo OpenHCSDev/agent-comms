@@ -30,10 +30,9 @@ from .coordination_cohort import sealed_cohort_assignments
 from .envelope_claim_transitions import ExistingFileClaim
 from .store_files import _store_lock
 from .threads import Thread
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .declared_family import DeclaredFamily
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
-from .jsonl_stream import unique_fields
 from .message_reference import MessageReference
 from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation
 
@@ -154,8 +153,8 @@ class SelectedWritePlans:
             with os.fdopen(fd, "rb") as stream:
                 fd = -1
                 try:
-                    return FieldCodec.decode(SelectedWriteIntent, json.loads(stream.read(), object_pairs_hook=unique_fields))
-                except (ValueError, TypeError) as error:
+                    return FieldCodec.decode(SelectedWriteIntent, FieldCodec.parse(stream.read()))
+                except MalformedRecord as error:
                     raise IdentityConflict("Selected write intent is malformed") from error
         finally:
             if fd >= 0:
@@ -175,7 +174,7 @@ class SelectedWritePlans:
             FieldCodec.decode(str, source_message_id)
             FieldCodec.decode(str, resource)
             FieldCodec.decode(str, contents)
-        except (TypeError, ValueError) as error:
+        except MalformedRecord as error:
             raise IdentityConflict("Selected write request is not typed") from error
         if not source_message_id or not resource:
             raise IdentityConflict("Selected write request requires its source and resource")
