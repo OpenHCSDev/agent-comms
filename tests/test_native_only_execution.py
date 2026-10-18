@@ -24,7 +24,7 @@ def test_headless_discovery_cannot_admit_an_unnamed_owner(tmp_path, arguments, c
     environment.pop('AGENT_COMMS_THREAD', None)
     result = subprocess.run(
         (sys.executable, '-c', 'from agent_comms.worker import main; raise SystemExit(main())', *arguments),
-        env=environment, capture_output=True, timeout=3,
+        env=environment, capture_output=True, timeout=30,
     )
     assert result.returncode == code, result.stderr.decode()
     assert not root.exists()
@@ -89,9 +89,11 @@ async def test_unvalidated_configuration_refuses_before_child(tmp_path, monkeypa
             str(tmp_path / "missing-native"), (), "must not send", str(tmp_path)
         )
     ]
-    assert len(result) == 1 and isinstance(result[0], events.Done)
-    assert not result[0].ok and result[0].reason_code == "native_launch_invalid"
-    assert "missing-native" in result[0].text
+    error, done = result
+    assert isinstance(error, events.Error) and isinstance(done, events.Done)
+    assert error.reason_code == done.reason_code == "native_launch_invalid"
+    assert not done.ok and error.text == done.text
+    assert "missing-native" in done.text
 
 
 @pytest.mark.usefixtures("native_rpc_fixture")

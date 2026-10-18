@@ -457,6 +457,7 @@ file = Path(sys.argv[1])
 reason = sys.argv[2]
 def send(value):
     print(json.dumps(value), flush=True)
+print('fixture-ready', flush=True)
 state = json.loads(sys.stdin.readline())
 send({'type':'response','id':state['id'],'command':'get_state','success':True,
       'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only',
@@ -483,7 +484,7 @@ send({'type':'agent_settled'})
     original = AttachedChild.start
 
     async def launch(*_argv, **kwargs):
-        return await original(
+        child = await original(
             (
                 sys.executable,
                 "-u",
@@ -493,6 +494,8 @@ send({'type':'agent_settled'})
             ),
             **kwargs,
         )
+        assert await asyncio.wait_for(child.stdout.readline(), timeout=30) == b"fixture-ready\n"
+        return child
 
     monkeypatch.setattr(AttachedChild, "start", launch)
     operation = TrackedTurnSession.execute(
