@@ -428,14 +428,14 @@ async def test_unchanged_observation_tick_skips_all_store_reads(tmp_path, monkey
         # Process-local work waiting on the next tick is never skipped.
         for _ in range(2):
             await tick()
-        from agent_comms.routing import ScheduledTurn
+        from agent_comms.turn_input_source import DependencyScheduledTurn
         from agent_comms.schedule_rules import WakeScheduleCheck
 
         # The observer owns this check; a real queued turn is dispatched by
         # another owner, whose separate tests exercise the provider path.
         monkeypatch.setattr(WakeScheduleCheck, "schedule", lambda _check: None)
         before = len(drains)
-        agent.inputs.pending_turns["beta"] = [ScheduledTurn("queued locally")]
+        agent.inputs.pending_turns["beta"] = [DependencyScheduledTurn("queued locally")]
         await tick()
         assert len(drains) == before + 1
     finally:

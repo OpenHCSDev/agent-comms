@@ -18,6 +18,7 @@ from .goals import (
     TurnGoalPermission,
 )
 from .messages import Message
+from .routing import ScheduledTurn
 from .started_input import StartedInput
 
 if TYPE_CHECKING:
@@ -235,7 +236,7 @@ class RoutedInput(TurnInputSource):
         return wait.allows_routed_input()
 
     def allows_goal_input(self, goal: GoalDeclaration) -> bool:
-        return not self.keys or NoGoal().allows(goal)
+        return not self.keys or goal.permits_accepted(None)
 
 
 class RoutedOriginalInput(OriginalTurnInput, RoutedInput):
@@ -284,6 +285,17 @@ class AutonomousOriginalInput(DependencyOriginalInput):
     @classmethod
     def original_display(cls, initial, task):
         return None
+
+
+class DependencyScheduledTurn(ScheduledTurn):
+    input_type = DependencyOriginalInput
+
+
+class AutonomousScheduledTurn(ScheduledTurn):
+    input_type = AutonomousOriginalInput
+
+    def batch(self, pending):
+        return pending[:1], pending[1:]
 
 
 @dataclass(frozen=True, kw_only=True)

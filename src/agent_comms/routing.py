@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterator, Mapping
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -14,6 +15,7 @@ from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
+    from .turn_input_source import OriginalTurnInput
     from .registry_provenance import RegistryProvenance
     from .thread_identity import ThreadIncarnation
 
@@ -85,15 +87,15 @@ class TurnRouting:
 
 
 @dataclass(frozen=True, slots=True)
-class ScheduledTurn:
+class ScheduledTurn(ABC):
     prompt: str
     origin: Message | None = None
     goal_id: str | None = None
     goal_wait_id: str | None = None
 
     @property
-    def autonomous_goal(self) -> bool:
-        return self.goal_id is not None and self.origin is None
+    @abstractmethod
+    def input_type(self) -> type[OriginalTurnInput]: ...
 
     @classmethod
     def resuming_in_project(cls, project: str) -> ScheduledTurn:
@@ -130,13 +132,17 @@ class ScheduledTurn:
         """Combine channel turns sharing a route, keeping each direct input separate."""
         if not pending:
             return [], []
-        if pending[0].origin and pending[0].origin.role.response_policy(pending[0].origin).separate_turn:
+        return pending[0].batch(pending)
+
+    def batch(self, pending):
+        if self.origin and self.origin.role.response_policy(self.origin).separate_turn:
             return pending[:1], pending[1:]
         boundary = next(
             (
                 index
                 for index, turn in enumerate(pending)
-                if (turn.origin.exact_reply_target if turn.origin else None)
+                if turn.input_type != self.input_type
+                or (turn.origin.exact_reply_target if turn.origin else None)
                 != (pending[0].origin.exact_reply_target if pending[0].origin else None)
                 or (turn.origin and turn.origin.role.response_policy(turn.origin).separate_turn)
             ),

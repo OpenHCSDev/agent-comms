@@ -32,6 +32,7 @@ from .goal_presentation import ThreadGoalExecution
 from .goals import Goal, GoalDeclaration, GoalRevision
 from .reservation_rules import ReservationViolationError
 from .routing import ScheduledTurn
+from .turn_input_source import AutonomousScheduledTurn
 from .schedule_rules import OwnerTurnScheduleCheck, WakeScheduleCheck
 from .store_files import _store_lock
 
@@ -119,7 +120,7 @@ class GoalScheduler:
                 diagnostic="Goal launch grant unavailable; explicit Retry required.",
             )
             return
-        return ScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
+        return AutonomousScheduledTurn(GOAL_CONTINUE_PROMPT, goal_id=goal.id)
 
     async def set_goal(self, session_id: str, text: str) -> Goal:
         """Commit a UI goal through its executing owner and private launch ledger."""

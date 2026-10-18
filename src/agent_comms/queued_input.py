@@ -33,7 +33,7 @@ from .input_origin import InputOrigin, UnattributedInputOrigin, WireInputOrigin
 from .store_files import _store_lock
 from .coordinator import Coordination
 from .coordination_session import ReadNativeCoordinationSession
-from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput, OwnerOriginalInput
+from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput, DependencyScheduledTurn, OwnerOriginalInput
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
 
@@ -343,7 +343,6 @@ class DeliveredInput(QueuedInput):
         """
         from .agent_backend import InputContent
         from .context_segments.wake import DeliveredMessageSegment
-        from .routing import ScheduledTurn
         from .turn_context import TurnContext
 
         with _store_lock(inputs.comms._wire_lock_path):
@@ -369,7 +368,7 @@ class DeliveredInput(QueuedInput):
                     row = ReservedInput(
                         key, message.seq, canonical, context.claim_scope.claimed_generation,
                         message.target,
-                        ScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
+                        DependencyScheduledTurn.incoming(message, aliases=snapshot.aliases).prompt,
                         origin=WireInputOrigin(root_id, message.reference),
                     )
                     with ExitStack() as ownership:

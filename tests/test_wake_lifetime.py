@@ -6,7 +6,7 @@ import os
 from agent_comms.acp import CommsAgent
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
-from agent_comms.routing import ScheduledTurn
+from agent_comms.turn_input_source import DependencyScheduledTurn
 from agent_comms.runtime import UNBOUND_CONTROLLER
 from agent_comms.schedule_rules import WakeScheduleCheck
 from agent_comms.threads import Thread
@@ -25,7 +25,7 @@ async def test_wake_lock_wait_shutdown_keeps_input_unsent_and_controller_private
     token = inputs.runtime.controller.set(controller)
     lock = agent.turns.turn_locks.setdefault("owner", asyncio.Lock())
     await lock.acquire()
-    queued = ScheduledTurn("Never dispatch this cancelled wake")
+    queued = DependencyScheduledTurn("Never dispatch this cancelled wake")
     inputs.pending_turns["owner"] = [queued]
     try:
 

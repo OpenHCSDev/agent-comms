@@ -28,13 +28,14 @@ from .owned_send import OwnedSend
 from .native_input_owner import RegistryOwner
 from .native_pi import NativePiUnavailable
 from .coordinator import Coordination
-from .routing import MessageRoute, ScheduledTurn, TurnRouting
+from .routing import MessageRoute, TurnRouting
 from .runtime import UNBOUND_CONTROLLER
 from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_input_source import (
     CapturedInputDependency,
+    DependencyScheduledTurn,
     NoInputDependency,
     OriginalTurnInput,
     ScheduledOriginalInput,
@@ -147,7 +148,7 @@ class OwnedTurn:
                         owner=self.thread_name,
                         claim_scope=snapshot.claimed_generations[self.thread_name],
                         target=origin.target,
-                        source_text=ScheduledTurn.incoming(
+                        source_text=DependencyScheduledTurn.incoming(
                             origin, aliases=snapshot.aliases
                         ).prompt,
                         origin=WireInputOrigin(

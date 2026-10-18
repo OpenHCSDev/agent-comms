@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from .drain_failures import drain_failures
 from .reservation_rules import ReservationRule, RuleCheck, ReservationViolationError
 from .routing import ScheduledTurn
-from .turn_input_source import AutonomousOriginalInput, DependencyOriginalInput
+from .turn_input_source import DependencyScheduledTurn
 from .errors import RelationViolationError
 
 if TYPE_CHECKING:
@@ -49,7 +49,7 @@ class ProjectResumeCheck(OwnerTurnScheduleCheck):
         except ReservationViolationError:
             return
         if entry.status.running and entry.thread.goal.active().owes_project_resume(entry.thread):
-            resume = ScheduledTurn.resuming_in_project(entry.thread.worktree)
+            resume = DependencyScheduledTurn.resuming_in_project(entry.thread.worktree)
             pending = inputs.pending_turns.setdefault(session_id, [])
             if resume not in pending:
                 pending.append(resume)
@@ -107,8 +107,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                         "\n\n".join(turn.prompt for turn in pending),
                         origins=tuple(origin for turn in pending for origin in turn.origins),
                         dependency_wait_id=pending[0].goal_wait_id,
-                        input_type=(AutonomousOriginalInput if len(pending) == 1 and pending[0].autonomous_goal
-                                    else DependencyOriginalInput),
+                        input_type=pending[0].input_type,
                     )
                 except RequestError as error:
                     await goal.failed_schedule(error, pending[0], inputs.comms, owner, Coordination.run_worker)
