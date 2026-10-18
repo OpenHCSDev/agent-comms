@@ -14,6 +14,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
 from .goal_states import ActiveGoal, GoalState
+from .goal_failure_observation import FailedTurnProjection
 from .turn_goal_permission import ContinuationGoalPermission, InactiveGoalPermission, TurnGoalPermission
 from .registration_inheritance import RegistrationInheritance
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -22,7 +23,6 @@ from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
     from .goal_actions import GoalAction, GoalActionContext
-    from .goal_failure_observation import FailedTurnProjection
     from .goal_presentation import ThreadGoalExecution
     from .goal_waits import GoalWait, GoalWaits
     from .agent_activity import AgentActivity
@@ -357,6 +357,13 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
+@dataclass(frozen=True)
+class GoalPeerChange:
+    goal: GoalRevision | None
+    state: type[GoalState] | None
+    progress: str
+
+
 class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalDeclaration"]):
     """The recorded goal state, including a thread with no goal."""
 
@@ -387,11 +394,10 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
                            agents: AgentActivity) -> ThreadGoalExecution: ...
 
     @abstractmethod
-    def peer_change_values(self) -> tuple[GoalRevision | None, type[GoalState] | None, str]: ...
+    def peer_change_values(self) -> GoalPeerChange: ...
 
     @abstractmethod
-    def failed_turn_projection(self, projection: type[FailedTurnProjection], path: Path,
-                               owner: Thread, owner_status: ThreadStatus,
+    def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
                                claim_scope: int) -> FailedTurnProjection: ...
 
     @abstractmethod
@@ -528,13 +534,12 @@ class NoGoal(NullMember, GoalDeclaration):
                            agents: AgentActivity) -> ThreadGoalExecution:
         return wait.idle_execution()
 
-    def peer_change_values(self) -> tuple[None, None, str]:
-        return None, None, ""
+    def peer_change_values(self) -> GoalPeerChange:
+        return GoalPeerChange(goal=None, state=None, progress="")
 
-    def failed_turn_projection(self, projection: type[FailedTurnProjection], path: Path,
-                               owner: Thread, owner_status: ThreadStatus,
+    def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
                                claim_scope: int) -> FailedTurnProjection:
-        return projection("unavailable", "owner_or_goal_changed")
+        return FailedTurnProjection("unavailable", "owner_or_goal_changed")
 
     can_control: ClassVar[bool] = False
     visible: ClassVar[bool] = False
@@ -616,13 +621,12 @@ class Goal(RecordMember, GoalDeclaration):
                            agents: AgentActivity) -> ThreadGoalExecution:
         return wait.project(self, snapshot, agents)
 
-    def peer_change_values(self) -> tuple[GoalRevision, type[GoalState], str]:
-        return self.checkpoint, type(self.state), self.progress
+    def peer_change_values(self) -> GoalPeerChange:
+        return GoalPeerChange(goal=self.checkpoint, state=type(self.state), progress=self.progress)
 
-    def failed_turn_projection(self, projection: type[FailedTurnProjection], path: Path,
-                               owner: Thread, owner_status: ThreadStatus,
+    def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
                                claim_scope: int) -> FailedTurnProjection:
-        return projection.read_for_goal(path, owner, owner_status, claim_scope, self)
+        return FailedTurnProjection.read_for_goal(path, owner, owner_status, claim_scope, self)
 
     def check_expected(self, current: GoalDeclaration) -> None:
         if self != current:

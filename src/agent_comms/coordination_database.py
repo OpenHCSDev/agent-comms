@@ -9,7 +9,7 @@ import stat
 import tempfile
 from abc import ABC, abstractmethod
 from contextlib import closing, contextmanager, suppress
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Self
 
@@ -22,10 +22,10 @@ from agent_comms.coordination_errors import (
 )
 from agent_comms.coordination_schema import (
     COORDINATION_SCHEMA_VERSION,
+    CoordinatorTable,
     coordinator_schema,
 )
 from agent_comms.coordination_tables.metadata import SchemaMeta
-from agent_comms.coordination_tables.publications import PublicationIntents
 from agent_comms.typed_table import (
     SQLiteUserVersion,
     TypedRow,
@@ -275,12 +275,8 @@ class CoordinationStore:
         return self.writer(self.path, contention, isolation_level=None)
 
     def _configure_connection(self) -> None:
-        self._connection.create_function(
-            "coordination_validate_publication_intent",
-            sum(field.init for field in fields(PublicationIntents)),
-            PublicationIntents.validate_sql,
-            deterministic=True,
-        )
+        for row_type in CoordinatorTable.declarations():
+            row_type.configure_connection(self._connection)
         self._connection.row_factory = sqlite3.Row
         self._connection.execute("PRAGMA foreign_keys = ON")
         # Rollback journal avoids a post-schema WAL-mode race among fresh openers.

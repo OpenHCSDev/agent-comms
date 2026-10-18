@@ -18,15 +18,15 @@ from .diagnostics import FailureReason
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec, Id128Text
 from .goal_attempt_identity import FailureNotObserved, GoalAttemptIdentity
-from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnIdentity
+from .thread_identity import ClaimedIdentity, RecordedThreadIncarnation, ThreadIncarnation, TurnFence, TurnIdentity
 from .thread_status import ThreadStatus
-from .turn_lease import TurnFence, TurnLeaseFence
 from .typed_table import Column, ForeignKey, TypedTable
 
 if TYPE_CHECKING:
     from .goal_attempts import Reservation
     from .goals import Goal
     from .threads import Thread
+    from .turn_lease import TurnLeaseFence
 
 
 class GoalLedgerTable:
@@ -254,4 +254,4 @@ def read_failed_turn_projection(
     never be used for dispatch or as evidence of absence of an owner pause.
     """
 
-    return owner.goal.failed_turn_projection(FailedTurnProjection, path, owner, owner_status, claim_scope)
+    return owner.goal.failed_turn_projection(path, owner, owner_status, claim_scope)
