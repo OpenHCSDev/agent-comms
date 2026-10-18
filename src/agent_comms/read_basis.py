@@ -17,8 +17,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, TextIO
 
 from .channel_targets import CommandTarget
-from .declared_family import DeclaredFamily
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged
+from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
 from .store_files import SharedLock, _store_lock
@@ -227,8 +227,8 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
     from .messages import Message
-    from .registration import Registration
     from .read_ledger import ReadLedger
+    from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
 
@@ -571,12 +571,6 @@ class DMDisplayScope(MessageDisplayScope):
         if first.incarnation == second.incarnation:
             raise ValueError("DM display identity changed; refresh the page.")
         return cls.capture(first.name, second.name, snapshot)
-
-    def inbound(self, message: Message | BusPageRow) -> bool:
-        return message.sender in self.second_names and message.target in self.first_names
-
-    def unread_before(self, message: Message | BusPageRow, before: int, seen: ReadCursor) -> bool:
-        return message.seq < before and message.seq not in seen and self.inbound(message)
 
     def offsets(self, index, *, lower, upper, descending, before_offset):
         return index.conversation_offsets(
