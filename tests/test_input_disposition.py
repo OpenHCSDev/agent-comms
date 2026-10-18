@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.input_attempt import UnresolvedInput
 from agent_comms.input_disposition import InputDispositions
 from stored_inputs import stored_inputs
 
@@ -66,19 +67,11 @@ def test_unresolved_projection_follows_rename_without_private_receipts(tmp_path:
     store.record("bus:8", seq=8, owner="peer", claim_scope=1, target="#review", text="other owner")
     store.bind("bus:7", claim_scope=1, turn_id="turn", native_id="a" * 32, text="private wrapper")
     comms.threads.rename_managed_thread("kid", "new-kid", owner_pid=os.getpid())
-    expected = [
-        {
-            "inputId": "bus:7",
-            "sequence": 7,
-            "target": "#review",
-            "text": "exact source",
-            "status": "unknown",
-        }
-    ]
+    expected = (UnresolvedInput(7, "#review", "exact source", "bus:7", "unknown"),)
     assert comms.goals.unresolved_inputs("new-kid") == expected
     assert comms.goals.unresolved_inputs("kid") == expected
     assert store.started("bus:7", turn_id="turn", native_id="a" * 32, text="private wrapper")
-    assert comms.goals.unresolved_inputs("new-kid") == []
+    assert comms.goals.unresolved_inputs("new-kid") == ()
 
 
 def _cold_snapshots(root, gate, results):

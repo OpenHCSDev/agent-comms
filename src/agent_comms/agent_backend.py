@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
 from .send_outcome import SendBoundary
+from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
     from .launch_runtime import LaunchRuntime
@@ -240,7 +241,7 @@ class ContextUsage:
     window: int | None
 
 
-class CompactionOutcome(DeclaredFamily, affix="Compaction"):
+class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):
     """The result of one requested compaction."""
 
     def display_summary(self):

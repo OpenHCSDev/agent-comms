@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
 from .goals import Goal
-from .input_attempt import InputAttempt
+from .declared_family import DeclaredFamily
+from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import LockedStore, RootFile
 from .registry_document import RegistrySnapshot
 from .thread_identity import RecordedThreadIncarnation
@@ -158,6 +159,75 @@ class RecordedGoalWait(GoalWait):
         )
 
 
+class InputExclusion(DeclaredFamily, affix="Exclusion"):
+    """Why a standby review leaves an unresolved input out; its declared name is its wire value."""
+
+
+class OwnerInputWithoutBusSequenceExclusion(InputExclusion):
+    """The owner's own input has no bus sequence, so no dependency sent it."""
+
+
+class NotADirectReplyFromDeclaredDependenciesExclusion(InputExclusion):
+    """A bus input that is not a direct reply from the declared dependencies."""
+
+
+@dataclass(frozen=True)
+class ExcludedInput(UnresolvedInput):
+    reason: type[InputExclusion] = field(kw_only=True)
+
+    @classmethod
+    def excluded(cls, row: StoredInput, reason: type[InputExclusion]) -> ExcludedInput:
+        return ExcludedInput(
+            sequence=row.sequence, target=row.target, text=row.source_text,
+            input_id=row.public_id, status=row.public_status,
+            reviewed_for_goals=tuple(sorted(row.goal_reviews)), reason=reason)
+
+
+@dataclass(frozen=True)
+class StandbyReview:
+    """The reply form of a goal input review: eligible messages and their exact keys."""
+
+    goal_id: str
+    wait_for: tuple[str, ...]
+    reviewed_inputs: tuple[str, ...]
+    messages: tuple[UnresolvedInput, ...]
+    already_reviewed_inputs: tuple[UnresolvedInput, ...]
+    excluded_inputs: tuple[ExcludedInput, ...]
+
+    def summary(self) -> StandbyReviewSummary:
+        return StandbyReviewSummary(counts=ReviewCounts(
+            len(self.messages), len(self.already_reviewed_inputs), len(self.excluded_inputs)))
+
+    def eligible_summary(self) -> StandbyReviewSummary:
+        """The summary with this review's complete eligible messages and exact keys inline."""
+        return replace(self.summary(), goal_id=self.goal_id, wait_for=self.wait_for,
+                       messages=self.messages, reviewed_inputs=self.reviewed_inputs,
+                       messages_complete=True)
+
+
+@dataclass(frozen=True)
+class ReviewCounts:
+    messages: int
+    already_reviewed_inputs: int
+    excluded_inputs: int
+
+
+_OMITTED = {"wire_omit_default": True}
+
+
+@dataclass(frozen=True, kw_only=True)
+class StandbyReviewSummary:
+    """An oversized standby review: its counts, and its eligible messages when they fit inline."""
+
+    complete: bool = False
+    counts: ReviewCounts
+    goal_id: str | None = field(default=None, metadata=_OMITTED)
+    wait_for: tuple[str, ...] | None = field(default=None, metadata=_OMITTED)
+    messages: tuple[UnresolvedInput, ...] | None = field(default=None, metadata=_OMITTED)
+    reviewed_inputs: tuple[str, ...] | None = field(default=None, metadata=_OMITTED)
+    messages_complete: bool | None = field(default=None, metadata=_OMITTED)
+
+
 @dataclass(frozen=True, slots=True)
 class GoalInputReview:
     """Ephemeral dependency review projection derived from bus and input authority."""
@@ -165,36 +235,26 @@ class GoalInputReview:
     goal_id: str
     targets: tuple[GoalWaitTarget, ...]
     owners: frozenset[str]
-    unknown: tuple[InputAttempt, ...]
+    unknown: tuple[StoredInput, ...]
     eligible_keys: frozenset[str]
 
-    def public(self) -> dict:
-        eligible, reviewed, excluded = [], [], []
+    def standby_review(self) -> StandbyReview:
+        eligible: list[UnresolvedInput] = []
+        reviewed: list[UnresolvedInput] = []
+        excluded: list[ExcludedInput] = []
         for row in self.unknown:
-            item = row.public()
             if row.key not in self.eligible_keys:
-                excluded.append(
-                    {
-                        **item,
-                        "reason": (
-                            "owner_input_without_bus_sequence"
-                            if row.sequence is None
-                            else "not_a_direct_reply_from_declared_dependencies"
-                        ),
-                    }
-                )
+                excluded.append(ExcludedInput.excluded(row, reason=(
+                    OwnerInputWithoutBusSequenceExclusion if row.sequence is None
+                    else NotADirectReplyFromDeclaredDependenciesExclusion)))
             elif row.reviewed_for_goal(self.goal_id):
-                reviewed.append(item)
+                reviewed.append(UnresolvedInput.of(row))
             else:
-                eligible.append(item)
-        return {
-            "goal_id": self.goal_id,
-            "wait_for": [target.incarnation.name for target in self.targets],
-            "reviewed_inputs": [item["inputId"] for item in eligible],
-            "messages": eligible,
-            "already_reviewed_inputs": reviewed,
-            "excluded_inputs": excluded,
-        }
+                eligible.append(UnresolvedInput.of(row))
+        return StandbyReview(
+            self.goal_id, tuple(target.incarnation.name for target in self.targets),
+            tuple(item.input_id for item in eligible), tuple(eligible), tuple(reviewed),
+            tuple(excluded))
 
 
 @dataclass(frozen=True, slots=True)
