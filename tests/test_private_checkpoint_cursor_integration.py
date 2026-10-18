@@ -65,7 +65,6 @@ def _root(tmp_path: Path):
 
 async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, monkeypatch):
     root, root_id, comms, first, lookup = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first_turn = await runtime.SelectedExecution(
@@ -99,7 +98,6 @@ async def test_fresh_open_1002_initials_over_eight_mib_remain_exact(tmp_path, mo
 
 async def test_certified_unproven_first_source_cannot_be_skipped(tmp_path, monkeypatch):
     root, root_id, comms, _first, lookup = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     bad, bad_calls = _fake_model(decision="IGNORE", digest_override="b" * 64)
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
@@ -133,7 +131,6 @@ async def test_pending_unknown_append_cold_rebuild_does_not_replay(tmp_path, mon
     import agent_comms.private_bus_checkpoint as checkpoint
 
     root, root_id, comms, first, _lookup = _root(tmp_path)
-    monkeypatch.setattr(runtime, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     turn = await runtime.SelectedExecution(

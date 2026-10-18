@@ -203,7 +203,6 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
     async def forbidden(*_args, **_kwargs):
         raise AssertionError("An unsafe Pi session must be refused before process launch")
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable):
         await TrackedTurnSession.execute(
@@ -238,7 +237,6 @@ def test_any_prelaunch_fsync_failure_denies_launch(
             raise OSError(errno.EIO, "injected directory fsync failure")
         return actual_fsync(descriptor)
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_selected_fsync)
     sessions = tmp_path / "sessions"
     with pytest.raises(NativePiUnavailable, match="could not be committed"):
@@ -276,7 +274,6 @@ def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(
                     break
         return original_fsync(descriptor)
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", record_fsync)
     launch = NativePiRpcLaunch.tracked(
         tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
@@ -328,7 +325,6 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
         launches += 1
         raise RuntimeError("reached spawn only after re-synchronizing visible directories")
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(native.os, "fsync", fail_once)
     monkeypatch.setattr(AttachedChild, "start", launch)
     request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
@@ -348,7 +344,6 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
     import agent_comms.native_pi as native
 
     sessions = tmp_path / "sessions"
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     NativePiRpcLaunch.tracked(
         tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
         model=selected_model,
@@ -392,7 +387,6 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
     async def forbidden(*_argv, **_kwargs):
         raise AssertionError("A redirected policy must be rejected before launch")
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", forbidden)
     with pytest.raises(NativePiUnavailable, match="unsafe ancestor"):
         await TrackedTurnSession.execute(
@@ -431,7 +425,6 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(
         started.append(process)
         return process
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/sleep"))
     monkeypatch.setattr(AttachedChild, "start", launch)
     task = asyncio.create_task(
         TrackedTurnSession.execute(
@@ -513,7 +506,6 @@ send({'type':'agent_settled'})
             **kwargs,
         )
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", launch)
     operation = TrackedTurnSession.execute(
         tmp_path,
@@ -588,7 +580,6 @@ sys.stdin.read()
     async def launch(_argv, **kwargs):
         return await start((sys.executable, "-u", "-c", program, str(received)), **kwargs)
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", launch)
     with pytest.raises(NativePiUnavailable, match="capability preflight failed"):
         await TrackedTurnSession.execute(
@@ -639,7 +630,6 @@ def test_prepared_rpc_launch_requires_exact_package_and_private_resources(
 def test_missing_native_model_fails_before_any_session_side_effect(
     tmp_path: Path, monkeypatch, provider: str, model: str
 ) -> None:
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: Path("/bin/true"))
     with pytest.raises(IdentityConflict):
         NativePiRpcLaunch.tracked(
             tmp_path,

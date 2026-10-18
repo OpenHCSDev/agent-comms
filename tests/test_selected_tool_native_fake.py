@@ -85,7 +85,6 @@ send({'type':'agent_settled'})
             (sys.executable, "-u", str(fake), str(tmp_path / "sessions"), variant), **kwargs
         )
 
-    monkeypatch.setattr(native, "_trusted_package", lambda _: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", launch)
     observed: list[str] = []
 

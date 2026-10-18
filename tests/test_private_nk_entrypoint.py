@@ -47,7 +47,6 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     )
     route_file.chmod(0o600)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     for name in ("AGENT_COMMS_ROOT",):
         monkeypatch.delenv(name, raising=False)
     routed = wire()
@@ -99,7 +98,6 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     assert comms.registry.require("headless").process_identity is None
 
     monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: package)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     launched: list[ParentedProcess] = []
     captured: list[dict[str, str]] = []
     launch = ParentedProcess.launch
@@ -126,7 +124,6 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
     root, root_id, _, _, _ = _root(tmp_path)
     route_file = tmp_path / "route-state" / "active-route.json"
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     active_route.publish_active_route(active_route.ActiveRoute(root, root_id))
     comms = wire()
@@ -165,7 +162,6 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     directory.mkdir(mode=0o755)
     route_file = directory / "active-route.json"
     route = active_route.ActiveRoute(root, root_id)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
     for name in ("AGENT_COMMS_ROOT",):
         monkeypatch.delenv(name, raising=False)
@@ -189,7 +185,6 @@ def test_publish_route_refuses_rival_installed_after_absent_check(tmp_path, monk
     directory.mkdir(mode=0o700)
     route_file = directory / "active-route.json"
     route = active_route.ActiveRoute(root, root_id)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     rival = b'{"rival":"preserve these bytes"}\n'
     original_link = os.link
 
@@ -214,7 +209,6 @@ def test_default_write_guard_orders_old_root_write_before_route_publication(tmp_
     route = active_route.ActiveRoute(root, root_id)
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     exclusive_requested = threading.Event()
     original_flock = active_route.fcntl.flock
 
@@ -286,7 +280,6 @@ def test_default_cli_send_holds_route_guard_until_bus_append(tmp_path, monkeypat
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("AGENT_COMMS_ROOT", raising=False)
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     monkeypatch.setattr(cli, "wire", lambda _root=None: legacy)
     entered_send = threading.Event()
     release_send = threading.Event()
@@ -463,7 +456,6 @@ def test_public_absolute_symlink_handoff_keeps_canonical_root(tmp_path, monkeypa
 
 def test_late_private_owner_can_accept_first_message_before_worker_spawn(tmp_path, monkeypatch):
     root, root_id, comms, _, _ = _root(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     comms.registry.declare(comms.registry.new_thread('late-owner', frozenset(), str(tmp_path)))
     late = comms.registry.require("late-owner")
     lookup = RecordedThreadIncarnation("fixture", late.created_at).lookup
@@ -502,7 +494,6 @@ def test_an_old_version_route_is_refused_by_its_version_and_replaced_only_by_the
     directory.mkdir(mode=0o700)
     route_file = directory / "active-route.json"
     monkeypatch.setattr(active_route, "active_route_path", lambda: route_file)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
     old = json.dumps({"version": 1, "root": str(root), "wire_root_id": root_id,
                       "native_package": str(tmp_path)}).encode()
     route_file.write_bytes(old)

@@ -117,7 +117,6 @@ def test_default_off_and_packaged_extension_selection(
 ) -> None:
     tmp_path.chmod(0o700)
     sessions = tmp_path / "sessions"
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: Path("/bin/true"))
     default = native_pi.NativePiRpcLaunch.tracked(
         tmp_path, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions), model=selected_model
     )

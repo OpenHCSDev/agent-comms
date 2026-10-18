@@ -36,7 +36,6 @@ async def test_durable_private_claim_names_each_changed_authority(
 ):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     observed = []
 
     class InspectedError(Exception):

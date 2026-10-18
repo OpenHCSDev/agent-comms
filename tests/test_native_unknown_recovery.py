@@ -38,7 +38,6 @@ def unknown_owner(directory, authorized, output, exit_allowed):
     root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
     import agent_comms.native_pi as native_pi
 
-    native_pi._trusted_package = lambda path: path
     fake, _calls = _fake_model()
 
     async def fail(*args, **kwargs):
@@ -141,7 +140,6 @@ async def test_abandon_unknown_preserves_evidence_and_allows_only_new_work(
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, source.seq, store)
     fake, calls = _fake_model()
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda path: path)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=Path("/unused")
@@ -316,8 +314,6 @@ print(json.dumps({"type":"response", "id":request["id"],
         assert len(processes) == 1 and processes[0].returncode is not None
         return original_failure(self, boundary)
 
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda path: path)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda path: Path("/bin/true"))
     monkeypatch.setattr(AttachedChild, "start", local_rpc)
     monkeypatch.setattr(DurableTurn, "fail_unknown", after_reap)
     with pytest.raises(NativePiInputNotSent, match="capability preflight failed") as failure:
@@ -354,7 +350,6 @@ print(json.dumps({"type":"response", "id":request["id"],
 @pytest.mark.asyncio
 async def test_revoked_live_failure_keeps_slot_for_recovery(tmp_path, monkeypatch):  # noqa: F811
     root, root_id, comms, _initial, _people = _root(tmp_path, direct=True)
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda path: path)
 
     async def revoke_then_fail(*_args, **_kwargs):
         comms.registry.unregister("beta")

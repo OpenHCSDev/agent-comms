@@ -241,7 +241,6 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     wire_before = comms.bus.log.path.read_bytes()
     published_revision = comms.views.revision()
     runner, calls = _fake_model(decision="IGNORE")
-    monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     outcome = await SelectedExecution(
         root=root, wire_root_id=root_id, owner_name="beta", native_package=tmp_path,

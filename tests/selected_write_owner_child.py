@@ -25,8 +25,6 @@ async def main(base: Path) -> None:
         await asyncio.sleep(0.01)
     else:
         raise RuntimeError("parent did not register child")
-    private_nk_entrypoint._trusted_package = lambda _: None
-    native_pi._trusted_package = lambda _: None
     fake, calls = _fake_model(decision="FULL")
     TrackedTurnSession.execute = fake
     original_load = acp.CommsAgent.load_session

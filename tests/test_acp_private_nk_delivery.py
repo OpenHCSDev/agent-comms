@@ -107,8 +107,6 @@ async def test_acp_new_session_owner_consumes_private_selected_source(tmp_path, 
     monkeypatch.setattr(agent._runtime, "start", noop)
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _: None)
     monkeypatch.setattr(agent.sessions.config, "options", no_options)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     session = await agent.new_session(cwd=str(project), mcp_servers=[])
@@ -147,8 +145,6 @@ async def test_private_owner_rename_migrates_generation_before_canonical_selecte
     assert comms.registry.require("beta").name == "gamma"
     assert not (comms.root / ".private-owner-rename.pending").exists()
 
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "new owner"}, caller=NoThreadCaller())
@@ -172,8 +168,6 @@ async def test_private_rename_does_not_replay_unserved_old_name_selected_source(
             await _accept_visible_deliveries(bus, root_id, store.session.path, lookup, 0, owner_name="beta")
     comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new-after-rename"}, caller=NoThreadCaller())
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     assert await agent.inputs.drain_inbox("beta") == 1
@@ -192,8 +186,6 @@ async def test_private_rename_old_name_backlog_does_not_exhaust_new_recipient_sc
         comms.messaging.send_message("sender", "beta", f"old {index}")
     comms.threads._rename_thread("beta", "gamma")
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "gamma", "body": "new canonical"}, caller=NoThreadCaller())
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     assert await agent.inputs.drain_inbox("beta") == 1
@@ -287,8 +279,6 @@ async def test_private_rename_compensates_registry_failure_with_new_old_owner_ge
 
 async def test_private_rename_intent_fences_inflight_reserved_native_send(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -428,8 +418,6 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
     This tests the backend contract, not a Toad widget or provider acceptance.
     """
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
@@ -480,8 +468,6 @@ async def test_delayed_old_cursor_update_cannot_rebind_new_owner_snapshot(tmp_pa
 async def test_observed_mid_session_claim_change_invalidates_old_proof(tmp_path, monkeypatch):
     """No reattach is required for a registry stop/heartbeat claim_scope bump."""
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     updates = []
@@ -536,8 +522,6 @@ async def test_cursor_refresh_defers_real_lock_contention_but_not_invalid_proof(
     tmp_path, monkeypatch
 ):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     updates = []
@@ -691,8 +675,6 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
         store.participants.register(
             RecordedThreadIncarnation("fixture", alpha.created_at).lookup, "alpha", "alpha", committed=True
         )
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     sent = invoke_tool(
@@ -726,8 +708,6 @@ async def test_acp_private_no_wake_has_delivery_receipt_but_no_model(tmp_path, m
 
 async def test_acp_uncertain_native_turn_is_not_replayed_or_acked(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(fail_on=1)
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     sent = invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
@@ -760,8 +740,6 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
     second.sessions.bindings["beta"] = "beta"
     second.sessions.titles["beta"] = "beta"
     second.sessions.worktrees["beta"] = str(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = separate_session_fake(decision="FULL")
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -811,8 +789,6 @@ async def test_two_acp_instances_cannot_engage_or_send_simultaneously(tmp_path, 
 
 async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     invoke_tool(comms, "comms_send", {"from": "sender", "to": "beta", "body": "selected"}, caller=NoThreadCaller())
@@ -834,8 +810,6 @@ async def test_human_owner_turn_cannot_be_borrowed_by_private_acp(tmp_path, monk
 
 async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     entered, release = asyncio.Event(), asyncio.Event()
 
@@ -869,8 +843,6 @@ async def test_goal_change_between_reservation_and_native_send_refuses(tmp_path,
 
 async def test_stable_existing_goal_allows_separate_selected_direct_reply(tmp_path, monkeypatch):
     comms, agent, _ = _session(tmp_path)
-    monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-    monkeypatch.setattr(native_pi, "_trusted_package", lambda _: None)
     fake, calls = _fake_model(decision="FULL")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     original = comms.goals.update_goal("beta", SetGoalAction(text="Separate ongoing goal"))
