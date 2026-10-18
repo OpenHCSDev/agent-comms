@@ -92,11 +92,6 @@ class BusPageMetrics(TypedRow):
     count: int = field(metadata={"sql": Column(generated="COALESCE(SUM({sender} NOT IN (SELECT value FROM json_each(?))),0)")})
 
 
-@dataclass(frozen=True)
-class BusPageCount(TypedRow):
-    count: int = field(metadata={"sql": Column(generated="COUNT(*)")})
-
-
 class BusPageIndex:
     batch_bytes = 4 * 1024 * 1024
 
@@ -329,13 +324,12 @@ class BusPageIndex:
         counts = {}
         for scope in semantics.scopes:
             predicate, parameters = scope.index_predicate
-            row, = BusPageRow.select(self.connection, row_type=BusPageCount,
+            counts[scope.channel] = BusPageRow.count(self.connection,
                 where=f"seq > ? AND offset < ? AND ({predicate}) "
                       "AND sender NOT IN (SELECT value FROM json_each(?)) "
                       "AND seq NOT IN (SELECT value FROM json_each(?))",
                 parameters=(seen.high_water, before_offset, *parameters,
                             json.dumps(tuple(semantics.viewer_names)), json.dumps(seen.exceptions)))
-            counts[scope.channel] = row.count
         return counts
 
 
@@ -351,5 +345,6 @@ class EmptyBusPageIndex(BusPageIndex):
     def display_snapshot(self, semantics, boundary):
         return DisplaySnapshot.empty(semantics)
 
-    def display_unread(self, semantics, seen, before_offset):
+    def display_unread(self, semantics: DisplayMetricScope, seen: ReadCursor,
+                       before_offset: int) -> dict[str, int]:
         return dict.fromkeys((scope.channel for scope in semantics.scopes), 0)

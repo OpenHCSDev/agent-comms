@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 class DisplayMetricScope:
     scopes: tuple[ChannelDisplayScope, ...]
     viewer_names: frozenset[str]
+
     def inbound(self, message: Message) -> bool:
         return message.sender not in self.viewer_names
 
