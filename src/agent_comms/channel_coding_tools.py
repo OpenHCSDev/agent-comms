@@ -205,8 +205,10 @@ class CodingToolMode(NativeToolMode):
         # The native package manifest verifies each declaration's extension bytes.
         if any(not extension.is_file() for extension in extensions):
             raise SelectedToolDenied("Native tool extension is not installed")
-        return ("--tools", ",".join(tool.declared_name for tool in declarations),
-                *(argument for extension in extensions for argument in ("-e", str(extension))))
+        arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
+                     *(argument for extension in extensions for argument in ("-e", str(extension))))
+        thread = self.owner.comms.registry.require(self.owner.owner_name)
+        return thread.native_launch_arguments(arguments)
 
     async def open_transport(self, turn, ownership) -> OwnerToolSocket:
         return await CodingToolSocket.open(turn, ownership, self.owner)

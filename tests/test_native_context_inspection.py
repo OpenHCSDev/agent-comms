@@ -20,7 +20,7 @@ from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, de
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.task_sources import CurrentTaskScopeSelection, OriginalTaskChange
-from agent_comms.tools import tool_catalog
+from agent_comms.native_tools import NativeRequestTools
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import stored_inputs
 
@@ -135,7 +135,7 @@ async def test_context_manifest_native_acp_and_cli_continuous(
         assert fixture.session.read_bytes() == before_query
         baseline_sequence = owner._comms.bus.log.latest_sequence()
         inputs = ("S5_CONTEXT_FIRST_ORIGINAL", "S5_CONTEXT_QUEUED_ORIGINAL", "S5_CONTEXT_SECOND_ORIGINAL")
-        declaration = next(tool for tool in tool_catalog() if tool['name'] == 'comms_decision')
+        declaration = next(tool for tool in NativeRequestTools.catalog() if tool['name'] == 'comms_decision')
         choice = 'PRIVATE_ORIGINAL_CONTEXT_CHOICE'
         fixture.provider.tool_call = ('comms_decision', {
             'chosen': choice, 'rejected': ['PRIVATE_ORIGINAL_CONTEXT_ALTERNATIVE'],

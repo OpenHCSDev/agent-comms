@@ -7,9 +7,8 @@ from typing import TYPE_CHECKING, NoReturn
 
 from pydantic import JsonValue
 
-from .cli_result import CliResult
+from .cli_result import ToolCatalogResult, ThreadToolCatalogResult
 from .launch_runtime import CallingThreadUnavailable
-from .pi_vocabulary import ServiceTier
 from .presentation import MessageNotification
 from .tool_result import ToolResult
 
@@ -22,16 +21,6 @@ if TYPE_CHECKING:
 class ThreadListing(ToolResult):
     threads: tuple[dict[str, JsonValue], ...]
     sent_notifications: tuple[MessageNotification, ...]
-
-
-@dataclass(frozen=True)
-class ToolCatalogResult(CliResult):
-    tools: tuple[dict[str, object], ...]
-
-
-@dataclass(frozen=True)
-class ThreadToolCatalogResult(ToolCatalogResult):
-    service_tier: ServiceTier
 
 
 class ToolCaller(ABC):

@@ -108,6 +108,7 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
 
     @classmethod
     def decode(cls, name: str) -> type[Self]:
+        cls._member_declarations()
         try:
             member = cls.__registry__[name]
         except (KeyError, TypeError):

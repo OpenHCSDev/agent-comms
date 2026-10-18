@@ -13,7 +13,7 @@ from agent_comms.channels import (
     ViewPredicate,
 )
 from agent_comms.field_codec import FieldCodec
-from agent_comms.tools import tool_catalog
+from agent_comms.native_tools import NativeRequestTools
 
 
 @pytest.mark.parametrize(
@@ -32,7 +32,7 @@ def test_predicate_relation_owns_matching(required, observed, any_of, all_of):
 
 def test_match_declarations_own_names_and_tool_choices():
     assert ViewMatch.names() == ("any_of", "all_of")
-    declaration = next(tool for tool in tool_catalog() if tool["name"] == "comms_set_view")
+    declaration = next(tool for tool in NativeRequestTools.catalog() if tool["name"] == "comms_set_view")
     assert declaration["parameters"]["properties"]["match"]["enum"] == ["any_of", "all_of"]
 
 
