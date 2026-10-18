@@ -8,9 +8,11 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 from __future__ import annotations
 
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from heapq import merge
@@ -20,6 +22,7 @@ from typing import TYPE_CHECKING, TextIO
 from .channel_targets import CommandTarget
 from .coordination_errors import DMPaintedBoundChanged, DMScopeChanged, HistoricalSourceChanged
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
 from .errors import UnregisteredThreadError
 from .private_path import FileRevision
 from .store_files import SharedLock, _store_lock
@@ -281,6 +284,18 @@ class ReadCursor:
             return 0
         return min((self.for_conversation(Conversation(target)).high_water
                     for target in targets), default=0)
+
+    @staticmethod
+    @contextmanager
+    def reading_sql(connection, snapshot, bindings: Mapping[str, tuple[MessageDisplayScope, ReadCursor]]):
+        def encoded(label, sender, target):
+            scope, seen = bindings[label]
+            return json.dumps(FieldCodec.encode(seen.for_conversation(scope.read_key(sender, target, snapshot))))
+        connection.create_function("read_cursor", 3, encoded, deterministic=True)
+        try:
+            yield
+        finally:
+            connection.create_function("read_cursor", 3, None)
 
     @classmethod
     def union(cls, cursors: Iterable[ReadCursor]) -> ReadCursor:
@@ -581,7 +596,7 @@ class CoveredDMDisplayBasis(DMDisplayBasis):
 
     def validate_tail(self, through: int) -> None:
         newest = max(
-            sequence for item in self.displayed.conversations for sequence in item.sequences
+            (sequence for item in self.displayed.conversations for sequence in item.sequences), default=0
         )
         if through > newest:
             raise DMPaintedBoundChanged()
@@ -728,6 +743,16 @@ class ChannelDisplayScope(MessageDisplayScope):
                 f"(target NOT LIKE '#%' AND target IN ({name_marks})) OR "
                 f"EXISTS (SELECT 1 FROM json_each(mentions) WHERE value IN ({name_marks}))",
                 (*targets, *names, *names, *names))
+
+    def capture_all(self, reads, viewer, snapshot, source, index) -> DisplayBasis:
+        if self.any_mode or self.targets is None:
+            return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
+                                         snapshot, source, index)
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            tuple(DisplayedConversation(Conversation(target), (), row.seq)
+                  for target in self.targets
+                  if (row := index.latest_target(target, source.boundary)) is not None),
+            source.bus_identity)
 
     def selection(self, history_revision: FileRevision | None) -> DisplaySelection:
         if self.displayed is None:

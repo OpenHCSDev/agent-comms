@@ -178,10 +178,10 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
             self, message, snapshot, document=document
         )
 
-    def _displayed_recipient(self, message, thread, snapshot, *, document):
+    def displayed_incarnation(self, message, incarnation, snapshot, *, document):
         conversation = self.conversation(message, snapshot)
-        if message.seq in self.cursor(thread.name, snapshot, document=document).for_conversation(conversation):
-            return (thread.incarnation,)
+        if message.seq in self.cursor(incarnation.name, snapshot, document=document).for_conversation(conversation):
+            return (incarnation,)
         return ()
 
     def remove_threads(self, threads: Sequence[Thread]) -> None:

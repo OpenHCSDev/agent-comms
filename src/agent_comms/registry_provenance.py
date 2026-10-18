@@ -149,7 +149,7 @@ class RegistryProvenance(RegistryNames[ThreadProvenance]):
         return name not in self.threads
 
     def displayed_recipient_effect(self, reads, message, thread: ThreadProvenance, *, document=None):
-        return reads._displayed_recipient(message, thread, self, document=document)
+        return reads.displayed_incarnation(message, thread.incarnation, self, document=document)
 
     def historical_recipient(self, recipient: FrozenRecipient) -> ArchivedRecipient | RetiredRecipient:
         """Archives select by original name and birth; duplicate births stay distinct."""

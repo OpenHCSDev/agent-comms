@@ -16,7 +16,7 @@ from agent_comms.assignment_states import (
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import DMScopeChanged, HistoricalSourceChanged
 from agent_comms.coordination_schema import COORDINATION_SCHEMA_VERSION
-from agent_comms.read_basis import HistoricalDisplay
+from agent_comms.read_basis import HistoricalDisplay, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.thread_identity import AgentThreadRole, UserThreadRole
 from agent_comms.threads import Thread
@@ -78,7 +78,7 @@ def test_recorded_display_is_sparse_and_exact_incarnation(archived_notification)
     unpainted, = results[messages[2].seq, messages[2].message_id]
     assert painted.displayed_to == (source.provenance.require("reader").incarnation,)
     assert unpainted.displayed_to == ()
-    assert not live.bus.reads.cursor("reader", live.registry.snapshot())
+    assert live.bus.reads.cursor("reader", live.registry.snapshot()) == ReadCursor()
     ledger = ReadLedger.at(source.root)
     document = ledger.read()
     reused = replace(basis, viewer_created_at=111.0)

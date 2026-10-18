@@ -6,12 +6,13 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
+from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
 from agent_comms.comms import Comms, wire
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import OlderTraversal
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
-from agent_comms.read_basis import Conversation, ConversationCursor, NamedViewer, ReadCursor
+from agent_comms.read_basis import ChannelDisplayScope, Conversation, ConversationCursor, NamedViewer, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.presentation import ReadThrough
 
@@ -380,7 +381,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                     comms.views.mark_channel_view_read(
                         target, worktree=str(tmp_path), mark=ReadThrough(through, proof)
                     )
-            except ValueError as error:
+            except (DMScopeChanged, DMPaintedBoundChanged) as error:
                 # A stale incarnation is a refused paint, not permission to
                 # acknowledge a new peer using an old page.
                 stale_participant = any(
@@ -388,10 +389,11 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                     for item in proof.displayed.conversations
                     for p in item.conversation.participants
                 )
-                changed_projection = kind == "channel" and str(error).startswith(
-                    "Channel display changed"
+                snapshot = comms.registry.snapshot()
+                changed_projection = kind == "channel" and proof != ChannelDisplayScope.capture(
+                    comms.views.presentation.catalog.read().require_channel(target, snapshot.threads), snapshot,
                 )
-                assert stale_participant or changed_projection, str(error)
+                assert stale_participant or changed_projection or not proof.displayed.message_count, str(error)
             else:
                 acknowledged.update(record(proof.displayed.through(through)))
         elif operation == "rebind":

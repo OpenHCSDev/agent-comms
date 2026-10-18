@@ -580,24 +580,9 @@ class OpenedRouteCounts(BusRouteCounts):
             "through": self.source.through,
         }
 
-    @contextmanager
-    def reading_cursors(self, seen: Mapping[str, ReadCursor]) -> Iterator[None]:
-        """Borrow each route's conversation cursor for this SQL read only."""
-        self.connection.create_function(
-            "read_cursor", 3,
-            lambda actor, sender, target: json.dumps(FieldCodec.encode(
-                seen[actor].for_conversation(
-                    self.deliveries[actor].read_key(sender, target, self.registry),
-                ),
-            )), deterministic=True,
-        )
-        try:
-            yield
-        finally:
-            self.connection.create_function("read_cursor", 3, None)
-
     def _read_counts(self, seen: Mapping[str, ReadCursor]) -> list[RouteUnread]:
-        with self.reading_cursors(seen):
+        with ReadCursor.reading_sql(self.connection, self.registry,
+                {actor: (self.deliveries[actor], cursor) for actor, cursor in seen.items()}):
             return RouteUnread.read(self.connection.execute(
                 f'''WITH {self._requests}, cursors AS MATERIALIZED (
                     SELECT request.*,read_cursor(actor,sender,target) AS cursor FROM requests AS request
@@ -621,7 +606,7 @@ class OpenedRouteCounts(BusRouteCounts):
                 self._request_bindings(self.deliveries)))
 
     def _read_deliveries(self, actor: str, seen: ReadCursor, after: int) -> list[UnseenDelivery]:
-        with self.reading_cursors({actor: seen}):
+        with ReadCursor.reading_sql(self.connection, self.registry, {actor: (self.deliveries[actor], seen)}):
             return UnseenDelivery.read(self.connection.execute(
                 f'''WITH {self._requests}, cursors AS MATERIALIZED (
                     SELECT request.*,read_cursor(actor,sender,target) AS cursor FROM requests AS request

@@ -79,8 +79,8 @@ class ExternalRecipientActivity(RecipientActivity):
     incarnation: ThreadIncarnation
 
     def after_inbox_read(self, notification, source, reads, document, snapshot):
-        if self.incarnation.current(snapshot) and source.message.seq in reads.cursor(
-            self.incarnation.name, snapshot, document=document
+        if self.incarnation.current(snapshot) and reads.displayed_incarnation(
+            source.message, self.incarnation, snapshot, document=document
         ):
             return replace(
                 notification,

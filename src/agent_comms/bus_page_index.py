@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, BinaryIO, Literal
 
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import MalformedRecord
 from .bus_activity_index import ChannelActivity
 from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
@@ -343,25 +343,17 @@ class BusPageIndex:
     def display_unread(self, scopes: tuple[ChannelDisplayScope, ...], viewer_names: frozenset[str],
                        seen: ReadCursor, before_offset: int, snapshot: RegistryProvenance) -> dict[str, int]:
         counts = {}
-        try:
-            for scope in scopes:
-                self.connection.create_function(
-                    "read_cursor", 2,
-                    lambda sender, target: json.dumps(FieldCodec.encode(
-                        seen.for_conversation(scope.read_key(sender, target, snapshot)),
-                    )), deterministic=True,
-                )
+        for scope in scopes:
+            with ReadCursor.reading_sql(self.connection, snapshot, {scope.channel: (scope, seen)}):
                 predicate, parameters = scope.index_predicate
                 counts[scope.channel] = BusPageRow.count(self.connection,
                     where=f"seq > ? AND offset < ? AND ({predicate}) "
                           "AND sender NOT IN (SELECT value FROM json_each(?)) "
-                          "AND seq > json_extract(read_cursor(sender,target),'$.high_water') "
+                          "AND seq > json_extract(read_cursor(?,sender,target),'$.high_water') "
                           "AND seq NOT IN (SELECT value FROM "
-                          "json_each(json_extract(read_cursor(sender,target),'$.exceptions')))",
+                          "json_each(json_extract(read_cursor(?,sender,target),'$.exceptions')))",
                     parameters=(seen.lower_bound(scope, snapshot), before_offset, *parameters,
-                                json.dumps(tuple(viewer_names))))
-        finally:
-            self.connection.create_function("read_cursor", 2, None)
+                                json.dumps(tuple(viewer_names)), scope.channel, scope.channel))
         return counts
 
 
