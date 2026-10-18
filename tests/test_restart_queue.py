@@ -171,7 +171,7 @@ async def test_actual_queued_restart_retains_history_and_accepts_new_input(
             "agent_comms.cli",
             "--root",
             str(comms.root),
-            "invoke",
+            "tool",
             "--tool",
             "comms_start",
             "--arguments",
