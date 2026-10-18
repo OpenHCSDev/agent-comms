@@ -269,17 +269,12 @@ class TurnRunner:
                 reply = await self.runtime.request_permission(
                     session_id,
                     controller,
-                    {
-                        "toolCall": tool_call.model_dump(by_alias=True, exclude_none=True),
-                        "options": [
-                            option.model_dump(by_alias=True, exclude_none=True)
-                            for option in options
-                        ],
-                    },
+                    tool_call.model_dump(by_alias=True, exclude_none=True),
+                    [option.model_dump(by_alias=True, exclude_none=True) for option in options],
                 )
-                if not isinstance(reply, dict):
+                if reply is None:
                     return pi.CancelledUiChoice()
-                outcome = reply
+                outcome = reply.outcome.model_dump(by_alias=True, exclude_none=True)
             elif controller is self.sessions.client:
                 response = await asyncio.wait_for(
                     controller.request_permission(
