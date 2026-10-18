@@ -57,13 +57,13 @@ _TAIL_BYTES = 4096
 
 
 @dataclass(frozen=True)
-class CapturedWireSource(Generic[OriginalSource]):
+class CapturedWireSource[OriginalSource, Value = OriginalSource]:
     """One inspection's original bytes and decoded value; no open store or permit."""
 
     source: PrefixSource
     pointer: WireSourcePointer[OriginalSource]
     raw: bytes
-    value: OriginalSource
+    value: Value
 
 
 @dataclass(frozen=True)
@@ -820,7 +820,7 @@ class ContextManifestReference:
 class ContextManifestPage:
     """One page of original resources and source-bound cuts in either direction."""
 
-    resources: tuple[CapturedWireSource[ContextManifest], ...]
+    resources: tuple[CapturedWireSource[RecordedContextManifest, ContextManifest], ...]
     older: BeforeContextManifest | None
     newer: AfterContextManifest | None
 
@@ -847,7 +847,9 @@ class RecordedContextManifestSources(
     max_page_bytes: ClassVar[int] = 512 * 1024
 
     @classmethod
-    def latest(cls, log, thread):
+    def latest(
+        cls, log: WireLog, thread: ThreadIncarnation,
+    ) -> CapturedWireSource[RecordedContextManifest, ContextManifest] | None:
         with log.certified_read() as source:
             prefix = source.witness
             rows = cls.select(source.connection, thread=thread, order_by=("offset",),
@@ -857,7 +859,11 @@ class RecordedContextManifestSources(
         return next(iter(resolved.values()), None)
 
     @classmethod
-    def resolve(cls, log, captured, prefix):
+    def resolve(
+        cls, log: WireLog, captured: tuple[tuple[RecordedContextManifestSources, bytes], ...],
+        prefix: PrefixWitness,
+    ) -> dict[RecordedContextManifestSources, CapturedWireSource[
+        RecordedContextManifest, ContextManifest]]:
         """Resolve only referenced predecessors and entries, decoding outside locks."""
         rows = {row.offset: row for row, _ in captured}
         raw = {row.offset: value for row, value in captured}
@@ -868,18 +874,16 @@ class RecordedContextManifestSources(
             references = set()
             for offset in pending:
                 for segment in recorded[offset].segments:
-                    if segment.previous is not None:
-                        if not 0 <= segment.previous < offset:
-                            raise RelationViolationError("Context predecessor is not an earlier record")
-                        if segment.previous not in recorded:
-                            references.add(segment.previous)
+                    references.update(segment.predecessors(offset))
+            references.difference_update(recorded)
             if not references:
                 break
             with log.certified_read() as source:
                 source.witness.require_read_window(prefix)
                 predecessors = tuple(row for offset in references for row in cls.select(
                     source.connection, offset=offset))
-                captured_prior = tuple((row, row.read_bytes(source.stream)) for row in predecessors)
+                captured_prior = tuple(
+                    (row, row.read_bytes(source.stream)) for row in predecessors)
             if {row.offset for row, _ in captured_prior} != references:
                 raise RelationViolationError("Recorded context predecessors are incomplete")
             pending = set()
@@ -891,7 +895,7 @@ class RecordedContextManifestSources(
                 pending.add(row.offset)
         references = {reference for manifest in recorded.values()
                       for segment in manifest.segments for reference in segment.entries}
-        entries = {}
+        entries: dict[ContextEntryReference, SegmentManifest] = {}
         if references:
             with log.certified_read() as source:
                 source.witness.require_read_window(prefix)
@@ -901,16 +905,18 @@ class RecordedContextManifestSources(
                 geometries = {(row.offset, row.length): row for row in entry_rows}
                 entry_bytes = tuple(row.read_bytes(source.stream) for row in geometries.values())
             for value in entry_bytes:
-                for entry in WireRecord.from_wire(json.loads(value), prefix.root_id).context_entries():
+                record = WireRecord.from_wire(json.loads(value), prefix.root_id)
+                for entry in record.context_entries():
                     if entry.reference in references:
                         entries[entry.reference] = entry.manifest
             if entries.keys() != references:
                 raise RelationViolationError("Recorded context entries are incomplete")
-        values = {}
+        values: dict[int, ContextManifest] = {}
         for offset in sorted(recorded):
             manifest = recorded[offset]
-            if any(values[segment.previous].thread != manifest.thread
-                   for segment in manifest.segments if segment.previous is not None):
+            if any(values[predecessor].thread != manifest.thread
+                   for segment in manifest.segments
+                   for predecessor in segment.predecessors(offset)):
                 raise RelationViolationError("Context predecessor belongs to another owner")
             values[offset] = manifest.restore(entries, values)
         return {row: CapturedWireSource(prefix.source_identity, row, value, values[row.offset])
@@ -920,7 +926,7 @@ class RecordedContextManifestSources(
     def for_owner(
         cls, log: WireLog, name: str, registry: Registration, *,
         cursor: ContextManifestCursor | None = None,
-        previous: tuple[CapturedWireSource[ContextManifest], ...] = (),
+        previous: tuple[CapturedWireSource[RecordedContextManifest, ContextManifest], ...] = (),
         limit: int | None = None,
     ) -> ContextManifestPage:
         """Acquire one bounded page and its entries; decode outside both locks.
@@ -984,7 +990,8 @@ class RecordedContextManifestSources(
         changed = cls.resolve(log, captured, prefix)
         for row, resource in changed.items():
             if resource.value.thread.resolved(snapshot) != incarnation:
-                raise RelationViolationError("Context source differs from recorded owner.")
+                raise RelationViolationError(
+                    "Context source differs from recorded owner.")
             resources[row] = resource
         return ContextManifestPage(tuple(resources[row] for row in rows), older, newer)
 

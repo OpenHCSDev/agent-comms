@@ -69,3 +69,40 @@ def test_changed_text_and_replaced_transcript_do_not_reuse_old_values(tmp_path):
     page = comms.bus.log.context_manifest_page(owner.name, comms.registry)
     assert page.resources[-1].value.segments[0].captured_text == ('Changed system',)
     assert len(page.resources[-1].value.segments[2].contributors) == 1
+
+
+def test_newly_captured_text_is_not_replaced_by_an_empty_predecessor(tmp_path):
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    first = context(owner, tmp_path, 1, 1)
+    first = replace(first, segments=(replace(first.segments[0], captured_text=()),
+                                     *first.segments[1:]))
+    comms.bus.log.record_context(first)
+    second = context(owner, tmp_path, 1, 2)
+    comms.bus.log.record_context(second)
+    page = comms.bus.log.context_manifest_page(owner.name, comms.registry)
+    assert page.resources[-1].value.segments[0].captured_text == second.segments[0].captured_text
+
+
+def test_request_provenance_does_not_change_immutable_entry_membership(tmp_path):
+    comms, _ = _root(tmp_path)
+    owner = comms.registry.require('Alice')
+    first = context(owner, tmp_path, 328, 1)
+    comms.bus.log.record_context(first)
+    second = context(owner, tmp_path, 330, 2)
+    transcript = second.segments[2]
+    contributors = tuple(replace(child, provenance=tuple(
+        replace(source, request_generation=2, context_digest='b' * 64)
+        if isinstance(source, NativeProvenance) else source for source in child.provenance))
+        for child in transcript.contributors)
+    second = replace(second, segments=(*second.segments[:2],
+                                       replace(transcript, contributors=contributors)))
+    comms.bus.log.record_context(second)
+    page = comms.bus.log.context_manifest_page(owner.name, comms.registry)
+    actual = page.resources[-1]
+    recorded = actual.pointer.decode_bytes(actual.raw, actual.source.root_id)
+    assert len(actual.value.segments[2].contributors) == 330
+    assert recorded.segments[2].inherited_entries == 328
+    assert len(recorded.segments[2].entries) == 2
+    assert len(actual.raw) < 3000
+    assert actual.value.segments[2].recorded_public_text({}) == transcript.recorded_public_text({})
