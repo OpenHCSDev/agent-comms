@@ -194,7 +194,7 @@ def test_read_progress_during_fetch_does_not_invalidate_page(
         ReadLedger.conversation(message, snapshot): ConversationCursor(message.seq)
         for message in messages.values() if message.seq in expected
     })
-    assert all(sequence in cursor for sequence in expected)
+    assert all(message.seq in cursor.for_conversation(ReadLedger.conversation(message, snapshot)) for message in messages.values() if message.seq in expected)
 
 
 def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):
