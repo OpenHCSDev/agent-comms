@@ -13,7 +13,6 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
-from . import agent_events as events
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
@@ -1343,3 +1342,8 @@ class McpLiveAcknowledgement:
             self.servers
         ):
             raise ValueError("Invalid external MCP server collection")
+
+
+# Core observations refer to the payload types above; conversion methods use
+# this module only after those declarations are complete.
+from . import agent_events as events  # noqa: E402

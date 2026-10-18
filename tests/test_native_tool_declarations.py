@@ -22,7 +22,7 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
         label = "Inspect"
         preview_fields = ('query',)
 
-    event = ToolDeclaration.start("case", "inspect_fixture", {"query": "new declaration"})
+    event = events.ToolStart.from_call("case", "inspect_fixture", {"query": "new declaration"})
     assert (event.title, event.kind) == ("Inspect new declaration", "search")
     owner, received = acp_tools
     await owner._emit_event("declared-tool", event, owner.sessions.client)
@@ -42,10 +42,10 @@ async def test_new_tool_declaration_drives_presentation_without_coding_permissio
     assert {type(tool) for tool in examples} == set(CodingTool.members_with(CodingTool))
     for tool in examples:
         call = type(tool).from_call(tool.declared_name, tool.arguments, call_id="case")
-        event = ToolDeclaration.start("case", tool.declared_name, call.tool.arguments)
+        event = events.ToolStart.from_call("case", tool.declared_name, call.tool.arguments)
         assert event.kind == tool.acp_kind and event.args == tool.arguments
         assert call.tool == tool and tool.arguments[tool.preview_fields[0]] in event.title
-    unknown = ToolDeclaration.start("unknown", "external_extension", {"private": "preserved"})
+    unknown = events.ToolStart.from_call("unknown", "external_extension", {"private": "preserved"})
     assert (unknown.title, unknown.kind, unknown.args) == (
         "external_extension",
         "other",
@@ -58,7 +58,7 @@ async def test_pattern_search_metadata_reaches_official_acp(acp_tools, name, lab
     from agent_comms.transcript_events import ToolStartTranscript
 
     arguments = {"pattern": "shared preview"}
-    event = ToolDeclaration.start("pattern-case", name, arguments)
+    event = events.ToolStart.from_call("pattern-case", name, arguments)
     recorded = ToolStartTranscript(tool_call_id="pattern-case", tool_name=name, raw_input=arguments)
     assert (event.title, event.kind) == (f"{label} shared preview", "search")
     assert (recorded.title, recorded.kind) == (event.title, event.kind)
@@ -88,7 +88,7 @@ def test_recorded_metadata_does_not_require_an_executable_request(name, label, k
     end = ToolEndTranscript(tool_call_id="saved", tool_name=name, text="saved result")
     assert (start.title, start.kind, start.raw_input) == (label, kind, foreign)
     assert (end.title, end.kind) == (label, kind)
-    assert ToolDeclaration.start("saved", name, foreign).title == label
+    assert events.ToolStart.from_call("saved", name, foreign).title == label
     from agent_comms.field_codec import FieldCodec
     for invalid in (17, None, [["path", "external.txt"]]):
         with pytest.raises((TypeError, ValueError)):
