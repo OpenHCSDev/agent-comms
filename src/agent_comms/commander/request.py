@@ -19,21 +19,19 @@ from ..todos import Todo
 from .order import COMMS, ME, CommanderVerb, RuledVerb, hhmm
 
 
-def open_request() -> tuple[Goal, tuple[Todo, ...]] | None:
-    """The commander's active Goal when it is an owner request, with the orders serving it."""
+def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
+    """The commander's open owner requests and their undelivered orders."""
     thread = COMMS.registry.require(ME)
-    goal = thread.active_goal
-    served = None if goal is None else goal.order.serving(goal, COMMS.goals, thread.incarnation)
-    return None if goal is None or served is None else (goal, served)
+    return thread.goal.active().project(
+        lambda goal: goal.order.open_requests(goal, COMMS.goals, thread.incarnation), tuple,
+    )
 
 
 def stalled() -> list[str]:
-    match open_request():
-        case (goal, ()):
-            return [
-                f"REQUEST STALLED: {goal.id} {goal.text} -> order its next step or mark it done"
-            ]
-    return []
+    return [
+        f"REQUEST STALLED: {goal.id} {goal.text} -> order its next step or mark it done"
+        for goal, served in open_requests() if not served
+    ]
 
 
 class RequestVerb(CommanderVerb):
@@ -47,7 +45,7 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
 
     def run(self) -> None:
         goal = COMMS.goals.update_goal(ME, SetGoalAction(text=self.text, order=RequestGoalOrder()))
-        print(goal.id if goal else "No request recorded.")
+        print(goal.require().id)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -66,14 +64,13 @@ class RequestListVerb(RequestVerb, declared_name="list"):
     help = "the open request and the open orders serving it"
 
     def run(self) -> None:
-        request = open_request()
-        if request is None:
+        requests = open_requests()
+        if not requests:
             print("No open request.")
-            return
-        goal, served = request
-        print(f"{goal.id} {goal.text}")
-        for todo in served:
-            print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
+        for goal, served in requests:
+            print(f"{goal.id} {goal.text}")
+            for todo in served:
+                print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
 
 
 def main(a: list[str]) -> None:

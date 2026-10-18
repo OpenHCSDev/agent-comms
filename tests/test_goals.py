@@ -16,10 +16,9 @@ from agent_comms.goal_actions import (
     SetGoalAction,
 )
 from agent_comms.goal_states import ActiveGoal, BlockedGoal, CompletedGoal, PausedGoal
-from agent_comms.goals import Goal
-from agent_comms.threads import Thread
-from agent_comms.tools import ToolRequest
+from agent_comms.goals import Goal, NoGoal
 from agent_comms.tool_caller import ThreadCaller
+from agent_comms.tools import ToolRequest
 
 
 def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
@@ -47,7 +46,7 @@ def test_goal_survives_rename_and_reregistration(tmp_path, monkeypatch):
         )
     assert comms.registry.require("worker").goal == replacement
     comms.goals.update_goal("worker", ClearGoalAction())
-    assert wire(tmp_path).registry.require("worker").goal is None
+    assert wire(tmp_path).registry.require("worker").goal == NoGoal()
     with pytest.raises(ValueError, match="No goal"):
         comms.goals.update_goal("worker", ActiveGoalAction())
     with pytest.raises(ValueError, match="requires"):
@@ -83,7 +82,7 @@ def test_explicit_resume_tool_keeps_goal_id_and_rejects_stale_calls(tmp_path, mo
     with pytest.raises(ValueError, match="cannot be resumed"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale blocked update"}, caller=ThreadCaller("worker"))
     comms.goals.update_goal("worker", SetGoalAction(text="Replacement goal"))
-    with pytest.raises(ValueError, match="cannot be resumed"):
+    with pytest.raises(ValueError, match="goal was replaced or cleared"):
         resume.invoke(comms, {"goal_id": goal.id, "progress": "stale replaced goal"}, caller=ThreadCaller("worker"))
 
 

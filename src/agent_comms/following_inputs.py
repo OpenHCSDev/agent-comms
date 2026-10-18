@@ -10,6 +10,7 @@ from .acp_extension import LiveQueueScope
 from .agent_backend import TurnInbox
 from .coordinator import Coordination
 from .owned_send import OwnedSend
+from .goal_attempts import NoLaunchPermit
 from .queued_input import DeliveredInput, InputHandoffRefused
 from .thread_identity import ClaimedIdentity, TurnId
 from .turn_input_source import AcceptedFollowingInput, SelectedOriginalInput
@@ -92,7 +93,7 @@ class OwnerFollowingInputs(FollowingInputs):
             turn=TurnId(lease.turn_id),
             claim_scope=lease.claimed_generation,
             original=original,
-            goal_permit=None,
+            goal_permit=NoLaunchPermit(),
         )
         self.scope = LiveQueueScope(
             self.session_id,

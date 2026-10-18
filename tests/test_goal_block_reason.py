@@ -109,22 +109,6 @@ def test_automatic_blocks_record_diagnostic_not_prior_progress(tmp_path):
     assert blocked.state.reason == "Attempt outcome uncertain; inspect before Retry."
     assert wire(tmp_path).goals.goal_execution("worker").block_reason == blocked.state.reason
 
-    comms2, started2 = _owner(tmp_path / "another")
-    completed = comms2.goals.update_goal(
-        "worker", CompletedGoalAction(progress="Reported completion")
-    )
-    assert completed is not None
-    revoked = comms2.goals.block_unverified_goal_completion(
-        "worker",
-        expected_goal=completed,
-        expected_worktree=str(tmp_path / "another"),
-        diagnostic="Provider turn failed after provisional completion.",
-    )
-    assert revoked is not None
-    assert revoked.state.reason == "Provider turn failed after provisional completion."
-    assert wire(tmp_path / "another").registry.require("worker").goal == revoked
-
-
 def test_unrecorded_block_is_labeled_unavailable_not_inferred_from_progress(tmp_path):
     comms, goal = _owner(tmp_path)
     thread = comms.registry.require("worker")

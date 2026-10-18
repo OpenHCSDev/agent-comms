@@ -13,7 +13,7 @@ import pytest
 
 import agent_comms.locked_store as locked_store
 from agent_comms.comms import wire
-from agent_comms.read_basis import DMDisplayBasis, EmptyDMDisplayBasis
+from agent_comms.read_basis import DMDisplayBasis, EmptyTail
 from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged, TranscriptChanged
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.threads import Thread
@@ -192,7 +192,7 @@ def test_empty_dm_basis_is_no_op_without_creating_read_ledger(tmp_path: Path):
     comms = wire(tmp_path)
     comms.registry.declare(_thread(tmp_path, "peer"))
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path))
-    assert isinstance(page.display_basis, EmptyDMDisplayBasis)
+    assert page.display_basis.displayed.tail == EmptyTail()
     comms.views.mark_dm_view_read(
         "peer", worktree=str(tmp_path), through=0, expected_display_basis=page.display_basis,
     )
