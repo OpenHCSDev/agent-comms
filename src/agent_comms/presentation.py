@@ -721,8 +721,24 @@ def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]]):
     return field(metadata={"paths": paths})
 
 
+class NoRevision:
+    __slots__ = ()
+
+    def registrations_changed_since(self, other: WireRevision) -> bool:
+        return True
+
+    def stores_changed_since(self, other: WireRevision) -> bool:
+        return True
+
+    def sidebar_changed_since(self, other: WireRevision) -> bool:
+        return True
+
+    def notification_read_changed(self, request, current: WireRevision) -> bool:
+        return True
+
+
 @dataclass(frozen=True, slots=True)
-class WireRevision:
+class WireRevision(NoRevision):
     """One observation of every Comms store a view derives from, by name."""
 
     registry: tuple[FileRevision, ...] = revision_source(lambda views: (views.registry.store.path,))
@@ -850,6 +866,9 @@ class WireRevision:
     def external_transcripts_changed_since(self, earlier: WireRevision) -> bool:
         """CLI drafts and finished items changed, independently of coordination status."""
         return self.external_transcripts != earlier.external_transcripts
+
+    def notification_read_changed(self, request, current: WireRevision) -> bool:
+        return request.changed_since(current, self)
 
     def notifications_changed_since(self, earlier: WireRevision) -> bool:
         """Recipient state depends on assignments, presence, bus replies and read marks."""
