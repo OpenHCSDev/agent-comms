@@ -32,7 +32,7 @@ from typing import TYPE_CHECKING, ClassVar, Generic, Self, TypeVar, final
 
 from acp import RequestError
 
-from agent_comms.acp_extension import TranscriptDraftUpdate, TranscriptSnapshotUpdate
+from agent_comms.acp_extension import TranscriptSnapshotUpdate
 from agent_comms.active_route import CommsRoute
 from agent_comms.activity import ObservedActivity
 from agent_comms.bus_route_counts import RouteIndexRebuilding
@@ -375,19 +375,6 @@ class SubscribeTranscript(ReadTranscript):
 
 
 @dataclass(frozen=True)
-class ReadTranscriptUpdate(TranscriptRequest[TranscriptSnapshotUpdate | TranscriptDraftUpdate]):
-    """Refresh a published page, reading only its draft while its contents agree."""
-
-    previous: TranscriptReadIdentity | None = None
-
-    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
-        previous = self.previous
-        if previous is not None and previous.same_snapshot(read.identity):
-            return TranscriptDraftUpdate(read.identity, read.current_draft())
-        return TranscriptSnapshotUpdate.from_read(read)
-
-
-@dataclass(frozen=True)
 class RefreshTranscript(ReadRequest):
     """A published page's witness: None while its content is current, else the current page."""
 
@@ -630,8 +617,7 @@ class NotificationReading(Observation[ObserveNotifications]):
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         for request in self.request.reads:
-            previous = self.revisions.get(request)
-            if previous is not None and not request.changed_since(revision, previous):
+            if request in self.revisions and not request.changed_since(revision, self.revisions[request]):
                 continue
             try:
                 request.require_root(comms)
