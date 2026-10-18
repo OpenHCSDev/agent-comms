@@ -77,10 +77,75 @@ class InterestRequest(ObservationRequest):
     def observation(self) -> Observation: ...
 
     def receive(self, service: ObservationService) -> None:
-        observation = self.observation()
+        service.interest.receive(self, service)
+
+
+class ObservationInterestStopped(RuntimeError):
+    """The observer still serves acquired reads but accepts no new interests."""
+
+
+class ObservationInterest(ABC):
+    @abstractmethod
+    def receive(self, request: InterestRequest, service: ObservationService) -> None: ...
+
+    @abstractmethod
+    def stop(self) -> ObservationInterest: ...
+
+    def remove(self, kind: type[Observation]) -> None:
+        pass
+
+    def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
+        pass
+
+    async def observe(self, service: ObservationService, revision: WireRevision,
+                      attempted: set[int]) -> None:
+        pass
+
+
+class StoppedObservationInterest(ObservationInterest):
+    def receive(self, request: InterestRequest, service: ObservationService) -> None:
+        raise ObservationInterestStopped("The observer has stopped accepting interests")
+
+    def stop(self) -> ObservationInterest:
+        return self
+
+
+class LiveObservationInterest(ObservationInterest):
+    def __init__(self) -> None:
+        self.observations: dict[type[Observation], Observation] = {}
+
+    def receive(self, request: InterestRequest, service: ObservationService) -> None:
+        observation = request.observation()
         kind = type(observation)
-        service.observations[kind] = observation.for_interest(service.observations.get(kind))
+        self.observations[kind] = observation.for_interest(self.observations.get(kind))
         service.observe_again()
+
+    def stop(self) -> ObservationInterest:
+        self.observations.clear()
+        return StoppedObservationInterest()
+
+    def remove(self, kind: type[Observation]) -> None:
+        self.observations.pop(kind, None)
+
+    def prepared(self, observation: SidebarReading, service: ObservationService) -> None:
+        if self.observations.get(type(observation)) is observation:
+            observation.sent = None
+            service.observe_again()
+
+    async def observe(self, service: ObservationService, revision: WireRevision,
+                      attempted: set[int]) -> None:
+        for kind, observation in tuple(self.observations.items()):
+            await service.answer_pending(attempted)
+            if self.observations.get(kind) is not observation:
+                continue
+            for result in observation.read(service.comms, revision):
+                if result is not None:
+                    service.send(result)
+                await service.answer_pending(attempted)
+                if self.observations.get(kind) is not observation:
+                    break
+            if self.observations.get(kind) is observation:
+                observation.after_read(service)
 
 
 InterestT = TypeVar("InterestT", bound=InterestRequest)
@@ -474,9 +539,7 @@ class SidebarReading(Observation[ObserveSidebar]):
         )
 
     def prepared(self, service: ObservationService) -> None:
-        if service.observations.get(type(self)) is self:
-            self.sent = None
-            service.observe_again()
+        service.interest.prepared(self, service)
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         while True:
@@ -513,7 +576,7 @@ class SidebarSent:
 @dataclass(frozen=True)
 class StopSidebar(ObservationRequest):
     def receive(self, service: ObservationService) -> None:
-        service.observations.pop(SidebarReading, None)
+        service.interest.remove(SidebarReading)
 
 
 @dataclass(frozen=True)
@@ -521,7 +584,7 @@ class StopObserving(ObservationRequest):
     """Views are retiring; finish their outstanding reads without observing more state."""
 
     def receive(self, service: ObservationService) -> None:
-        service.observations.clear()
+        service.interest = service.interest.stop()
 
 
 @dataclass(frozen=True)
@@ -586,7 +649,8 @@ class ThreadReading(Observation[ObserveThreads]):
     def for_interest(self, previous: Self | None) -> Self:
         if previous is not None:
             self.observed = previous.observed
-        return self
+            self.initial = self.request.names - previous.request.names
+        return super().for_interest(previous)
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         previous = self.observed
@@ -819,7 +883,7 @@ class ObservationService:
     def __init__(self, comms, connection: Connection):
         self.comms = comms
         self.connection = connection
-        self.observations: dict[type[Observation], Observation] = {}
+        self.interest: ObservationInterest = LiveObservationInterest()
         self.changed = asyncio.Event()
         self.revision: WireRevision | None = None
         self.observe_due = True
@@ -835,6 +899,7 @@ class ObservationService:
         if self.closed:
             return
         self.closed = True
+        self.interest = self.interest.stop()
         for asking in tuple(self.owner_reads.values()):
             asking.cancel()
         self.changed.set()
@@ -896,23 +961,7 @@ class ObservationService:
         if self.revision is None or revision.stores_changed_since(self.revision):
             self.send(RevisionObserved(revision))
         self.revision = revision
-        for kind, observation in tuple(self.observations.items()):
-            # Fresh foreground requests take precedence at every read boundary.
-            await self.answer_pending(attempted)
-            if self.closed:
-                return
-            if self.observations.get(kind) is not observation:
-                continue
-            for result in observation.read(self.comms, revision):
-                if result is not None:
-                    self.send(result)
-                await self.answer_pending(attempted)
-                if self.closed:
-                    return
-                if self.observations.get(kind) is not observation:
-                    break
-            if self.observations.get(kind) is observation:
-                observation.after_read(self)
+        await self.interest.observe(self, revision, attempted)
 
     async def expire(self) -> None:
         """Time-based sidebar state belongs to the sidebar observer, not file watching."""
@@ -944,7 +993,6 @@ class ObservationService:
                 watching.cancel()
                 expiring.cancel()
                 self.pending.clear()
-                self.observations.clear()
                 self.comms.views.transcript_reads.close()
 
 
