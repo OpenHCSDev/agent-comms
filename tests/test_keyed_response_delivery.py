@@ -1,5 +1,7 @@
 """Real bus/SQL reply delivery, awareness and missing-native-proof boundaries."""
 
+from agent_comms.wake_candidate_index import RebuildIndex
+
 from pathlib import Path
 
 import pytest
@@ -59,7 +61,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         from agent_comms.wake_candidate_index import WakeCandidateIndex
 
         candidates = WakeCandidateIndex(case.bus.log)
-        assert candidates.maintain(rebuild=True)
+        assert candidates.maintain(start=RebuildIndex())
         page = candidates.page(
             root_id=case.root_id, recipient_lookup=lookup, after_seq=0,
             required_through_seq=response.seq,

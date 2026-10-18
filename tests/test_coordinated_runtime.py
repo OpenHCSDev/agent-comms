@@ -63,7 +63,9 @@ from agent_comms.publisher import Publisher
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.tracked_turn import TrackedTurnSession
-from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCandidateIndex
+from agent_comms.wake_candidate_index import (
+    ProjectionUnavailableError, WakeCandidateIndex, RebuildIndex,
+)
 from agent_comms.context_segments.wake import SelectedWakeSegment
 from agent_comms.turn_context import TurnContext
 from agent_comms.wake_policy import PassiveWake
@@ -133,7 +135,7 @@ def _root(
         assert accepted.value.member_count == len(initial.audience.recipients)
     # The global fixture deliberately disables background candidate workers.
     # Tests that consume selected awareness own their deterministic projection.
-    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     return root, root_id, comms, initial, people
 
 
@@ -473,7 +475,7 @@ async def test_production_awareness_caller_includes_or_omits_without_losing_orig
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
     if available:
-        assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
+        assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     else:
 
         def unavailable(*_args, **_kwargs):
@@ -604,7 +606,7 @@ async def test_optional_awareness_requires_complete_binding_and_resource_budget(
     tmp_path: Path, monkeypatch, kind: str
 ) -> None:
     root, root_id, comms, initial, _people = _root(tmp_path, direct=True)
-    assert WakeCandidateIndex(comms.bus.log).maintain(rebuild=True)
+    assert WakeCandidateIndex(comms.bus.log).maintain(start=RebuildIndex())
     monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
     runner, calls = _fake_model()
     monkeypatch.setattr(TrackedTurnSession, "execute", runner)

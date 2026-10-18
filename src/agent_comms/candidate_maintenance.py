@@ -17,7 +17,7 @@ from .bus_route_counts import BusRouteCounts
 from .coordination_errors import CoordinationError
 from .routing import DeliveryMessage
 from .wire_log import WireLog
-from .wake_candidate_index import WakeCandidateIndex
+from .wake_candidate_index import FirstBuild, WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)
 _MAX_ACTIVE_ROOTS = 32
@@ -82,7 +82,7 @@ def _drain_candidate(root: Path) -> None:
                     target = _pending[root][1]
                 hint = index.notify_committed_append(root_id=root_id, through_bytes=target)
                 result = index.catch_up_committed_append(
-                    hint, bootstrap_new=True
+                    hint, start=FirstBuild()
                 )
                 with log._opened_wire_snapshot(need_sequence=False) as source:
                     route_result = routes.sync(

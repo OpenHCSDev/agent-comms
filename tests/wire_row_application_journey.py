@@ -17,7 +17,9 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.threads import Thread
-from agent_comms.wake_candidate_index import WakeCandidateIndex
+from agent_comms.wake_candidate_index import (
+    WakeCandidateIndex, RebuildIndex,
+)
 from agent_comms.wire_record import WireRecord
 
 
@@ -49,7 +51,7 @@ def main(root: Path) -> None:
     # The actual row exceeds this work quantum but is a legal physical row.
     # Explicit rebuild exercises the first-row exception without racing the
     # already-retired production maintenance worker.
-    assert index.maintain(rebuild=True, max_bytes=1)
+    assert index.maintain(start=RebuildIndex(), max_bytes=1)
     page = index.page(
         root_id=root_id, recipient_lookup=RecordedThreadIncarnation("fixture", births["Alice"]).lookup,
         after_seq=0, required_through_seq=message.seq,
