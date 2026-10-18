@@ -3,12 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar, TYPE_CHECKING
+from typing import ClassVar
 
 from .declared_family import DeclaredFamily
-
-if TYPE_CHECKING:
-    from .agent_events import ToolStart
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
@@ -36,13 +33,6 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         declaration = cls.for_name(name)
         preview = ' '.join(word for key in declaration.preview_fields for word in str(arguments.get(key, '')).split())
         return declaration.label + (' ' + preview if preview else '')
-
-    @classmethod
-    def start(cls, call_id: str, name: str, arguments: dict[str, object]) -> ToolStart:
-        from .agent_events import ToolStart
-
-        declaration = cls.for_name(name)
-        return ToolStart(call_id, name, cls.caption(name, arguments), arguments, declaration.acp_kind)
 
     @classmethod
     def result_diff(cls, result, ok):

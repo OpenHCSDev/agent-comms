@@ -8,7 +8,6 @@ import asyncio
 import itertools
 import json
 from pathlib import Path
-from typing import ClassVar
 
 import pytest
 
@@ -30,19 +29,16 @@ from agent_comms.turn_phase import (
 )
 
 
-class AuditPauseStart(pi.PiEvent):
-    pass
-
-
-class AuditPauseEnd(pi.PiEvent):
-    pass
-
-
 class AuditPausePhase(StallExempt, Excursion):
     stall_reason = "audit_pause_no_progress"
 
-    start_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (AuditPauseStart,)
-    end_events: ClassVar[tuple[type[pi.PiEvent], ...]] = (AuditPauseEnd,)
+
+class AuditPauseStart(pi.PiEvent, starts=AuditPausePhase):
+    pass
+
+
+class AuditPauseEnd(pi.PiEvent, ends=AuditPausePhase):
+    pass
 
 
 class AuditFailure(failures.TurnFailure):
