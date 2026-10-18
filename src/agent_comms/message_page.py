@@ -6,7 +6,7 @@ import sys
 from abc import ABC, abstractmethod
 from collections import deque
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
 from .messages import Message
@@ -38,6 +38,26 @@ class MessagePage:
     display_basis: DMDisplayBasis | None = None
     historical_display: HistoricalDisplay | None = None
     history_revision: FileRevision | None = None
+    source_pages: tuple[MessagePage, ...] = ()
+    bytes_read: int = 0
+
+    @classmethod
+    def combine(cls, pages: tuple[MessagePage, ...]) -> MessagePage:
+        latest = next((page for page in reversed(pages) if page.messages), pages[-1])
+        return replace(
+            latest, messages=tuple(message for page in pages for message in page.messages),
+            has_older=pages[0].has_older, has_newer=pages[-1].has_newer,
+            source_pages=pages, bytes_read=sum(page.bytes_read for page in pages),
+        )
+
+    def evidence_for(self, message: Message) -> MessagePage | None:
+        page = next(page for page in (self.source_pages or (self,))
+                    if any(row.view_key == message.view_key for row in page.messages))
+        return page if page.selection.has_evidence else None
+
+    @property
+    def newest_evidence(self) -> MessagePage | None:
+        return self.evidence_for(self.messages[-1]) if self.messages else None
 
     @property
     def selection(self) -> DisplaySelection:
@@ -59,9 +79,9 @@ class MessagePage:
         return self.messages[-1].view_cursor if self.messages else None
 
     def __post_init__(self) -> None:
-        sequences = [message.seq for message in self.messages]
+        sequences = [message.view_order for message in self.messages]
         if sequences != sorted(sequences) or len(sequences) != len(set(sequences)):
-            raise ValueError("Message pages must contain unique messages in seq order.")
+            raise ValueError("Message pages must contain unique messages in source order.")
 
     @property
     def oldest_seq(self) -> int | None:
@@ -82,8 +102,7 @@ class MessagePageRow:
 class PageWindow:
     """One budget authority; a single oversized row always makes progress."""
 
-    limit: int
-    max_bytes: int
+    bounds: PageBounds
     rows: deque[MessagePageRow] = field(default_factory=deque)
     bytes: int = 0
 
@@ -92,10 +111,10 @@ class PageWindow:
         return tuple(row.message for row in self.rows)
 
     def page(self, has_older: bool, has_newer: bool) -> MessagePage:
-        return MessagePage(self.messages, has_older, has_newer)
+        return MessagePage(self.messages, has_older, has_newer, bytes_read=self.bytes)
 
     def take(self, traversal: PageTraversal, row: MessagePageRow) -> bool:
-        if len(self.rows) >= self.limit or (self.rows and self.bytes + row.size > self.max_bytes):
+        if not self.bounds.fits(len(self.rows) + 1, self.bytes + row.size):
             return False
         traversal.append(self.rows, row)
         self.bytes += row.size
@@ -115,6 +134,15 @@ class PageBounds:
             raise ValueError("History page limit must be positive.")
         if self.max_bytes <= 0:
             raise ValueError("History page byte budget must be positive.")
+
+    def fits(self, count: int, size: int) -> bool:
+        return count <= self.limit and (count <= 1 or size <= self.max_bytes)
+
+    def after(self, page: MessagePage) -> PageBounds | None:
+        traversal = self.traversal.continuation(page)
+        limit, size = self.limit - len(page.messages), self.max_bytes - page.bytes_read
+        return (replace(self, traversal=traversal, limit=limit, max_bytes=size)
+                if traversal is not None and limit > 0 and size > 0 else None)
 
     def conversation(self, scope: MessageDisplayScope) -> ConversationMessagePageRequest:
         return ConversationMessagePageRequest(scope, self)
@@ -170,7 +198,7 @@ class MessagePageRequest(MessageReadRequest[MessagePage]):
 
     def indexed(self, index, source: WireSnapshot) -> MessagePage:
         traversal = self.bounds.traversal
-        window = PageWindow(self.bounds.limit, self.bounds.max_bytes)
+        window = PageWindow(self.bounds)
         opposite = more = False
         with closing(traversal.opposite_offsets(index, self.scope, source.boundary)) as rows:
             opposite = any(True for _ in self.indexed_records(source, rows))

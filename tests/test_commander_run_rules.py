@@ -1,0 +1,69 @@
+"""The declared run and assignment history stay with their original records."""
+from dataclasses import replace
+import importlib
+
+import pytest
+
+from agent_comms.change_report import FileLine
+from agent_comms.field_codec import FieldCodec
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.todos import ApplicationOrderRun, MechanicalOrderRun, Todo, TodoStore
+from test_todos import order, thread
+
+
+def test_declared_run_round_trips_and_short_runs_are_refused(tmp_path):
+    planned = 'The real application shows every thread after reopening the saved session'
+    checked = replace(order(tmp_path), run=ApplicationOrderRun(planned))
+    store = TodoStore(tmp_path)
+    lead = thread('lead', tmp_path, 1)
+    todo = store.create('P1', 'OpenHCSDev/agent-comms', 'Repair the thread list',
+        creator=lead, owner=lead, generation='one', deadline=RecordedEventTime(1000), order=checked)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(todo)) == todo
+    assert planned in todo.order.instructions(todo)
+    with pytest.raises(ValueError, match='8\\+ words'):
+        ApplicationOrderRun('a grep passed')
+
+
+def test_clean_transfers_keep_history_and_third_owner_needs_a_real_line(tmp_path):
+    store = TodoStore(tmp_path)
+    lead = thread('lead', tmp_path, 1)
+    first = store.create('P1', 'OpenHCSDev/agent-comms', 'Repair the thread list',
+        creator=lead, owner=lead, generation='one', deadline=RecordedEventTime(1000), order=order(tmp_path))
+    second = store.assign('P1', expected_revision=first.revision,
+        owner=thread('second', tmp_path, 2), parent=lead, generation='two',
+        deadline=RecordedEventTime(1000), order=order(tmp_path))
+    assert not second.strikes
+    kwargs = dict(expected_revision=second.revision, owner=thread('third', tmp_path, 3),
+        parent=lead, generation='three', deadline=RecordedEventTime(1000), order=order(tmp_path))
+    with pytest.raises(ValueError, match='--traced PATH:LINE'):
+        store.assign('P1', **kwargs)
+    with pytest.raises(ValueError, match='does not exist'):
+        store.assign('P1', traced=FileLine(__file__, 999999), **kwargs)
+    third = store.assign('P1', traced=FileLine(__file__, 1), **kwargs)
+    assert [old.name for old in third.assignment.previous_owners] == ['lead', 'second']
+    assert store.assign('P1', traced=FileLine(__file__, 1), **kwargs) == third
+
+
+def test_send_refuses_missing_run_but_mechanical_orders_are_exempt(commander_script):
+    script, repo = commander_script
+    body = repo.parent / 'missing-run.txt'
+    body.write_text(f'Problem: P1\nOwner: {__file__}:1\nCheck: {repo} :: printf 0 -> 1\n'
+                    '1. Repair the counter value.\nBanned: no second store\nReport: the count\n')
+    kwargs = dict(clean=True, new=('P1', 'The real thread list disappears after opening saved history'))
+    with pytest.raises(SystemExit, match='Works when:'):
+        script.send('worker', '23:59', str(body), **kwargs)
+    assert script.todos() == ()
+    script.send('worker', '23:59', str(body), mechanical=True, **kwargs)
+    assert isinstance(script.COMMS.goals.todos.get('P1').order.run, MechanicalOrderRun)
+
+
+def test_wording_posts_a_correction_without_a_strike(commander_script, monkeypatch):
+    script, _ = commander_script
+    watcher = importlib.reload(importlib.import_module('agent_comms.commander.vibe_watch'))
+    sent = []
+    monkeypatch.setattr(watcher, 'post', lambda recipients, body: sent.append((recipients, body)))
+    watcher.judge({'text': 'The canonical ownership changed', 'from': 'worker',
+                   'sender_role': 'agent', 'id': 'wording', 'to': ['lead']})
+    assert sent[0][0] == ['worker']
+    assert sent[0][1].startswith('Correction, no strike: message wording')
+    assert script.todos() == ()

@@ -9,7 +9,7 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, PausedGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import OperationDelivery, PendingProblemOrder, StrikeTodo
+from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder, StrikeTodo
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_result import ToolResult
 from agent_comms.tools import (
@@ -61,7 +61,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsResumeGoalTool, {"goal_id": goal.id, "progress": "Resumed"}, lead
     yield CommsGoalHistoryTool, {}, lead
     order = PendingProblemOrder(
-        id="order-P1", owner=FileLine(__file__, 1),
+        id="order-P1", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(comms.root), "printf 1", CountCheckResult(1)),
         edits=("Repair the existing owner",), banned=("No second store",),
         report="Report the result", at=RecordedEventTime(100),

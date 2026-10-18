@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
@@ -89,6 +90,27 @@ class RegistryNames(Generic[Member]):
     def canonical_name(self, name: str) -> str:
         """Resolve this namespace without requiring current membership."""
         return self.aliases.get(name, name)
+
+    def reserves(self, name: str) -> bool:
+        """A canonical name or a permanent alias occupies this text."""
+        return name in self.threads or name in self.aliases
+
+    @staticmethod
+    def thread_slug(text: str) -> str:
+        """Characters a name cannot hold become "-", trimmed; empty text names a session."""
+        return re.sub(r"[^A-Za-z0-9_-]+", "-", text).strip("-") or "session"
+
+    def claim_name(self, wanted: str, owner: str | None = None) -> str:
+        """The first free thread name for wanted text: its slug, then slug-2, slug-3.
+
+        A name that already resolves to ``owner`` is free for that owner, so a
+        rename to one of its own names keeps it.
+        """
+        base = self.thread_slug(wanted)
+        name, suffix = base, 2
+        while self.reserves(name) and self.canonical_name(name) != owner:
+            name, suffix = f"{base}-{suffix}", suffix + 1
+        return name
 
     def named_members(self) -> Iterator[tuple[str, Member]]:
         """Original declarations under their canonical and retained alias names."""
