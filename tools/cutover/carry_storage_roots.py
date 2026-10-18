@@ -17,9 +17,10 @@ from agent_comms.storage_rules import StorageRoots, StorageRule
 from agent_comms.store_files import _store_lock
 
 
-def carry(root: Path, *, apply: bool = False) -> dict:
+def carry_locked(root: Path, *, apply: bool = False) -> dict:
+    """Carry under the caller's retained wire lock; acquire only the registry."""
     store = RegistryStore(root / 'registry.json')
-    with _store_lock(root / 'wire'), store.locked():
+    with store.locked():
         store.private_guard_unlocked()
         document = json.loads(store.path.read_text())
         rule = StorageRule.load(root)
@@ -50,7 +51,8 @@ def main() -> None:
     parser.add_argument('root', type=lambda text: Path(text).resolve())
     parser.add_argument('--apply', action='store_true')
     args = parser.parse_args()
-    print(json.dumps(carry(args.root, apply=args.apply)))
+    with _store_lock(args.root / 'wire'):
+        print(json.dumps(carry_locked(args.root, apply=args.apply)))
 
 
 if __name__ == '__main__':

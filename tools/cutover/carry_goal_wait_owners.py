@@ -34,19 +34,24 @@ def carry_rows(raw: dict, snapshot: RegistrySnapshot) -> dict[str, RecordedGoalW
     return carried
 
 
+def carry_locked(root: Path, *, apply: bool = False) -> dict:
+    """Carry under the caller's retained wire lock; use the existing wait writer."""
+    waits = GoalWaits.at(root)
+    registry = Registration(root / "registry.json")
+    raw = json.loads(waits.path.read_text()) if waits.path.exists() else {}
+    carried = carry_rows(raw, registry.snapshot())
+    if apply:
+        waits.replace(carried)
+    return {"waits": len(carried), "applied": apply}
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
     parser.add_argument("--apply", action="store_true", help="Publish only after old readers/writers stop")
     args = parser.parse_args()
-    waits = GoalWaits.at(args.root)
     with _store_lock(args.root / "wire"):
-        registry = Registration(args.root / "registry.json")
-        raw = json.loads(waits.path.read_text()) if waits.path.exists() else {}
-        carried = carry_rows(raw, registry.snapshot())
-        if args.apply:
-            waits.replace(carried)
-    print(json.dumps({"waits": len(carried), "applied": args.apply}))
+        print(json.dumps(carry_locked(args.root, apply=args.apply)))
 
 
 if __name__ == "__main__":

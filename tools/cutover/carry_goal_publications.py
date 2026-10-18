@@ -21,10 +21,11 @@ from agent_comms.store_files import _store_lock
 from agent_comms.wire_log import WireLog
 
 
-def carry(root: Path, *, apply: bool = False) -> dict:
+def carry_locked(root: Path, *, apply: bool = False) -> dict:
+    """Carry under the caller's retained wire lock; acquire only owned stores."""
     registry = root / "registry.json"
     history = root / "goal_history.sqlite3"
-    with _store_lock(root / "wire"), _store_lock(registry):
+    with _store_lock(registry):
         with WireLog(root / "bus.jsonl").certified_read() as source:
             head = source.committed_sequence()
         store = RegistryStore(registry)
@@ -75,7 +76,8 @@ def main() -> None:
     parser.add_argument("root", type=lambda value: Path(value).resolve())
     parser.add_argument("--apply", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(carry(args.root, apply=args.apply)))
+    with _store_lock(args.root / "wire"):
+        print(json.dumps(carry_locked(args.root, apply=args.apply)))
 
 
 if __name__ == "__main__":
