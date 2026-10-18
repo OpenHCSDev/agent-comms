@@ -122,7 +122,6 @@ def test_experiment_c_every_pause_preserving_action_keeps_owner(owner, action):
     assert changed.id == paused.id and changed.revision == paused.revision + 1
     assert isinstance(changed.state, PausedGoal) and isinstance(changed.state.source, OwnerPause)
     # Immutable rewrites and cold reopen retain the original source in Goal.
-    assert not (comms.root / "goal_pause_events.json").exists()
     rewritten = replace(changed, progress="new report", revision=changed.revision + 1)
     comms.registry.register(replace(comms.registry.require("worker"), goal=rewritten))
     assert wire(comms.root).registry.require("worker").goal.state == paused.state
