@@ -65,7 +65,8 @@ class HuntDue(ReasonedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        hunted = (hunt.at.at for todo in cls.todos(comms, commander) for hunt in todo.hunts)
+        hunts = (hunt for todo in cls.todos(comms, commander) for hunt in todo.hunts)
+        hunted = (hunt.at.recorded_at("A hunt") for hunt in hunts)
         age = time.time() - max(hunted, default=0)
         return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
 

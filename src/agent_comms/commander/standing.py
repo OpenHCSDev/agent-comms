@@ -15,7 +15,7 @@ CONFIG = CommanderConfig.installed()
 
 @dataclass(frozen=True)
 class IdleUnits(ReasonedStandingRule):
-    """Units active in the recent log holding no order; parked threads and the commander are not units."""
+    """Units active in the recent log holding no order; parked threads and the commander are not."""
 
     recent: ClassVar[int] = 6000
     text = "IDLE UNITS with no order: {why} -> give each the top unowned row now"
