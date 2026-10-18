@@ -67,9 +67,9 @@ class GoalPrecondition:
             raise ValueError("The goal owner changed; refresh its state.")
         self.expected_goal.check_expected(goal)
         if self.goal_id is not None:
-            thread.goal.require_id(self.goal_id)
+            goal.require().require_id(self.goal_id)
         if self.expected_state is not None:
-            goal.require_state(self.expected_state)
+            goal.require().require_state(self.expected_state)
 
 
 @dataclass(frozen=True)
@@ -357,7 +357,7 @@ class DeliveredOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         ctx.goals.todos.apply(self.problem, self.operation)
-        pending = any(todo.pending for todo in ctx.goals.todos.for_goal(ctx.thread.incarnation, goal.id))
+        pending = ctx.goals.todos.holds_pending(ctx.thread.incarnation)
         return replace(goal, state=goal.state.after_order_delivery(pending),
                        progress=self.progress, revision=goal.revision + 1)
 
@@ -458,8 +458,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         return replace(goal, order=ProblemGoalOrder(), revision=goal.revision + 1)
 
     def request_ref(self, ctx: GoalActionContext) -> GoalRef:
+        """Refuse invalid orders before reserving their Todo."""
         commander = ctx.goals.registry.require(self.commander)
-        commander.goal.require_id(self.request).require_active().order.require_request()
+        commander.goal.require().require_id(self.request).require_active().order.require_request()
         self.deadline.require_deadline()
         self.order.owner.require_exists()
         self.order.check.require_directory()

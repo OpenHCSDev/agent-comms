@@ -32,7 +32,7 @@ from .input_disposition import DeliveryOverview, InputDispositions
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
 from .threads import Thread
-from .todos import TodoStore
+from .todos import StrikeReason, Todo, TodoStore
 from .turn_lease import FinishedTurnFence
 from .wire_log import ConversationSourceWindowRequest
 
@@ -60,6 +60,12 @@ class Goals:
         prepared = operation.prepare(self, current)
         with _store_lock(self._wire_lock_path):
             return self.todos.apply(problem, prepared)
+
+    def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
+        actor = self.registry.require(commander).incarnation
+        store: TodoStore = self.todos
+        with _store_lock(self._wire_lock_path):
+            return store.fire(unit, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:
@@ -134,7 +140,7 @@ class Goals:
     def _goal_input_review(
         self, thread: Thread, goal_id: str, wait_for: Sequence[str]
     ) -> GoalInputReview:
-        goal = thread.goal.require_id(goal_id).require_active()
+        goal = thread.goal.require().require_id(goal_id).require_active()
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
         resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)

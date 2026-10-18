@@ -56,11 +56,13 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, Todo, TodoOperation
+from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
+                    PullRequests, StrikeReason, Todo, TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing, ToolCatalogResult
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
@@ -154,6 +156,7 @@ class TodoChanged(ToolResult):
 @dataclass(frozen=True)
 class TodoList(ToolResult):
     todos: tuple[Todo, ...]
+    progress: dict[str, OrderProgress] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -274,6 +277,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
 ):
     description: ClassVar[str]
+    bus_effect: ClassVar[str] = "Changes the bus; call it only when the owner says to."
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
     action_order: ClassVar[int] = 0
@@ -334,10 +338,16 @@ class LiveOwnerTool:
     __slots__ = ()
 
 
-class ConnectorReadable:
-    """A read tool the claude.ai connector lists and calls; a tool without it is not exposed."""
+class ReadTool:
+    """A tool whose apply changes nothing on the bus."""
 
     __slots__ = ()
+    bus_effect: ClassVar[str] = "Reads only; changes nothing on the bus."
+
+
+@dataclass(frozen=True, kw_only=True)
+class ThreadReadTool(ReadTool, ToolRequest):
+    thread: str = tool_field("Thread to read; omit to read your own", default="")
 
 
 class ThreadToolRequest(ToolRequest[ThreadCaller]):
@@ -506,7 +516,7 @@ class CommsThreadTagsTool(ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsChannelsTool(ToolRequest):
+class CommsChannelsTool(ReadTool, ToolRequest):
     label = "List channels"
     description = "List named tag views and their current member threads; #any includes everyone."
 
@@ -638,15 +648,12 @@ class CommsGoalTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
-        command = FieldCodec.decode_record(self.status, {
-            "progress": self.progress,
-            **{key: value for key, value in (
+        command = replace(
+            self.status(progress=self.progress),
+            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
+            **{key: tuple(value) for key, value in (
                 ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
             ) if value},
-        })
-        command = replace(
-            command,
-            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
         )
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         return GoalProgress.from_snapshot(comms.goals.goal_snapshot(name))
@@ -665,7 +672,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal.require_id(goal_id)
+        current = comms.registry.require(name).goal.require().require_id(goal_id)
         current.state.require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
@@ -697,7 +704,7 @@ class CommsEditGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal.require_id(goal_id)
+        current = comms.registry.require(name).goal.require().require_id(goal_id)
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(
@@ -708,14 +715,14 @@ class CommsEditGoalTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsGoalHistoryTool(ThreadToolRequest):
+class CommsGoalHistoryTool(ThreadReadTool):
     label = "Goal history"
     description = "Read recorded goal revisions and recorded provenance and observation gaps."
     goal_id: str = tool_field("Optional goal ID; omit for this thread's full history", default="")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalHistory:
+    def apply(self, comms: Comms, caller: ToolCaller) -> GoalHistory:
         requested = self.goal_id.strip()
-        entries = comms.goals.goal_history(caller.name, goal_id=requested or None)
+        entries = comms.goals.goal_history(caller.subject(self.thread), goal_id=requested or None)
         return GoalHistory(tuple(entry.recorded() for entry in entries))
 
 
@@ -732,13 +739,28 @@ class CommsTodoTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTodoListTool(ThreadToolRequest):
+class CommsFireTool(ThreadToolRequest):
+    label = "Fire unit"
+    description = ("Release every open problem the unit holds in one operation, recording one "
+                   "plain reason on each; only their commander may invoke this tool.")
+    unit: str = tool_field("Unit thread to fire")
+    reason: StrikeReason = tool_field("What the unit did, plainly")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
+        return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsTodoListTool(ThreadReadTool):
     label = "Read problems"
     description = "Read the commander's canonical Todo orders, deadlines, strikes and hunts."
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
-        actor = comms.registry.require(caller.name).incarnation
-        return TodoList(tuple(comms.goals.todos.for_commander(actor)))
+    def apply(self, comms: Comms, caller: ToolCaller) -> TodoList:
+        actor = comms.registry.require(caller.subject(self.thread)).incarnation
+        listed = tuple(comms.goals.todos.for_commander(actor))
+        pulls, storage = PullRequests(), comms.registry.storage_rule
+        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
+                                 for todo in listed if todo.state.open and todo.holder})
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -814,18 +836,17 @@ class CommsProblemCloseTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTurnsTool(ToolRequest):
+class CommsTurnsTool(ThreadReadTool):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
-    thread: str = tool_field("Thread whose own saved turn records to read")
     last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(self.thread, last=self.last)
+        return comms.transcripts.turns(caller.subject(self.thread), last=self.last)
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsThreadsTool(ConnectorReadable, ToolRequest):
+class CommsThreadsTool(ReadTool, ToolRequest):
     label = "Comms Threads"
     description = (
         "List agent threads with status and pending counts, plus this caller's "
@@ -839,7 +860,7 @@ class CommsThreadsTool(ConnectorReadable, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsWorkBranchesTool(ToolRequest):
+class CommsWorkBranchesTool(ReadTool, ToolRequest):
     label = "Work branches"
     description = (
         "Branches with commits not on main, newest first, each with its open PR or linked "
@@ -874,15 +895,15 @@ class CommsCollaborationTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsCollaborationsTool(ThreadToolRequest):
+class CommsCollaborationsTool(ThreadReadTool):
     label = "List collaborations"
     description = (
         "Read explicit contacts and goal-derived awareness with provenance, without "
         "changing delivery, work acceptance or owners."
     )
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> CollaborationList:
-        contacts = comms.relationships.contacts(caller.name)
+    def apply(self, comms: Comms, caller: ToolCaller) -> CollaborationList:
+        contacts = comms.relationships.contacts(caller.subject(self.thread))
         visible = tuple(
             VisibleCollaborator(entry.target, entry.available, entry.sources, entry.detail,
                                 entry.goal_contacts)
@@ -1132,7 +1153,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsRestartQueueTool(ToolRequest):
+class CommsRestartQueueTool(ReadTool, ToolRequest):
     label = "Restart Queue Status"
     description = "Inspect queued, restarted, stale, or uncertain attempts for a thread."
     name: str = tool_field("Agent thread")
@@ -1171,7 +1192,7 @@ class ToolsCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
         caller = ToolCaller.from_actor(self.name)
-        return caller.catalog(ctx, tuple(tool_catalog()))
+        return caller.catalog(ctx, tuple(NativeRequestTools.catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1194,10 +1215,6 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         json.dump(self.apply(ctx), output, indent=2)
         output.write("\n")
         return 0
-
-
-def tool_catalog() -> list[dict[str, object]]:
-    return [tool.schema() for tool in ToolRequest.members_with(ToolRequest)]
 
 
 def context_tool_catalog(context: str) -> list[dict[str, object]]:

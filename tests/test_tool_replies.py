@@ -1,5 +1,6 @@
 """Every declared tool's reply is the encoding of its declared result record."""
 import os
+from dataclasses import replace
 from typing import get_type_hints
 
 from agent_comms.change_report import FileLine
@@ -16,13 +17,13 @@ from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
-    CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
+    CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
     CommsThreadsTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsTurnsTool,
-    CommsWorkBranchesTool, LiveOwnerTool, ToolRequest,
+    CommsWorkBranchesTool, LiveOwnerTool, ReadTool, ToolRequest,
 )
 from agent_comms.work_branches import WorkBranches
 
@@ -59,7 +60,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsEditGoalTool, {"goal_id": goal.id, "text": "Lead the whole team"}, lead
     comms.goals.update_goal("lead", PausedGoalAction(progress="Paused by its owner"))
     yield CommsResumeGoalTool, {"goal_id": goal.id, "progress": "Resumed"}, lead
-    yield CommsGoalHistoryTool, {}, lead
+    yield CommsGoalHistoryTool, {"thread": "lead"}, lead
     comms.goals.update_goal("lead", SetGoalAction(text="Owner request", goal_id="request", order=RequestGoalOrder()))
     order = PendingProblemOrder(
         id="order-P1", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
@@ -71,7 +72,7 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
         problem="P1", order=order, request="request", deadline=RecordedEventTime(1000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P1"))}, lead
-    yield CommsTodoListTool, {}, lead
+    yield CommsTodoListTool, {"thread": "lead"}, lead
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
     yield CommsTodoTool, {"id": "P1", "operation": FieldCodec.encode(StrikeTodo(
@@ -88,13 +89,18 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsProblemCloseTool, {
         "problem": "P1", "works": "The installed application now keeps the order across returns.",
         "artifact": str(comms.root / "installed-evidence")}, lead
+    yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
+        problem="P2", order=replace(order, id="order-P2"), request="request", deadline=RecordedEventTime(4000),
+        commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P2"))}, lead
+    yield CommsFireTool, {"unit": "worker",
+                          "reason": "The unit broke the release path twice and missed both of its deadlines."}, lead
     yield CommsTurnsTool, {"thread": "worker"}, lead
     yield CommsThreadsTool, {}, lead
     yield CommsThreadsTool, {}, nobody
     monkeypatch.setattr(WorkBranches, "read", lambda self, snapshot: ())  # It asks gh.
     yield CommsWorkBranchesTool, {"checkout": str(project)}, lead
     yield CommsCollaborationTool, {"action": "add", "peer": "worker", "note": "Pairing"}, lead
-    yield CommsCollaborationsTool, {}, lead
+    yield CommsCollaborationsTool, {"thread": "lead"}, lead
     yield CommsSendTool, {"from": "lead", "to": "worker", "body": "Hello @worker"}, lead
     yield CommsDecisionTool, {"to": "#team", "chosen": "Typed records", "rejected": ["Dicts"]}, author
     yield CommsConstraintTool, {"to": "#team", "text": "Never replay inputs"}, author
@@ -119,6 +125,27 @@ def test_every_tool_reply_decodes_as_its_declared_result(comms, tmp_path, monkey
         invoked.add(tool)
     assert invoked == {tool for tool in ToolRequest.members_with(ToolRequest)
                        if not issubclass(tool, LiveOwnerTool)}
+
+
+def stores(comms: Comms) -> dict:
+    """registry.json, the todo store and the goal store, byte for byte."""
+    paths = (comms.root / "registry.json", comms.goals.todos.path,
+             *(comms.root / "goal-private").rglob("*"))
+    return {path: path.read_bytes() for path in paths if path.is_file()}
+
+
+def test_a_read_tool_changes_no_store_for_any_caller(comms, tmp_path, monkeypatch):
+    read = set()
+    for tool, arguments, caller in scenario(comms, tmp_path, monkeypatch):
+        if not issubclass(tool, ReadTool):
+            tool.invoke(comms, arguments, caller=caller)
+            continue
+        before = stores(comms)
+        for reader in (caller, NoThreadCaller("claude-ai")):
+            tool.invoke(comms, arguments, caller=reader)
+            assert stores(comms) == before, (tool.declared_name, reader)
+        read.add(tool)
+    assert read == set(ToolRequest.members_with(ReadTool))
 
 
 def test_every_tool_declares_a_tool_result():

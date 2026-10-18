@@ -52,10 +52,25 @@ class ThreadPresentationStatus(DeclaredFamily, affix="ThreadPresentationStatus")
     def without_work(self) -> ThreadPresentationStatus:
         return IdleThreadPresentationStatus(details=self.details)
 
+    def with_disconnection[T](self, ordinary: T, disconnected: Callable[[], T]) -> T:
+        """A failed viewer connection normally supplies the displayed state."""
+        return disconnected()
+
 
 @dataclass(frozen=True, slots=True)
 class IdleThreadPresentationStatus(ThreadPresentationStatus):
     pass
+
+
+@dataclass(frozen=True, slots=True)
+class StoppedThreadPresentationStatus(IdleThreadPresentationStatus):
+    """An explicitly stopped owner is not a failed connection."""
+
+    def with_disconnection[T](self, ordinary: T, disconnected: Callable[[], T]) -> T:
+        return ordinary
+
+    def without_work(self) -> ThreadPresentationStatus:
+        return self
 
 
 @dataclass(frozen=True, slots=True)

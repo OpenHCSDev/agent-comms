@@ -328,6 +328,8 @@ class RequestGoalOrder(GoalOrder):
 class ProblemGoalOrder(GoalOrder):
     """A unit's one Goal groups its canonical Todo assignments, not copied orders."""
 
+    StrikeLimit: ClassVar[int] = 2  # live strikes the commanded unit may take on one problem
+
     def require_completion(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         raise ValueError("Complete each problem with its checked delivered commit.")
 
@@ -336,7 +338,7 @@ class ProblemGoalOrder(GoalOrder):
             raise ValueError("The problem Goal has no assigned Todos.")
 
     def require_replacement(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
-        if any(todo.pending for todo in goals.todos.for_goal(owner, goal.id)):
+        if goals.todos.holds_pending(owner):
             raise ValueError("Finish or release the assigned problems before replacing this Goal.")
 
     def todos(self, goals: Goals, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
@@ -418,13 +420,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         raise RelationViolationError("No goal is set for this thread.")
 
     @abstractmethod
-    def require_id(self, goal_id: str) -> Goal: ...
-
-    @abstractmethod
     def reported_id(self) -> str | None: ...
-
-    @abstractmethod
-    def require_state(self, expected: GoalState) -> None: ...
 
     @abstractmethod
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool: ...
@@ -472,14 +468,8 @@ class NoGoal(NullMember, GoalDeclaration):
     def instructions_for(self, goals: Goals, owner: ThreadIncarnation) -> tuple[str, ...]:
         return ()
 
-    def require_id(self, goal_id: str) -> Goal:
-        raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
-
     def reported_id(self) -> None:
         return None
-
-    def require_state(self, expected: GoalState) -> None:
-        raise ValueError("This goal is no longer active; refresh its state.")
 
     def clear_wait(self, waits: GoalWaits, *, wait_id: str | None = None) -> bool:
         return False

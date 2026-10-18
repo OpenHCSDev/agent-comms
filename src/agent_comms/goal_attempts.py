@@ -24,7 +24,7 @@ from contextlib import ExitStack, closing, suppress
 from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, TypeVar
+from typing import TYPE_CHECKING, ClassVar, Literal, TypeVar
 from uuid import uuid4
 
 from .coordination_database import CoordinationStore
@@ -358,21 +358,31 @@ def assert_goal_attempt_schema(conn: sqlite3.Connection) -> None:
 class GoalTurnPermit(ABC):
     """The turn's launch authority, including a turn that has no goal claim."""
 
+    @property
     @abstractmethod
-    def check_grant(self, store: GoalAttemptStore) -> None: ...
+    def claims(self) -> tuple[LaunchPermit, ...]: ...
 
-    @abstractmethod
-    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool: ...
+    def check_grant(self, store: GoalAttemptStore) -> None:
+        for permit in self.claims:
+            OrdinaryGoalGrantCheck(permit=permit, store=store).require_valid()
 
-    @abstractmethod
-    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None: ...
+    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
+        for permit in self.claims:
+            claims.callback(permit.retire_unverified, store)
+        return bool(self.claims)
 
-    @abstractmethod
-    def block(self, account: TurnGoalAccount, diagnostic: str) -> None: ...
+    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None:
+        for permit in self.claims:
+            account.settle_launched(permit, terminal)
 
-    @abstractmethod
+    def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
+        for permit in self.claims:
+            account.block_active_goal(diagnostic)
+
     def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-                    goal: GoalDeclaration, turn: TurnId) -> None: ...
+                    goal: GoalDeclaration, turn: TurnId) -> None:
+        for permit in self.claims:
+            goal.settle(settlement, store, permit, turn)
 
     @abstractmethod
     def has_verified_progress(self, store: GoalAttemptStore) -> bool: ...
@@ -389,21 +399,7 @@ class GoalTurnPermit(ABC):
 
 
 class NoLaunchPermit(GoalTurnPermit):
-    def check_grant(self, store: GoalAttemptStore) -> None:
-        pass
-
-    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
-        return False
-
-    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None:
-        pass
-
-    def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
-        pass
-
-    def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-                    goal: GoalDeclaration, turn: TurnId) -> None:
-        pass
+    claims: ClassVar[tuple[LaunchPermit, ...]] = ()
 
     def has_verified_progress(self, store: GoalAttemptStore) -> bool:
         return False
@@ -426,22 +422,9 @@ class NoLaunchPermit(GoalTurnPermit):
 class LaunchPermit(GoalTurnPermit):
     reservation: Reservation
 
-    def check_grant(self, store: GoalAttemptStore) -> None:
-        OrdinaryGoalGrantCheck(permit=self, store=store).require_valid()
-
-    def prepare_launch(self, claims: ExitStack, store: GoalAttemptStore) -> bool:
-        claims.callback(self.retire_unverified, store)
-        return True
-
-    def settle(self, account: TurnGoalAccount, terminal: Done | None) -> None:
-        account.settle_launched(self, terminal)
-
-    def block(self, account: TurnGoalAccount, diagnostic: str) -> None:
-        account.block_active_goal(diagnostic)
-
-    def settle_goal(self, settlement: type[VerifiedGoalSettlement], store: GoalAttemptStore,
-                    goal: GoalDeclaration, turn: TurnId) -> None:
-        goal.settle(settlement, store, self, turn)
+    @property
+    def claims(self) -> tuple[LaunchPermit, ...]:
+        return (self,)
 
     def fail_origin(self, store: GoalAttemptStore, goal_id: str) -> None:
         with suppress(StaleAttemptError):

@@ -189,7 +189,7 @@ class TurnGoalAccount:
         if terminal is None:
             self.block_active_goal("Backend turn ended without a result; inspect local diagnostics.")
         store = self.comms.goals.open_goal_store()
-        captured = self.owner.goal.require_id(permit.reservation.goal_id)
+        captured = self.owner.goal.require().require_id(permit.reservation.goal_id)
         current = captured.continued_by(self.comms.registry.require(self.thread_name).goal)
         if terminal is not None and terminal.ok:
             current.settle(VerifiedGoalSettlement, store, permit, self.turn)

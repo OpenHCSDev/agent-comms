@@ -171,7 +171,8 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     from agent_comms.channel_management import TagDisposition
     from agent_comms.cli_commands import CliCommand
     from agent_comms.field_codec import FieldCodec, compile_decoder
-    from agent_comms.tools import CommsTagsTool, tool_catalog
+    from agent_comms.tools import CommsTagsTool
+    from agent_comms.native_tools import NativeRequestTools
 
     comms = setup_wire(tmp_path)
     action = next(action for action in CliCommand.target_catalog(comms, '#api', project=str(tmp_path))
@@ -184,7 +185,7 @@ async def test_new_tag_disposition_is_declared_in_original_editor_and_tool_catal
     edited = action.edited({'disposition': editor_value})
     assert edited.bound[0].disposition == disposition
     assert 'only inactive' in edited.confirmation
-    tag_tool = next(tool for tool in tool_catalog() if tool['name'] == CommsTagsTool.declared_name)
+    tag_tool = next(tool for tool in NativeRequestTools.catalog() if tool['name'] == CommsTagsTool.declared_name)
     schema = tag_tool['parameters']['properties']['disposition']
     assert schema['oneOf'] == FieldCodec.value_schema(TagDisposition)['oneOf']
     assert any(member['properties'][TagDisposition.family_discriminator]['const']

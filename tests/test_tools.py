@@ -1,13 +1,35 @@
+import json
 import re
 
 import pytest
 
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
-from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool, tool_catalog
+from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool
+from agent_comms.native_tools import NativeRequestTools
 
 
 class TestToolCatalog:
+    def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
+        from pathlib import Path
+        from agent_comms.pi_vocabulary import ServiceTier
+        from agent_comms.tools import ToolsCliCommand
+
+        monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
+
+        thread = comms.registry.new_thread(
+            name="catalog-owner", tags=frozenset(), worktree="/wt", service_tier=ServiceTier.STANDARD,
+        )
+        comms.registry.declare(thread)
+        flag, path = thread.native_launch_arguments(())
+        assert flag == "--comms-catalog"
+        payload = json.loads(Path(path).read_text())
+        assert payload == ToolsCliCommand(name=thread.name).apply(comms).encoded()
+        assert payload["service_tier"] == "standard"
+        assert {tool["name"] for tool in payload["tools"]} == {
+            tool["name"] for tool in NativeRequestTools.catalog()
+        }
+
     def test_collaboration_tools_share_one_mutual_contact(self, comms, monkeypatch):
         monkeypatch.setenv("AGENT_COMMS_THREAD", "a")
         comms.registry.declare(comms.registry.new_thread(name='a', tags=frozenset(), worktree='/wt'))
@@ -57,7 +79,7 @@ class TestToolCatalog:
         assert not (comms.root / "relationships.json").exists()
 
     def test_catalog_exposes_adapter_json_schemas(self):
-        catalog = tool_catalog()
+        catalog = NativeRequestTools.catalog()
         names = [tool["name"] for tool in catalog]
         assert {
             "comms_send",
@@ -193,7 +215,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
     for name in ("a", "b"):
         comms.registry.declare(comms.registry.new_thread(name=name, tags=frozenset(), worktree='/wt'))
     comms.messaging.send("a", "b", "Actual inbox source")
-    schema = next(row for row in tool_catalog() if row["name"] == InspectInboxTool.declared_name)
+    schema = next(row for row in NativeRequestTools.catalog() if row["name"] == InspectInboxTool.declared_name)
     assert schema["parameters"]["required"] == ["target", "viewer"]
     assert schema["parameters"]["properties"]["include_body"]["default"] is False
     assert schema["context_bindings"] == {"target": "subject"}
