@@ -222,6 +222,11 @@ class Activity(ActivityData):
         """Create a new bounded status, rather than decoding an existing event."""
         return cls(thread, state, cls.format_detail(detail))
 
+    @classmethod
+    def absent(cls, thread: str) -> Activity:
+        """No event: idle, with no historical clock."""
+        return cls(thread, ActivityState.IDLE, timestamp=0.0)
+
     def fold_into(self, latest: dict[str, Activity]) -> None:
         """Apply this event to the latest-per-thread map; a deletion leaves no entry."""
         if self.state.retires_thread:
@@ -346,9 +351,8 @@ class ActivityLog(ThreadOwnedState):
     def _observed(self, thread: str, events: Mapping[str, Activity], *,
                   active: bool, now: float) -> Activity:
         if thread not in events:
-            # An absent event has no historical clock. Reading it must never
-            # mint an actual-event timestamp.
-            return Activity(thread, ActivityState.IDLE, timestamp=0.0)
+            # Reading an absent event must never mint an actual-event timestamp.
+            return Activity.absent(thread)
         latest = events[thread]
         if (
             latest.diagnostic is None

@@ -12,7 +12,7 @@ from itertools import zip_longest
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
-from .activity import ActivityState, ObservedActivity
+from .activity import Activity, ActivityData, ActivityState, ObservedActivity
 from .coordination_errors import StaleRevision
 from .audience_manifest import FrozenRecipient
 from .bus_activity_index import ChannelActivity
@@ -21,7 +21,7 @@ from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import CommandTarget
 from .channels import Channel, ChannelMemberIndex, Channels
 from .display_order import ChannelSort, NameChannelSort
-from .goal_presentation import ThreadGoalExecution, IdleGoalExecution
+from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
 from .external_transcript import ExternalTranscript
 from .notification_assignment import NotificationAssignment
@@ -53,6 +53,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .ui_model.observation import ReadNotifications, ThreadsObserved
     from .bus_publication import CommittedDelivery
+    from .goal_waits import RecordedGoalWait
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .history_views import HistoryViews
@@ -612,13 +613,47 @@ class ChannelView:
 
 
 @dataclass(frozen=True, slots=True)
-class ThreadView:
+class ThreadRecord:
+    """A thread's wire record; every reader of one thread writes these fields from here."""
     thread: Thread
     status: ThreadStatus
+    activity: ActivityData
+    goal_execution: ThreadGoalExecution
+    pending: int | None = field(default=None, kw_only=True)  # None when the reader did not count it
+
+    @classmethod
+    def read(cls, snapshot: RegistrySnapshot, agents: AgentActivity,
+             waits: dict[str, RecordedGoalWait], threads: Iterable[Thread],
+             pending: Mapping[str, int] | None = None) -> tuple[ThreadRecord, ...]:
+        """Only active threads are observed; the rest show the absent activity."""
+        threads = tuple(threads)
+        observed = agents.all_activity(
+            (thread for thread in threads if snapshot.statuses[thread.name].active),
+            snapshot=snapshot)
+        return tuple(cls(
+            thread, snapshot.statuses[thread.name],
+            observed.get(thread.name, Activity.absent(thread.name)),
+            GoalWaits.execution(thread.goal, waits, snapshot, agents),
+            pending=None if pending is None else pending[thread.name],
+        ) for thread in threads)
+
+    def to_wire(self) -> dict[str, object]:
+        return {
+            **self.thread.to_wire(),
+            "status": self.status.declared_name,
+            "is_fork": self.thread.is_fork,
+            "activity": self.activity.state.value,
+            "activity_detail": self.activity.detail,
+            "goal_execution": self.goal_execution.to_wire(),
+            **({} if self.pending is None else {"pending": self.pending}),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class ThreadView(ThreadRecord):
     activity: ObservedActivity
     runtime: RuntimeInfo
     last_seen: float
-    goal_execution: ThreadGoalExecution = IdleGoalExecution()
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
     @classmethod
@@ -634,9 +669,9 @@ class ThreadView:
         waits = goal_waits.read()
         activities = agents.all_activity(threads, snapshot=snapshot)
         return tuple(cls(
-            thread, snapshot.statuses[thread.name], activities[thread.name], runtime[thread.name],
-            snapshot.seen_at(thread.name), GoalWaits.execution(thread.goal, waits, snapshot, agents),
-            snapshot.owner_binding(thread.name),
+            thread, snapshot.statuses[thread.name], activities[thread.name],
+            GoalWaits.execution(thread.goal, waits, snapshot, agents), runtime[thread.name],
+            snapshot.seen_at(thread.name), snapshot.owner_binding(thread.name),
         ) for thread in threads)
 
     @property
@@ -661,15 +696,10 @@ class ThreadView:
 
     def to_wire(self) -> dict[str, object]:
         return {
-            **self.thread.to_wire(),
-            "status": self.status.declared_name,
-            "is_fork": self.thread.is_fork,
+            **ThreadRecord.to_wire(self),
             **self.thread.runtime.presentation(),
             "last_seen": self.last_seen,
             "last_activity": self.activity.timestamp,
-            "activity": self.activity.state.value,
-            "activity_detail": self.activity.detail,
-            "goal_execution": self.goal_execution.to_wire(),
             **self.runtime.wire_fields(),
         }
 
