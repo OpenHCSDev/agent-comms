@@ -103,7 +103,7 @@ class TurnRunner:
         self.goals.bind(sessions, inputs)
 
     def session_busy(self, session_id: str) -> bool:
-        return session_id in self.turn_tasks or self.turn_state(session_id).busy
+        return session_id in self.turn_tasks or self.turn_state(session_id).active.phase.busy
 
     def turn_state(self, session_id: str) -> TurnState:
         name = self.sessions.bindings.get(session_id)
@@ -111,7 +111,7 @@ class TurnRunner:
 
     def owns_turn(self, session_id: str, turn_id: str) -> bool:
         state = self.turn_state(session_id)
-        return state.busy and state.managed_id == turn_id
+        return state.active.phase.busy and state.active.id == turn_id
 
     async def transition_turn(self, session_id: str, lease: TurnLeaseFence, phase: TurnPhase) -> None:
         states = await Coordination.run_worker(partial(
@@ -128,7 +128,7 @@ class TurnRunner:
         lease = thread.turn_lease
         if lease is None:
             return
-        await CompactionObservation(self, session_id, lease, thread.turn_state.phase).dispatch(event)
+        await CompactionObservation(self, session_id, lease, thread.active_turn.phase).dispatch(event)
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""
@@ -367,7 +367,7 @@ class TurnRunner:
 
     async def active_backend_inbox(self, session_id: str) -> TurnInbox | None:
         state = await Coordination.run_worker(partial(self.turn_state, session_id))
-        return self.inputs.backend_inboxes.get(session_id) if state.accepts_followup else None
+        return self.inputs.backend_inboxes.get(session_id) if state.active.phase.accepts_followup else None
 
     async def close_idle_backend(self, session_id: str, thread: Thread) -> None:
         async with self.idle_backend(session_id, thread) as persistent:

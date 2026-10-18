@@ -268,7 +268,7 @@ class Goals:
             )
             if (
                 source is None
-                or source.executing
+                or source.active_turn.executing
                 or observed is None
                 or not observed.matches(fence.renamed(canonical))
                 or not snapshot.statuses[canonical].active

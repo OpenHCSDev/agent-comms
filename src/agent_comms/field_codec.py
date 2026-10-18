@@ -143,6 +143,30 @@ class WireValue(FieldRepresentation):
         return cls.from_wire(value)
 
 
+class SubclassUnion(WireValue):
+    """An untagged wire union derives its alternatives from direct declarations."""
+
+    accepts_null = True
+    external_json_shape = True
+    _decoder: ClassVar[UnionDecoder[Self]]
+
+    def __init_subclass__(cls) -> None:
+        super().__init_subclass__()
+        if SubclassUnion in cls.__bases__:
+            return
+        for base in cls.__bases__:
+            if SubclassUnion in base.__bases__:
+                base._decoder = ValueDecoder.for_members(tuple(base.__subclasses__()))
+
+    @classmethod
+    def from_wire(cls, data: object) -> Self:
+        return cls._decoder.decode(data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.value_schema(cls._decoder.target)
+
+
 class InlineRecord(WireValue):
     """A typed field represented by its declared object's sibling wire fields."""
 

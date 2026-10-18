@@ -291,7 +291,7 @@ class Registration:
             snapshot = edit.document.snapshot()
             owner = RegistryOwner.capture_local(snapshot, expected.name)
             owner.require_exact(snapshot, expected, generation)
-            owner.thread.require_idle()
+            owner.thread.active_turn.require_idle()
             self._assert_maintenance_open_unlocked()
             result = edit.document.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
@@ -309,7 +309,7 @@ class Registration:
         turn = TurnId.for_registration(turn_id)
         with self.store.editing() as edit:
             owner = RegistryOwner.capture_local(edit.document.snapshot(), name)
-            owner.thread.require_idle()
+            owner.thread.active_turn.require_idle()
             self._assert_maintenance_open_unlocked()
             result = edit.document.lease_turn(owner.thread, turn.value, routing)
             edit.commit()
