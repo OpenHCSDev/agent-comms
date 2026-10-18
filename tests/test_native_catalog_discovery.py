@@ -1,5 +1,6 @@
 """Catalogs through actual pinned Pi, without a provider prompt or saved input."""
-from agent_comms.native_package import pinned_native_package
+from agent_comms import native_package
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 from agent_comms.native_arguments import SelectedModel
 
 import asyncio
@@ -49,24 +50,25 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     native = native_backend
     source = Path(source_name).resolve(strict=True)
     before = hashlib.sha256(source.read_bytes()).hexdigest()
-    package = pinned_native_package()
-    created = await ForkSessionHelper.run(ForkSessionRequest(
-        str(package), str(source), str(native.project),
-        directory=str(native.project / "launch-sessions"),
-    ), cwd=native.project)
-    session = SavedSelectedSession(created.path.parent,
-        identity=NativeSessionIdentity(created.session_id, created.session_file))
-    execution = SelectedExecution(root=native.root,
-        wire_root_id=Comms(native.root).owners.require_private_launch().wire_root_id,
-        owner_name="launch-ownership", native_package=package)
     verifications = []
-    verify = native_pi._trusted_package
+    verify = native_package.verify_native_package
 
     def observed(artifact):
         verifications.append(artifact)
         return verify(artifact)
 
-    monkeypatch.setattr(native_pi, "_trusted_package", observed)
+    monkeypatch.setattr(native_package, "verify_native_package", observed)
+    private_launch = Comms(native.root).owners.require_private_launch()
+    package = private_launch.native_package
+    created = await ForkSessionHelper.run(ForkSessionRequest(
+        str(package.path), str(source), str(native.project),
+        directory=str(native.project / "launch-sessions"),
+    ), cwd=native.project)
+    session = SavedSelectedSession(created.path.parent,
+        identity=NativeSessionIdentity(created.session_id, created.session_file))
+    execution = SelectedExecution(root=native.root,
+        wire_root_id=private_launch.wire_root_id,
+        owner_name="launch-ownership", native_package=package)
     await Coordination.run_worker(execution.validate)
     launches, children = [], []
     for stage in range(2):
@@ -76,7 +78,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
                 "response-local": {"type": "api_key", "key": "changed-local-only"},
             }))
         launch = await Coordination.run_worker(partial(execution.tracked_launch,
-            package, worktree=native.project, session=session,
+            package, root=native.root, worktree=native.project, session=session,
             model=SelectedModel("response-local", "fixture"), thinking_level=OffThinkingLevel))
         authentication = launch.configuration.auth_revision()
         launches.append((launch, authentication))
@@ -95,8 +97,8 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     assert children[0].proc.identity != children[1].proc.identity
     with pytest.raises(IdentityConflict, match="differs from its execution package"):
         await Coordination.run_worker(partial(execution.tracked_launch,
-            package.parent,
-            worktree=native.project, session=session,
+            package.path.parent,
+            root=native.root, worktree=native.project, session=session,
             model=SelectedModel("response-local", "fixture")))
     malformed = native.project / "malformed.jsonl"
     malformed.write_text("{}\n")
@@ -104,11 +106,12 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
         identity=NativeSessionIdentity(created.session_id, str(malformed)))
     with pytest.raises((ValueError, native_pi.NativePiUnavailable)):
         await Coordination.run_worker(partial(execution.tracked_launch,
-            package, worktree=native.project, session=wrong,
+            package, root=native.root, worktree=native.project, session=wrong,
             model=SelectedModel("response-local", "fixture")))
     # Independent new acquisition still verifies the real artifact.
+    fresh = await Coordination.run_worker(partial(VerifiedNativePackage.acquire, package.path))
     await Coordination.run_worker(partial(NativePiRpcLaunch.tracked,
-        package, worktree=native.project, session=session,
+        fresh, root=native.root, worktree=native.project, session=session,
         model=SelectedModel("response-local", "fixture")))
     assert len(verifications) == 2 and native.provider.posts == 0
 
@@ -302,6 +305,7 @@ async def test_actual_native_setting_responses_use_the_command_result_owner(
             "--no-skills",
             "--no-context-files",
         ),
+        package=_owner.sessions.config.package,
         worktree=native_backend.project,
     )
     # The command result owner needs a session; this probe never opens its child.
@@ -373,7 +377,8 @@ async def test_actual_native_replacement_callback_once_and_cancel(native_backend
         command, ("--provider", "response-local", "--model", "fixture", "--thinking", "off",
                "--offline", "--no-extensions",
                "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-tools"),
-        worktree=native.project, session_file=created.session_file,
+        package=Comms(native.root).owners.require_private_launch().native_package,
+        root=native.root, worktree=native.project, session_file=created.session_file,
     ))
 
     def observed():
