@@ -12,7 +12,7 @@ from .field_codec import FieldCodec, SubclassUnion
 
 if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
-    from .message_page import MessagePage, MessagePageRow, PageWindow
+    from .message_page import MessagePage, PageWindow
     from .read_basis import MessageDisplayScope
 
 
@@ -106,7 +106,10 @@ class PageTraversal(ABC):
 
     @staticmethod
     @abstractmethod
-    def append(rows: deque[MessagePageRow], row: MessagePageRow, /) -> None: ...
+    def append[T](rows: deque[T], row: T, /) -> None: ...
+
+    @abstractmethod
+    def continuation(self, page: MessagePage) -> PageTraversal | None: ...
 
     @abstractmethod
     def result(self, window: PageWindow, more: bool, opposite: bool) -> MessagePage: ...
@@ -135,6 +138,10 @@ class OlderTraversal(PageTraversal):
                 index, lower=self.cursor - 1, upper=None, descending=True, before_offset=boundary
             )
 
+    def continuation(self, page: MessagePage) -> OlderTraversal | None:
+        cursor = page.oldest_cursor
+        return cursor.older() if page.has_older and cursor is not None else None
+
     append = staticmethod(deque.appendleft)
 
     def result(self, window: PageWindow, more: bool, opposite: bool) -> MessagePage:
@@ -160,6 +167,10 @@ class NewerTraversal(PageTraversal):
         self, index: BusPageIndex, scope: MessageDisplayScope, boundary: int
     ) -> PageOffsets:
         return OlderTraversal(self.cursor + 1).offsets(index, scope, boundary)
+
+    def continuation(self, page: MessagePage) -> NewerTraversal | None:
+        cursor = page.newest_cursor
+        return cursor.newer() if page.has_newer and cursor is not None else None
 
     append = staticmethod(deque.append)
 

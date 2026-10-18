@@ -17,6 +17,7 @@ from agent_comms.channel_management import (
     DeleteExclusiveInactiveThreadsTagDisposition,
 )
 from agent_comms.comms import wire
+from agent_comms.field_codec import FieldCodec
 from agent_comms.display_order import (
     ChannelSort, CreatedChannelSort, CreatedThreadSort, LastActivityChannelSort,
     LastActivityThreadSort, LastMessageThreadSort, LastUserInputChannelSort, ThreadSort,
@@ -534,7 +535,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     assert len(joined) == 1 and joined[0].role.change.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].role.response_policy(joined[0]).starts_turn
     with comms.bus.opened_activity() as clocks:
-        assert "moving" not in comms.views.last_sent_timestamps(clocks.sent, registry=comms.registry.snapshot())
+        assert "moving" not in comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot())
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
     assert len(list(comms.views.channel_history_page("#api").messages)) == 2
@@ -566,7 +567,7 @@ def test_channel_pins_persist_and_partition_existing_order(tmp_path, order):
         [name for name in original if name in {"#ui", "#none"}]
         + [name for name in original if name not in {"#ui", "#none"}]
     )
-    assert all(views[name].to_wire()["pinned"] for name in list(views)[:2])
+    assert all(FieldCodec.encode(views[name])["pinned"] for name in list(views)[:2])
     assert observer.channels.catalog.read().list_order is order
     for channel in ("#ui", "#none"):
         observer.channels.set_channel_pinned(channel, False)

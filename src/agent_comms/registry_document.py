@@ -293,15 +293,6 @@ class RegistryDocument(RegistryPresence):
         except MalformedRecord as error:
             raise RelationViolationError(f"Invalid registry document: {error}") from error
 
-    def claim_name(self, base_name: str) -> str:
-        """Allocate from current declarations and permanent aliases under the registry lock."""
-        name = base_name
-        suffix = 2
-        while name in self.threads or name in self.aliases:
-            name = f"{base_name}-{suffix}"
-            suffix += 1
-        return name
-
     def prepare_declaration(self, thread: Thread, status: ThreadStatus) -> RegistrationChange:
         canonical = self.canonical_name(thread.name)
         requested = thread.for_registration(canonical, self.threads.get(canonical))
@@ -391,11 +382,10 @@ class RegistryDocument(RegistryPresence):
             return canonical, canonical
         current = self.threads[canonical]
         self.statuses[canonical].require_self_rename()
-        alias_owner = self.aliases.get(new_name)
-        if new_name in self.threads or (alias_owner is not None and alias_owner != canonical):
+        if self.taken(new_name, owner=canonical):
             raise RelationViolationError(f"Thread name {new_name!r} is already in use.")
         replacement = replace(current, name=new_name)
-        if alias_owner == canonical:
+        if new_name in self.aliases:  # free for this thread: one of its own aliases
             del self.aliases[new_name]
         status = self.statuses.pop(canonical)
         last_seen = self.last_seen.pop(canonical)

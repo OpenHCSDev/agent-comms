@@ -137,3 +137,30 @@ def test_rows_leave_the_stream_at_the_last_yielded_row(tmp_path, reader, expecte
     with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         assert len(read(source)) == expected
         assert source.position == len(b''.join(rows[:expected]))
+
+
+@pytest.mark.parametrize('other', ['Bob', 'sender'])
+def test_unknown_segment_only_blocks_its_own_thread(tmp_path, other):
+    from conftest import publish_initial
+    from agent_comms.errors import StoredHistoryUnreadable
+    from agent_comms.field_codec import FieldCodec
+    from agent_comms.private_bus_checkpoint import RecordedContextManifestSources
+    from agent_comms.turn_context import RecordedContextManifest
+    from agent_comms.wire_record import AuthoredObservationWireRecord, RecordedContextManifestWireObservation
+    from test_private_bus_checkpoint import _root
+    from test_turn_context_wire import manifest
+
+    comms, _ = _root(tmp_path)
+    message = publish_initial(comms, 'sender', '#team', '@Alice original question')
+    recorded, _ = RecordedContextManifest.capture(manifest(comms.registry.require('Alice')))
+    row = AuthoredObservationWireRecord(RecordedContextManifestWireObservation(recorded)).to_wire()
+    row['observation']['manifest']['segments'][0]['manifest']['kind'] = 'unavailable_future_segment'
+    with comms.bus.log.locked():
+        metadata = comms.bus.log.read_metadata_unlocked(required=True)
+        comms.bus.log.append_private_unlocked(metadata, row)
+    assert comms.bus.full_history_page().messages == (message,)
+    RecordedContextManifestSources.for_owner(comms.bus.log, other, comms.registry)
+    decoded = WireRecord.public_from_wire(row)
+    assert FieldCodec.encode(decoded) == row
+    with pytest.raises(StoredHistoryUnreadable, match='context sequence.*unavailable_future_segment'):
+        RecordedContextManifestSources.for_owner(comms.bus.log, 'Alice', comms.registry)

@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
+from .change_report import FileLine
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -26,7 +27,7 @@ from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import Goal, GoalOrder, ProblemGoalOrder, UnorderedGoalOrder
 from .threads import Thread
 from .recorded_time import EventTime
-from .todos import DeliverTodo, PendingProblemOrder
+from .todos import DeliverTodo, GoalRef, PendingProblemOrder, Todo
 
 if TYPE_CHECKING:
     from .goal_presentation import GoalSnapshot
@@ -336,8 +337,9 @@ class CompletionGoalAction(TransitionGoalAction):
 
 @dataclass(frozen=True, kw_only=True)
 class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
-    def before_transition(self, ctx):
-        ctx.require_goal().order.require_completion()
+    def before_transition(self, ctx: GoalActionContext) -> None:
+        goal = ctx.require_goal()
+        goal.order.require_completion(goal, ctx.goals, ctx.thread.incarnation)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -442,33 +444,40 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
 class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     problem: str
     order: PendingProblemOrder
-    goal_id: str
+    request: str
     deadline: EventTime
     commander: str
 
     @abstractmethod
-    def reserve(self, ctx): ...
+    def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
 
-    def change(self, ctx):
-        ctx.thread.require_order_slot(self.goal_id, self.problem)
+    def change(self, ctx: GoalActionContext) -> Goal:
+        """The order joins the unit's live Goal or starts one; its Todo names the request served."""
+        commander = ctx.goals.registry.require(self.commander)
+        commander.require_active_goal(self.request).order.require_request()
         self.deadline.require_deadline()
         self.order.owner.require_exists()
         self.order.check.require_directory()
-        todo = self.reserve(ctx)
-        current = ctx.thread.goal_for(self.goal_id)
-        if current is not None:
+        request = GoalRef(commander.name, commander.created_at, self.request)
+        current = ctx.thread.goal
+        if current is not None and not current.state.terminal:
+            self.reserve(ctx, current.id, request)
             return replace(current, order=ProblemGoalOrder(), revision=current.revision + 1)
-        return SetGoalAction(text="Complete the assigned problems.", goal_id=self.goal_id, order=ProblemGoalOrder()).change(ctx)
+        fresh = SetGoalAction(text="Complete the assigned problems.", order=ProblemGoalOrder())
+        self.reserve(ctx, fresh.goal_id, request)
+        return fresh.change(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(ProblemOrderGoalAction):
     expected_revision: int
+    traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
 
-    def reserve(self, ctx):
+    def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
-            generation=self.goal_id, deadline=self.deadline, order=self.order)
+            generation=generation, goal=goal, deadline=self.deadline, order=self.order,
+            traced=self.traced)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -476,10 +485,10 @@ class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: str
     text: str
 
-    def reserve(self, ctx):
+    def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,
             creator=ctx.goals.registry.require(self.commander), owner=ctx.thread,
-            generation=self.goal_id, deadline=self.deadline, order=self.order)
+            generation=generation, goal=goal, deadline=self.deadline, order=self.order)
 
 
 @dataclass(frozen=True, kw_only=True)
