@@ -316,7 +316,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
     from agent_comms.acp import CommsAgent
     from agent_comms.child_process import ProcessIdentity
     from agent_comms.comms import Comms
-    from agent_comms import owner_lifecycle
+    from agent_comms import private_nk_entrypoint
     from agent_comms.coordination_errors import PublicationActivationBlocked
     from agent_comms.native_package import NativePackageError
     from agent_comms.threads import Thread
@@ -332,7 +332,7 @@ async def test_owner_that_fails_before_binding_releases_its_registration(tmp_pat
         raise NativePackageError("Pinned native package directory is missing")
 
     # A private wire whose installation has no prepared native package.
-    monkeypatch.setattr(owner_lifecycle, "pinned_native_package", unprepared)
+    monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", unprepared)
     with pytest.raises(PublicationActivationBlocked, match="prepared native package"):
         await agent.sessions.start_owner(str(tmp_path), "worker")
     await agent.shutdown()

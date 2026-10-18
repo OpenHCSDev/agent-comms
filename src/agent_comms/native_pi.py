@@ -427,7 +427,7 @@ class NativePiRpcLaunch:
         return cls(argv, cwd, env, session, package, configuration=configuration, runtime=runtime)
 
     @classmethod
-    def _command_selection(cls, command: str, runtime: LaunchRuntime):
+    def _command_selection(cls, command: str, runtime: LaunchRuntime, root: Path | None = None):
         """Decode the original launcher selection without acquiring its package.
 
         Executable names never establish capability. Configured commands must
@@ -440,7 +440,7 @@ class NativePiRpcLaunch:
         executable = (
             Path(shutil.which(command) or command).resolve(strict=True) if command != "pi" else None
         )
-        route = PrivateNkLaunch.derive()
+        route = PrivateNkLaunch.derive(root)
         if route is not None:
             package = route.native_package
         elif executable is not None and executable == stack_launcher.resolve():
@@ -457,9 +457,14 @@ class NativePiRpcLaunch:
         return package, route
 
     @classmethod
-    def package_for_command(cls, command: str, runtime: LaunchRuntime) -> Path:
-        """Acquire the original reviewed artifact before any new native execution."""
-        package, route = cls._command_selection(command, runtime)
+    def package_for_command(
+        cls, command: str, runtime: LaunchRuntime, root: Path | None = None,
+    ) -> Path:
+        """Acquire the original reviewed artifact before any new native execution.
+
+        The launch is the caller's root's; without one, this process's selection.
+        """
+        package, route = cls._command_selection(command, runtime, root)
         if route is not None:
             route.validate()
         else:
@@ -468,7 +473,7 @@ class NativePiRpcLaunch:
 
     @classmethod
     def catalog(
-        cls, command: str, arguments: tuple[str, ...], *, worktree: Path,
+        cls, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path | None = None,
     ) -> NativePiRpcLaunch:
         """Metadata-only RPC owns an in-memory session, never a saved selection.
 
@@ -483,7 +488,7 @@ class NativePiRpcLaunch:
         except ValueError as error:
             raise NativePiUnavailable(str(error)) from error
         runtime = LaunchRuntime.running()
-        package = cls.package_for_command(command, runtime)
+        package = cls.package_for_command(command, runtime, root)
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")

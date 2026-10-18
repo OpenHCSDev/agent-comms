@@ -252,6 +252,7 @@ class CatalogQuery(NativeQuery):
     @asynccontextmanager
     async def catalog(
         self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
+        root: Path | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
@@ -264,6 +265,7 @@ class CatalogQuery(NativeQuery):
                 agent_bin,
                 tuple(arguments),
                 worktree=Path.cwd() if worktree is None else worktree,
+                root=root,
             )
             async with BoundedRun.session(
                 launch.argv, cwd=launch.cwd, env=launch.env, timeout=CATALOG_TIMEOUT
@@ -277,10 +279,12 @@ class CatalogQuery(NativeQuery):
         except (EOFError, ValueError, OSError) as error:
             raise NativePiUnavailable(f"Native catalog discovery failed: {error!r}") from error
 
-    async def discover(self, agent_bin: str, arguments: Sequence[str]) -> PiResponseData:
+    async def discover(
+        self, agent_bin: str, arguments: Sequence[str], root: Path | None = None,
+    ) -> PiResponseData:
         from .native_pi import NativePiUnavailable
 
-        async with self.catalog(agent_bin, arguments) as (channel, writer):
+        async with self.catalog(agent_bin, arguments, root=root) as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is True:
                 return response.data.require_payload()
@@ -327,6 +331,7 @@ class SettingCommand(CatalogQuery):
 
     async def configure(
         self, agent_bin: str, arguments: Sequence[str], *, worktree: Path,
+        root: Path | None = None,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
 
@@ -335,7 +340,7 @@ class SettingCommand(CatalogQuery):
         """
         from .native_pi import NativePiUnavailable
 
-        async with self.catalog(agent_bin, arguments, worktree=worktree) as (channel, writer):
+        async with self.catalog(agent_bin, arguments, worktree=worktree, root=root) as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is not True:
                 raise NativePiUnavailable(response.error or self.error_message)
