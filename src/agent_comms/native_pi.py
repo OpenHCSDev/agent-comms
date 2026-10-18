@@ -430,7 +430,7 @@ class NativePiRpcLaunch:
 
     @classmethod
     def _command_selection(
-        cls, command: str, runtime: LaunchRuntime, root: Path | str | None = None,
+        cls, command: str, runtime: LaunchRuntime, root: Path | str | None,
     ):
         """Decode the original launcher selection without acquiring its package.
 
