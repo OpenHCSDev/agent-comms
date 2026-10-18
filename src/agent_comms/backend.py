@@ -19,7 +19,9 @@ import asyncio
 import json
 import secrets
 import unicodedata
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterator, Sequence
+from collections.abc import (
+    AsyncGenerator, AsyncIterator, Awaitable, Callable, Iterable, Iterator, Sequence,
+)
 from contextlib import AsyncExitStack, aclosing, contextmanager
 from functools import partial
 from pathlib import Path
@@ -581,6 +583,5 @@ class TurnSession:
         )
         self.output.startup_error(self.error_text)
 
-    def finish_result(self) -> Iterator[events.AgentEvent]:
-        for event in self.output.done(self, self.error_text):
-            yield event
+    def finish_result(self) -> Iterable[events.AgentEvent]:
+        yield from self.output.done(self, self.error_text)
