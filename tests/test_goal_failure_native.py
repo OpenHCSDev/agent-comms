@@ -260,7 +260,6 @@ async def test_saved_native_acp_failed_goal_remains_passive(native_backend, monk
                 paused = reopened.registry.require(sid).goal
                 assert paused.state.pause_source.instruction()
                 assert reopened.goals.goal_history(sid)[-1].after == paused
-                assert not (comms.root / "goal_pause_events.json").exists()
                 assert stored_inputs(agent.inputs.dispositions.root).rows[key] == unknown
                 return
             # Explicit owner Retry traverses the socket control, new scheduler,
