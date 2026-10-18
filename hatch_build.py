@@ -13,12 +13,12 @@ class CoreBuildHook(BuildHookInterface):
         root = Path(self.root)
         relative = "src/agent_comms/_native/core_stamp.py"
         source = root / relative
+        source.with_name("core-commit").unlink(missing_ok=True)
         # These definitions need no application dependencies in the build env.
         types = run_path(str(root / "src/agent_comms/core_stamp.py"))
         checkout = types["CheckoutStamp"](str(root.resolve()))
         if version == "editable":
             checkout.write(source)
-            source.with_name("core-commit").unlink(missing_ok=True)
             build_data["artifacts"].append(relative)
             return
         # Never overwrite a source checkout's stamp while building its wheel.
