@@ -359,8 +359,6 @@ def step(comms: Comms) -> None:
         except RestartRefusal as refusal:
             record = record.transition(refusal.queue_state())
         except StoppedOwnerFailure as exc:
-            # An attempted restart remains uncertain; the cutover already left
-            # it stopped, and this queue never replays installation or input.
             record = record.transition(UncertainRestart(reason=str(exc)))
         except (OSError, ValueError) as exc:
             record = record.transition(UncertainRestart(reason=f"{type(exc).__name__}: {exc}"))

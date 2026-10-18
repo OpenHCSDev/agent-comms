@@ -199,7 +199,6 @@ class StoppedOwnerFailure(CoordinationError):
         self, stopped: StoppedOwnerBatch | FencedOwnerBatch, operation: OwnerCutover,
         cause: BaseException,
     ):
-        # The message names its cause: a log or a thread shows why the restart failed.
         super().__init__(
             'Cutover failed after fencing; retirement ownership requires explicit disposition: '
             f'{type(cause).__name__}: {cause}'
