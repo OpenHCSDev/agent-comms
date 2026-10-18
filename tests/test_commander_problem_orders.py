@@ -418,7 +418,7 @@ def test_order_fire_releases_every_open_problem_the_unit_holds(commander, comman
     create(commander, 'P1')
     create(commander, 'P2', 'printf 2', 2)
     script.FireVerb(unit='worker', why=FIRED).run()
-    assert [(t.assignment, t.released[0].reason) for t in map(comms.goals.todos.get, ('P1', 'P2'))] == [(None, FIRED)] * 2
+    assert [(t.assignment, t.released[0].reason.text) for t in map(comms.goals.todos.get, ('P1', 'P2'))] == [(None, FIRED)] * 2
     assert capsys.readouterr().out.splitlines() == [f'{pid}: released from worker: {FIRED}' for pid in ('P1', 'P2')]
     script.board()
     assert (tmp_path / 'board.md').read_text().count(f'unassigned: released from worker: {FIRED}') == 2

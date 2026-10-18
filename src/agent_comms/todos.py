@@ -160,7 +160,8 @@ class NotifiedFirstCallEvent(FirstCallEvent):
         return current.notify()
 
 
-class OrderWords(WireValue, str):
+@dataclass(frozen=True)
+class OrderWords(WireValue):
     """Text the commander writes; quoted, backticked, indented and path-like spans are someone else's words."""
 
     CITED: ClassVar[re.Pattern] = re.compile(
@@ -168,14 +169,14 @@ class OrderWords(WireValue, str):
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
     least_words: ClassVar[int] = 1
+    text: str
 
-    def __new__(cls, text: str):
-        if refused := cls.refused(text):
+    def __post_init__(self) -> None:
+        if refused := self.refused(self.text):
             raise ValueError(refused)
-        return super().__new__(cls, text)
 
     def to_wire(self) -> str:
-        return str(self)
+        return self.text
 
     @classmethod
     def from_wire(cls, data: object) -> Self:

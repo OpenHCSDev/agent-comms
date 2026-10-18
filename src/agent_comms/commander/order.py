@@ -388,7 +388,7 @@ def board():
     listed = (t for t in todos() if t.state.open)
     for t in sorted(listed, key=lambda t: int(t.id[1:]) if t.id[1:].isdigit() else 0):
         unit, last = t.holder, t.released[-1:]
-        owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason}'
+        owner = unit or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
         lines.append(f'| {t.id}: {t.text} | {t.order.owner.to_wire()} | {owner} | {t.order.id} | '
                      f'{hhmm(t.deadline)} | {"no" if t.pending else "yes, install pending"} | '
                      f'{unit and last_activity(unit) or "-"} |')
