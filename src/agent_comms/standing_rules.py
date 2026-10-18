@@ -28,16 +28,19 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def line(self) -> str: ...
 
+    def began(self) -> float | None:
+        """When this violation began, or None when its rule cannot say: it shows on every read."""
+        return None
+
     @staticmethod
     def todos(comms: Comms, commander: str) -> tuple[Todo, ...]:
         return tuple(comms.goals.todos.for_commander(comms.registry.require(commander).incarnation))
 
     @classmethod
-    def broken(cls, comms: Comms, commander: str) -> tuple[StandingRule, ...]:
-        """Every member's current violations for one commander."""
-        return tuple(
-            found for rule in cls.members_with(cls) for found in rule.violations(comms, commander)
-        )
+    def broken(cls, comms: Comms, commander: str, after: float = 0.0) -> tuple[StandingRule, ...]:
+        """Every member's violations for one commander that began after ``after``."""
+        found = (v for rule in cls.members_with(cls) for v in rule.violations(comms, commander))
+        return tuple(rule for rule in found if (began := rule.began()) is None or began >= after)
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
     why: str
+    since: float | None = None
     text: ClassVar[str]
 
     @classmethod
@@ -52,8 +56,16 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     def reason(cls, comms: Comms, commander: str) -> str | None: ...
 
     @classmethod
+    def broken_at(cls, comms: Comms, commander: str) -> float | None:
+        return None
+
+    @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        return tuple(cls(why) for why in (cls.reason(comms, commander),) if why)
+        why = cls.reason(comms, commander)
+        return (cls(why, cls.broken_at(comms, commander)),) if why else ()
+
+    def began(self) -> float | None:
+        return self.since
 
     def line(self) -> str:
         return self.text.format(why=self.why)
@@ -65,11 +77,18 @@ class HuntDue(ReasonedStandingRule):
     text = "HUNT DUE: read a hot path and order the fix this wake"
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
+    def hunted(cls, comms: Comms, commander: str) -> float:
         hunts = (hunt for todo in cls.todos(comms, commander) for hunt in todo.hunts)
-        hunted = (hunt.at.recorded_at("A hunt") for hunt in hunts)
-        age = time.time() - max(hunted, default=0)
+        return max((hunt.at.recorded_at("A hunt") for hunt in hunts), default=0)
+
+    @classmethod
+    def reason(cls, comms: Comms, commander: str) -> str | None:
+        age = time.time() - cls.hunted(comms, commander)
         return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
+
+    @classmethod
+    def broken_at(cls, comms: Comms, commander: str) -> float | None:
+        return cls.hunted(comms, commander) + cls.seconds
 
 
 @dataclass(frozen=True)

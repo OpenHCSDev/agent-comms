@@ -7,6 +7,7 @@ import pytest
 from agent_comms.todos import (CommittedProgress, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
     PullRequest, PullRequests, PushedProgress, UnreadProgress)
 
+from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
 from test_commander_problem_orders import create
 
@@ -144,3 +145,17 @@ def test_a_stalled_order_prints_stall_with_its_progress(commander, commander_scr
     create(commander, 'P1', deadline=time.time() + 3600)
     assert script.deadline_lines(script.open_todos()) == [
         'STALL P1 worker: no commit since the order -> push it now or reassign']
+
+
+def test_overdue_is_announced_once_per_crossing(commander, commander_script):
+    comms, _ = commander
+    script, _ = commander_script
+    create(commander, 'P1')  # ordered at 100 and due at 1000; it stalled at 700, before the watch
+    polls, since = [], 800.0
+    for _ in range(3):
+        polls, since = polls + script.deadline_lines(script.open_todos(), since), time.time()
+    assert len(polls) == 1 and polls[0].startswith('OVERDUE: worker (due ')
+    comms.messaging.send_message('worker', 'lead', 'on it', InfoKind)
+    replied = script.deadline_lines(script.open_todos(), since)
+    assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
+    assert script.deadline_lines(script.open_todos(), time.time()) == []
