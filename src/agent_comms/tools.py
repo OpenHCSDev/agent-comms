@@ -57,7 +57,7 @@ from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
-                    PullRequests, StrikeReason, Todo, TodoOperation)
+                    PlainText, PullRequests, StrikeReason, Todo, TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -757,6 +757,30 @@ class CommsFireTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
         return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCorrectWordingTool(ThreadToolRequest):
+    label = "Correct unit wording"
+    description = ("Answer a unit's jargon with a correction naming its open orders; the unit's "
+                   "strikes stay as they are. Only its commander may invoke this tool.")
+    unit: str = tool_field("Unit thread whose message used jargon")
+    message_id: str = tool_field("The unit's message")
+    text: str = tool_field("The unit's message text")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
+        actor = comms.registry.require(caller.name).incarnation
+        orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
+                  if todo.state.open and todo.holder == self.unit]
+        if not orders:
+            raise ValueError(f"{self.unit} holds no open order from {caller.name}.")
+        if not (words := PlainText.found(self.text)):
+            raise ValueError(f"Message {self.message_id} is plain; there is nothing to correct.")
+        message = comms.messaging.send_message(
+            caller.name, self.unit,
+            f"Correction, no strike, on {', '.join(orders)}: message {self.message_id} used "
+            f"{', '.join(words)}. Say what you did and what broke in plain words from now on.")
+        return MessagePublished(message.message_id, SentTranscript.from_message(message))
 
 
 @dataclass(frozen=True, kw_only=True)
