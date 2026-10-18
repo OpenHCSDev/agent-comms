@@ -118,7 +118,7 @@ class LiveObservationInterest(ObservationInterest):
     def receive(self, request: InterestRequest, service: ObservationService) -> None:
         observation = request.observation()
         kind = type(observation)
-        self.observations[kind] = observation.for_interest(self.observations.get(kind))
+        self.observations[kind] = self.observations.get(kind, NotObserved()).for_interest(observation)
         service.observe_again()
 
     def stop(self) -> ObservationInterest:
@@ -152,17 +152,27 @@ class LiveObservationInterest(ObservationInterest):
 InterestT = TypeVar("InterestT", bound=InterestRequest)
 
 
-class Observation(ABC, Generic[InterestT]):
+class ObservationLifetime(ABC):
+    """A previous reader decides how the next interest continues its lifetime."""
+
+    @abstractmethod
+    def for_interest(self, requested: Observation) -> Observation: ...
+
+
+class NotObserved(ObservationLifetime):
+    def for_interest(self, requested: Observation) -> Observation:
+        return requested
+
+
+class Observation(ObservationLifetime, Generic[InterestT]):
     """A requested view owns its read state and yields between store operations."""
 
     def __init__(self, request: InterestT):
         self.request = request
 
-    def for_interest(self, previous: Self | None) -> Self:
-        """The requested view owns whether its read lifetime can be retained."""
-        if previous is not None:
-            return previous if previous.request == self.request else self.continue_from(previous)
-        return self
+    def for_interest(self, requested: Observation) -> Observation:
+        """Keep an unchanged reader; a changed request continues from this reader."""
+        return self if self.request == requested.request else requested.continue_from(self)
 
     def continue_from(self, previous: Self) -> Self:
         """A changed interest starts fresh unless its reader can retain useful answers."""
@@ -374,17 +384,34 @@ class SubscribeTranscript(ReadTranscript):
     )
 
 
-@dataclass(frozen=True)
-class ReadTranscriptUpdate(TranscriptRequest[TranscriptSnapshotUpdate | TranscriptDraftUpdate]):
-    """Refresh a published page, reading only its draft while its contents agree."""
+class TranscriptPublicationState(ABC):
+    @abstractmethod
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate: ...
 
-    previous: TranscriptReadIdentity | None = None
+
+class NotPublished(TranscriptPublicationState):
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate:
+        return TranscriptSnapshotUpdate.from_read(read)
+
+
+@dataclass(frozen=True)
+class Published(TranscriptPublicationState):
+    identity: TranscriptReadIdentity
 
     def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
-        previous = self.previous
-        if previous is not None and previous.same_snapshot(read.identity):
+        if self.identity.same_snapshot(read.identity):
             return TranscriptDraftUpdate(read.identity, read.current_draft())
         return TranscriptSnapshotUpdate.from_read(read)
+
+
+@dataclass(frozen=True)
+class ReadTranscriptUpdate(TranscriptRequest[TranscriptSnapshotUpdate | TranscriptDraftUpdate]):
+    """The publication state decides whether this read needs a page or its draft."""
+
+    previous: TranscriptPublicationState = field(default_factory=NotPublished)
+
+    def result(self, read: TranscriptRead) -> TranscriptSnapshotUpdate | TranscriptDraftUpdate:
+        return self.previous.result(read)
 
 
 @dataclass(frozen=True)
@@ -623,15 +650,32 @@ class ObserveNotifications(InterestRequest):
         return NotificationReading(self)
 
 
+class NotificationRead(ABC):
+    @abstractmethod
+    def changed(self, request: ReadNotifications, revision: WireRevision) -> bool: ...
+
+
+class NotRead(NotificationRead):
+    def changed(self, request: ReadNotifications, revision: WireRevision) -> bool:
+        return True
+
+
+@dataclass(frozen=True)
+class ReadAt(NotificationRead):
+    revision: WireRevision
+
+    def changed(self, request: ReadNotifications, revision: WireRevision) -> bool:
+        return request.changed_since(revision, self.revision)
+
+
 class NotificationReading(Observation[ObserveNotifications]):
     def __init__(self, request: ObserveNotifications):
         super().__init__(request)
-        self.revisions: dict[ReadNotifications, WireRevision] = {}
+        self.read_states: dict[ReadNotifications, NotificationRead] = {}
 
     def read(self, comms: Comms, revision: WireRevision) -> Iterator[Observed | None]:
         for request in self.request.reads:
-            previous = self.revisions.get(request)
-            if previous is not None and not request.changed_since(revision, previous):
+            if not self.read_states.get(request, NotRead()).changed(request, revision):
                 continue
             try:
                 request.require_root(comms)
@@ -643,7 +687,7 @@ class NotificationReading(Observation[ObserveNotifications]):
                 result = NotificationsUnreadable(revision, request, UnreadableHistory.capture(error))
             else:
                 result = NotificationsObserved(revision, request, outcomes)
-            self.revisions[request] = revision
+            self.read_states[request] = ReadAt(revision)
             yield result
 
 
