@@ -11,7 +11,8 @@ import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
-from typing import Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
+from collections.abc import Iterator
+from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
@@ -20,6 +21,11 @@ from .native_file_artifact import NativeFileArtifact
 from .tool_declaration import ToolDeclaration
 from .pi_vocabulary import NoThinkingOverride, PiStopReason, ThinkingLevel, ThinkingLevelField, UnreportedStopReason
 from .transcript_events import SentTranscript
+
+if TYPE_CHECKING:
+    from .agent_events import AgentEvent, ProviderUsage
+    from .backend import TurnSession
+    from .turn_usage import UsageAccount
 
 
 def wire_field(name: str, default=None):
@@ -223,13 +229,13 @@ class TokenTotal:
     def otherwise(self, other: TokenTotal) -> TokenTotal:
         return other
 
-    def provisional(self, session):
-        return ()
+    def provisional(self, session: TurnSession) -> Iterator[AgentEvent]:
+        return iter(())
 
-    def confirm(self, account) -> None:
+    def confirm(self, account: UsageAccount) -> None:
         """Only a reported total confirms the context usage."""
 
-    def settle(self, session):
+    def settle(self, session: TurnSession) -> Iterator[AgentEvent]:
         """A stop keeps only a confirmed total; an unconfirmed provisional one is withdrawn."""
         if session.usage.provisional:
             session.usage.rollback()
@@ -248,14 +254,14 @@ class ReportedTokens(TokenTotal):
     def otherwise(self, other: TokenTotal) -> TokenTotal:
         return self
 
-    def confirm(self, account) -> None:
+    def confirm(self, account: UsageAccount) -> None:
         account.confirm(self.count)
 
-    def provisional(self, session):
+    def provisional(self, session: TurnSession) -> Iterator[AgentEvent]:
         session.usage.observe(self.count)
         yield session.context_info()
 
-    def settle(self, session):
+    def settle(self, session: TurnSession) -> Iterator[AgentEvent]:
         if not session.accepts_output:
             yield from super().settle(session)
             return
@@ -284,7 +290,7 @@ class PiUsage(PiPayload):
     def token_total(self) -> TokenTotal:
         return TokenTotal.reported(self.total_tokens)
 
-    def charges(self, account) -> tuple:
+    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
         """A usage Pi reported is charged once to the turn's account."""
         return (account.charge(self),)
 
@@ -293,7 +299,7 @@ class PiUsage(PiPayload):
 class UnreportedUsage(PiUsage):
     """Pi sent no usage object: nothing is charged and no token total is known."""
 
-    def charges(self, account) -> tuple:
+    def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
         return ()
 
 
