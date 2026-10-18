@@ -25,7 +25,6 @@ from .goal_presentation import ThreadGoalExecution
 from .goal_waits import GoalWaits
 from .external_transcript import ExternalTranscript
 from .notification_assignment import NotificationAssignment
-from .relationships import RelationshipStore
 from .mentions import MentionCandidate
 from .message_page import ConversationMessagePageRequest, MessagePage, MessagePageRequest
 from .message_reference import MessageReference
@@ -35,7 +34,7 @@ from .private_path import FileRevision
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
-from .runtime_info import RuntimeInfo
+from .runtime_info import AgentRuntimeInfo, UnobservedRuntimeInfo
 from .store_files import SharedLock, _store_lock
 from .wire_log import WireSnapshot, WireLog
 from .thread_identity import ThreadIncarnation
@@ -652,7 +651,7 @@ class ThreadRecord:
 @dataclass(frozen=True, slots=True)
 class ThreadView(ThreadRecord):
     activity: ObservedActivity
-    runtime: RuntimeInfo
+    runtime: AgentRuntimeInfo | UnobservedRuntimeInfo
     last_seen: float
     binding: ThreadOwnerBinding = UnavailableThreadOwnerBinding()
 
@@ -771,6 +770,12 @@ def revision_source(paths: Callable[[HistoryViews], tuple[Path, ...]]):
     return field(metadata={"paths": paths})
 
 
+def relationship_paths(views: HistoryViews) -> tuple[Path, ...]:
+    # Relationship entries hold thread views, so their module loads this one first.
+    from .relationships import RelationshipStore
+    return (RelationshipStore.path_in(views.root),)
+
+
 class ReadState:
     __slots__ = ()
 
@@ -809,7 +814,7 @@ class WireRevision(ReadState):
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,))
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,))
     goal_waits: tuple[FileRevision, ...] = revision_source(lambda views: (GoalWaits.path_in(views.root),))
-    relationships: tuple[FileRevision, ...] = revision_source(lambda views: (RelationshipStore.path_in(views.root),))
+    relationships: tuple[FileRevision, ...] = revision_source(relationship_paths)
     notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root))
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root))
     expiry_tick: int
