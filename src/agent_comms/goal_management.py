@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
 from .goal_presentation import ThreadGoalExecution, GoalWaitTarget
+from .goals import GoalDeclaration
 from .goals import Goal
 from .message_bus import MessageBus
 from .store_files import _store_lock
@@ -132,7 +133,7 @@ class Goals:
     def _goal_input_review(
         self, thread: Thread, goal_id: str, wait_for: Sequence[str]
     ) -> GoalInputReview:
-        goal = thread.require_active_goal(goal_id)
+        goal = thread.goal.require_active(goal_id)
         if not wait_for:
             raise ValueError("Standby requires explicit wait_for thread names.")
         resolved = tuple(self.registry.require(target.removeprefix("@")) for target in wait_for)
@@ -201,7 +202,7 @@ class Goals:
 
     def goal_wait(self, name: str) -> GoalWait:
         goal = self.registry.require(name).goal
-        return self.waits.for_goal(goal, self.waits.read()) if goal is not None else NoGoalWait()
+        return goal.wait(self.waits.read())
 
     def recover_closed_goal_wait(self, name: str) -> tuple[str, ...]:
         """Release one stranded standby without replaying a dependency input.
@@ -216,7 +217,7 @@ class Goals:
             owner = snapshot.threads.get(canonical)
             if owner is None or self.agents.is_working(owner.incarnation, snapshot):
                 return ()
-            goal = owner.active_goal
+            goal = owner.goal.active()
             if goal is None:
                 return ()
             waits = self.waits
@@ -287,7 +288,7 @@ class Goals:
                 owner = snapshot.threads.get(snapshot.canonical_name(wait.owner.name))
                 if owner is None:
                     continue
-                goal = owner.active_goal
+                goal = owner.goal.active()
                 if (
                     goal is None
                     or goal.id != goal_id
@@ -322,7 +323,7 @@ class Goals:
         return self._goal_snapshot(name)[1]
 
     def goal_changed(
-        self, name: str, previous: tuple[Goal | None, ThreadGoalExecution] | None
+        self, name: str, previous: tuple[GoalDeclaration, ThreadGoalExecution] | None
     ) -> GoalChanged | None:
         """Announce a durable change through S1's event vocabulary.
 
@@ -334,12 +335,12 @@ class Goals:
         current = self.goal_snapshot(name)
         return GoalChanged(*current) if current != previous else None
 
-    def goal_snapshot(self, name: str) -> tuple[Goal | None, ThreadGoalExecution]:
+    def goal_snapshot(self, name: str) -> tuple[GoalDeclaration, ThreadGoalExecution]:
         """Read current goal and its scheduling projection as one owner snapshot."""
         with _store_lock(self._wire_lock_path, shared=True):
             return self._goal_snapshot(name)
 
-    def _goal_snapshot(self, name: str) -> tuple[Goal | None, ThreadGoalExecution]:
+    def _goal_snapshot(self, name: str) -> tuple[GoalDeclaration, ThreadGoalExecution]:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal
@@ -348,7 +349,7 @@ class Goals:
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""
-        goal = self.registry.require(name).active_goal
+        goal = self.registry.require(name).goal.active()
         return bool(
             goal is not None and self.waits.clear(goal.id, wait_id=wait_id)
         )
@@ -382,7 +383,7 @@ class Goals:
         action: GoalAction,
         *,
         actor: type = RuntimeInvocable,
-    ) -> Goal | None:
+    ) -> GoalDeclaration:
         """Run checks before locking, then recheck the original goal at publication."""
         action.require_actor(actor)
         action = action.prepare(self, name, actor)
@@ -398,18 +399,17 @@ class Goals:
         started_goal: Goal,
         expected_worktree: str,
         diagnostic: str,
-    ) -> Goal | None:
+    ) -> GoalDeclaration:
         """Make an unresolved same-ID attempt visible without losing newer progress."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
-            current = thread.goal_for(started_goal.id)
-            if thread.worktree != expected_worktree or current is None:
-                return thread.goal
-            blocked = current.after_failed_turn(diagnostic)
-            if blocked is current:
-                return current
-            self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
-            return blocked
+            if thread.worktree == expected_worktree:
+                for current in thread.goal.matching(started_goal.id):
+                    blocked = current.after_failed_turn(diagnostic)
+                    if blocked is not current:
+                        self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
+                    return blocked
+            return thread.goal
 
     def block_unverified_goal_completion(
         self,
@@ -418,14 +418,14 @@ class Goals:
         expected_goal: Goal,
         expected_worktree: str,
         diagnostic: str,
-    ) -> Goal | None:
+    ) -> GoalDeclaration:
         """Revoke a provisional completion after the provider turn failed."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             current = thread.goal
-            if thread.worktree != expected_worktree or current is None or current != expected_goal:
+            if thread.worktree != expected_worktree or current != expected_goal:
                 return current
-            blocked = current.after_unverified_completion(diagnostic)
+            blocked = expected_goal.after_unverified_completion(diagnostic)
             if blocked is current:
                 return current
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))

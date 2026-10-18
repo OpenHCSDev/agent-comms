@@ -715,7 +715,7 @@ class ThreadRelationships:
         contacts: list[GoalDerivedContact] = []
         diagnostics: list[GoalMentionDiagnostic] = []
         for owner in registry.threads.values():
-            goal = owner.active_goal
+            goal = owner.goal.active()
             if goal is None or not owner.role.executable:
                 continue
             source = goal.mention_source

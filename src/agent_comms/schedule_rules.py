@@ -91,7 +91,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     inputs.pending_turns.pop(session_id, None)
                     continue
                 pending = inputs.pending_turns.pop(session_id, [])
-                goal = owner.active_goal
+                goal = owner.goal.active()
                 if goal is not None:
                     pending = [turn for turn in pending if turn.goal_id == goal.id]
                 if not pending:

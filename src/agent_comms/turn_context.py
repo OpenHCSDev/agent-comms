@@ -826,7 +826,7 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.active_goal if relation.relevance.grants(GoalShown) else None
+        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else None
         return cls(
             view.thread.name,
             relation.relevance,

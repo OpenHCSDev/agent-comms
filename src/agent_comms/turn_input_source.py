@@ -15,6 +15,7 @@ from .turn_goal_permission import InactiveGoalPermission, TurnGoalPermission
 if TYPE_CHECKING:
     from .comms import Comms
     from .goal_waits import GoalWait
+    from .goals import GoalDeclaration
     from .goals import Goal
     from .input_disposition import InputDispositions
     from .thread_identity import RecordedThreadIncarnation, TurnId
@@ -42,7 +43,7 @@ class TurnInputSource(ABC):
                     owner: RecordedThreadIncarnation) -> bool: ...
 
     @abstractmethod
-    def allows_goal_input(self, goal: Goal | None) -> bool: ...
+    def allows_goal_input(self, goal: GoalDeclaration) -> bool: ...
 
     @abstractmethod
     def display(self, dispositions: InputDispositions, text: str) -> str | None: ...
@@ -50,7 +51,7 @@ class TurnInputSource(ABC):
     def consume_wait(self, comms: Comms, canonical: str, wait: GoalWait) -> bool:
         return True
 
-    def defers_for_goal(self, original: Goal | None, current: Goal | None) -> bool:
+    def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
         return False
 
 
@@ -156,7 +157,7 @@ class DirectInput(TurnInputSource):
                     owner: RecordedThreadIncarnation) -> bool:
         return True
 
-    def allows_goal_input(self, goal: Goal | None) -> bool:
+    def allows_goal_input(self, goal: GoalDeclaration) -> bool:
         return True
 
 
@@ -175,7 +176,7 @@ class RoutedInput(TurnInputSource):
                     owner: RecordedThreadIncarnation) -> bool:
         return wait.allows_routed_input()
 
-    def allows_goal_input(self, goal: Goal | None) -> bool:
+    def allows_goal_input(self, goal: GoalDeclaration) -> bool:
         return not self.keys or InactiveGoalPermission().allows(goal)
 
 
@@ -226,7 +227,7 @@ class FollowingTurnInput(TurnInputSource):
         row = dispositions.lookup(self.keys[0]) if self.keys else None
         return row.source_text if row is not None and row.exists else text
 
-    def defers_for_goal(self, original: Goal | None, current: Goal | None) -> bool:
+    def defers_for_goal(self, original: GoalDeclaration, current: GoalDeclaration) -> bool:
         return (
             (original is None or not original.state.active)
             and current is not None

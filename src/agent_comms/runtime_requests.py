@@ -283,7 +283,7 @@ class GoalSnapshotResultRuntimeRequest(ResultRuntimeRequest):
             ctx.server.agent._comms.goals.goal_snapshot, ctx.name,
         ))
         return {
-            "goal": goal.to_wire() if goal is not None else None,
+            "goal": goal.to_wire(),
             "goalExecution": execution.to_wire(),
             "_meta": encode_updates(TurnChangedUpdate(await Coordination.run_worker(partial(
                 ctx.server.agent.turns.turn_state, ctx.session_id,

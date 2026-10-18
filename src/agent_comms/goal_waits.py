@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .goal_presentation import GoalExecution, GoalExecutionState, GoalWaitTarget, IdleGoalExecution, ThreadGoalExecution
+from .goals import GoalDeclaration
 from .goals import Goal
 from .input_attempt import InputAttempt
 from .locked_store import LockedStore, RootFile
@@ -245,13 +246,11 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
 
     @classmethod
     def execution(
-        cls, goal: Goal | None, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
+        cls, goal: GoalDeclaration, rows: dict[str, RecordedGoalWait], snapshot: RegistrySnapshot,
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""
-        if goal is None:
-            return IdleGoalExecution()
-        return cls.for_goal(goal, rows).project(goal, snapshot, agents)
+        return goal.execution(rows, snapshot, agents)
 
     @staticmethod
     def closed_wait_group(
@@ -276,7 +275,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 continue
             seen.add(name)
             thread = snapshot.threads[name]
-            goal = thread.active_goal
+            goal = thread.goal.active()
             wait = rows.get(goal.id) if goal is not None else None
             if wait is not None and (
                 goal is None
@@ -292,7 +291,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                 if canonical == owner:
                     pending.append(owner)
                     continue
-                peer_goal = peer.active_goal
+                peer_goal = peer.goal.active()
                 peer_wait = (
                     rows.get(peer_goal.id)
                     if peer_goal is not None

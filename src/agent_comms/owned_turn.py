@@ -114,7 +114,7 @@ class OwnedTurn:
         )
         self.thread_name = self.thread.name
         wait = self.runner.comms.goals.goal_wait(self.thread_name)
-        active_goal = self.thread.active_goal
+        active_goal = self.thread.goal.active()
         if self.dependency_wait_id is not None:
             if not wait.matches_id(self.dependency_wait_id):
                 return
@@ -140,7 +140,7 @@ class OwnedTurn:
             self.lease_cleanup, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
-        active_goal = self.thread.active_goal
+        active_goal = self.thread.goal.active()
         if self.autonomous_goal and active_goal is None:
             return False
         if active_goal is not None and not self.original_owner_input:
@@ -234,7 +234,7 @@ class OwnedTurn:
         """Acquire the original durable input before opening loop capabilities."""
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.thread.goal)
-        elif active_goal := self.thread.active_goal:
+        elif active_goal := self.thread.goal.active():
             permission = ContinuationGoalPermission(active_goal)
         else:
             permission = InactiveGoalPermission()

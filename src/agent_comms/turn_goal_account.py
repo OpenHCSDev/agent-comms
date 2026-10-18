@@ -126,7 +126,7 @@ class TurnGoalAccount:
 
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal = self.comms.registry.require(self.thread_name).goal
-        goal_id = goal.id if goal is not None else None
+        goal_id = next((record.id for record in goal), None)
         permit = self.originated.get(goal_id)
         if (
             permit is None
@@ -148,25 +148,26 @@ class TurnGoalAccount:
             return
         with _store_lock(self.comms._wire_lock_path):
             owner = self.comms.registry.snapshot().require(self.owner.name)
-            goal = owner.goal
-            if goal is None or goal.id in self.originated:
-                return
-            store = self.comms.goals.open_goal_store()
-            self.originated[goal.id] = None
-            generation = store.require_generation(goal.id)
-            generation.lifecycle.require_ready()
-            grant = self.comms.goals.ready_goal_grant_locked(
-                owner, self.lease.claimed_generation, generation,
-            )
-            permit = store.claim_launch(
-                store.reserve(goal.id, generation.number, ready_grant=grant)
-            )
-        self.claims.callback(permit.retire_unverified, store)
-        self.originated[goal.id] = permit
-        for response_id, usage in self.unattributed_usage:
-            permit.record_provider_usage(store, response_id, usage.to_wire())
-        self.unattributed_usage.clear()
-        self.pending_origins[self.thread_name] = goal.id
+            for goal in owner.goal:
+                if goal.id in self.originated:
+                    return
+                store = self.comms.goals.open_goal_store()
+                self.originated[goal.id] = None
+                generation = store.require_generation(goal.id)
+                generation.lifecycle.require_ready()
+                grant = self.comms.goals.ready_goal_grant_locked(
+                    owner, self.lease.claimed_generation, generation,
+                )
+                permit = store.claim_launch(
+                    store.reserve(goal.id, generation.number, ready_grant=grant)
+                )
+        for goal in owner.goal:
+            self.claims.callback(permit.retire_unverified, store)
+            self.originated[goal.id] = permit
+            for response_id, usage in self.unattributed_usage:
+                permit.record_provider_usage(store, response_id, usage.to_wire())
+            self.unattributed_usage.clear()
+            self.pending_origins[self.thread_name] = goal.id
 
     def block_current(self, diagnostic: str) -> None:
         self.comms.goals.block_goal_after_failed_turn(
@@ -199,9 +200,9 @@ class TurnGoalAccount:
         if terminal is None and self.current_active_goal() is not None:
             self.block_current("Backend turn ended without a result; inspect local diagnostics.")
         store = self.comms.goals.open_goal_store()
-        current = self.comms.registry.require(self.thread_name).goal_for(self.owner.goal.id)
+        current_goals = self.comms.registry.require(self.thread_name).goal.matching(self.owner.goal.id)
         if terminal is not None and terminal.ok:
-            if current is not None:
+            for current in current_goals:
                 result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
                 result.dispatch_sync(current.state)
         if self.permit.has_verified_progress(store):
@@ -226,17 +227,17 @@ class TurnGoalAccount:
                 "Goal turn ended without verified terminal progress.",
                 observation=observation,
             )
-        if current is not None:
+        for current in current_goals:
             self.block_current("Goal turn ended without verified terminal progress.")
 
     def finish(self, terminal: events.Done | None) -> None:
         """Settle all original grants once from the actual producer terminal event."""
         self.settle_original(terminal)
         for goal_id, permit in self.originated.items():
-            current = self.comms.registry.require(self.thread_name).goal_for(goal_id)
+            current_goals = self.comms.registry.require(self.thread_name).goal.matching(goal_id)
             store = self.comms.goals.open_goal_store()
             if terminal is not None and terminal.ok:
-                if current is not None:
+                for current in current_goals:
                     result = OriginGoalSettlement(store, permit, current, self.turn)
                     result.dispatch_sync(current.state)
             if permit is None or not permit.has_verified_progress(store):
@@ -253,7 +254,7 @@ class TurnGoalAccount:
                             expected_generation=generation.number,
                             attempt_id=generation.attempt_id,
                         )
-                if current is not None:
+                for current in current_goals:
                     FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync(
                         current.state
                     )

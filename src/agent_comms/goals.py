@@ -14,7 +14,8 @@ from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, WireValue
+from .errors import RelationViolationError
 from .goal_states import ActiveGoal, GoalState
 
 
@@ -297,8 +298,109 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
+class GoalDeclaration(WireValue):
+    """A thread's goal declaration; null is only its external representation."""
+
+    accepts_null = True
+
+    @classmethod
+    def from_wire(cls, data):
+        return NoGoal() if data is None else FieldCodec.decode_record(Goal, data)
+
+    @classmethod
+    def schema(cls):
+        return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(Goal)]}
+
+    @abstractmethod
+    def __iter__(self): ...
+
+    def require(self) -> Goal:
+        raise RelationViolationError("No goal is set for this thread.")
+
+    def require_id(self, goal_id: str) -> Goal:
+        goal = self.require()
+        if goal.id != goal_id:
+            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+        return goal
+
+    def require_active(self, goal_id: str) -> Goal:
+        goal = self.require_id(goal_id)
+        goal.state.require_active()
+        return goal
+
+    def require_checkpoint(self, checkpoint: GoalRevision) -> Goal:
+        if self.captured != PresentGoalCheckpoint(checkpoint):
+            raise ValueError("The goal changed before this action; the action was not applied.")
+        return self.require()
+
+    def require_replacement(self, goals, owner) -> None:
+        pass
+
+    def require_order_slot(self, goal_id: str, problem: str) -> None:
+        pass
+
+    def require_state(self, state):
+        raise ValueError("This goal is no longer active; refresh its state.")
+
+    def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
+        return False
+
+    def failure_projection(self, reason):
+        from .goal_attempt_identity import FailureNotObserved
+        raise FailureNotObserved("owner_or_goal_changed")
+
+    def matching(self, goal_id: str):
+        return tuple(goal for goal in self if goal.id == goal_id)
+
+    def active_records(self):
+        return (goal for goal in self if goal.state.active)
+
+    def active(self) -> Goal | None:
+        return next(self.active_records(), None)
+
+    def active_id(self) -> str | None:
+        return next((goal.id for goal in self.active_records()), None)
+
+    @property
+    def captured(self) -> GoalCheckpoint:
+        return AbsentGoalCheckpoint()
+
+    def wake_context(self):
+        return None
+
+    def registration_value(self, previous):
+        return previous
+
+    def clear_wait(self, waits):
+        pass
+
+    def retire_attempt(self, goals):
+        pass
+
+    def wait(self, rows):
+        from .goal_waits import NoGoalWait
+        return NoGoalWait()
+
+    def execution(self, rows, snapshot, agents):
+        from .goal_presentation import IdleGoalExecution
+        return IdleGoalExecution()
+
+    def display(self):
+        from .ui_model.goal import NoGoal as NoGoalDisplay
+        return NoGoalDisplay()
+
+
 @dataclass(frozen=True)
-class Goal:
+class NoGoal(GoalDeclaration):
+    def __iter__(self):
+        return iter(())
+
+    def to_wire(self):
+        return None
+
+
+@dataclass(frozen=True)
+class Goal(GoalDeclaration):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
     text: str
@@ -310,6 +412,55 @@ class Goal:
     mention_source: GoalMentionSource | None = None
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
+
+    accepts_null = False
+
+    def __iter__(self):
+        return iter((self,))
+
+    def require(self) -> Goal:
+        return self
+
+    @property
+    def captured(self) -> GoalCheckpoint:
+        return PresentGoalCheckpoint(self.checkpoint)
+
+    def require_state(self, state):
+        if self.state != state:
+            raise ValueError(self.state.activity_refusal())
+
+    def failure_projection(self, reason):
+        return self.state.failure_projection(reason)
+
+    def require_order_slot(self, goal_id: str, problem: str) -> None:
+        self.order.require_slot(self, goal_id, problem)
+
+    def wake_context(self):
+        return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+
+    def registration_value(self, previous):
+        return self
+
+    def clear_wait(self, waits):
+        return waits.clear(self.id)
+
+    def retire_attempt(self, goals):
+        attempts = goals.open_goal_store()
+        generation = attempts.snapshot(self.id)
+        if generation is not None and not generation.lifecycle.terminal:
+            attempts.retire_goal(self.id, expected_generation=generation.number,
+                                 attempt_id=generation.attempt_id)
+
+    def wait(self, rows):
+        from .goal_waits import NoGoalWait
+        return rows.get(self.id, NoGoalWait()) if self.state.active else NoGoalWait()
+
+    def execution(self, rows, snapshot, agents):
+        return self.wait(rows).project(self, snapshot, agents)
+
+    def display(self):
+        from .ui_model.goal import ShowingGoal
+        return ShowingGoal(self)
 
     def instructions(self, todos) -> str:
         return self.render_instructions(self.order.instructions(todos))
@@ -338,7 +489,7 @@ class Goal:
         return replace(self, state=state, progress=progress, revision=self.revision + 1)
 
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
+        return FieldCodec.encode_record(self)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:
