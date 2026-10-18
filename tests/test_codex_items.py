@@ -43,8 +43,8 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
     command = {"type": "commandExecution", "id": "c1", "command": "ls -la", "status": "inProgress"}
 
     def receive(method, **params):
-        update = stream.receive(RpcNotification(method=method, params={"threadId": "th", **params}))
-        parts = () if update is None else update.accumulate(output)
+        updates = stream.receive(RpcNotification(method=method, params={"threadId": "th", **params}))
+        parts = tuple(part for update in updates for part in update.accumulate(output))
         return parts[0] if parts else None
 
     assert receive("turn/started", turn={"id": "t1"}) == TurnStarted()
@@ -86,8 +86,8 @@ def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
     output = _output(tmp_path)
 
     def receive(method, **params):
-        update = stream.receive(RpcNotification(method=method, params={"threadId": "th", "turnId": "t", **params}))
-        parts = () if update is None else update.accumulate(output)
+        updates = stream.receive(RpcNotification(method=method, params={"threadId": "th", "turnId": "t", **params}))
+        parts = tuple(part for update in updates for part in update.accumulate(output))
         return parts[-1] if parts else None
 
     assert receive("item/agentMessage/delta", itemId="a", delta="suffix") is None
@@ -141,11 +141,11 @@ def test_function_outputs_keep_wire_fields_and_share_page_and_live_decoding(tmp_
 
         stream = ItemStream("thread")
         output = _output(tmp_path / name)
-        started = stream.receive(RpcNotification(method="item/started", params={
+        started, = stream.receive(RpcNotification(method="item/started", params={
             "threadId": "thread", "turnId": "turn", "startedAtMs": 1000, "item": wire,
         }))
         started.accumulate(output)
-        complete = stream.receive(RpcNotification(method="item/completed", params={
+        complete, = stream.receive(RpcNotification(method="item/completed", params={
             "threadId": "thread", "turnId": "turn", "completedAtMs": 2000, "item": wire,
         }))
         finished, = complete.accumulate(output)

@@ -71,7 +71,7 @@ def fake_input_started(args, kwargs):
     with kwargs["send_boundary"](None, native_id, text) as authorized:
         assert isinstance(authorized, GrantedSend)
     assert kwargs["native_start"](None, native_id, text)
-    return ae.InputStarted(id=None)
+    return ae.OriginalInputStarted()
 
 
 @pytest.fixture
