@@ -11,7 +11,7 @@ from typing import ClassVar, Literal
 from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord, WireValue
+from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
 from .goal_states import ActiveGoal, GoalState
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
@@ -303,18 +303,8 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
-class GoalDeclaration(WireValue):
+class GoalDeclaration(SubclassUnion):
     """The recorded goal state, including a thread with no goal."""
-
-    accepts_null = True
-
-    @classmethod
-    def from_wire(cls, data):
-        return NoGoal() if data is None else FieldCodec.decode_record(Goal, data)
-
-    @classmethod
-    def schema(cls):
-        return {"anyOf": [{"type": "null"}, FieldCodec.record_schema(Goal)]}
 
     def is_set(self) -> bool:
         return False
@@ -356,16 +346,13 @@ class GoalDeclaration(WireValue):
 
 
 @dataclass(frozen=True)
-class NoGoal(GoalDeclaration):
-    def to_wire(self):
-        return None
+class NoGoal(NullMember, GoalDeclaration):
+    pass
 
 
 @dataclass(frozen=True)
-class Goal(GoalDeclaration):
+class Goal(RecordMember, GoalDeclaration):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
-
-    accepts_null = False
 
     text: str
     id: str
@@ -421,9 +408,6 @@ class Goal(GoalDeclaration):
         if state is self.state:
             return self
         return replace(self, state=state, progress=progress, revision=self.revision + 1)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

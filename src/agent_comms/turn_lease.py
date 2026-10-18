@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar, Self
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, NullMember, PathText, SubclassUnion
+from .field_codec import FieldCodec, NullMember, PathText, SubclassUnion, RecordMember
 from .locked_store import JsonDocument
 from .routing import TurnRouting
 from .store_files import _store_lock
@@ -117,7 +117,7 @@ class NoTurn(NullMember, TurnDeclaration):
 
 
 @dataclass(frozen=True)
-class ActiveTurn(TurnDeclaration):
+class ActiveTurn(RecordMember, TurnDeclaration):
     id: str
     owner_pid: int
     started_at: float = field(default_factory=time.time)
@@ -210,17 +210,6 @@ class ActiveTurn(TurnDeclaration):
             and turn_generation > 0
         )
 
-    @classmethod
-    def from_wire(cls, data: Mapping) -> ActiveTurn:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
-
 
 @dataclass(frozen=True)
 class TurnState:
@@ -306,7 +295,7 @@ class NoTurnRecord(NullMember, TurnRecord):
 
 
 @dataclass(frozen=True)
-class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
+class StoredTurnRecord(RecordMember, JsonDocument[ActiveTurn], TurnRecord):
     path: Annotated[Path, PathText]
     registry_path: Annotated[Path, PathText]
 
@@ -314,17 +303,6 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], TurnRecord):
 
     def empty(self) -> ActiveTurn:
         raise RelationViolationError(f"Active turn record is missing: {self.path}")
-
-    @classmethod
-    def from_wire(cls, data: object) -> StoredTurnRecord:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
-
-    def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode_record(self)
 
     @classmethod
     def for_identity(cls, registry_path: Path, identity: TurnIdentity) -> StoredTurnRecord:

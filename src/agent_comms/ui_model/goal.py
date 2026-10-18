@@ -6,9 +6,10 @@ settlement the owner read alongside it.
 
 from abc import abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import ClassVar
 
+from agent_comms import goals
 from agent_comms.acp_extension import AgentCommsUpdate, decode_updates
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
@@ -38,11 +39,11 @@ class GoalDisplay(DeclaredFamily):
 
     @property
     @abstractmethod
-    def snapshot(self) -> Goal | None: ...
+    def snapshot(self) -> GoalDeclaration: ...
 
     @property
     def visible(self) -> bool:
-        return self.snapshot is not None
+        return self.snapshot.is_set()
 
     @abstractmethod
     def heading(self, execution: ThreadGoalExecution) -> str: ...
@@ -58,15 +59,15 @@ class GoalDisplay(DeclaredFamily):
 
     @staticmethod
     def current(goal: GoalDeclaration) -> "GoalDisplay":
-        return NoGoal() if not goal.is_set() else ShowingGoal(goal)
+        return NoGoal() if not goal.is_set() else ShowingGoal(goal.require())
 
 
 @dataclass(frozen=True)
 class NoGoal(GoalDisplay):
     can_control: ClassVar[bool] = False
     @property
-    def snapshot(self) -> None:
-        return None
+    def snapshot(self) -> GoalDeclaration:
+        return goals.NoGoal()
 
     def heading(self, execution: ThreadGoalExecution) -> str:
         return "No current goal"
@@ -99,11 +100,11 @@ class ShowingGoal(GoalDisplay):
 
 @dataclass(frozen=True)
 class GoalUnavailable(GoalDisplay):
-    last_confirmed: Goal | None
+    last_confirmed: GoalDeclaration = field(default_factory=goals.NoGoal)
     can_control: ClassVar[bool] = False
 
     @property
-    def snapshot(self) -> Goal | None:
+    def snapshot(self) -> GoalDeclaration:
         return self.last_confirmed
 
     @property
@@ -112,4 +113,4 @@ class GoalUnavailable(GoalDisplay):
 
     def heading(self, execution: ThreadGoalExecution) -> str:
         # A failed read says nothing about why; the session's own state explains it.
-        return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed is not None else "Goal state unavailable"
+        return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed.is_set() else "Goal state unavailable"

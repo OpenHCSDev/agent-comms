@@ -8,7 +8,7 @@ from dataclasses import dataclass, fields
 from enum import StrEnum
 from typing import TYPE_CHECKING, Self
 
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, WireValue, RecordMember
 from .goal_states import (
     ActiveGoal,
     BlockedGoal,
@@ -144,7 +144,7 @@ class ThreadGoalExecution(WireValue):
 
 
 @dataclass(frozen=True, slots=True)
-class GoalExecution(ThreadGoalExecution):
+class GoalExecution(RecordMember, ThreadGoalExecution):
     state: GoalExecutionState
     goal_id: str
     wait_for: tuple[GoalWaitTarget, ...] = ()
@@ -166,18 +166,6 @@ class GoalExecution(ThreadGoalExecution):
 
     def validate_goal(self, goal: GoalCheckpoint) -> None:
         goal.require_identity(self.goal_id)
-
-    def to_wire(self) -> dict:
-        """Use the one field codec; target births keep their original wire keys."""
-        return FieldCodec.encode_record(self)
-
-    @classmethod
-    def from_wire(cls, data: Mapping) -> GoalExecution:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict:
-        return FieldCodec.record_schema(cls)
 
 
 @dataclass(frozen=True, slots=True)

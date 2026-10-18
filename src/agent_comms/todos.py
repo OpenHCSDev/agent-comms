@@ -20,7 +20,7 @@ from .change_report import FileLine
 from .child_process import BoundedRun, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SubclassUnion, RecordMember
 from .goals import OrderCheck
 from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -407,8 +407,7 @@ class NoGoalReference(NullMember, GoalReference):
 
 
 @dataclass(frozen=True)
-class GoalRef(GoalReference):
-    accepts_null = False
+class GoalRef(RecordMember, GoalReference):
 
     owner: str
     owner_created: float
@@ -428,17 +427,6 @@ class GoalRef(GoalReference):
     @property
     def incarnation(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.owner, self.owner_created)
-
-    @classmethod
-    def from_wire(cls, value: object) -> GoalRef:
-        return FieldCodec.decode_record(cls, value)
-
-    @classmethod
-    def schema(cls):
-        return FieldCodec.record_schema(cls)
-
-    def to_wire(self):
-        return FieldCodec.encode_record(self)
 
 
 @dataclass(frozen=True, slots=True)
