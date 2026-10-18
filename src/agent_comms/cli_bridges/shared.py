@@ -796,6 +796,9 @@ class Inbox(Operation[OperationBridge]):
 
             registry = await asyncio.to_thread(
                 Registration, Path(bridge.binding.root) / 'registry.json')
+            # A bridge started during an upgrade's drain waits for it to clear, as a running
+            # watch does, instead of being refused at registration.
+            await bridge.comms.bus.resumed()
             # The endpoint, not a particular CLI's record parser, owns presence.
             with registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid())):
                 async with asyncio.TaskGroup() as tasks:
@@ -1016,6 +1019,7 @@ class LineMonitorBridge(TranscriptBridge[Options]):
     operations = (Send, Watch)
     incoming_frame: ClassVar[type[IncomingFrame]]
     window_bytes: ClassVar[int]
+    PROBE_NOTICE_SECONDS: ClassVar[float] = 15.0
 
     def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
         super().__init__(options, binding, db)
@@ -1026,12 +1030,20 @@ class LineMonitorBridge(TranscriptBridge[Options]):
         self.write_line = ExplicitWatchAcknowledgment.line_output(sys.stdout)
 
     async def prepare_delivery(self) -> None:
-        self.write_line(self.probe.model_dump_json())
+        # The probe is on stdout before the wait: no later write exists to flush it.
+        print(self.probe.model_dump_json(), flush=True)
         print('Waiting for this session to observe the monitor probe; inbox remains unread.',
               file=sys.stderr, flush=True)
         # The harness owns notification scheduling. Missing proof never opens
         # the inbox; the watch's existing cancellation owns this wait's lifetime.
-        await self.monitor_ready.wait()
+        try:
+            await asyncio.wait_for(self.monitor_ready.wait(), self.PROBE_NOTICE_SECONDS)
+        except TimeoutError:
+            # A line-lagging filter (grep aliased to ugrep) holds the last line until another
+            # arrives; this notice says the wait out loud and releases a held probe.
+            print(f'Monitor probe not observed after {self.PROBE_NOTICE_SECONDS:g}s; '
+                  'inbox remains unread until this session observes it.', flush=True)
+            await self.monitor_ready.wait()
 
     def confirm_probe(self, probe: MonitorProbe) -> None:
         if probe == self.probe:

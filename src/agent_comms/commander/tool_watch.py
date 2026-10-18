@@ -11,7 +11,7 @@ from .config import CommanderConfig
 from ..field_codec import MalformedRecord
 from ..native_tool_call import SelectedToolDenied
 from ..native_tools import CodingTool
-from ..tool_declaration import one_line
+from ..tool_declaration import ToolDeclaration, one_line
 from ..registration import Registration
 
 CONFIG = CommanderConfig.installed()
@@ -37,7 +37,7 @@ def decoded(name, args):
 
 def digest_line(name, args, tool):
     """What the call does, in enough detail to judge it."""
-    return tool and tool.digest() or f'{name} {one_line(json.dumps(args), 260)}'
+    return ToolDeclaration.call_digest(name, tool, args)
 
 
 def record_edit(thread, tool):
@@ -68,7 +68,7 @@ def enforce_storage(registry, thread, tool):
         return
     STRUCK[(thread, violation)] = time.time()
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
-    if task := next((t.id for t in order.open_todos(thread)), None):
+    if task := next((t.id for t in order.held_by(thread)), None):
         order.strike(thread, f'{task} broke the storage rule at a tool call: {violation}; '
                              'storage waste is banned outright', 'tool_watch at tool call')
 

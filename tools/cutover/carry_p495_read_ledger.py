@@ -13,6 +13,7 @@ from pathlib import Path
 from agent_comms.field_codec import FieldCodec
 from agent_comms.read_basis import ChannelConversation, DMConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument, ReadLedger
+from agent_comms.recorded_bus import NoRecordedBus, RecordedBusIdentity
 from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
@@ -34,7 +35,7 @@ class PreviousConversation:
 @dataclass(frozen=True)
 class PreviousReadDocument:
     messages: dict[RecordedThreadIncarnation, dict[PreviousConversation, ConversationCursor]] = field(default_factory=dict)
-    bus_identity: tuple[int, int] | None = None
+    bus_identity: RecordedBusIdentity = field(default_factory=NoRecordedBus)
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
 

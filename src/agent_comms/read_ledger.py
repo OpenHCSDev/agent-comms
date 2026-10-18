@@ -17,7 +17,8 @@ from .coordination_errors import DMScopeChanged
 from .locked_store import LockedStore, RootFile
 from .field_codec import FieldCodec
 from .store_files import SharedLock
-from .private_path import FileIdentity, ObservedPath
+from .private_path import ObservedPath
+from .recorded_bus import NoRecordedBus, RecordedBusIdentity
 from .read_basis import (
     ChannelConversation,
     Conversation,
@@ -43,14 +44,13 @@ if TYPE_CHECKING:
 @dataclass(frozen=True, slots=True)
 class ReadDocument:
     messages: dict[RecordedThreadIncarnation, ReadCursor] = field(default_factory=dict)
-    bus_identity: tuple[int, int] | None = None
+    bus_identity: RecordedBusIdentity = field(default_factory=NoRecordedBus)
     transcripts: dict[tuple[str, str, int], int] = field(default_factory=dict)
     notice: str | None = None
 
     def cursors(self, viewer: str, snapshot: RegistryProvenance,
                 source: ObservedPath | OpenedWireSource) -> Iterator[ReadCursor]:
-        recorded = FileIdentity(*self.bus_identity) if self.bus_identity is not None else None
-        if recorded is not None and source.same_file(recorded):
+        if self.bus_identity.matches(source):
             thread = snapshot.threads[snapshot.canonical_name(viewer)]
             for owner in thread.incarnation.recorded_names(snapshot):
                 yield self.messages.get(owner, ReadCursor())
@@ -91,14 +91,6 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
                 fields=("messages", "bus_identity")))
 
     @staticmethod
-    def bus_identity(path: Path) -> tuple[int, int] | None:
-        try:
-            info = path.stat()
-        except FileNotFoundError:
-            return None
-        return info.st_dev, info.st_ino
-
-    @staticmethod
     def conversation(message: Message, snapshot: RegistryProvenance) -> Conversation:
         return CommandTarget.named(message.target).conversation_key(message.sender, snapshot, ChannelConversation, DMConversation)
 
@@ -122,21 +114,23 @@ class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
         )
 
     def mark_displayed(self, viewer: str, displayed: DisplayBasis) -> None:
-        if displayed.bus_identity != self.bus_identity(self.path.with_name("bus.jsonl")):
+        if not displayed.bus_identity.matches(ObservedPath.at(self.path.with_name("bus.jsonl"))):
             raise DMScopeChanged("Display bus changed; refresh the displayed page.")
         if viewer != displayed.viewer:
             raise DMScopeChanged("Display belongs to a different viewer.")
 
         def advance(document: ReadDocument) -> ReadDocument:
             messages = (
-                dict(document.messages) if document.bus_identity == displayed.bus_identity else {}
+                dict(document.messages)
+                if document.bus_identity.matches(displayed.bus_identity) else {}
             )
             messages[displayed.viewer_identity] = messages.get(
                 displayed.viewer_identity, ReadCursor(),
             ).add(displayed.conversations)
             return (
                 replace(document, messages=messages, bus_identity=displayed.bus_identity)
-                if messages != document.messages or document.bus_identity != displayed.bus_identity
+                if messages != document.messages
+                or not document.bus_identity.matches(displayed.bus_identity)
                 else document
             )
 

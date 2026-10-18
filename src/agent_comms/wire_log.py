@@ -41,6 +41,7 @@ from .errors import (
 from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
+from .recorded_bus import NoRecordedBus, RecordedBus, RecordedBusIdentity
 from .private_path import FileIdentity, FileRevision
 from .private_bus_checkpoint import RecordedContextManifestSources
 from .store_files import (
@@ -102,9 +103,8 @@ class WireSnapshot(ABC):
         revision: FileRevision
 
     @property
-    def bus_identity(self) -> tuple[int, int] | None:
-        identity = self.revision.identity
-        return identity.device, identity.inode
+    def bus_identity(self) -> RecordedBusIdentity:
+        return RecordedBus(self.revision.identity)
 
     @abstractmethod
     def rows(self, after_offset: int = 0, before_offset: int | None = None): ...
@@ -190,8 +190,8 @@ class AbsentWireSnapshot(WireSnapshot):
     boundary = position = 0
 
     @property
-    def bus_identity(self) -> None:
-        return None
+    def bus_identity(self) -> RecordedBusIdentity:
+        return NoRecordedBus()
 
     def same_file(self, identity: FileIdentity) -> bool:
         return False

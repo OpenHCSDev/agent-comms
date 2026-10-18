@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 from .bus_publication import AgentOrigin, HumanOrigin
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
+from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .messages import InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
 from .publisher import InitialWrites, OwnerPublisher
@@ -21,6 +22,7 @@ from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread
+from .todos import TodoStore
 from .task_sources import TaskAttachment, NoTaskAttachment
 from .task_sources import HumanConstraintPin, NativeInputConstraintPin, TaskScopeSelection, CurrentTaskScopeSelection
 from .task_sources import TaskChange, OriginalTaskChange
@@ -69,6 +71,8 @@ class Messaging:
         """Return one committed envelope, including optional guarded claims."""
         type.require_sendable()
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
+            # A sender outside any watch is not paused by the drain; the barrier refuses it here.
+            MaintenanceBarrier(self.root / "registry.json").assert_open_unlocked()
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
@@ -96,6 +100,7 @@ class Messaging:
                 )
             else:
                 committed = publisher.publish_ordinary(message, origin=AgentOrigin())
+        TodoStore(self.root).correct(owner.name, committed.message_id, body)
         return committed
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:

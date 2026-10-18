@@ -24,6 +24,7 @@ from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec
 from .private_path import FileRevision
+from .recorded_bus import RecordedBusIdentity
 from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
@@ -145,7 +146,7 @@ class NoDisplaySelection(DisplaySelection):
 
 @dataclass(frozen=True, slots=True)
 class ChannelSelection(SelectedDisplay):
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
     scope: ChannelDisplayScope
 
     def select_evidence(self, page, selected):
@@ -156,7 +157,7 @@ class ChannelSelection(SelectedDisplay):
 @dataclass(frozen=True, slots=True)
 class DMSelection(SelectedDisplay):
     root_identity: tuple[int, int]
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
     worktree: str
     requested_peer: str
     peer: ThreadIncarnation
@@ -438,12 +439,47 @@ class DisplayedConversation:
                           min(self.prefix_through, sequence))
 
 
+class DisplayedTail(DeclaredFamily, affix="Tail"):
+    """The newest sequence a displayed range vouches for, which bounds a painted read mark."""
+
+    @abstractmethod
+    def validate(self, through: int) -> None: ...
+
+    @abstractmethod
+    def mark(self, reads: ReadLedger, displayed: DisplayBasis, through: int) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class CoveredTail(DisplayedTail):
+    """Only fetched references become read; omitted older messages stay unread."""
+
+    newest: int
+
+    def validate(self, through: int) -> None:
+        if through > self.newest:
+            raise DMPaintedBoundChanged()
+
+    def mark(self, reads: ReadLedger, displayed: DisplayBasis, through: int) -> None:
+        reads.mark_displayed(displayed.viewer, displayed.through(through))
+
+
+@dataclass(frozen=True, slots=True)
+class EmptyTail(DisplayedTail):
+    """A range holding no sequences validates its identity but acknowledges nothing."""
+
+    def validate(self, through: int) -> None:
+        pass
+
+    def mark(self, reads: ReadLedger, displayed: DisplayBasis, through: int) -> None:
+        pass
+
+
 @dataclass(frozen=True, slots=True)
 class DisplayBasis:
     viewer: str
     viewer_created_at: float
     conversations: tuple[DisplayedConversation, ...]
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
 
     @property
     def viewer_identity(self) -> RecordedThreadIncarnation:
@@ -452,6 +488,12 @@ class DisplayBasis:
     @property
     def message_count(self) -> int:
         return sum(len(item.sequences) for item in self.conversations)
+
+    @property
+    def tail(self) -> DisplayedTail:
+        """Derived from the sequences this range holds now: a painted selection of none is empty."""
+        newest = sorted(n for item in self.conversations for n in item.sequences)[-1:]
+        return CoveredTail(*newest) if newest else EmptyTail()
 
     def select(self, sequences: Collection[int]) -> DisplayBasis:
         """Retain painted members of this proof; never introduce new sequences."""
@@ -480,21 +522,21 @@ class DisplayBasis:
         )
 
     def validate(
-        self, viewer: str, snapshot: RegistrySnapshot, bus_identity: tuple[int, int] | None
+        self, viewer: str, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity
     ) -> None:
         thread = snapshot.threads.get(viewer)
         if (
             viewer != self.viewer
             or thread is None
             or thread.incarnation != self.viewer_identity
-            or bus_identity != self.bus_identity
+            or not self.bus_identity.matches(bus_identity)
             or any(not item.conversation.current(snapshot) for item in self.conversations)
         ):
             raise DMScopeChanged("Display incarnation changed; refresh the displayed page.")
 
 
 @dataclass(frozen=True, slots=True)
-class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
+class DMDisplayBasis:
     """Immutable identity/scope witness for one fetched human DM page.
 
     A page fetch is not proof that a UI painted it. The client must supply
@@ -509,7 +551,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
     viewer_names: frozenset[str]
     peer_identity: ThreadIncarnation
     peer_names: frozenset[str]
-    bus_identity: tuple[int, int] | None
+    bus_identity: RecordedBusIdentity
     displayed: DisplayBasis
     fetched_through: int
 
@@ -548,9 +590,8 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             )
         page, displayed = result.page, result.displayed
         with _store_lock(root / "wire", mode=SharedLock()):
-            kind = CoveredDMDisplayBasis if displayed.message_count else EmptyDMDisplayBasis
             root_info = root.stat()
-            basis = kind(
+            basis = cls(
                 root=str(root.resolve()),
                 root_identity=(root_info.st_dev, root_info.st_ino),
                 worktree=str(Path(worktree).resolve()),
@@ -566,7 +607,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             with registry.store.locked(mode=SharedLock()):
                 if registry.store.revision_unlocked() != revision:
                     raise HistoricalSourceChanged("Registry changed; refresh the DM page")
-                basis.validate_identity(snapshot, bus.reads.bus_identity(bus.log.path))
+                basis.validate_identity(snapshot, RecordedBusIdentity.capture(bus.log.path))
             return replace(page, display_basis=basis)
 
     def selection(self, history_revision: FileRevision | None) -> SelectedDisplay:
@@ -620,15 +661,9 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
                 peer,
                 through,
                 snapshot,
-                bus.reads.bus_identity(bus.log.path),
+                RecordedBusIdentity.capture(bus.log.path),
             )
-            self.mark(bus.reads, through)
-
-    @abstractmethod
-    def mark(self, reads: ReadLedger, through: int) -> None: ...
-
-    @abstractmethod
-    def validate_tail(self, through: int) -> None: ...
+            self.displayed.tail.mark(bus.reads, self.displayed, through)
 
     def validate_for(
         self,
@@ -637,7 +672,7 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
         peer: str,
         through: int,
         snapshot: RegistrySnapshot,
-        bus_identity: tuple[int, int] | None,
+        bus_identity: RecordedBusIdentity,
     ) -> None:
         if (self.root, self.worktree, self.requested_peer) != (
             str(root.resolve()),
@@ -645,14 +680,14 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             peer,
         ):
             raise DMScopeChanged("Painted DM read belongs to a different root, worktree or peer.")
-        self.validate_tail(through)
+        self.displayed.tail.validate(through)
         info = root.stat()
         if (info.st_dev, info.st_ino) != self.root_identity:
             raise DMScopeChanged("DM root was replaced; refresh the page.")
         self.validate_identity(snapshot, bus_identity)
 
     def validate_identity(
-        self, snapshot: RegistrySnapshot, bus_identity: tuple[int, int] | None
+        self, snapshot: RegistrySnapshot, bus_identity: RecordedBusIdentity
     ) -> None:
         """Fetch and painted acknowledgement share actual identity/scope validation.
 
@@ -674,30 +709,9 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
             or scope != DMDisplayScope(self.viewer_names, self.peer_names)
         ):
             raise DMScopeChanged("DM viewer/peer incarnation changed; refresh the page.")
-        if bus_identity != self.bus_identity:
+        if not self.bus_identity.matches(bus_identity):
             raise DMScopeChanged("DM bus was replaced; refresh the page.")
         self.displayed.validate(self.viewer, snapshot, bus_identity)
-
-
-class CoveredDMDisplayBasis(DMDisplayBasis):
-    """Only fetched references become read; omitted older messages stay unread."""
-
-    def validate_tail(self, through: int) -> None:
-        if through > self.fetched_through:
-            raise DMPaintedBoundChanged()
-
-    def mark(self, reads: ReadLedger, through: int) -> None:
-        reads.mark_displayed(self.viewer, self.displayed.through(through))
-
-
-class EmptyDMDisplayBasis(DMDisplayBasis):
-    """An empty range validates its identity but acknowledges nothing."""
-
-    def validate_tail(self, through: int) -> None:
-        pass
-
-    def mark(self, reads: ReadLedger, through: int) -> None:
-        pass
 
 
 class MessageDisplayScope(ABC):

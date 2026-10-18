@@ -20,7 +20,7 @@ from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
 from functools import partial
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, cast, get_type_hints
 
 from acp.exceptions import RequestError
 from acp.schema import SessionConfigSelectOption
@@ -158,16 +158,16 @@ class TargetField:
 
     @property
     def multiline(self) -> bool:
-        return self.declaration.metadata['multiline']
+        return CommandOption.of(self.declaration).multiline
 
     @property
     def description(self) -> str:
-        return self.declaration.metadata['parser_options'].get(
+        return CommandOption.of(self.declaration).parser_options.get(
             'help', self.name.replace('_', ' ').capitalize())
 
     @property
     def editor_default(self):
-        formatter = self.declaration.metadata['editor_format']
+        formatter = CommandOption.of(self.declaration).editor_format
         return formatter(self.value) if formatter else compile_decoder(self.annotation).encode_editor(self.value)
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
@@ -203,8 +203,9 @@ class ChoiceTargetField(TargetField):
         return tuple((choice.name, choice.value) for choice in self.options)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> ChoiceTargetField:
-        options = (SessionConfigSelectOption(name=label, value=compile_decoder(self.annotation).encode_editor(value))
-                   for label, value in compile_decoder(self.annotation).editor_choices())
+        decoder = compile_decoder(self.annotation)
+        options = (SessionConfigSelectOption(name=label, value=decoder.encode_editor(decoder.decode(value)))
+                   for label, value in decoder.editor_choices())
         return replace(self, options=tuple(options))
 
     def editor_hints(self, choices: Callable[[ChoiceTargetField], object]) -> tuple[object, ...]:
@@ -214,19 +215,42 @@ class ChoiceTargetField(TargetField):
 class CatalogTargetField(ChoiceTargetField):
     @property
     def catalog(self) -> type[CatalogConfigOption]:
-        return self.declaration.metadata[CatalogConfigOption]
+        return cast(type[CatalogConfigOption], CommandOption.of(self.declaration).catalog)
 
     @property
     def editor_declarations(self) -> tuple[object, ...]:
         return (self.catalog,)
 
     async def prepare(self, catalogs: ConfigOptions, selection: CatalogSelection) -> CatalogTargetField:
-        options = await catalogs.catalog_for(self.catalog).choices(selection)
+        catalog = catalogs.catalog_for(self.catalog)
+        options = await catalog.display_choices(selection)
+        decoder = compile_decoder(self.annotation)
         return replace(self, options=tuple(SessionConfigSelectOption(name=item.name,
-            value=compile_decoder(self.annotation).encode_editor(item.value)) for item in options))
+            value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
+
+
+@dataclass(frozen=True)
+class CommandOption:
+    """The declared CLI and editor properties of one command field."""
+
+    multiline: bool
+    target_bound: bool
+    editor_format: Callable[[Any], str] | None
+    flags: tuple[str, ...]
+    parser_options: Mapping[str, Any]
+    group: str | None
+    normalize: Callable[..., Any] | None
+    parser_default: Any
+    parser_default_factory: Any
+    editor: type[TargetField]
+    catalog: type[CatalogConfigOption] | None
+
+    @staticmethod
+    def of(declaration: Field) -> CommandOption:
+        return declaration.metadata[CommandOption]
 
 
 def option(
@@ -246,23 +270,14 @@ def option(
     **parser_options: Any,
 ) -> Any:
     """One field owns both its CLI projection and JSON boundary conversion."""
-    metadata = {
-        TargetField: editor,
-        "multiline": multiline,
-        "target_bound": target_bound,
-        "editor_format": editor_format,
-        "flags": flags,
-        "parser_options": parser_options,
-        "group": group,
-        "normalize": normalize,
-        "parser_default": parser_default,
-        "parser_default_factory": parser_default_factory,
-    }
+    metadata: dict[object, object] = {CommandOption: CommandOption(
+        multiline=multiline, target_bound=target_bound, editor_format=editor_format,
+        flags=flags, parser_options=parser_options, group=group, normalize=normalize,
+        parser_default=parser_default, parser_default_factory=parser_default_factory,
+        editor=CatalogTargetField if catalog is not None else editor, catalog=catalog,
+    )}
     if wire_name is not None:
         metadata["wire_name"] = wire_name
-    if catalog is not None:
-        metadata[CatalogConfigOption] = catalog
-        metadata[TargetField] = CatalogTargetField
     return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
@@ -753,8 +768,8 @@ class DeclaredOptions(Command):
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
-            metadata = declared.metadata
-            group = metadata["group"]
+            option = CommandOption.of(declared)
+            group = option.group
             owner = parser
             if group is not None:
                 if group not in groups:
@@ -762,11 +777,11 @@ class DeclaredOptions(Command):
                 owner = groups[group]
             annotation = hints[declared.name]
             decoder = compile_decoder(annotation)
-            options = {**decoder.argument_options(), **metadata["parser_options"]}
-            if metadata["parser_default"] is not MISSING:
-                options["default"] = metadata["parser_default"]
-            elif metadata["parser_default_factory"] is not MISSING:
-                options["default"] = metadata["parser_default_factory"]()
+            options = {**decoder.argument_options(), **option.parser_options}
+            if option.parser_default is not MISSING:
+                options["default"] = option.parser_default
+            elif option.parser_default_factory is not MISSING:
+                options["default"] = option.parser_default_factory()
             else:
                 default = (declared.default_factory() if declared.default_factory is not MISSING
                            else declared.default)
@@ -776,20 +791,20 @@ class DeclaredOptions(Command):
                     options["default"] = decoder.argument_text(
                         FieldCodec.encode(default, annotation)
                     )
-            if any(flag.startswith("-") for flag in metadata["flags"]):
+            if any(flag.startswith("-") for flag in option.flags):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
                 options.pop("required", None)
-            owner.add_argument(*metadata["flags"], **options)
+            owner.add_argument(*option.flags, **options)
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
         payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         for declared in fields(cls):
             key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
-            normalize = declared.metadata["normalize"]
+            normalize = CommandOption.of(declared).normalize
             payload[key] = (normalize(value) if normalize is not None
                             else compile_decoder(hints[declared.name]).argument_payload(value))
         return cls.from_payload(payload)
@@ -877,9 +892,9 @@ class CliCommand(
     @property
     def editable_fields(self) -> tuple[TargetField, ...]:
         """The command owns the parameters offered by its target action."""
-        hints = get_type_hints(type(self))
-        return tuple(item.metadata[TargetField](item, hints[item.name], getattr(self, item.name))
-                     for item in fields(self) if not item.metadata['target_bound'])
+        hints = get_type_hints(type(self), include_extras=True)
+        return tuple(CommandOption.of(item).editor(item, hints[item.name], getattr(self, item.name))
+                     for item in fields(self) if not CommandOption.of(item).target_bound)
 
     async def prepare_fields(self) -> tuple[TargetField, ...]:
         catalogs = ConfigOptions.configured()
@@ -902,12 +917,12 @@ class CliCommand(
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
-        hints = get_type_hints(cls)
+        hints = get_type_hints(cls, include_extras=True)
         declared = {key: item for item, key in FieldCodec.record_fields(cls)}
         result = {}
         for key, text in values.items():
             item = declared[key]
-            normalize = item.metadata['normalize']
+            normalize = CommandOption.of(item).normalize
             result[key] = normalize(text) if normalize else compile_decoder(hints[item.name]).decode_editor(text)
         return result
 
@@ -925,7 +940,7 @@ class CliCommand(
 
     def edited(self, arguments: dict[str, object]) -> Self:
         bound = {key for declared, key in FieldCodec.record_fields(type(self))
-                 if declared.metadata['target_bound']}
+                 if CommandOption.of(declared).target_bound}
         if bound & arguments.keys():
             raise ValueError('Target-bound parameters cannot be overridden')
         editable = {item.name for item in self.editable_fields}

@@ -7,8 +7,6 @@ claim historical proof that a model consumed an old channel message.
 
 from __future__ import annotations
 
-from .wire_log import CurrentSnapshotOpening
-
 import json
 import time
 from abc import ABC, abstractmethod
@@ -19,13 +17,15 @@ from pathlib import Path
 from threading import RLock
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from . import presentation
 from .channel_targets import CommandTarget
 from .command import Command
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, LastActivityThreadSort, ThreadSort
 from .errors import RelationViolationError, UnregisteredThreadError
-from .goals import GoalMentionBinding
+from .goals import Goal, GoalMentionBinding
 from .locked_store import LockedStore, RootFile
+from .messages import Message
 from .peer_relevance import (
     ChannelmateRelevance,
     CollaboratorRelevance,
@@ -33,9 +33,6 @@ from .peer_relevance import (
     PeerRelevance,
     StrangerRelevance,
 )
-from . import presentation
-from .wire_record import WireRecord
-from .messages import Message
 from .private_path import FileRevision
 from .registry_document import RegistrySnapshot, RosterVisibility
 from .routing import DeliveryScope
@@ -43,6 +40,8 @@ from .store_files import SharedLock, _store_lock
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
+from .wire_log import CurrentSnapshotOpening
+from .wire_record import WireRecord
 
 if TYPE_CHECKING:
     from .history_views import HistoryViews
@@ -723,20 +722,23 @@ class ThreadRelationships:
             for thread in registry.threads.values()
             for executor in thread.role.executor(thread)
         ):
-            goal = owner.active_goal
-            if goal is None:
-                continue
-            source = goal.mention_source
-            # Missing historical evidence grants no contact or current-name binding.
-            if source is None:
-                continue
-            if not source.matches(goal, owner, registry):
-                continue
-            for binding in source.bindings:
-                projected, issues = binding.project(registry, owner, goal, source)
-                contacts.extend(projected)
-                diagnostics.extend(issues)
+            owner.goal.active().project(lambda goal: ThreadRelationships._project_goal_contacts(
+                goal, owner, registry, contacts, diagnostics,
+            ), lambda: None)
         return tuple(contacts), tuple(diagnostics)
+
+    @staticmethod
+    def _project_goal_contacts(goal: Goal, owner: Thread, registry: RegistrySnapshot,
+                               contacts: list[GoalDerivedContact],
+                               diagnostics: list[GoalMentionDiagnostic]) -> None:
+        source = goal.mention_source
+        # Missing historical evidence grants no contact or current-name binding.
+        if source is None or not source.matches(goal, owner, registry):
+            return
+        for binding in source.bindings:
+            projected, issues = binding.project(registry, owner, goal, source)
+            contacts.extend(projected)
+            diagnostics.extend(issues)
 
     def goal_contacts(
         self, owner: str

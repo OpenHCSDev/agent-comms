@@ -32,6 +32,7 @@ from .audience_manifest import FrozenRecipient
 from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
+from .maintenance_barrier import MaintenanceBarrier
 from .routing import TurnRouting
 from .runtime_info import RuntimeInfo, RuntimeInfoStore
 from .store_files import SharedLock, _store_lock
@@ -120,6 +121,8 @@ class AgentActivity:
         if state.retires_thread:
             raise RelationViolationError("Only permanent thread deletion retires its activity.")
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
+            # A tool-use hook runs outside any watch; maintenance refuses it like a send.
+            MaintenanceBarrier(self._wire_lock_path.parent / "registry.json").assert_open_unlocked()
             self._emit_activity(Activity.create(thread, state, detail))
 
     def activity_of(self, thread: str, *, snapshot: RegistrySnapshot) -> ObservedActivity:

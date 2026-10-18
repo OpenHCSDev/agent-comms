@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec, NullMember, SubclassUnion
+from .field_codec import FieldCodec, NullMember, SubclassUnion, RecordMember
 from .errors import RelationViolationError
 from .sealed import Sealed
 
@@ -60,11 +60,8 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
-class ProcessState(SubclassUnion):
+class ProcessState(SubclassUnion, affix=""):
     """An exact recorded process or a worker which has never started."""
-
-    def to_wire(self) -> object:
-        return FieldCodec.encode_record(self)
 
     @abstractmethod
     def allows_owner_start(self) -> bool: ...
@@ -187,7 +184,7 @@ class NoProcess(NullMember, ProcessState):
 
 
 @dataclass(frozen=True)
-class ProcessIdentity(ProcessState):
+class ProcessIdentity(RecordMember, ProcessState):
     pid: int
     start_time: int
 
@@ -202,14 +199,6 @@ class ProcessIdentity(ProcessState):
     @classmethod
     def capture(cls, pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
-
-    @classmethod
-    def from_wire(cls, data: object) -> ProcessIdentity:
-        return FieldCodec.decode_record(cls, data)
-
-    @classmethod
-    def schema(cls) -> dict[str, object]:
-        return FieldCodec.record_schema(cls)
 
     def allows_owner_start(self) -> bool:
         return False
@@ -290,13 +279,13 @@ class ProcessIdentity(ProcessState):
 NO_PROCESS = NoProcess()
 
 
-class GroupLeader(ProcessIdentity):
+class GroupLeader(ProcessIdentity, declared_name=None):
     def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
         return tuple(member for member in platform.members_of_group(self.pid)
                      if member.start_time >= self.start_time)
 
 
-class GroupMember(ProcessIdentity):
+class GroupMember(ProcessIdentity, declared_name=None):
     def members(self, platform: PosixPlatform) -> tuple[ProcessIdentity, ...]:
         return (self,) if platform.matches(self) else ()
 
