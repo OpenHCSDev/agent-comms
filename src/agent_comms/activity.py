@@ -18,6 +18,7 @@ from .bus_projection import NoCheckpoint
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, projected
+from .locked_store import RuntimeFile
 from .private_path import FileRevision
 from .store_files import (
     _append_jsonl,
@@ -287,12 +288,15 @@ class ActivityReadState:
         return cls._by_path.setdefault(os.path.abspath(path), cls())
 
 
-class ActivityLog(ThreadOwnedState):
+class ActivityLog(ThreadOwnedState, RuntimeFile):
     """Persists Activity events as an append-only JSONL log.
 
     The latest event per thread is its current activity; stale events
-    (older than ``stale_after`` seconds) read as idle.
+    (older than ``stale_after`` seconds) read as idle. Activity is runtime
+    state: units' bridges and hooks write it during maintenance.
     """
+
+    filename: ClassVar[str] = "activity.jsonl"
 
     def __init__(self, store_path: Path, stale_after: float = 120.0):
         self._path = store_path

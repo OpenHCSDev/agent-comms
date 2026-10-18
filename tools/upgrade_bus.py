@@ -37,6 +37,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -46,8 +47,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cutover.carry import CarryChain, CarryLedger, Step
 
+import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 
 REPO = Path(__file__).resolve().parents[1]
@@ -69,16 +73,36 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
 
 
 def bus_files(root: Path) -> dict[str, str]:
-    """Every regular file under the bus but its lock files, by content hash. A SQLite store
-    counts once, under its database's name, by the rows SQLite reads from it, so companion
-    files that appear or vanish change nothing."""
+    """Every regular file under the bus but its lock files and the runtime files no carry
+    writes, by content hash. A SQLite store counts once, under its database's name, by the
+    rows SQLite reads from it, so companion files that appear or vanish change nothing."""
+    runtime = RuntimeFile.paths_in(root)
     paths = [path for path in sorted(root.rglob("*"))
-             if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")]
+             if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")
+             and path not in runtime]
     stores = {path for path in paths if CoordinationStore.is_database(path)}
     companions = {companion for store in stores for companion in CoordinationStore.files(store)[1:]}
     return {str(path.relative_to(root)): CoordinationStore.digest(path) if path in stores
             else hashlib.sha256(path.read_bytes()).hexdigest()
             for path in paths if path not in companions}
+
+
+@contextmanager
+def transcripts_held(root: Path):
+    """Bridges publish their CLI's items outside Core's maintenance refusal, so the operator
+    holds the transcript store's writer: a bridge's write waits, then fails busy and is
+    republished when its watch starts. A carry that needs this store fails the same way in
+    the rehearsal, before the backup."""
+    path = ExternalTranscript.path_in(root)
+    if not path.exists():
+        yield
+        return
+    with closing(CoordinationStore.writer(path, isolation_level=None)) as writer:
+        writer.execute("BEGIN IMMEDIATE")
+        try:
+            yield
+        finally:
+            writer.execute("ROLLBACK")
 
 
 def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
@@ -219,10 +243,11 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         copy_bus(root, copy)
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
         stack.prepare_native()
-        before = bus_files(copy)
-        steps = [*before_stop(copy, pending, stack, revisions),
-                 *carry_all(copy, pending, stack, revisions)]
-        files = carried(copy, before, steps)
+        with transcripts_held(copy):
+            before = bus_files(copy)
+            steps = [*before_stop(copy, pending, stack, revisions),
+                     *carry_all(copy, pending, stack, revisions)]
+            files = carried(copy, before, steps)
         return {"steps": steps, "files": files, "read": stack.verify(copy)}
 
 
@@ -330,12 +355,15 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     maintenance = MaintenanceBarrier(root / "registry.json")
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
     lock = checkout / "stack/uv.lock"
+    transcripts = ExitStack()
     try:
         for name in running:
             installed.cli(root, "stop", "--name", name)
         route_readers()
+        transcripts.enter_context(transcripts_held(root))
         backup = Backup.take(root, ROUTE)
     except BaseException as error:
+        transcripts.close()
         maintenance.clear(held)
         start(installed, root, running)
         print(f"upgrade-bus: aborted before the backup ({type(error).__name__}: {error}); "
@@ -348,8 +376,10 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.prepare_native()
         steps = carry_all(root, pending, staged, revisions)
         files = carried(root, backup.files(), steps)
+        transcripts.close()
         read = installed.verify(root)
     except BaseException as error:
+        transcripts.close()
         backup.restore()
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
