@@ -24,7 +24,7 @@ from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, CommandTarget
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision
-from .errors import UnknownChannelError
+from .errors import UnknownChannelError, UnregisteredThreadError
 from .exporting import (
     WireExportBoundary,
     WireExportFormat,
@@ -91,6 +91,13 @@ class ThreadPresentations:
         if not owner.incarnation.current(self.snapshot):
             raise StaleRevision("Thread source incarnation changed during presentation")
         return view.presentation.with_sources(captured)
+
+    def require(self, name: str) -> ThreadPresentation:
+        """A bound caller must name an available thread, not an anonymous view."""
+        presentation = self.read(name)
+        if presentation is None:
+            raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
+        return presentation
 
 
 class HistoryViews:
@@ -329,12 +336,6 @@ class HistoryViews:
             frozenset(retired),
         )
 
-    def thread_presentation(
-        self, name: str, *, sent_source_limit: int = 5
-    ) -> ThreadPresentation | None:
-        """Read one current executable thread through the shared status acquisition."""
-        return self.thread_presentations((name,), sent_source_limit=sent_source_limit).read(name)
-
     def thread_presentations(
         self, names: Iterable[str], *, sent_source_limit: int = 5,
     ) -> ThreadPresentations:
@@ -347,15 +348,6 @@ class HistoryViews:
         return ThreadPresentations(
             snapshot, {view.thread.name: view for view in views}, self.transcripts, sent_source_limit
         )
-
-    def require_thread_presentation(self, name: str) -> ThreadPresentation:
-        """A bound caller must still name an available thread, not an anonymous view."""
-        presentation = self.thread_presentation(name)
-        if presentation is None:
-            from .errors import UnregisteredThreadError
-
-            raise UnregisteredThreadError(f"Thread presentation unavailable: {name}")
-        return presentation
 
     def viewer_snapshot(
         self, worktree: str, *, show_stopped: bool = True, show_archived: bool = False
@@ -407,8 +399,6 @@ class HistoryViews:
     def mark_dm_view_read(
         self, peer: str, *, worktree: str, through: int, expected_display_basis: DMDisplayBasis
     ) -> None:
-        if type(expected_display_basis) is not DMDisplayBasis:
-            raise ValueError("Painted DM read requires a typed page basis and integer bound.")
         expected_display_basis.acknowledge(
             self.bus,
             self.registry,
