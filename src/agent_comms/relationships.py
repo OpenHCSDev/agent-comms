@@ -270,20 +270,18 @@ class RelationshipEntry:
 class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
     """A declared group owns its identity, presentation and entry source."""
 
-    entries: tuple[RelationshipEntry, ...]
-    _by_target: dict[str, RelationshipEntry] = field(init=False, compare=False, repr=False)
-    targets: frozenset[str] = field(init=False, compare=False, repr=False)
+    entries: dict[str, RelationshipEntry]
     family_discriminator: ClassVar[str] = "key"
     title: ClassVar[str]
     empty_text: ClassVar[str]
     order: ClassVar[type[ThreadSort] | None] = None
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "_by_target", {entry.target: entry for entry in self.entries})
-        object.__setattr__(self, "targets", frozenset(self._by_target))
+    @property
+    def targets(self) -> frozenset[str]:
+        return frozenset(self.entries)
 
     def entry(self, target: str) -> RelationshipEntry:
-        return self._by_target[target]
+        return self.entries[target]
 
     @classmethod
     @abstractmethod
@@ -291,7 +289,7 @@ class RelationshipGroup(DeclaredFamily, affix="RelationshipGroup"):
 
     @classmethod
     def build(cls, context: RelationshipContext) -> RelationshipGroup:
-        return cls(cls.supply(context))
+        return cls({entry.target: entry for entry in cls.supply(context)})
 
     def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
         return ()
@@ -372,7 +370,7 @@ class SortableRelationshipGroup(RelationshipGroup):
                 context.sent.get(item.target, 0) if person else 0,
             )
 
-        return cls(tuple(sorted(cls.supply(context), key=key)), order)
+        return cls({entry.target: entry for entry in sorted(cls.supply(context), key=key)}, order)
 
     def selectable(self) -> tuple[SortableRelationshipGroup, ...]:
         return (self,)
@@ -460,7 +458,11 @@ class ThreadCommsSnapshot:
         current = self.groups_by_type.get(group)
         if current is None:
             return None
-        return next((entry for entry in current.entries if entry.revalidates(earlier)), None)
+        try:
+            entry = current.entry(earlier.target)
+        except KeyError:
+            return None
+        return entry if entry.revalidates(earlier) else None
 
     @property
     def sortable_groups(self) -> tuple[SortableRelationshipGroup, ...]:
