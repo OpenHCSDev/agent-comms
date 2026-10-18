@@ -26,6 +26,7 @@ from refactor_audit.measures import ForeignAbsenceProbe as AuditForeignAbsencePr
 from agent_comms.core_stamp import WheelStamp
 from agent_comms.declared_family import DeclaredFamily
 from cutover.carry import STEPS, Step
+from stored_formats import StoredForm
 from agent_comms.field_codec import FieldCodec, projected
 from agent_comms.mro_dispatch import MroDispatch, handles
 
@@ -1049,7 +1050,7 @@ class UncarriedRecordFormat(Measure):
     representations with the same wire spelling are the same format.
     """
 
-    probe: typing.ClassVar[Path] = Path(__file__).with_name("stored_formats.py")
+    probe: typing.ClassVar[str] = "import sys, stored_formats; stored_formats.main(sys.argv[1:])"
 
     @staticmethod
     def declares_version(source: bytes) -> bool:
@@ -1064,7 +1065,7 @@ class UncarriedRecordFormat(Measure):
         return False
 
     @classmethod
-    def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, list]:
+    def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, StoredForm]:
         """Each versioned record in the changed modules, measured by that revision's own code."""
         package = Path(root).parent
         modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
@@ -1077,10 +1078,11 @@ class UncarriedRecordFormat(Measure):
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             # Extracted source is stamped with its commit the way a build stamps it.
             WheelStamp(revision(repo, ref)).write(Path(scratch) / root / "package_stamp.py")
-            result = subprocess.run([sys.executable, str(cls.probe), *modules], cwd=scratch,
-                                    env={**os.environ, "PYTHONPATH": str(Path(scratch) / package)},
+            path = os.pathsep.join([str(Path(scratch) / package), str(Path(__file__).parent)])
+            result = subprocess.run([sys.executable, "-c", cls.probe, *modules], cwd=scratch,
+                                    env={**os.environ, "PYTHONPATH": path},
                                     capture_output=True, text=True, check=True, timeout=300)
-        return json.loads(result.stdout)
+        return {name: StoredForm(**form) for name, form in json.loads(result.stdout).items()}
 
     @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
@@ -1089,9 +1091,8 @@ class UncarriedRecordFormat(Measure):
                       for path in added.decode().split("\0"))
         before = cls.formats(repo, base, root, changed)
         after = cls.formats(repo, head, root, changed)
-        uncarried = sum(before[name][0] == version or not carried
-                        for name, (version, stored) in after.items()
-                        if name in before and before[name] != [version, stored])
+        uncarried = sum(before[name].version == form.version or not carried
+                        for name, form in after.items() if name in before and before[name] != form)
         return {cls.__name__: 0}, {cls.__name__: uncarried}
 
 def git(repo: Path, *args: str, input: bytes = b"") -> bytes:

@@ -1,4 +1,4 @@
-"""Print the stored form of each versioned record declared in the named modules.
+"""Report the stored form of each versioned record declared in the named modules.
 
 The debt ratchet runs this once per revision with that revision's source on PYTHONPATH,
 so each side's stored form comes from its own FieldCodec declarations and no revision's
@@ -13,23 +13,34 @@ import dataclasses
 import importlib
 import inspect
 import json
-import sys
+from dataclasses import dataclass
 
 from agent_comms.field_codec import FieldCodec
 
 
-def stored_form(record: type) -> tuple[int, dict[str, object]] | None:
-    """The record's format version and the schema FieldCodec writes for it, if it has one."""
-    schema = FieldCodec.record_schema(record)
-    stamped = schema["properties"].pop("version", {}).get("enum", [])
-    schema["required"] = [key for key in schema["required"] if key != "version"]
-    declared = vars(record).get("version")
-    if len(stamped) == 1:
-        return stamped[0], schema
-    return (declared, schema) if isinstance(declared, int) else None
+@dataclass(frozen=True)
+class StoredForm:
+    """A versioned record as FieldCodec writes it: its format version, each stored key with
+    that field's wire schema, and the keys every record carries."""
+
+    version: int
+    fields: dict[object, object]
+    required: list[str]
+
+    @classmethod
+    def of(cls, record: type) -> StoredForm | None:
+        """Decode the record schema once. The version is a single-valued stored field, or the
+        ClassVar the writer stamps beside the fields."""
+        declared = vars(record).get("version")
+        match FieldCodec.record_schema(record):
+            case {"properties": {"version": {"enum": [stamped]}, **stored}, "required": required}:
+                return cls(stamped, stored, [key for key in required if key in stored])
+            case {"properties": properties, "required": required} if isinstance(declared, int):
+                return cls(declared, properties, required)
+        return None
 
 
-def stored_formats(module_name: str) -> dict[str, tuple[int, dict[str, object]]]:
+def stored_formats(module_name: str) -> dict[str, StoredForm]:
     module = importlib.import_module(module_name)
     records = [
         record
@@ -38,16 +49,19 @@ def stored_formats(module_name: str) -> dict[str, tuple[int, dict[str, object]]]
     ]
     found = {}
     for record in filter(dataclasses.is_dataclass, records):
-        stored = {field.name for field in dataclasses.fields(record)} | set(vars(record))
-        form = stored_form(record) if "version" in stored else None
+        form = StoredForm.of(record) if vars(record).get("version") is not None else None
         if form is not None:
             found[f"{module_name}.{record.__name__}"] = form
     return found
 
 
-if __name__ == "__main__":
+def main(modules: list[str]) -> None:
     print(
         json.dumps(
-            {name: form for module in sys.argv[1:] for name, form in stored_formats(module).items()}
+            {
+                name: dataclasses.asdict(form)
+                for module in modules
+                for name, form in stored_formats(module).items()
+            }
         )
     )
