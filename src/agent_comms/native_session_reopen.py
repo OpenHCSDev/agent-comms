@@ -9,7 +9,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .native_package import verify_native_package
+from .native_package import VerifiedNativePackage
 from .pi_helper import PiHelper, SessionHelperRequest
 from .private_path import FileRevision
 
@@ -71,10 +71,9 @@ class NativeSessionIdentity:
         )
 
     @staticmethod
-    def locate(package: Path, session_file: str) -> NativeSessionIdentity:
-        """Acquire a verified package before a standalone saved-header lookup."""
+    def locate(package: VerifiedNativePackage, session_file: str) -> NativeSessionIdentity:
+        """Read a saved header through the process's acquired package."""
         try:
-            verify_native_package(package)
             return SessionIdentityHelper.locate(package, session_file)
         except (OSError, ValueError) as error:
             if isinstance(error, NativeReopenError):
@@ -88,7 +87,7 @@ class SessionIdentityHelper(PiHelper):
     result = NativeSessionIdentity
 
     @classmethod
-    def locate(cls, package: Path, session_file: str) -> NativeSessionIdentity:
+    def locate(cls, package: VerifiedNativePackage, session_file: str) -> NativeSessionIdentity:
         """Locate the original header without constructing another history index.
 
         A located identity is not history readiness. The actual native loader
@@ -109,7 +108,7 @@ class SessionIdentityHelper(PiHelper):
                 raise NativeReopenError("Saved native session is not a regular file")
             identity = asyncio.run(
                 cls.run(
-                    SessionHelperRequest(str(package), str(file)), cwd=file.parent
+                    SessionHelperRequest(str(package.path), str(file)), cwd=file.parent
                 )
             )
             if FileRevision.from_stat(before) != FileRevision.from_stat(file.stat()):

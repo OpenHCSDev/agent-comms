@@ -353,7 +353,39 @@ def install_declared_sources(root: Path, snapshot_root: Path) -> None:
             temporary.unlink(missing_ok=True)
 
 
-def verify_native_package(root: Path) -> None:
+@dataclass(frozen=True, slots=True, init=False)
+class VerifiedNativePackage:
+    """The immutable artifact acquired for one process; never a readiness proof."""
+
+    path: Path
+
+    def __init__(self):
+        raise TypeError("Use verify_native_package to acquire the reviewed artifact")
+
+    @property
+    def cli(self) -> Path:
+        return self.path / "dist/cli.js"
+
+    @classmethod
+    def acquire(cls, root: Path) -> VerifiedNativePackage:
+        """Check the launch ancestry before acquiring the complete pinned tree."""
+        from .private_path import PrivateDirectoryRole, TrustedAncestorRole
+
+        root = root.absolute()  # Do not resolve away symlink components.
+        if ".." in root.parts:
+            raise NativePackageError("Pinned native Pi package path is not lexical")
+        if root.parts[-3:] != ("node_modules", "@earendil-works", "pi-coding-agent"):
+            raise NativePackageError("Canonical native Pi package layout is required")
+        for ancestor in (root, *root.parents):
+            failed = TrustedAncestorRole.violation(ancestor.lstat())
+            if failed is not None:
+                raise NativePackageError(f"Native Pi package has unsafe ancestor: {failed.declared_name}")
+        if PrivateDirectoryRole.violation(root.parents[2].lstat()) is not None:
+            raise NativePackageError("Disposable native Pi root must be owner-only")
+        return verify_native_package(root)
+
+
+def verify_native_package(root: Path) -> VerifiedNativePackage:
     """Verify the entire copied package against the repository-owned commitment."""
     pins = [
         line[len(TREE_PREFIX) :]
@@ -364,6 +396,9 @@ def verify_native_package(root: Path) -> None:
         raise NativePackageError("Pinned native package tree commitment unavailable")
     if package_tree_digest(root) != pins[0]:
         raise NativePackageError("Native package tree differs from pinned artifact")
+    verified = object.__new__(VerifiedNativePackage)
+    object.__setattr__(verified, "path", root)
+    return verified
 
 
 if __name__ == "__main__":

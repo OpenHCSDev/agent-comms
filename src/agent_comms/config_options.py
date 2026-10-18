@@ -8,7 +8,7 @@ from dataclasses import replace
 from abc import abstractmethod
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
 
@@ -27,8 +27,9 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
-from .native_pi import NativePiUnavailable
-from .launch_runtime import RestartEnvironment
+from .native_pi import NativePiUnavailable, NativePiRpcLaunch
+from .native_package import VerifiedNativePackage
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -75,9 +76,11 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
 
-    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment):
+    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment,
+                 package: VerifiedNativePackage):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
+        self.package = package
         self.catalogs: dict[str | None, list[SessionConfigSelectOption]] = {}
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
@@ -171,7 +174,7 @@ class ModelConfigOption(CatalogConfigOption):
             from .pi_commands import GetAvailableModels
 
             data = await GetAvailableModels().discover(
-                self.agent_bin, self.agent_args.argv, self.configuration.root
+                self.agent_bin, self.agent_args.argv, self.configuration.root, package=self.package
             )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -201,7 +204,8 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root,
+            package=self.package,
         )
         levels = [member.declared_name for member in data.levels]
         return [SessionConfigSelectOption(value=level, name=level.title()) for level in levels]
@@ -235,9 +239,15 @@ class ConfigOptions:
         return cls(NativeArguments.configured_binary(), NativeArguments.configured(),
                    RestartEnvironment.inherit(os.environ))
 
+    @cached_property
+    def package(self) -> VerifiedNativePackage:
+        return NativePiRpcLaunch.package_for_command(
+            self.agent_bin, LaunchRuntime.running(), self.configuration.root,
+        )
+
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
-            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
+            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration, self.package)
         return self.catalogs[member]
 
     async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect]:
@@ -279,6 +289,10 @@ class SessionConfigOptions(ConfigOptions):
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
         self.settings_in_use: dict[str, UseSettings] = {}
+
+    @property
+    def package(self) -> VerifiedNativePackage:
+        return self.comms.owners.require_private_launch().native_package
 
     @asynccontextmanager
     async def session_options(
@@ -341,7 +355,7 @@ class SessionConfigOptions(ConfigOptions):
             thread.thinking_level
         )
         state = await command.configure(
-            self.agent_bin, arguments.argv, worktree=Path(thread.worktree), root=self.comms.root,
+            self.agent_bin, arguments.argv, package=self.package, worktree=Path(thread.worktree), root=self.comms.root,
         )
         model = state.model.display_name
         level = state.thinking_level.wire_value()

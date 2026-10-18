@@ -11,15 +11,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
-from .native_package import NativePackageError, pinned_native_package
-from .native_pi import _private_session_dir, _trusted_package
+from .native_package import NativePackageError, VerifiedNativePackage, pinned_native_package
+from .native_pi import _private_session_dir
 from .wire_log import WireLog
 
 @dataclass(frozen=True, slots=True)
 class PrivateNkLaunch:
     validated_root: Path
     wire_root_id: str
-    native_package: Path
+    native_package: VerifiedNativePackage
 
     @classmethod
     def derive(cls, root: Path | str | None = None) -> PrivateNkLaunch | None:
@@ -41,23 +41,22 @@ class PrivateNkLaunch:
     def installed(cls, root: Path, wire_root_id: str) -> PrivateNkLaunch:
         """A private root's launch with this installation's pinned native package."""
         try:
-            package = pinned_native_package()
+            package = VerifiedNativePackage.acquire(pinned_native_package())
         except NativePackageError as error:
             raise PublicationActivationBlocked(
                 "private owner launch needs this installation's prepared native package"
             ) from error
         return cls(root, wire_root_id, package)
 
-    def validate(self) -> Path:
+    def validate(self) -> VerifiedNativePackage:
         """Recheck this authority before a new owner process can be reserved.
 
         Creates no root, registry, SQLite database or provider opportunity when
         the owner-only directory or the reviewed copied Pi is absent.
         """
         _private_session_dir(self.validated_root)
-        cli = _trusted_package(self.native_package)
         with WireLog(self.validated_root / "bus.jsonl").certified_read() as source:
             marker = source.marker
         if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")
-        return cli
+        return self.native_package

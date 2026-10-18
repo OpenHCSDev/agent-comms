@@ -32,6 +32,8 @@ from .pi_payloads import (
 )
 from .turn_context import InputContributionCoordinates, SegmentManifest
 
+from .native_package import VerifiedNativePackage
+
 if TYPE_CHECKING:
     from .backend import TurnSession
     from .pi_events import Response
@@ -250,8 +252,8 @@ class CatalogQuery(NativeQuery):
 
     @asynccontextmanager
     async def catalog(
-        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path | None = None,
-        root: Path | str | None = None,
+        self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage,
+        worktree: Path | None = None, root: Path | str | None = None,
     ):
         """Acquire metadata commands without borrowing a saved or executing session."""
         from .child_process import BoundedRun
@@ -263,6 +265,7 @@ class CatalogQuery(NativeQuery):
                 NativePiRpcLaunch.catalog,
                 agent_bin,
                 tuple(arguments),
+                package=package,
                 worktree=Path.cwd() if worktree is None else worktree,
                 root=root,
             )
@@ -280,10 +283,11 @@ class CatalogQuery(NativeQuery):
 
     async def discover(
         self, agent_bin: str, arguments: Sequence[str], root: Path | str | None = None,
+        *, package: VerifiedNativePackage,
     ) -> PiResponseData:
         from .native_pi import NativePiUnavailable
 
-        async with self.catalog(agent_bin, arguments, root=root) as (channel, writer):
+        async with self.catalog(agent_bin, arguments, root=root, package=package) as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is True:
                 return response.data.require_payload()
@@ -329,7 +333,7 @@ class SettingCommand(CatalogQuery):
     error_message: ClassVar[str]
 
     async def configure(
-        self, agent_bin: str, arguments: Sequence[str], *, worktree: Path,
+        self, agent_bin: str, arguments: Sequence[str], *, package: VerifiedNativePackage, worktree: Path,
         root: Path | str | None = None,
     ) -> StateData:
         """Let native settings own validation/defaults, then observe their result.
@@ -339,7 +343,7 @@ class SettingCommand(CatalogQuery):
         """
         from .native_pi import NativePiUnavailable
 
-        catalog = self.catalog(agent_bin, arguments, worktree=worktree, root=root)
+        catalog = self.catalog(agent_bin, arguments, package=package, worktree=worktree, root=root)
         async with catalog as (channel, writer):
             response = await self.exchange(channel, writer)
             if response.success is not True:

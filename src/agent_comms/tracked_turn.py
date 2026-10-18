@@ -26,6 +26,7 @@ from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_entries import NativeEntry
+from .native_package import VerifiedNativePackage
 from .native_pi import (
     NativeContextProof,
     NativeEmptyAnswer,
@@ -266,7 +267,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     @classmethod
     async def execute(
         cls,
-        package: Path,
+        package: VerifiedNativePackage,
         *,
         input_id: str,
         prompt: str,
