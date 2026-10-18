@@ -395,7 +395,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
     notification = MessageNotification(
-        initial.audience.recipients[0], HumanReadProgress(),
+        initial.audience.recipients[0], initial.audience.sender_lookup, HumanReadProgress(),
         message=initial.message, changed=True,
     )
     sent_outcome = notification.sent_outcome()
