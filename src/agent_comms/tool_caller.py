@@ -5,11 +5,20 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
+from pydantic import JsonValue
+
 from .launch_runtime import CallingThreadUnavailable
+from .presentation import MessageNotification
 
 if TYPE_CHECKING:
     from .comms import Comms
     from .tools import ToolRequest
+
+
+@dataclass(frozen=True)
+class ThreadListing:
+    threads: tuple[dict[str, JsonValue], ...]
+    sent_notifications: tuple[MessageNotification, ...]
 
 
 class ToolCaller(ABC):
@@ -22,7 +31,7 @@ class ToolCaller(ABC):
     def invoke(self, request: ToolRequest, comms: Comms) -> object: ...
 
     @abstractmethod
-    def listing(self, comms: Comms, result: dict[str, object]) -> dict[str, object]: ...
+    def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing: ...
 
     @abstractmethod
     def subject(self, named: str) -> str: ...
@@ -36,8 +45,8 @@ class NoThreadCaller(ToolCaller):
     def invoke(self, request: ToolRequest, comms: Comms) -> object:
         return request.apply_without_thread(comms, self)
 
-    def listing(self, comms: Comms, result: dict[str, object]) -> dict[str, object]:
-        return {**result, "sent_notifications": []}
+    def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:
+        return ThreadListing(threads, ())
 
     def refuse_thread(self) -> NoReturn:
         raise CallingThreadUnavailable("This tool requires a thread caller.")
@@ -58,9 +67,9 @@ class ThreadCaller(ToolCaller):
     def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> object:
         return request.apply(comms, self)
 
-    def listing(self, comms: Comms, result: dict[str, object]) -> dict[str, object]:
+    def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
-        return {**result, "sent_notifications": list(presentation.sent_notifications)}
+        return ThreadListing(threads, presentation.sent_notifications)
 
     def subject(self, named: str) -> str:
         return named or self.name
