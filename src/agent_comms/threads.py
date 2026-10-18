@@ -17,7 +17,7 @@ from .goals import (
     AbsentGoalCheckpoint, Goal, GoalCheckpoint, GoalRevision, PresentGoalCheckpoint,
 )
 from .registration_inheritance import InheritEmpty, InheritMissing, InheritPrevious
-from .storage_rules import StorageRoots
+from .storage_rules import StorageRoots, StorageRule
 from .thread_identity import (
     ThreadProvenance,
     ThreadRole,
@@ -94,16 +94,14 @@ class Thread(ThreadProvenance):
             for location, _ in parent.runtime.history_locations(parent, registry, visited):
                 yield location, True
 
-    def contains_worktree(self, worktree: str) -> bool:
-        """This conversation's current and retained project directories."""
-        selected = str(Path(worktree).expanduser().resolve())
-        return Path(selected) in self.storage_roots.checkouts
+    def contains_worktree(self, worktree: str, rule: StorageRule) -> bool:
+        """Only this unit's current home and Git-registered extra checkouts."""
+        return Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
 
     def moved_to_project(self, project: str) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
         return replace(
             self, worktree=project,
-            storage_roots=self.storage_roots.adding(Path(project).resolve()),
             project_resume_due=self.project_resume_due or self.executing,
         )
 
@@ -405,7 +403,6 @@ class Thread(ThreadProvenance):
                 if (policy := declared.metadata.get("registration_inheritance")) is not None
             }
         resolved = replace(self, name=canonical_name, **inherited)
-        resolved = replace(resolved, storage_roots=resolved.storage_roots.adding(Path(resolved.worktree).resolve()))
         return self if resolved == self else resolved
 
     @property

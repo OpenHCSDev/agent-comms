@@ -1,5 +1,6 @@
-"""Registered storage is the single owner; ordinary edits do not walk or save it."""
-from dataclasses import replace
+"""Scratch is configured; checkout membership is read from Git and the filesystem."""
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -8,17 +9,19 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.storage_rules import (
-    AllocateStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
+    AllocateStorageEffect, CheckoutStorageEffect, RemoveCheckoutStorageEffect, StorageRoots, StorageRule,
     WriteStorageEffect, shell_storage_effects,
 )
 from agent_comms.threads import Thread
 
 
 def test_storage_paths_round_trip_inside_collections(tmp_path):
-    roots = StorageRoots((tmp_path / 'home', tmp_path / 'extra'), tmp_path / 'scratch')
+    roots = StorageRoots(tmp_path / 'scratch')
     encoded = FieldCodec.encode(roots)
-    assert encoded['checkouts'] == [str(p) for p in roots.checkouts]
+    assert encoded == {'scratch': str(roots.scratch)}
     assert FieldCodec.decode(StorageRoots, encoded) == roots
+    with pytest.raises(ValueError):
+        FieldCodec.decode(StorageRoots, {**encoded, 'checkouts': []})
 
 
 def test_registry_rule_supplies_new_thread_roots(tmp_path):
@@ -40,45 +43,51 @@ def test_ordinary_write_neither_walks_usage_nor_opens_registry_edit(tmp_path, mo
     comms.registry.declare(thread)
     def forbidden(*args, **kwargs):
         raise AssertionError('ordinary write performed allocation/registry work')
-    monkeypatch.setattr(StorageRoots, 'usage', forbidden)
+    monkeypatch.setattr(StorageRule, 'require_quota', forbidden)
+    monkeypatch.setattr(StorageRule, 'checkouts_of', forbidden)
     monkeypatch.setattr(type(comms.registry.store), 'editing', forbidden)
     comms.registry.decide_storage('worker', (WriteStorageEffect(thread.storage_roots.scratch / 'result'),))
 
 
-@pytest.mark.parametrize('index', [1, 2])
-def test_any_registered_extra_can_be_removed_including_after_shell_error(tmp_path, monkeypatch, index):
-    from agent_comms.channel_coding_tools import CodingCall
-    from agent_comms.native_tools import ReadTool
-    comms = Comms(tmp_path)
-    thread = comms.registry.new_thread('worker', frozenset(), str(tmp_path / 'home'))
-    roots = thread.storage_roots.adding(tmp_path / 'first').adding(tmp_path / 'second')
-    comms.registry.declare(replace(thread, storage_roots=roots))
-    removed = roots.checkouts[index]
-    decision = comms.registry.decide_storage('worker', (RemoveCheckoutStorageEffect(removed),))
-    assert comms.registry.require('worker').storage_roots == roots
-    call = CodingCall('removed-then-error', ReadTool(path='unused'))
-    call.storage_decisions = (decision,)
-    monkeypatch.setattr('agent_comms.channel_coding_tools.record_selected_terminal', lambda *args: None)
-    call.commit_terminal(True, tmp_path, 'input', 1)
-    assert comms.registry.require('worker').storage_roots == roots.removing((removed,))
+def test_removed_worktree_frees_quota_and_another_home_cannot_claim_its_parent(tmp_path, monkeypatch):
+    base = tmp_path / 'checkouts'
+    home, old, new = base / 'worker', base / 'worker--P1', base / 'worker--P2'
+    home.mkdir(parents=True)
+    subprocess.run(('git', 'init', '-q', str(home)), check=True)
+    subprocess.run(('git', '-C', str(home), '-c', 'user.name=P430', '-c', 'user.email=p430@example.invalid',
+                    'commit', '-q', '--allow-empty', '-m', 'seed'), check=True)
+    subprocess.run(('git', '-C', str(home), 'worktree', 'add', '-q', str(old)), check=True)
+    rule = StorageRule(checkout_base=base, scratch_base=tmp_path / 'scratch', floor_gib=0, max_checkouts=1)
+    comms = Comms(tmp_path / 'wire')
+    comms.registry.storage_rule = rule
+    thread = comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(home)))
+    comms.registry.declare(comms.registry.new_thread('opencode', frozenset(), '/home/ts'))
+    assert rule.checkouts_of(thread) == (home, old)
+    with pytest.raises(SelectedToolDenied, match='at most 1'):
+        comms.registry.decide_storage('worker', (CheckoutStorageEffect(new),))
+    comms.registry.decide_storage('worker', (RemoveCheckoutStorageEffect(old),))
+    shutil.rmtree(old)
+    assert rule.checkouts_of(thread) == (home,)
+    comms.registry.decide_storage('worker', (CheckoutStorageEffect(new),))
+    assert comms.registry.require('worker').storage_roots == thread.storage_roots
 
 
 def test_allocation_floor_is_checked_before_usage_walk(tmp_path, monkeypatch):
     rule = StorageRule(volume=tmp_path)
-    roots = rule.initial_roots('worker', str(tmp_path))
+    thread = Thread('worker', frozenset(), str(tmp_path), storage_roots=rule.initial_roots('worker'))
     monkeypatch.setattr(StorageRule, 'free_gib', lambda self: 0)
-    monkeypatch.setattr(StorageRoots, 'usage', lambda self: pytest.fail('walked before rejecting allocation'))
+    monkeypatch.setattr(StorageRule, 'checkouts_of', lambda *args: pytest.fail('walked before rejecting allocation'))
     with pytest.raises(SelectedToolDenied, match='allocation requires'):
-        AllocateStorageEffect().check(rule, roots)
+        AllocateStorageEffect().check(rule, thread)
 
 
 @pytest.mark.parametrize('command', ['git clone remote target', 'python -m venv env', 'uv sync'])
 def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
     rule = StorageRule()
-    roots = rule.initial_roots('worker', str(tmp_path))
+    thread = Thread('worker', frozenset(), str(tmp_path), storage_roots=rule.initial_roots('worker'))
     with pytest.raises(SelectedToolDenied):
         for effect in shell_storage_effects(command, tmp_path):
-            effect.check(rule, roots)
+            effect.check(rule, thread)
 
 
 def test_programs_do_not_claim_to_be_effect_values():

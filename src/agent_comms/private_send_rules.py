@@ -63,7 +63,9 @@ class RunningTurnRegistryCheck(RegistryClaimCheck):
 
     def worktree_matches(self) -> bool:
         return super().worktree_matches() or (
-            self.actual.project_resume_due and self.actual.contains_worktree(self.expected.worktree)
+            self.actual.project_resume_due
+            and self.expected.turn_lease is not None
+            and self.actual.turn_lease == self.expected.turn_lease
         )
 
 
