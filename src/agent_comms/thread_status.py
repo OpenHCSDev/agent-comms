@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, ClassVar
 from .declared_family import DeclaredFamily
 from .child_process import ProcessState
 from .errors import RelationViolationError
-from .thread_presentation import ThreadPresentation
+from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -69,10 +69,14 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
     def allows_owner_start(self, *, process: ProcessState) -> bool:
         return self.allows_owner_control()
 
-    def native_presentation(self, process: ProcessState, ordinary, binding):
+    def native_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
         return ordinary
 
-    def external_presentation(self, process: ProcessState, ordinary):
+    def external_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation,
+    ) -> ThreadPresentation:
         return ordinary
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
@@ -97,12 +101,18 @@ class ActiveThreadPresence:
     def allows_owner_start(self, *, process: ProcessState) -> bool:
         return process.allows_owner_start()
 
-    def native_presentation(self, process: ProcessState, ordinary, binding):
+    def native_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
         return process.native_presentation(ordinary, binding)
 
-    def external_presentation(self, process: ProcessState, ordinary):
+    def external_presentation(
+        self, process: ProcessState, ordinary: ThreadPresentation,
+    ) -> ThreadPresentation:
         if process.offline():
-            return replace(ordinary, marker="○", summary="CLI offline", status=ordinary.status.without_work())
+            return replace(
+                ordinary, marker="○", summary="CLI offline", status=ordinary.status.without_work(),
+            )
         return ordinary
 
     def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:

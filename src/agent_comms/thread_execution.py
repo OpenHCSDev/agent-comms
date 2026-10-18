@@ -101,10 +101,12 @@ class NativeThreadExecution(ThreadExecution):
 
         if not snapshot.statuses[thread.name].active or not thread.process_alive:
             return UnavailableThreadOwnerBinding()
-        return LiveThreadOwnerBinding(snapshot.owner_identity(thread.name), thread.require_process())
+        return LiveThreadOwnerBinding(
+            snapshot.owner_identity(thread.name), thread.require_process(),
+        )
 
     @classmethod
-    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
+    def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return status.native_presentation(thread.process_identity, ordinary, binding)
 
@@ -132,7 +134,7 @@ class ExternalThreadExecution(ThreadExecution):
         return NoBridgeThreadStatus()
 
     @classmethod
-    def presentation(cls, thread: Thread, status, ordinary: ThreadPresentation,
+    def presentation(cls, thread: Thread, status: ThreadStatus, ordinary: ThreadPresentation,
                      binding: ThreadOwnerBinding) -> ThreadPresentation:
         return status.external_presentation(thread.process_identity, ordinary)
 

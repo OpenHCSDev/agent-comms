@@ -212,7 +212,9 @@ def _bounded_inbox_response(
 class NativeOwnerCommand:
     @classmethod
     def available_for_thread(cls, thread, status: ThreadStatus) -> bool:
-        return thread.execution.native_command_available(cls, status, process=thread.process_identity)
+        return thread.execution.native_command_available(
+            cls, status, process=thread.process_identity,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -25,13 +25,21 @@ from collections.abc import Callable
 from contextlib import asynccontextmanager, contextmanager, nullcontext, suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from .declared_family import DeclaredFamily
 from .launch_runtime import LaunchRuntime
-from .field_codec import FieldCodec, WireValue
+from .field_codec import FieldCodec, WireValue, compile_decoder
 from .errors import RelationViolationError
 from .sealed import Sealed
+
+if TYPE_CHECKING:
+    from .activity import ObservedActivity
+    from .registration_change import RegistrationChange, UpdatedRegistration
+    from .thread_identity import ThreadIncarnation, ThreadRole
+    from .thread_presentation import ThreadOwnerBinding, ThreadPresentation
+    from .thread_status import ThreadStatus
+    from .turn_lease import TurnState
 
 STOP_GRACE_SECONDS = 2.0
 
@@ -59,14 +67,14 @@ class ProcessState(WireValue):
     external_json_shape = True
 
     @classmethod
-    def from_wire(cls, data):
-        return FieldCodec.decode(NoProcess | ProcessIdentity, data)
+    def from_wire(cls, data: object) -> ProcessState:
+        return cast(ProcessState, compile_decoder(NoProcess | ProcessIdentity).decode(data))
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(ProcessIdentity | NoProcess)
 
-    def to_wire(self):
+    def to_wire(self) -> object:
         return FieldCodec.encode_record(self)
 
     def allows_owner_start(self) -> bool:
@@ -75,29 +83,38 @@ class ProcessState(WireValue):
     def allows_inactive_stop(self) -> bool:
         return self.matches_pid(os.getpid())
 
-    def allows_goal_observation(self, status) -> bool:
+    def allows_goal_observation(self, status: ThreadStatus) -> bool:
         return status.active
 
-    def needs_maintenance_claim(self, role, status) -> bool:
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
         return role.executable and status.active
 
     def conflicts_with(self, previous: ProcessState) -> bool:
         return self != previous
 
     @abstractmethod
-    def registration_change(self, previous, change, incarnation): ...
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange: ...
 
     @abstractmethod
-    def restarted_registration(self, change, incarnation): ...
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange: ...
 
     def offline(self) -> bool:
         return not self.alive()
 
-    def native_presentation(self, ordinary, binding):
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
         return binding.native_presentation(ordinary)
 
-    def project_activity(self, turn_state, activity):
-        return turn_state.project_activity(activity)
+    def project_activity(
+        self, turn_state: TurnState, activity: ObservedActivity,
+    ) -> ObservedActivity:
+        projected: ObservedActivity = turn_state.project_activity(activity)
+        return projected
 
     def attachment_process(self, previous: ProcessState) -> ProcessState:
         return self
@@ -124,67 +141,75 @@ class ProcessState(WireValue):
 @dataclass(frozen=True)
 class NoProcess(ProcessState):
     @classmethod
-    def from_wire(cls, data):
+    def from_wire(cls, data: object) -> NoProcess:
         FieldCodec.decode(type(None), data)
         return cls()
 
-    def to_wire(self):
+    def to_wire(self) -> None:
         return None
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.value_schema(type(None))
 
-    def allows_owner_start(self):
+    def allows_owner_start(self) -> bool:
         return True
 
-    def allows_inactive_stop(self):
+    def allows_inactive_stop(self) -> bool:
         return True
 
-    def allows_goal_observation(self, status):
+    def allows_goal_observation(self, status: ThreadStatus) -> bool:
         return False
 
-    def needs_maintenance_claim(self, role, status):
+    def needs_maintenance_claim(self, role: ThreadRole, status: ThreadStatus) -> bool:
         return False
 
-    def conflicts_with(self, previous):
+    def conflicts_with(self, previous: ProcessState) -> bool:
         return False
 
-    def registration_change(self, previous, change, incarnation):
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
         return change
 
-    def restarted_registration(self, change, incarnation):
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
         return change
 
-    def offline(self):
+    def offline(self) -> bool:
         return False
 
-    def native_presentation(self, ordinary, binding):
+    def native_presentation(
+        self, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
+    ) -> ThreadPresentation:
         return ordinary
 
-    def project_activity(self, turn_state, activity):
+    def project_activity(
+        self, turn_state: TurnState, activity: ObservedActivity,
+    ) -> ObservedActivity:
         return activity
 
-    def attachment_process(self, previous):
+    def attachment_process(self, previous: ProcessState) -> ProcessState:
         return previous
 
-    def require(self, message="No worker process has started"):
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity:
         raise RelationViolationError(message)
 
-    def alive(self):
+    def alive(self) -> bool:
         return False
 
-    def matches_pid(self, pid):
+    def matches_pid(self, pid: int) -> bool:
         return False
 
-    def signal(self, signum):
+    def signal(self, signum: int) -> None:
         pass
 
-    def require_release_by(self, process):
+    def require_release_by(self, process: ProcessIdentity) -> None:
         # Stopping before the first start still produces a valid release.
         pass
 
-    def pid_fields(self):
+    def pid_fields(self) -> dict[str, int]:
         return {}
 
 
@@ -198,22 +223,22 @@ class ProcessIdentity(ProcessState):
             raise ValueError("A positive PID and platform start time are required")
 
     @classmethod
-    def pid_argument(cls, value: str):
-        return FieldCodec.encode(cls.capture(int(value)))
+    def pid_argument(cls, value: str) -> dict[str, object]:
+        return FieldCodec.encode_record(cls.capture(int(value)))
 
     @classmethod
     def capture(cls, pid: int) -> ProcessIdentity:
         return Platform.current().identity(pid)
 
     @classmethod
-    def from_wire(cls, data):
+    def from_wire(cls, data: object) -> ProcessIdentity:
         return FieldCodec.decode_record(cls, data)
 
     @classmethod
-    def schema(cls):
+    def schema(cls) -> dict[str, object]:
         return FieldCodec.record_schema(cls)
 
-    def require(self, message="No worker process has started"):
+    def require(self, message: str = "No worker process has started") -> ProcessIdentity:
         return self
 
     def alive(self) -> bool:
@@ -232,10 +257,14 @@ class ProcessIdentity(ProcessState):
     def pid_fields(self) -> dict[str, int]:
         return {"pid": self.pid}
 
-    def registration_change(self, previous: ProcessState, change, incarnation):
+    def registration_change(
+        self, previous: ProcessState, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
         return previous.restarted_registration(change, incarnation)
 
-    def restarted_registration(self, change, incarnation):
+    def restarted_registration(
+        self, change: UpdatedRegistration, incarnation: ThreadIncarnation,
+    ) -> RegistrationChange:
         return change.restarted() if incarnation != change.previous.incarnation else change
 
 

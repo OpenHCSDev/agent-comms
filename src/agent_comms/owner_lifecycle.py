@@ -125,7 +125,9 @@ class NoRelease(OwnerRelease):
 
 @dataclass(frozen=True)
 class ReleasedOwner(ThreadIncarnationRecord):
-    process_identity: ProcessState = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
+    process_identity: ProcessState = field(
+        metadata={"sql": Column(storage=JsonStorage, nullable=True)},
+    )
 
     def require_process(self) -> ProcessIdentity:
         return self.process_identity.require(f"Thread {self.name!r} has no released process")
@@ -364,7 +366,10 @@ class OwnerLifecycle:
                 thread.process_identity.allows_inactive_stop()
             ):
                 return
-            if snapshot.statuses[thread.name].active and thread.process_identity.matches_pid(os.getpid()):
+            if (
+                snapshot.statuses[thread.name].active
+                and thread.process_identity.matches_pid(os.getpid())
+            ):
                 if RestartEnvironment.called_by(
                     thread.name,
                     canonicalize=lambda caller: self.registry.require(caller).name,

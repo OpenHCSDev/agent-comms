@@ -19,6 +19,14 @@ def test_process_field_keeps_null_or_exact_record(process, wire):
     assert json.dumps(FieldCodec.encode(process, ProcessState)) == json.dumps(wire)
 
 
+@pytest.mark.parametrize("process", [NoProcess(), ProcessIdentity(123, 456)])
+def test_thread_creation_result_carries_the_process_state(process):
+    from agent_comms.cli_commands import ThreadCreatedResult
+
+    result = ThreadCreatedResult("worker", process)
+    assert FieldCodec.decode(ThreadCreatedResult, FieldCodec.encode(result)) == result
+
+
 @pytest.mark.parametrize("wire", [False, 0, {}, {"pid": 0, "start_time": 1}, {"pid": True, "start_time": 1}])
 def test_process_field_rejects_non_identity_shapes(wire):
     with pytest.raises((ValueError, TypeError)):
@@ -28,6 +36,7 @@ def test_process_field_rejects_non_identity_shapes(wire):
 def test_unstarted_process_does_not_signal_or_supply_a_pid():
     process = NoProcess()
     assert not process.alive()
+    assert not process.offline()
     assert process.allows_owner_start()
     assert not process.matches_pid(123)
     process.signal(signal.SIGTERM)

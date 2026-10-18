@@ -145,7 +145,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         self._selected_write_controllers: dict[tuple[str, int], tuple[str, object]] = {}
 
     def _create_runtime_proxy(self, thread: Thread, session_id: str) -> RuntimeProxy:
-        return RuntimeProxy(self, session_id, socket_path(self._comms.root, thread.require_process().pid))
+        return RuntimeProxy(
+            self, session_id, socket_path(self._comms.root, thread.require_process().pid),
+        )
 
     # Private attachment ABI consumed by runtime/compaction. State exists only
     # on its component; in-process consumers use that owner directly.
