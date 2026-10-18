@@ -27,7 +27,6 @@ from agent_comms.maintenance_barrier import (
 from agent_comms.registration import Registration
 from agent_comms.store_files import _async_store_lock, _store_lock
 from agent_comms.threads import Thread
-from test_backend_native_lifecycle import native_backend
 
 
 async def test_channel_post_queues_without_start_during_cutover(tmp_path: Path, monkeypatch) -> None:

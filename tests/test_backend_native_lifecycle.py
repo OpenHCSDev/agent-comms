@@ -21,16 +21,7 @@ from agent_comms.threads import Thread
 from stored_inputs import stored_inputs
 
 
-from native_backend_fixture import native_backend_fixture, wait_for
-
-
-@pytest.fixture
-async def native_backend(tmp_path_factory, monkeypatch, native_launch_settings):
-    monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
-    # Native originals belong to the persistent run, even when a consuming
-    # module supplies a separate auto-deleting sealed-bus tmp_path fixture.
-    async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner")) as owner:
-        yield owner
+from native_backend_fixture import wait_for
 
 async def test_actual_native_queued_settlement_large_reuse_and_validated_reopen(native_backend):
     owner = native_backend

@@ -36,7 +36,6 @@ from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.runtime import RuntimeProxy, socket_path
 from delivery_owner_fixture import canonical_agent
 from stored_inputs import sent_text, stored_inputs
-from test_backend_native_lifecycle import native_backend
 from native_backend_fixture import wait_for
 
 

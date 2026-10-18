@@ -9,7 +9,6 @@ from agent_comms import agent_events as events
 from agent_comms import backend
 from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendNow, TurnInbox, WhenBusy
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 @pytest.mark.parametrize("outcome", ["failure", "stall"])

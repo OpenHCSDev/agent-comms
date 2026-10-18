@@ -26,7 +26,6 @@ from agent_comms.pi_native_backend import PiNativeBackend
 import agent_comms.native_package as native_package
 from delivery_owner_fixture import canonical_agent
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_installed_retained_greeting_then_managed_read(native_backend, monkeypatch):

@@ -17,7 +17,6 @@ from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.pi_commands import GetState, Prompt
 from agent_comms.pi_events import ContextCommitted, InputCommitted, Response
 from native_proof_cases import read_proof_rows, write_proof_rows
-from test_backend_native_lifecycle import native_backend as native_backend
 
 
 def grow_proof(session, original, target_bytes):

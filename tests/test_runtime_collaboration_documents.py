@@ -13,7 +13,6 @@ from agent_comms.shared_ledger import SharedLedger
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_installed_native_observation_producers_preserve_dates_without_input(native_backend, monkeypatch):

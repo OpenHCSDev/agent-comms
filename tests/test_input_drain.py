@@ -10,7 +10,6 @@ from agent_comms.acp_extension import (
     InputFailedUpdate,
     decode_updates,
 )
-from test_backend_native_lifecycle import native_backend as native_backend
 from stored_inputs import stored_inputs
 
 

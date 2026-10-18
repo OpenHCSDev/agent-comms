@@ -15,7 +15,6 @@ from agent_comms.runtime import socket_path
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 
-pytest_plugins = ("test_backend_native_lifecycle",)
 
 
 async def test_actual_fork_attachment_survives_cold_owner_before_socket(

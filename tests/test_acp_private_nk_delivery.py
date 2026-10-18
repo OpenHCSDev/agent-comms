@@ -40,7 +40,6 @@ from agent_comms.tracked_turn import TrackedTurnSession
 from delivery_owner_fixture import drain_diagnostic, reply_turn_finished
 from test_coordinated_runtime import _fake_model, tmp_path as private_root_fixture
 from test_native_prompt_binding import _fake_model as separate_session_fake
-from test_backend_native_lifecycle import native_backend as native_backend
 from test_goal_standby_liveness import retained_native_acp_owner as retained_native_acp_owner
 
 tmp_path = private_root_fixture

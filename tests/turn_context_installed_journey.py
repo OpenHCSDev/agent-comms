@@ -137,29 +137,27 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
 
 async def run(root, receiving_only=False):
     from pytest import MonkeyPatch
-    from test_backend_native_lifecycle import native_backend
+    from native_backend_fixture import native_backend_fixture
     from test_native_context_inspection import test_context_manifest_native_acp_and_cli_continuous
 
     started = time.monotonic()
     root.mkdir(mode=0o700)
-    monkey = MonkeyPatch()
-    fixture = native_backend.__wrapped__(root, monkey)
     original = None
     acknowledgement = {"python": sys.executable, "core": agent_comms.__file__, "fixture": str(root),
                "public_inputs": 0, "paid_provider_calls": 0}
     try:
-        original = await anext(fixture)
-        async with asyncio.timeout(90):
-            await test_context_manifest_native_acp_and_cli_continuous(
-                original, receiving_only=receiving_only)
+        with MonkeyPatch.context() as monkey:
+            monkey.delenv("AGENT_COMMS_THREAD", raising=False)
+            async with native_backend_fixture(root) as original:
+                async with asyncio.timeout(90):
+                    await test_context_manifest_native_acp_and_cli_continuous(
+                        original, receiving_only=receiving_only)
         acknowledgement["state"] = "SCOPED_PASS"
     except BaseException as error:
         acknowledgement["state"] = "FAILED_NO_REPLAY"
         acknowledgement["error"] = repr(error)
         raise
     finally:
-        await fixture.aclose()
-        monkey.undo()
         if original is not None:
             acknowledgement["local_provider_posts"] = original.provider.posts
             requests = root / 'original-provider-requests.json'
@@ -534,7 +532,7 @@ if __name__ == "__main__":
         parser.error('Terminal-only requires a distinct configured saved fork')
     if "site-packages" not in Path(agent_comms.__file__).parts:
         raise RuntimeError("This acceptance requires the paired installed Core wheel")
-    # Only pytest's fixture decorator/MonkeyPatch is borrowed. Import installed
+    # Only pytest's MonkeyPatch is borrowed. Import installed
     # Core first and append the support directory; do not process donor .pth files.
     if options.test_support_site is not None:
         sys.path.append(str(options.test_support_site))

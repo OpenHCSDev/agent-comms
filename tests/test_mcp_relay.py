@@ -21,7 +21,6 @@ from agent_comms.native_pi import CAPABILITY
 from agent_comms.pi_payloads import McpLiveAcknowledgement
 from agent_comms.runtime import UNBOUND_CONTROLLER, RuntimeProxy, SocketClient
 from delivery_owner_fixture import canonical_agent
-from test_backend_native_lifecycle import native_backend
 from pi_session_turn import one_turn_events
 
 pytestmark = [

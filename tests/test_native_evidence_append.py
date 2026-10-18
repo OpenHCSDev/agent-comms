@@ -16,7 +16,6 @@ from agent_comms.native_pi import (
 )
 from agent_comms.private_path import FileRevision
 from test_native_pi import _evidence
-from test_backend_native_lifecycle import native_backend
 
 APPEND = (json.dumps({"type": "custom", "id": "concurrent-append",
                       "customType": "isolated-evidence-check", "data": {}}) + "\n").encode()

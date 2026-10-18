@@ -12,7 +12,6 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.turn_runner import TurnRunner
-from test_backend_native_lifecycle import native_backend as native_backend
 from stored_inputs import stored_inputs
 
 
