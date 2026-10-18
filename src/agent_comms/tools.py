@@ -6,7 +6,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, asdict, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, Any, ClassVar, Type
+from typing import TYPE_CHECKING, ClassVar, Type
 
 from .pi_vocabulary import ServiceTier, ThinkingLevel
 from .cli_commands import (
@@ -1057,7 +1057,7 @@ class InvokeCliCommand(CliCommand, declared_name="tool"):
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
     tool: str = option("--tool")
-    arguments: dict[str, Any] = option(
+    arguments: JsonObject = option(
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
         parser_default="{}", normalize=_json_object)
 
