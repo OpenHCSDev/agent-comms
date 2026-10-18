@@ -1,6 +1,5 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
-import argparse
 import base64
 import hashlib
 import secrets
@@ -16,8 +15,8 @@ from agent_comms.connector import (
     AuthorizationQuery,
     Connector,
     ConnectorStore,
-    approve,
-    revoke,
+    ApproveVerb,
+    RevokeVerb,
 )
 from agent_comms.tool_caller import NoThreadCaller
 from agent_comms.tools import invoke_tool
@@ -60,7 +59,7 @@ async def approved_token(client: TestClient, store: ConnectorStore) -> str:
     waiting = await client.get("/authorize", params=query, allow_redirects=False)
     assert waiting.status == 200
     request = AuthorizationQuery(**query).request_id
-    assert approve(argparse.Namespace(request=request), store) == 0
+    assert ApproveVerb(request=request).apply(store) == 0
     redirected = await client.get("/authorize", params=query, allow_redirects=False)
     code = parse_qs(urlsplit(redirected.headers["Location"]).query)["code"][0]
     issued = await client.post(
@@ -120,6 +119,6 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
 
 async def test_a_revoked_token_is_refused(client, store):
     token = await approved_token(client, store)
-    assert revoke(argparse.Namespace(), store) == 0
+    assert RevokeVerb().apply(store) == 0
     refused = await client.post("/mcp", json=LIST, headers={"Authorization": f"Bearer {token}"})
     assert refused.status == 401

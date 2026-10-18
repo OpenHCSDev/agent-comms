@@ -24,20 +24,21 @@ import json
 import secrets
 import time
 from abc import abstractmethod
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import ClassVar, Literal, Self, get_args
+from typing import Annotated, ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from aiohttp import web
 from pydantic import JsonValue
 
+from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import client_wire
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, PathText
 from .locked_store import LockedStore, RootFile
 from .tool_caller import NoThreadCaller
 from .tools import ConnectorReadable, ToolRequest
@@ -516,68 +517,89 @@ class Connector:
         return await message.answer(self)
 
 
-def serve(args: argparse.Namespace, store: ConnectorStore) -> int | str:
-    connector = Connector(store, args.issuer.rstrip("/"), args.root)
-    web.run_app(connector.application(), host=LOOPBACK, port=PORT, access_log=None)
-    return 0
+@dataclass(frozen=True, kw_only=True)
+class ConnectorVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+    """One connector command: its options are its fields, and its parser comes from them."""
 
+    @abstractmethod
+    def apply(self, ctx: ConnectorStore) -> int | str: ...
 
-def pending(args: argparse.Namespace, store: ConnectorStore) -> int | str:
-    grants = store.read()
-    print(
-        json.dumps(
-            {
-                key: {"client": grants.clients[held.client_id].name}
-                for key, held in grants.requests.items()
-            }
+    @classmethod
+    def parse(cls, argv: Sequence[str] | None) -> ConnectorVerb:
+        parser = argparse.ArgumentParser(
+            prog="agent-comms-connector",
+            description=__doc__,
+            formatter_class=argparse.RawDescriptionHelpFormatter,
         )
+        verbs = parser.add_subparsers(dest="command", required=True)
+        for member in cls.members_with(cls):
+            member.add_parser(verbs)
+        args = parser.parse_args(argv)
+        return cls.decode(args.command).from_namespace(args)
+
+
+@dataclass(frozen=True, kw_only=True)
+class ServeVerb(ConnectorVerb):
+    help = f"Serve MCP on {LOOPBACK}:{PORT}/mcp"
+    root: Annotated[Path, PathText] | None = option(
+        "--root", default=None, help="Comms root (default: the active route)"
     )
-    return 0
-
-
-def approve(args: argparse.Namespace, store: ConnectorStore) -> int | str:
-    def approved(grants: ConnectorGrants) -> ConnectorGrants:
-        held = grants.requests[args.request]
-        return replace(
-            grants, requests=grants.requests | {args.request: replace(held, approved=True)}
-        )
-
-    try:
-        store.update(approved)
-    except KeyError:
-        return f"No authorization {args.request!r} is waiting."
-    return 0
-
-
-def revoke(args: argparse.Namespace, store: ConnectorStore) -> int | str:
-    store.update(lambda grants: replace(grants, requests={}, codes={}, access={}, refresh={}))
-    return 0
-
-
-def main(argv: Sequence[str] | None = None) -> int | str:
-    parser = argparse.ArgumentParser(
-        prog="agent-comms-connector",
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    commands = parser.add_subparsers(required=True)
-    serving = commands.add_parser("serve", help=f"Serve MCP on {LOOPBACK}:{PORT}/mcp")
-    serving.add_argument("--root", type=Path, default=None)
-    serving.add_argument(
+    issuer: str = option(
         "--issuer",
         default=f"http://{LOOPBACK}:{PORT}",
         help="Public origin the OAuth metadata names",
     )
-    serving.set_defaults(run=serve)
-    commands.add_parser("pending", help="List authorizations waiting for approval").set_defaults(
-        run=pending
-    )
-    approving = commands.add_parser("approve", help="Approve one waiting authorization")
-    approving.add_argument("request")
-    approving.set_defaults(run=approve)
-    commands.add_parser("revoke", help="Revoke every issued token and code").set_defaults(
-        run=revoke
-    )
-    args = parser.parse_args(argv)
-    run: Callable[[argparse.Namespace, ConnectorStore], int | str] = args.run
-    return run(args, ConnectorStore.owned())
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        connector = Connector(ctx, self.issuer.rstrip("/"), self.root)
+        web.run_app(connector.application(), host=LOOPBACK, port=PORT, access_log=None)
+        return 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class PendingVerb(ConnectorVerb):
+    help = "List authorizations waiting for approval"
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        grants = ctx.read()
+        print(
+            json.dumps(
+                {
+                    key: {"client": grants.clients[held.client_id].name}
+                    for key, held in grants.requests.items()
+                }
+            )
+        )
+        return 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class ApproveVerb(ConnectorVerb):
+    help = "Approve one waiting authorization"
+    request: str = option("request", help="The id the authorize page shows")
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        def approved(grants: ConnectorGrants) -> ConnectorGrants:
+            held = grants.requests[self.request]
+            return replace(
+                grants, requests=grants.requests | {self.request: replace(held, approved=True)}
+            )
+
+        try:
+            ctx.update(approved)
+        except KeyError:
+            return f"No authorization {self.request!r} is waiting."
+        return 0
+
+
+@dataclass(frozen=True, kw_only=True)
+class RevokeVerb(ConnectorVerb):
+    help = "Revoke every issued token and code"
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        ctx.update(lambda grants: replace(grants, requests={}, codes={}, access={}, refresh={}))
+        return 0
+
+
+def main(argv: Sequence[str] | None = None) -> int | str:
+    return ConnectorVerb.parse(argv).apply(ConnectorStore.owned())
