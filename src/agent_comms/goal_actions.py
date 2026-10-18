@@ -53,7 +53,7 @@ class OwnerControlInvocable:
 class GoalPrecondition:
     goal_id: str | None = None
     expected_state: GoalState | None = None
-    expected_goal: Goal | None = None
+    expected_goal: GoalDeclaration = NoGoal()
     expected_owner: ProcessIdentity | None = None
 
     def check(self, ctx: GoalActionContext) -> None:
@@ -63,8 +63,7 @@ class GoalPrecondition:
             or not ctx.goals.registry.status(thread.name).running
         ):
             raise ValueError("The goal owner changed; refresh its state.")
-        if self.expected_goal is not None and goal != self.expected_goal:
-            raise ValueError("Goal changed during resume; refresh its state.")
+        self.expected_goal.check_expected(goal)
         if self.goal_id is not None:
             thread.goal.require_id(self.goal_id)
         if self.expected_state is not None and (
@@ -421,7 +420,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
             if (current.text, current.order) != (self.text.strip(), self.order):
                 raise ValueError("Goal identity already has different instructions.")
             return ctx.thread.goal.require()
-        ctx.thread.require_goal_replacement(ctx.goals)
+        ctx.thread.goal.require_replacement(ctx.goals, ctx.thread.incarnation)
         goal = Goal(
             text=self.text.strip(), id=self.goal_id, revision=1, order=self.order,
             published_seq=ctx.goals.bus.log.latest_sequence(),
@@ -448,7 +447,7 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
     def reserve(self, ctx): ...
 
     def change(self, ctx):
-        ctx.thread.require_order_slot(self.goal_id, self.problem)
+        ctx.thread.goal.require_order_slot(self.goal_id)
         self.deadline.require_deadline()
         self.order.owner.require_exists()
         self.order.check.require_directory()
@@ -485,7 +484,7 @@ class ClearGoalAction(
     ReplacementGoalAction, OwnerInvocable, RuntimeInvocable, OwnerControlInvocable
 ):
     def change(self, ctx: GoalActionContext) -> GoalDeclaration:
-        ctx.thread.require_goal_replacement(ctx.goals)
+        ctx.thread.goal.require_replacement(ctx.goals, ctx.thread.incarnation)
         return NoGoal()
 
 
@@ -496,7 +495,7 @@ class EditGoalAction(GoalAction, OwnerInvocable, RuntimeInvocable):
 
     def change(self, ctx: GoalActionContext) -> Goal:
         goal = ctx.thread.goal.require()
-        ctx.thread.require_goal_replacement(ctx.goals)
+        ctx.thread.goal.require_replacement(ctx.goals, ctx.thread.incarnation)
         text = self.text.strip()
         if not text:
             raise ValueError("A goal requires text.")

@@ -43,7 +43,7 @@ class GoalDisplay(DeclaredFamily):
 
     @property
     def visible(self) -> bool:
-        return self.snapshot.is_set()
+        return True
 
     @abstractmethod
     def heading(self, execution: ThreadGoalExecution) -> str: ...
@@ -57,14 +57,15 @@ class GoalDisplay(DeclaredFamily):
     def action_failure(self, error: Exception) -> str:
         return str(error)
 
-    @staticmethod
-    def current(goal: GoalDeclaration) -> "GoalDisplay":
-        return NoGoal() if not goal.is_set() else ShowingGoal(goal.require())
-
 
 @dataclass(frozen=True)
 class NoGoal(GoalDisplay):
     can_control: ClassVar[bool] = False
+
+    @property
+    def visible(self) -> bool:
+        return False
+
     @property
     def snapshot(self) -> GoalDeclaration:
         return goals.NoGoal()
@@ -113,4 +114,4 @@ class GoalUnavailable(GoalDisplay):
 
     def heading(self, execution: ThreadGoalExecution) -> str:
         # A failed read says nothing about why; the session's own state explains it.
-        return "Goal state unavailable · last confirmed snapshot" if self.last_confirmed.is_set() else "Goal state unavailable"
+        return self.last_confirmed.unavailable_heading()

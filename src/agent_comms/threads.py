@@ -72,7 +72,7 @@ class Thread(ThreadProvenance):
         default=ServiceTier.PRIORITY, kw_only=True,
         metadata={"registration_inheritance": InheritPrevious},
     )
-    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": InheritEmpty})
+    goal: GoalDeclaration = field(default_factory=NoGoal, metadata={"registration_inheritance": GoalDeclaration})
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
@@ -268,52 +268,26 @@ class Thread(ThreadProvenance):
 
     @property
     def task_scope(self):
-        from .task_sources import GoalTaskScope, TurnTaskScope
-
-        goal = self.goal.active()
-        return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
-                if goal.is_set() else TurnTaskScope(project=self.worktree))
+        return self.goal.active().task_scope(self.worktree)
 
     def context_goal_segments(self, goals):
-        """Project this declaration's active goal without a second goal state."""
-        from .turn_context import GoalSegment
-
-        goal = self.goal.active()
-        return (GoalSegment.capture(self, goal, goals),) if goal.is_set() else ()
+        return self.goal.active().context_segments(self, goals)
 
     def wake_context(self) -> dict[str, object]:
-        """This captured thread owns its selected-wake work and goal projection."""
-        goal = self.goal
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
-            "current_goal": (None if not goal.is_set() else {
-                "text": goal.text, "status": goal.state.declared_name,
-                "progress": goal.progress,
-            }),
+            "current_goal": self.goal.wake_context(),
         }
 
     def retained_task_facts(self):
-        from .retained_task_facts import GoalTaskFact
-
-        return (GoalTaskFact(self.goal),) if self.goal.is_set() else ()
+        return self.goal.task_facts()
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
         """The current active goal still belongs to this captured project/goal."""
         if self.worktree != original.worktree:
             return NoGoal()
-        goal, captured = self.goal.active(), original.goal.active()
-        if not goal.is_set() or not captured.is_set():
-            return NoGoal()
-        return goal.matching(captured.require().id)
-
-    def require_goal_replacement(self, goals) -> None:
-        if self.goal.is_set():
-            self.goal.require_replacement(goals, self.incarnation)
-
-    def require_order_slot(self, goal_id: str, problem: str) -> None:
-        if self.goal.is_set():
-            self.goal.order.require_slot(self.goal, goal_id, problem)
+        return original.goal.active().continued_by(self.goal.active())
 
     def same_launch(self, other: Thread) -> bool:
         """Whether both records describe one process serving one saved session with one model setting.

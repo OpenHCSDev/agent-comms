@@ -13,6 +13,7 @@ from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
 from .goal_states import ActiveGoal, GoalState
+from .registration_inheritance import RegistrationInheritance
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
 
@@ -252,10 +253,6 @@ class OrderCheck:
         return found and cls(found[1], found[2], CountCheckResult(int(found[3])))
 
 class GoalOrder(DeclaredFamily, affix="GoalOrder"):
-    def require_slot(self, goal, goal_id, problem):
-        if goal.id != goal_id:
-            goal.state.require_order_slot()
-
     def require_completion(self) -> None:
         pass
 
@@ -303,11 +300,56 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
-class GoalDeclaration(SubclassUnion):
+class GoalDeclaration(SubclassUnion, RegistrationInheritance["GoalDeclaration"]):
     """The recorded goal state, including a thread with no goal."""
+
+    @classmethod
+    def apply(cls, incoming: GoalDeclaration, previous: GoalDeclaration) -> GoalDeclaration:
+        return incoming.registration_value(previous)
+
+    def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
+        return previous
 
     def is_set(self) -> bool:
         return False
+
+    def check_expected(self, current: GoalDeclaration) -> None:
+        pass
+
+    def accepts_following_handoff(self) -> bool:
+        return False
+
+    def defers_following_to(self, current: GoalDeclaration) -> bool:
+        return current.accepts_following_handoff()
+
+    def goal_display(self):
+        from .ui_model import goal
+        return goal.NoGoal()
+
+    def unavailable_heading(self) -> str:
+        return "Goal state unavailable"
+
+    def task_scope(self, project):
+        from .task_sources import TurnTaskScope
+        return TurnTaskScope(project=project)
+
+    def context_segments(self, thread, goals):
+        return ()
+
+    def task_facts(self):
+        return ()
+
+    def wake_context(self):
+        return None
+
+    def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
+        return self
+
+    def require_replacement(self, goals, owner) -> None:
+        pass
+
+    def require_order_slot(self, goal_id: str) -> None:
+        pass
 
     def require(self) -> Goal:
         raise RelationViolationError("No goal is set for this thread.")
@@ -364,8 +406,50 @@ class Goal(RecordMember, GoalDeclaration):
     state: GoalState = field(default_factory=ActiveGoal)
     order: GoalOrder = field(default_factory=UnorderedGoalOrder)
 
+    def registration_value(self, previous: GoalDeclaration) -> GoalDeclaration:
+        return self
+
     def is_set(self) -> bool:
         return True
+
+    def check_expected(self, current: GoalDeclaration) -> None:
+        if self != current:
+            raise ValueError("Goal changed during resume; refresh its state.")
+
+    def accepts_following_handoff(self) -> bool:
+        return self.state.active
+
+    def defers_following_to(self, current: GoalDeclaration) -> bool:
+        return not self.state.active and super().defers_following_to(current)
+
+    def goal_display(self):
+        from .ui_model.goal import ShowingGoal
+        return ShowingGoal(self)
+
+    def unavailable_heading(self) -> str:
+        return "Goal state unavailable · last confirmed snapshot"
+
+    def task_scope(self, project):
+        from .task_sources import GoalTaskScope
+        return GoalTaskScope(project=project, goal=self.checkpoint)
+
+    def context_segments(self, thread, goals):
+        from .turn_context import GoalSegment
+        return (GoalSegment.capture(thread, self, goals),)
+
+    def task_facts(self):
+        from .retained_task_facts import GoalTaskFact
+        return (GoalTaskFact(self),)
+
+    def wake_context(self):
+        return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+
+    def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
+        return current.matching(self.id)
+
+    def require_order_slot(self, goal_id: str) -> None:
+        if self.id != goal_id:
+            self.state.require_order_slot()
 
     def require(self) -> Goal:
         return self

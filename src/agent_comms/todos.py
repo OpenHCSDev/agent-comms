@@ -20,12 +20,12 @@ from .change_report import FileLine
 from .child_process import BoundedRun, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, NullMember, SubclassUnion, RecordMember
+from .field_codec import FieldCodec, NullMember, RecordMember, SubclassUnion
 from .goals import OrderCheck
 from .recorded_time import EventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, TypedStore, TypedTable
+from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -661,7 +661,7 @@ class Todo(TypedTable):
     creator_created: float
     state: type[TodoState]
     revision: int = field(metadata={"sql": Column(check="revision>0")})
-    goal: GoalReference
+    goal: GoalReference = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
     assignment: Assignment | None
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
