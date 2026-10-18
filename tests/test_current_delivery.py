@@ -10,6 +10,7 @@ import pytest
 
 from agent_comms.bus_route_counts import (
     BusRouteCounts, OpenedRouteCounts, RouteEntryRow, RouteSourceRow,
+    RouteIndexReady, UnrecordedRouteSource,
 )
 from agent_comms.comms import wire
 from agent_comms.messages import Message, InfoKind
@@ -28,6 +29,22 @@ def consistent(comms, *names):
             assert comms.bus.pending_counts_opened(source, basis) == Counter(
                 scope.conversation(row.sender, row.target) for row in inbox
             )
+
+
+def test_missing_projection_has_no_revision_and_one_current_row_query(tmp_path):
+    comms = wire(tmp_path)
+    with BusRouteCounts(comms.bus.log.path) as index:
+        queries = []
+        index.connection.set_trace_callback(queries.append)
+        state = RouteSourceRow.current(index.connection)
+        index.connection.set_trace_callback(None)
+        assert state == UnrecordedRouteSource()
+        assert state.through == 0
+        assert len(queries) == 1
+        with comms.bus.log._opened_wire_snapshot() as source:
+            assert not state.matches_source(source)
+            assert state.needs_rebuild(source)
+            state.check_source(source, RouteIndexReady())
 
 
 @pytest.mark.parametrize("rebound", ["sender", "recipient"])
@@ -113,8 +130,8 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
                 assert len(index.unseen_deliveries(viewer, basis.seen)) == 5
             assert decode.call_count == 0
     with BusRouteCounts(comms.bus.log.path) as index:
-        recorded = RouteSourceRow.select(index.connection)[0]
-    assert recorded.revision.size > stale.revision.size
+        recorded = RouteSourceRow.current(index.connection)
+    assert recorded.through > stale.revision.size
 
 
 def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
@@ -145,15 +162,15 @@ def test_truncated_source_fails_the_recorded_digest_and_rebuilds(tmp_path):
             scan.seek(stale.revision.size)
             boundary = stale.revision.size + len(scan.readline())
         with BusRouteCounts(path) as index:
-            recorded_offset = RouteSourceRow.select(index.connection)[0].revision.size
+            recorded_offset = RouteSourceRow.current(index.connection).through
         assert stale.revision.size < boundary < recorded_offset
         os.truncate(path, boundary)
         with patch.object(Message, "from_wire", wraps=Message.from_wire) as decode:
             assert reader.bus.pending_counts_opened(stale, basis) == {"sender": 5}
             assert decode.call_count > 0
     with BusRouteCounts(comms.bus.log.path) as index:
-        recorded = RouteSourceRow.select(index.connection)[0]
-    assert recorded.revision.size == stale.revision.size
+        recorded = RouteSourceRow.current(index.connection)
+    assert recorded.through == stale.revision.size
 
 
 def test_route_storage_and_decoder_have_one_declaration_owner():
@@ -183,14 +200,16 @@ def test_new_route_table_is_created_and_reset_with_its_scope(tmp_path):
 
     from contextlib import closing
 
-    routes = BusRouteCounts(tmp_path / "bus.jsonl")
+    comms = wire(tmp_path)
+    routes = BusRouteCounts(comms.bus.log.path)
     routes.prepare()
     with closing(sqlite3.connect(routes.path)) as writer:
         ExtraRouteStatisticRow(7).insert(writer)
         writer.commit()
     with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == [ExtraRouteStatisticRow(7)]
-    assert routes.sync(None, None, lambda _: None).complete
+    with comms.bus.log._opened_wire_snapshot() as source:
+        assert routes.sync(source, lambda _: ()).complete
     with routes as index:
         assert ExtraRouteStatisticRow.select(index.connection) == []
 
@@ -215,7 +234,7 @@ def test_retained_cut_clips_future_paint_in_counts_and_listings(tmp_path, birth_
         with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
             assert comms.bus.pending_counts_opened(pending_source, pending_basis) == {"sender": 1}
         later_reads = comms.bus.reads.read().cursor(
-            viewer, basis.registry, source.revision.identity
+            viewer, basis.registry, source
         )
         assert later_reads == ReadCursor().add((later.seq,))
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
