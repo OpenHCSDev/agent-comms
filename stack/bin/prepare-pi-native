@@ -163,7 +163,11 @@ if [[ "$update_pins" == true ]]; then
     build_id=$(sha256sum "$manifest" | cut -c1-16)
     target="$stack_root/.pi-native-$build_id"
 fi
-verify "$stage"
+if ! verify "$stage"; then
+    printf 'The built native tree differs from %s. If a source or the stock release\n' "$manifest" >&2
+    printf 'changed on purpose, run %s --update-pins and commit the manifest.\n' "$0" >&2
+    exit 1
+fi
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$manager"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/dist/core/settings-manager.js"
 node --check "$stage/node_modules/@earendil-works/pi-coding-agent/$bedrock"
