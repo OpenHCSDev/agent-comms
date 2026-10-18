@@ -94,7 +94,7 @@ class MergeGrowth(StandingRule):
         counted = [
             (int(a), int(d))
             for a, d, _ in (row.split("\t", 2) for row in diff.splitlines())
-            if a != "-"
+            if a.isdigit()
         ]
         return sum(a for a, _ in counted), sum(d for _, d in counted)
 
@@ -121,7 +121,7 @@ class MergeGrowth(StandingRule):
     @property
     def over(self) -> bool:
         net, tests = self.src[0] - self.src[1], self.tests[0] - self.tests[1]
-        return net > self.limit or 0 < tests and tests > net
+        return net > self.limit or tests > max(net, 0)
 
     def began(self) -> float:
         return self.merged
