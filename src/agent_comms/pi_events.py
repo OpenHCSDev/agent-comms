@@ -391,6 +391,7 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
     )
     result: CompactionData | None = field(default=None, metadata={"wire_name": "result"})
     will_retry: bool | None = field(default=None, metadata={"wire_name": "willRetry"})
+    error_message: str | None = field(default=None, metadata={"wire_name": "errorMessage"})
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         session.watchdog.progress()
@@ -398,7 +399,6 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
         if completed:
             for event in self.result.charge(session):
                 yield event
-        if completed:
             session.native.forget_context()
             session.watchdog.compacted(session.prompt_state.started)
         session.usage.invalidate()
@@ -410,8 +410,8 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
             context_used=None,
             will_retry=self.will_retry is True,
         )
-        # A failed compaction is Pi's to handle: before a prompt Pi still sends it,
-        # and an overflow is answered by Pi's own overflow path.
+        if self.error_message is not None:
+            yield session.output.error(self.error_message)
         if self.will_retry:
             session.request_retried()
             session.output.final_assistant_stop = False
