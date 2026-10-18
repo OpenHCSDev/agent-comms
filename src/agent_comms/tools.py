@@ -68,7 +68,7 @@ from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
 )
-from .turn_digests import ThreadTurns, TurnDigestRead
+from .turn_digests import LastTurns, ThreadTurns, TurnsSince
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
 from .tool_output import (
@@ -834,10 +834,10 @@ class CommsProblemCloseTool(ThreadToolRequest):
 class CommsTurnsTool(ThreadReadTool):
     label = "Recent turns"
     description = "Read a unit's recent turns with ordered original transcript facts."
-    last: int = tool_field("Number of newest turns", default=TurnDigestRead.last)
+    last: int = tool_field("Number of newest turns", default=LastTurns.count)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ThreadTurns:
-        return comms.transcripts.turns(caller.subject(self.thread), last=self.last)
+        return comms.transcripts.turns(caller.subject(self.thread), LastTurns(self.last))
 
 
 @dataclass(frozen=True, kw_only=True)

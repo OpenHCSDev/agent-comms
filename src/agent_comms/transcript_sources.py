@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
+    from .turn_digests import TurnBound
     from .transcript_events import TranscriptEvent
 
 from .field_codec import MalformedRecord
@@ -315,7 +316,7 @@ class TranscriptSource:
     async def watch_requests(self, emit) -> None:
         """Sources without a harness continuation have no bridge requests."""
 
-    def turns(self, last: int):
+    def turns(self, bound: TurnBound):
         """Read input-bounded turns under one original record-source cut."""
         turns, pending = [], []
         with self.reading() as reader:
@@ -326,10 +327,13 @@ class TranscriptSource:
                 for record in records:
                     pending.append(record)
                     if record.project(lambda original: original.entry.input_boundary):
-                        turns.append(TurnDigest(record.entry.require_entry_id(), tuple(
-                            event for original in reversed(pending) for event in original.events)))
+                        turn = TurnDigest(record.entry.require_entry_id(), tuple(
+                            event for original in reversed(pending) for event in original.events))
                         pending.clear()
-                        if len(turns) >= last:
+                        if not bound.admits(turn):
+                            break
+                        turns.append(turn)
+                        if bound.full(len(turns)):
                             break
             if not cut.holds(reader.cut(), cut.offset):
                 raise StaleRevision('Turn source changed during its read')

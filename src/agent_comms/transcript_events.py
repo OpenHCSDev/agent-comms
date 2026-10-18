@@ -333,3 +333,8 @@ class TurnDigest:
 
     turn_id: str
     events: tuple[TranscriptEvent, ...]
+
+    def before(self, at: float) -> bool:
+        """Every dated event of this turn precedes ``at``; an undated turn is never before."""
+        dated = [event.timestamp for event in self.events if event.timestamp is not None]
+        return bool(dated) and max(dated) < at
