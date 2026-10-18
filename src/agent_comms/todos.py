@@ -307,7 +307,7 @@ class Assignment:
 
 
 class TodoState(DeclaredFamily, affix="TodoState"):
-    open: ClassVar[bool] = True  # still on the board: assigned and not closed with installed evidence
+    open: ClassVar[bool] = True  # on the board until closed with installed evidence
 
     @classmethod
     def prepare_change(cls, goals, current):
