@@ -31,6 +31,7 @@ from .native_input_record import NativeInputCommit, NativeInputIdText
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
+from .pi_vocabulary import NoThinkingOverride, ThinkingLevel
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -582,7 +583,7 @@ class NativePiRpcLaunch:
         worktree: Path,
         session: SelectedSession,
         model: SelectedModel,
-        thinking_level: str | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         environment: dict[str, str] | None = None,
         selected_tool_mode: NativeToolMode = NoNativeTools(),
     ) -> NativePiRpcLaunch:

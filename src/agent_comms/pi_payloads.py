@@ -17,7 +17,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, TextRepresentation
 from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
-from .pi_vocabulary import PiStopReason, ThinkingLevel, UnreportedStopReason
+from .pi_vocabulary import NoThinkingOverride, PiStopReason, ThinkingLevel, ThinkingLevelField, UnreportedStopReason
 from .transcript_events import SentTranscript
 
 
@@ -998,7 +998,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     # Native omission and null both mean no model observation. Omit the named
     # default on output; its internal family tag is not a native model object.
     model: PiModel = field(default_factory=UnreportedModel, metadata={"wire_omit_default": True})
-    thinking_level: type[ThinkingLevel] | None = wire_field("thinkingLevel")
+    thinking_level: ThinkingLevelField = wire_field("thinkingLevel", default=NoThinkingOverride)
     message_count: int | None = wire_field("messageCount")
     pending_message_count: int | None = wire_field("pendingMessageCount")
     is_streaming: bool | None = wire_field("isStreaming")
@@ -1016,7 +1016,7 @@ class StateData(NativeSessionSnapshot, PiResponseData):
 
         return AgentInfo(
             model=self.model.display_name,
-            thinking_level=ThinkingLevel.optional_name(self.thinking_level),
+            thinking_level=self.thinking_level.saved_name(),
             session_name=self.session_name,
             session_file=session.active_session_file,
             context_size=self.model.context_window,

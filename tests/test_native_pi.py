@@ -31,6 +31,9 @@ from agent_comms.native_pi import (
     _trusted_package,
 )
 from agent_comms.tracked_turn import TrackedTurnSession
+from agent_comms.coordinated_runtime import IndependentExecution
+from agent_comms.native_startup import NativeStartup
+from agent_comms.turn_watchdog import ModelWait
 from agent_comms.native_session_reopen import NativeSessionIdentity
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.selected_session import SavedSelectedSession, SelectedSession
@@ -208,7 +211,8 @@ async def test_unprivate_session_rejected_before_pi_process_starts(
             input_id=INPUT_ID,
             prompt="Never disclose input ID",
             worktree=tmp_path,
-            pi_session=PersistentPiSession(),
+            execution=IndependentExecution(),
+            startup=NativeStartup(tmp_path),
             session=(SelectedSession(selected) if existing is None else SavedSelectedSession(
                 selected, identity=NativeSessionIdentity("sid", str(existing))
             )),
@@ -328,8 +332,8 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
     monkeypatch.setattr(native.os, "fsync", fail_once)
     monkeypatch.setattr(AttachedChild, "start", launch)
     request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
-                   session=SelectedSession(sessions), pi_session=PersistentPiSession(),
-                   model=selected_model)
+                   session=SelectedSession(sessions), execution=IndependentExecution(),
+                   startup=NativeStartup(tmp_path), model=selected_model)
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
         await TrackedTurnSession.execute(tmp_path, **request)
     assert launches == 0
@@ -371,6 +375,8 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
             worktree=tmp_path,
             session=SelectedSession(sessions),
             model=selected_model,
+            execution=IndependentExecution(),
+            startup=NativeStartup(tmp_path),
         )
 
 
@@ -396,6 +402,8 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
             worktree=tmp_path,
             session=SelectedSession(sessions),
             model=selected_model,
+            execution=IndependentExecution(),
+            startup=NativeStartup(tmp_path),
         )
 
 
@@ -432,8 +440,9 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(
             prompt="no output",
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
-            pi_session=PersistentPiSession(),
-            model_wait_timeout=20,
+            execution=IndependentExecution(),
+            startup=NativeStartup(tmp_path),
+            model_wait=ModelWait(20),
             model=selected_model,
         )
     )
@@ -512,8 +521,9 @@ send({'type':'agent_settled'})
         prompt="Decide IGNORE",
         worktree=tmp_path,
         session=SelectedSession(tmp_path / "sessions"),
-        pi_session=PersistentPiSession(),
-        model_wait_timeout=3,
+        execution=IndependentExecution(),
+        startup=NativeStartup(tmp_path),
+        model_wait=ModelWait(3),
         model=selected_model,
     )
     if stop_reason == "stop":
@@ -587,7 +597,8 @@ sys.stdin.read()
             prompt="must not send",
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
-            pi_session=PersistentPiSession(),
+            execution=IndependentExecution(),
+            startup=NativeStartup(tmp_path),
             model=selected_model,
         )
     from agent_comms.pi_commands import GetState, PiCommand
@@ -884,7 +895,8 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
 
         request = dict(
             observe_event=observe,
-            pi_session=native_session,
+            execution=IndependentExecution(pi_session=native_session),
+            startup=NativeStartup(tmp_path),
             input_id=INPUT_ID,
             prompt="Respond with X, fixture only",
             worktree=worktree,
@@ -1059,6 +1071,8 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
             model=selected_model,
+            execution=IndependentExecution(),
+            startup=NativeStartup(tmp_path),
         )
     assert os.geteuid() == os.stat(tmp_path).st_uid
     with pytest.raises(NativePiUnavailable, match="differs from reviewed fork"):

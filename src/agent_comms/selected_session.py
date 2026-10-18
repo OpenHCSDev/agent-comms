@@ -13,6 +13,7 @@ from .native_session_reopen import NativeSessionIdentity
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment
+from .pi_vocabulary import ThinkingLevel
 
 if TYPE_CHECKING:
     from .selected_participant import SelectedParticipant
@@ -44,8 +45,8 @@ class SelectedSession:
     def tracked_attestation(self, current):
         return current
 
-    def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
-        return ("--thinking", thinking_level) if thinking_level is not None else ()
+    def launch_arguments(self, thinking_level: type[ThinkingLevel]) -> tuple[str, ...]:
+        return thinking_level.launch_arguments()
 
     def launch_environment(self, agent_dir: Path, original) -> tuple[dict[str, str], RestartEnvironment]:
         environment = dict(os.environ)
@@ -135,7 +136,7 @@ class SavedSelectedSession(SelectedSession):
         self.identity.require_same_session(identity)
         return self.path
 
-    def launch_arguments(self, thinking_level: str | None) -> tuple[str, ...]:
+    def launch_arguments(self, thinking_level: type[ThinkingLevel]) -> tuple[str, ...]:
         try:
             self.verify_start(self.identity)
         except IdentityConflict as error:

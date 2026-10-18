@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import AsyncIterator, Callable
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -37,6 +38,10 @@ class TurnWait(DeclaredFamily, affix="Wait"):
     def __init__(self, budget: float = 0.0):
         self.budget = budget
         self.elapsed = 0.0
+
+    def fresh(self) -> TurnWait:
+        """Each turn charges its own clock, even when given the same wait policy."""
+        return type(self)(self.budget)
 
     def restart(self) -> None:
         self.elapsed = 0.0
@@ -115,6 +120,11 @@ class InputStartWait(TurnWait):
 
 
 class ModelWait(TurnWait):
+    def __init__(self, budget: float = 360.0):
+        if not math.isfinite(budget) or budget <= 0:
+            raise ValueError("A model progress wait must be positive and finite")
+        super().__init__(budget)
+
     def diagnosis(self, session: TurnSession) -> str:
         watchdog = session.watchdog
         stalled = watchdog.phase.stalled(watchdog.prompt_accepted)
@@ -171,13 +181,11 @@ class ProgressWatchdog:
     """Select a declared wait once; never grant input or replay authority."""
 
     def __init__(
-        self, model_wait_timeout: float | None, input_timeout: float, preflight_timeout: float
+        self, model_wait: TurnWait, input_timeout: float, preflight_timeout: float
     ):
         self.preflight_wait = PreflightWait(preflight_timeout)
         self.input_wait = InputStartWait(input_timeout)
-        self.model_wait = (
-            ModelWait(model_wait_timeout) if model_wait_timeout is not None else UnboundedWait()
-        )
+        self.model_wait = model_wait.fresh()
         self.poll_wait = PollWait()
         self.unbounded_wait = UnboundedWait()
         self.prompt_accepted = False

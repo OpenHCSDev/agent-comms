@@ -60,7 +60,7 @@ from .working_memory_labels import ClassifierVersion, ModelLabel, QuestionVersio
 from .working_memory_questions import SpanAnswer
 from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
-from .pi_vocabulary import ServiceTier, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField
 from .change_report import ChangeReport
 from .message_reference import MessageReference
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
@@ -823,7 +823,7 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         if ctx.registry.status(thread.name).active:
             raise RelationViolationError(
                 f"{thread.name} is running; change its settings through its session")
-        level = ThinkingLevel.decode(self.thinking).declared_name if self.thinking is not None else None
+        level = FieldCodec.decode(ThinkingLevelField, self.thinking)
         candidate = thread.with_model_configuration(
             model=self.model,
             thinking_level=level,
@@ -833,13 +833,13 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
         updated = ctx.threads.set_thread_configuration(
             thread,
             model=candidate.model,
-            thinking_level=ThinkingLevel.optional_name(candidate.thinking_level),
+            thinking_level=candidate.thinking_level,
             service_tier=candidate.service_tier,
         )
         return {
             "configured": updated.name,
             "model": updated.model,
-            "thinking_level": ThinkingLevel.optional_name(updated.thinking_level),
+            "thinking_level": updated.thinking_level.saved_name(),
             "service_tier": updated.service_tier.value,
         }
 
@@ -1448,7 +1448,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     project: str = option("--project", parser_default_factory=os.getcwd)
     model: str | None = option("--model", parser_default=NativeThreadDefaults.model,
                         catalog=ModelConfigOption)
-    thinking_level: type[ThinkingLevel] | None = option(
+    thinking_level: ThinkingLevelField = option(
         "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
         catalog=ThinkingLevelConfigOption)
 

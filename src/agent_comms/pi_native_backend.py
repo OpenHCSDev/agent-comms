@@ -219,7 +219,7 @@ class PiNativeBackend(
         from .pi_vocabulary import ThinkingLevel
 
         return self.agent_args.with_model(thread.model).with_thinking(
-            ThinkingLevel.optional_name(thread.thinking_level)
+            thread.thinking_level
         ).argv
 
     # -- lifecycle --------------------------------------------------------
@@ -354,9 +354,9 @@ class PiNativeBackend(
         for command in commands:
             state = await command.configure(self.agent_bin, arguments, worktree=Path(thread.worktree))
             arguments = self.agent_args.with_model(state.model.display_name).with_thinking(
-                ThinkingLevel.optional_name(state.thinking_level)
+                state.thinking_level
             ).argv
-        selected, level = state.model.display_name, ThinkingLevel.optional_name(state.thinking_level)
+        selected, level = state.model.display_name, state.thinking_level.saved_name()
         if selected is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         return selected, level

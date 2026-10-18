@@ -29,7 +29,7 @@ class ThreadConfiguration:
             os.getpid(),
             thread.worktree,
             self.threads.resolve_thread_model(thread.name),
-            ThinkingLevel.optional_name(thread.thinking_level),
+            thread.thinking_level.saved_name(),
             thread.display_title,
             info.context_reading(),
         )

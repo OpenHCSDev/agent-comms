@@ -36,7 +36,8 @@ from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
-from .pi_vocabulary import ServiceTier, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel, ThinkingLevelField
+from .field_codec import FieldCodec
 from .private_registry_guard import PRIVATE_OWNER_RENAME_PENDING, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
 from .store_files import _atomic_write_text, _store_lock
@@ -245,7 +246,7 @@ class ThreadManagement:
         worktree: str,
         pid: int = 0,
         model: str | None = None,
-        thinking_level: str | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
         auto_title_pending: bool = False,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
@@ -461,7 +462,7 @@ class ThreadManagement:
 
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
-        thinking_level: str | None = None, service_tier: ServiceTier | None = None,
+        thinking_level: type[ThinkingLevel] = NoThinkingOverride, service_tier: ServiceTier | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -487,7 +488,7 @@ class ThreadManagement:
         with _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             updated = thread.initialized_native_configuration(
-                model=model, thinking_level=thinking_level,
+                model=model, thinking_level=FieldCodec.decode(ThinkingLevelField, thinking_level),
             )
             if updated != thread:
                 self.registry.register(updated, self.registry.status(thread.name))
@@ -514,7 +515,7 @@ class ThreadManagement:
             if current != original:
                 raise RelationViolationError("Original thread changed before native source publication")
             attached = replace(
-                current.initialized_native_configuration(model=saved_model, thinking_level=None),
+                current.initialized_native_configuration(model=saved_model, thinking_level=NoThinkingOverride),
                 process_identity=(
                     current.process_identity
                     if pid is None

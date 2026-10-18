@@ -48,7 +48,7 @@ class CatalogSelection(Protocol):
     def model(self) -> str | None: ...
 
     @property
-    def thinking_level(self) -> type[ThinkingLevel] | None: ...
+    def thinking_level(self) -> type[ThinkingLevel]: ...
 
 
 class ConfigOption(DeclaredFamily, affix="ConfigOption"):
@@ -192,7 +192,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
     category = "thought_level"
 
     def current_value(self, thread: CatalogSelection) -> str | None:
-        return ThinkingLevel.optional_name(thread.thinking_level)
+        return thread.thinking_level.saved_name()
 
     async def discover(self, thread: CatalogSelection) -> list[SessionConfigSelectOption]:
         from .pi_commands import GetAvailableThinkingLevels
@@ -331,24 +331,24 @@ class SessionConfigOptions(ConfigOptions):
     ) -> None:
         """Store the model and thinking level Pi itself reports for this change."""
         arguments = self.agent_args.with_model(thread.model).with_thinking(
-            ThinkingLevel.optional_name(thread.thinking_level)
+            thread.thinking_level
         )
         state = await command.configure(
             self.agent_bin, arguments.argv, worktree=Path(thread.worktree),
         )
         model = state.model.display_name
-        level = ThinkingLevel.optional_name(state.thinking_level)
+        level = state.thinking_level.saved_name()
         if model is None or level is None:
             raise NativePiUnavailable("Native configuration did not report model and thinking level")
         state.model.require_selection(model)
         await Coordination.run_worker(partial(
             self.comms.threads.set_thread_configuration,
-            thread, model=model, thinking_level=level,
+            thread, model=model, thinking_level=state.thinking_level,
         ))
 
     @staticmethod
     def stored_settings(thread: Thread) -> UseSettings:
-        return UseSettings(thread.model, ThinkingLevel.optional_name(thread.thinking_level))
+        return UseSettings(thread.model, thread.thinking_level.saved_name())
 
     def turn_started(self, session_id: str, thread: Thread) -> None:
         self.settings_in_use.setdefault(session_id, self.stored_settings(thread))
