@@ -51,7 +51,7 @@ class ChildRetirementCancelled(asyncio.CancelledError, ChildRetirementError):
     """Preserve cancellation and an independently failed retirement acknowledgement."""
 
 
-@dataclass(frozen=True, eq=False)
+@dataclass(frozen=True)
 class ProcessIdentity:
     pid: int
     start_time: int
@@ -72,9 +72,6 @@ class ProcessIdentity:
         if not isinstance(other, ProcessIdentity):
             return NotImplemented
         return (self.pid, self.start_time) == (other.pid, other.start_time)
-
-    def __hash__(self):
-        return hash((self.pid, self.start_time))
 
     def alive(self) -> bool:
         return Platform.current().matches(self)
@@ -228,9 +225,15 @@ class Platform(DeclaredFamily, affix="Platform"):
         except ProcessLookupError:
             return False
 
-    def require(self, identity: ProcessIdentity) -> None:
-        if not self.matches(identity):
-            raise IdentityMismatchError(f"Process incarnation changed: {identity.pid}")
+    def require(self, identity: ProcessIdentity) -> ProcessIdentity:
+        changed = IdentityMismatchError(f"Process incarnation changed: {identity.pid}")
+        try:
+            current = self.identity(identity.pid)
+        except ProcessLookupError:
+            raise changed from None
+        if current != identity:
+            raise changed
+        return current
 
     @abstractmethod
     def send(self, identity: ProcessIdentity, signum: int) -> None: ...
@@ -1266,7 +1269,7 @@ class ObservedProcess(SynchronousProcess):
     """A recorded incarnation: may signal it, cannot claim a parent's exit code."""
 
     def require_stop_authority(self) -> None:
-        self.platform.require(self.identity)
+        self.identity = self.platform.require(self.identity)
 
     def reap(self) -> ChildOutcome:
         return DetachedExitOutcome()

@@ -142,6 +142,32 @@ async def test_stop_shared_process_group_member_without_signalling_neighbors(own
 
 
 @pytest.mark.asyncio
+async def test_stored_leader_keeps_group_scope_after_term_exits_leader(tmp_path: Path):
+    acknowledgement = tmp_path / "stored-tree.json"
+    child = ParentedProcess.launch((sys.executable, "-c", TREE, str(acknowledgement)))
+    stored = FieldCodec.decode(ProcessIdentity, FieldCodec.encode(child.identity))
+    try:
+        await ready(acknowledgement)
+        await ObservedProcess(stored).stop()
+        assert all(not member.alive() for member in identities(acknowledgement))
+    finally:
+        await child.stop()
+
+
+def test_live_target_with_no_successful_signal_raises(monkeypatch):
+    child = subprocess.Popen((sys.executable, "-c", "import time; time.sleep(60)"))
+    observed = ObservedProcess(ProcessIdentity.capture(child.pid))
+    monkeypatch.setattr(observed.platform, "group_members", lambda identity: ())
+    try:
+        with pytest.raises(RuntimeError, match="was not signalled"):
+            observed.stop_sync()
+        assert child.poll() is None
+    finally:
+        child.kill()
+        child.wait(timeout=5)
+
+
+@pytest.mark.asyncio
 async def test_real_execution_and_external_returncode_family() -> None:
     for code in (0, 7):
         result = await BoundedRun.run(
@@ -236,6 +262,10 @@ def test_new_outcome_is_derived_and_field_encoded() -> None:
     @dataclass(frozen=True)
     class TestObservationOutcome(ChildOutcome):
         observation: str
+
+        @property
+        def summary(self) -> str:
+            return self.observation
 
         @property
         def successful(self) -> bool:
