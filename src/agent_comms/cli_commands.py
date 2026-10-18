@@ -1640,7 +1640,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
     model: str | None = option("--model", parser_default=NativeThreadDefaults.model,
                         catalog=ModelConfigOption)
     thinking_level: ThinkingLevelField = option(
-        "--thinking-level", parser_default=NativeThreadDefaults.thinking_level,
+        "--thinking-level", default=NativeThreadDefaults.thinking_level,
         catalog=ThinkingLevelConfigOption)
 
     @classmethod
