@@ -22,7 +22,7 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (AwaitingFirstCall, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
@@ -802,3 +802,32 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     assert judged.strikes[0].reason == why
     revised = comms.registry.require('worker').goal
     assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+
+
+def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
+    comms, caller = commander
+    copied = tmp_path / 'copied'
+    copied.mkdir()
+    (copied / 'flag.py').write_text('def is_set(value):\n    return value is not None\n')
+    callers = copied / 'callers.py'
+    callers.write_text('from flag import is_set\n\ndef read(v):\n    return 1 if is_set(v) else 0\n')
+    family = ("grep -rhoE 'is_set\\(|except ValueError' --include=*.py . | wc -l")
+    deletes = OrderDeletion.parse(f'is_set absence decision at {copied / "flag.py"}:1 :: {copied} :: {family}')
+    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
+        problem='P520', order=replace(order(comms.root, 'order-P520'), deletes=deletes),
+        request='request', deadline=RecordedEventTime(1000), commander='lead',
+        repo='OpenHCSDev/agent-comms', text='Delete the is_set decision',
+    )).apply(comms, caller)
+    pending = comms.goals.todos.get('P520')
+    assert 'Deletes: is_set absence decision at' in pending.order.instructions(pending)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(pending)) == pending
+    (copied / 'flag.py').write_text('def checked(value):\n    if value is None:\n        raise ValueError\n')
+    callers.write_text('from flag import checked\n\ndef read(v):\n    try:\n        checked(v)\n'
+                       '    except ValueError:\n        return 0\n    return 1\n')
+    with pytest.raises(ValueError, match='expected last integer 0'):
+        CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+    assert comms.goals.todos.get('P520') == pending
+    (copied / 'flag.py').unlink()
+    callers.write_text('def read(v):\n    return int(v is not None)\n')
+    CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
+    assert not comms.goals.todos.get('P520').pending
