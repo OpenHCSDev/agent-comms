@@ -132,7 +132,7 @@ def test_index_recorded_ahead_of_the_read_cut_answers_without_decoding(tmp_path)
             with OpenedRouteCounts(
                 reader.bus.log.path, stale, basis.registry, {viewer: delivery}
             ) as index:
-                assert len(index.unseen_deliveries(viewer, basis.seen)) == 5
+                assert len(index.unseen_deliveries(viewer, basis.seen(stale))) == 5
             assert decode.call_count == 0
     with BusRouteCounts(comms.bus.log.path) as index:
         recorded = RouteSourceRow.current(index.connection)

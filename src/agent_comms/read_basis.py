@@ -512,8 +512,8 @@ class DMDisplayBasis(DeclaredFamily, affix="DMDisplayBasis"):
         that the corresponding inbound tail was contiguous and visibly painted.
         """
         peer = CommandTarget.named(peer).require_dm_peer()
-        with _store_lock(root / "wire", mode=SharedLock()):
-            snapshot = registry.snapshot()
+        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading() as registry_document:
+            snapshot = registry_document.snapshot()
             viewer_name = snapshot.canonical_name(viewer)
             peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)

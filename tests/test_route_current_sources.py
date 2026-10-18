@@ -30,8 +30,8 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
                 steps = []
                 index.connection.set_progress_handler(lambda: steps.append(1) and 0, 1)
                 try:
-                    assert index.unseen_counts({viewer: basis.seen}) == {viewer: {'sender': 1}}
-                    listed = [r.seq for r in index.unseen_deliveries(viewer, basis.seen)]
+                    assert index.unseen_counts({viewer: basis.seen(source)}) == {viewer: {'sender': 1}}
+                    listed = [r.seq for r in index.unseen_deliveries(viewer, basis.seen(source))]
                     assert listed == [original.seq]
                 finally:
                     index.connection.set_progress_handler(None, 0)
@@ -70,13 +70,13 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
         # The existing public-record owner supplies the unstamped saved format;
         # a current send always has an assigned stamp, even publish_ordinary.
         ordinary, = PublicWireRecord(original).delivery_messages()
-        assert scope.unread(ordinary, recorded, basis.seen)
+        assert scope.unread(ordinary, recorded, basis.seen(source))
         with OpenedRouteCounts(c.bus.log.path, source, recorded, {viewer: scope}) as index:
             bindings = index._request_bindings((viewer,))
             assert json.loads(bindings['senders'])['sender'] == ['']
             assert 'sender' in json.loads(bindings['unrecorded'])
             with pytest.raises(sqlite3.OperationalError, match='user-defined function'):
-                index.unseen_counts({viewer: basis.seen})
+                index.unseen_counts({viewer: basis.seen(source)})
         # The read never grants the same participant identity-bound publication.
         with pytest.raises(ValueError, match='positive recorded birth'):
             scope.minimum_timestamp('sender', viewer, '1'*32, recorded)

@@ -224,4 +224,3 @@ class ConversationMessagePageRequest(MessagePageRequest):
 class DisplayedMessagePage:
     page: MessagePage
     displayed: DisplayBasis
-

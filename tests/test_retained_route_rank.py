@@ -76,7 +76,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 with OpenedRouteCounts(
                     comms.bus.log.path, source, basis.registry, {viewer: delivery},
                 ) as index:
-                    answer = measure(index, viewer, basis.seen)
+                    answer = measure(index, viewer, basis.seen(source))
             assert answer[:2] == (
                 {viewer: {'sender': 2}}, (originals[2].seq, originals[3].seq),
             )
