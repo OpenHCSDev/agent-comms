@@ -17,8 +17,8 @@ if TYPE_CHECKING:
 from .coordination_errors import TranscriptChanged
 from .declared_family import DeclaredFamily
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
-from .private_path import FileRevision
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .private_path import FileRevision
 from .transcript_sources import TranscriptSource
 
 
