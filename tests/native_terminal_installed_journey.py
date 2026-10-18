@@ -36,9 +36,10 @@ async def main(output, package, launcher, provider, model, thinking):
         'AGENT_COMMS_ROOT': str(comms.root), ROOT_ID_ENV: root_id,
         PACKAGE_ENV: str(package),
     })
+    comms.owners.pin_private_nk_launch(comms.root, root_id, package)
     agent = CommsAgent(
         comms, runtime_enabled=True, auto_wake=False,
-        private_nk_native_package=package, private_nk_wire_root_id=root_id,
+
         agent_bin=str(launcher), agent_args=[
             '--provider', provider, '--model', model, '--thinking', thinking,
             '--no-extensions', '--no-skills', '--no-context-files', '--tools', 'bash',

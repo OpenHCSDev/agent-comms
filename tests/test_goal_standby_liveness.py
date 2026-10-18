@@ -485,13 +485,12 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
     comms = canonical_goal_wire(tmp_path / "wire")
     with comms.bus.log.certified_read() as source:
         root_id = source.marker.root_id
+    comms.owners.pin_private_nk_launch(comms.root, root_id, tmp_path)
     agent = CommsAgent(
         comms,
         agent_bin="pi",
         runtime_enabled=True,
         auto_wake=False,
-        private_nk_native_package=tmp_path,
-        private_nk_wire_root_id=root_id,
     )
     monkeypatch.setattr(agent.inputs, "ensure_live_drain", lambda _session: None)
     activate_empty_source(agent)

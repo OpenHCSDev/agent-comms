@@ -96,7 +96,7 @@ def test_service_factory_uses_selection_and_retains_private_pin(tmp_path, monkey
     _, root, root_id = route_fixture(tmp_path, monkeypatch)
     service = wire()
     assert service.root == root
-    assert service.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path, None)
+    assert service.owners._private_nk_launch == PrivateNkLaunch(root, root_id, tmp_path)
     assert wire(root).owners._private_nk_launch is None
 
 

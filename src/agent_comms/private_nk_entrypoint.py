@@ -1,8 +1,9 @@
-"""Explicit, pinned private N/K owner launch configuration.
+"""Pinned private N/K owner launch configuration.
 
-The public ACP attachment never becomes a model executor. A separately
-launched owner worker may opt in only with both exact root ID and reviewed
-native package. This module installs no marker, participant, schema or input.
+The public ACP attachment never becomes a model executor. An owner runs only
+with an exact root ID and a reviewed native package. The owner lifecycle
+derives both for a private root; a parent hands its pin to each child through
+the environment. This module installs no marker, participant, schema or input.
 """
 
 from __future__ import annotations
@@ -11,8 +12,6 @@ import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
-
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
 from . import launch_runtime
@@ -20,20 +19,15 @@ from .native_pi import _private_session_dir, _trusted_package
 from .wire_log import WireLog
 from .wire_metadata import WireRootIdText
 
-if TYPE_CHECKING:
-    from .selected_tool_broker import SelectedToolIntent
-
-
 @dataclass(frozen=True, slots=True)
 class PrivateNkLaunch:
     validated_root: Path
     wire_root_id: str
     native_package: Path
-    selected_tool_intent: SelectedToolIntent | None
 
     @classmethod
     def from_environment(cls, root: Path, environment: Mapping[str, str]) -> PrivateNkLaunch | None:
-        """Decode the explicit launch settings without permitting work to start.
+        """Decode a parent's handoff without permitting work to start.
 
         Observing a thread or publishing activity does not launch a native owner.
         Actual worker/ACP entrypoints and process handoffs call validate before
@@ -57,13 +51,11 @@ class PrivateNkLaunch:
                 "private N/K owner cannot start with an unbound prompt"
             )
         validated_root = Path(root).expanduser().absolute()  # capture cwd once
-        # Normal production FULL turns select their coding tools in the runtime.
-        # Claim support is not a request for the optional single-write proof mode.
-        return cls(validated_root, root_id, native_package, None)
+        return cls(validated_root, root_id, native_package)
 
     @classmethod
     def current(cls) -> PrivateNkLaunch | None:
-        """Decode the original explicit environment or owner-installed route."""
+        """Decode the parent's handoff or the owner-installed route."""
         environment = dict(os.environ)
         if "AGENT_COMMS_ROOT" not in environment:
             from .active_route import read_active_route
@@ -97,11 +89,3 @@ class PrivateNkLaunch:
             launch_runtime.ROOT_ID_ENV: self.wire_root_id,
             launch_runtime.PACKAGE_ENV: str(self.native_package),
         })
-
-
-def private_nk_from_environment() -> PrivateNkLaunch | None:
-    """Use explicit process settings, or the owner-installed active route."""
-    launch = PrivateNkLaunch.current()
-    if launch is not None:
-        launch.validate()
-    return launch
