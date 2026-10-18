@@ -9,7 +9,7 @@
      --replaces without --clean is a send-back: it strikes the unit and roasts the blunt line in #comms
   order say UNIT[,UNIT] BODYFILE           a non-order message (answer, ownership call); refused if it orders work
   order problem "TEXT" --where PATH:LINE     record a problem (it alarms every minute until an order owns it)
-  order close PID --works "EVIDENCE"        the fix works in the app; the problem leaves the list
+  order close PID --works "EVIDENCE" --artifact FILE   the fix works in the app; Core closes the problem
   order fold PID --into PID --why "..."     a duplicate row joins the problem that already states it
   order board                               regenerate fleet-board.md from problems and orders
   order done UNIT MSG --sha SHA           the unit delivered that order (SHA it pushed); late delivery is a strike
@@ -23,11 +23,15 @@ code; it refuses orders that leave a unit room to interpret, and refuses to let 
 """
 import calendar, fcntl, json, os, re, subprocess, sys, time
 
+from ..comms import Comms
+from ..tool_caller import ThreadCaller
+from ..tools import CommsProblemCloseTool
 from . import storage
 from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
+COMMS = Comms(CONFIG.root)  # the bus whose Todo store owns problems, orders, deadlines and strikes
 RTS = str(CONFIG.state)
 DEADLINES, STRIKES = f'{RTS}/deadlines.json', f'{RTS}/strikes.jsonl'
 DONE = f'{RTS}/done.jsonl'  # every delivered order, written by done(); the board shows its problem as install-pending
@@ -404,19 +408,9 @@ def problem(text, where, unit, due, order_file, disk=False):
     print(pid)
 
 
-def close(pid, works):
-    problems = load(PROBLEMS, {})
-    if pid not in problems:
-        sys.exit(f'Refused: no open problem {pid}')
-    if len(works.split()) < 8:
-        sys.exit('Refused: say what you saw working in the installed app (8+ words, with the artifact path)')
-    open_orders = [(u, d['msg']) for u, owed in load(DEADLINES, {}).items() for d in owed if pid in facts(d)]
-    if open_orders:
-        sys.exit(f'Refused: {pid} still has open orders {open_orders}; done or drop them first')
-    closed = problems.pop(pid)
-    save(PROBLEMS, problems)
-    with open(f'{RTS}/closed.jsonl', 'a') as f:
-        f.write(json.dumps(dict(closed, id=pid, works=works, closed=time.time())) + '\n')
+def close(pid, works, artifact):
+    """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
+    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact), COMMS)
     board()
     print(f'{pid} closed')
 
@@ -761,8 +755,8 @@ def main(a):
         say(a[1], a[2])
     elif a[:1] == ['problem'] and len(a) in (10, 11) and a[2] == '--where' and a[4] == '--to' and a[6] == '--due' and a[8] == '--order' and a[10:] in ([], ['--disk']):
         problem(a[1], a[3], a[5], a[7], a[9], disk=a[10:] == ['--disk'])
-    elif a[:1] == ['close'] and len(a) == 4 and a[2] == '--works':
-        close(a[1], a[3])
+    elif a[:1] == ['close'] and len(a) == 6 and a[2] == '--works' and a[4] == '--artifact':
+        close(a[1], a[3], a[5])
     elif a[:1] == ['fold'] and len(a) == 6 and a[2] == '--into' and a[4] == '--why':
         fold(a[1], a[3], a[5])
     elif a[:1] == ['link'] and len(a) == 4:
