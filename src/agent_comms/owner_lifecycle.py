@@ -23,7 +23,7 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .private_nk_entrypoint import PrivateNkLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -43,8 +43,8 @@ _LOG = logging.getLogger(__name__)
 class LaunchInput:
     text = ""
 
-    def apply_environment(self, environment: dict[str, str]) -> None:
-        pass
+    def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
+        return launch
 
     def record_first_input(self, record) -> None:
         pass
@@ -55,8 +55,8 @@ class TaskLaunchInput(LaunchInput):
     text: str = field()
     input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
 
-    def apply_environment(self, environment: dict[str, str]) -> None:
-        environment[RestartEnvironment.initial_input_key] = self.input_key
+    def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
+        return replace(launch, startup_input=self.input_key)
 
     def record_first_input(self, record) -> None:
         record(self.input_key, seq=None, text=self.text)
@@ -374,7 +374,7 @@ class OwnerLifecycle:
                 snapshot.statuses[thread.name].active
                 and thread.process_identity.runs_here()
             ):
-                if RestartEnvironment.called_by(
+                if ThreadLaunch.called_by(
                     thread.name,
                     canonicalize=lambda caller: self.registry.require(caller).name,
                 ):
@@ -428,7 +428,6 @@ class OwnerLifecycle:
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
-        env.pop(RestartEnvironment.initial_input_key, None)
         private_launch = self.require_launch_authority()
         if private_launch is not None:
             if agent_bin == "pi":
@@ -452,14 +451,13 @@ class OwnerLifecycle:
                     thread.name,
                     committed=True,
                 )
-        env = thread.launch().apply(env)
+        env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
         # A private child derives the same launch from its validated root; ordinary
         # roots keep their canonical child path across symlink changes.
         env["AGENT_COMMS_ROOT"] = str(
             self.root.resolve() if private_launch is None else private_launch.validated_root
         )
-        initial_input.apply_environment(env)
         if agent_args is not None:
             env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
@@ -504,7 +502,7 @@ class OwnerLifecycle:
 
     def release(self, name: str) -> None:
         """Let the calling participant mark itself stopped without signalling."""
-        caller = RestartEnvironment.calling_thread()
+        caller = ThreadLaunch.current().name
         with _store_lock(self._wire_lock_path):
             canonical = self.registry.require(name).name
             if self.registry.require(caller).name != canonical:
