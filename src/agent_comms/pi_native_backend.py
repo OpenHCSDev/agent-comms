@@ -34,6 +34,7 @@ from .agent_backend import (
     TurnDelivery,
 )
 from .context_reading import ContextReading, UnmeasuredContext
+from .pi_payloads import PiContextUsage
 from .unstarted_runtime import UnstartedRuntime
 from .native_pi import NativePiRpcLaunch
 from .native_transcript import NativeTranscript
@@ -289,7 +290,7 @@ class PiNativeBackend(
         from .pi_commands import GetSessionStats
 
         stats = await self.inspect(thread, GetSessionStats())
-        usage = stats.context_usage
+        usage: PiContextUsage | None = stats.context_usage
         if usage is None:
             return UnmeasuredContext()
         return usage.context_window.reading(usage.token_total)

@@ -9,22 +9,28 @@ from __future__ import annotations
 import re
 import types
 from abc import abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
-from collections.abc import Iterator
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
+from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation, WireValue
-from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
+from .native_session_reopen import NativeSessionIdentity
+from .pi_vocabulary import (
+    NoThinkingOverride,
+    PiStopReason,
+    ThinkingLevel,
+    ThinkingLevelField,
+    UnreportedStopReason,
+)
 from .tool_declaration import ToolDeclaration
-from .pi_vocabulary import NoThinkingOverride, PiStopReason, ThinkingLevel, ThinkingLevelField, UnreportedStopReason
 from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo, ProviderUsage
-    from .context_reading import ContextReading
     from .backend import TurnSession
     from .turn_usage import UsageAccount
 
@@ -228,7 +234,9 @@ class TokenTotal(WireValue):
 
     @classmethod
     def from_wire(cls, value: object) -> TokenTotal:
-        return UnreportedTokens() if value is None else ReportedTokens(FieldCodec.decode(int, value))
+        if value is None:
+            return UnreportedTokens()
+        return ReportedTokens(FieldCodec.decode(int, value))
 
     @classmethod
     def schema(cls) -> dict[str, object]:
@@ -250,11 +258,9 @@ class TokenTotal(WireValue):
         pass
 
     def reading(self, used: TokenTotal) -> ContextReading:
-        from .context_reading import UnmeasuredContext
         return UnmeasuredContext()
 
     def with_size(self, size: int) -> ContextReading:
-        from .context_reading import UnmeasuredContext
         return UnmeasuredContext()
 
     @staticmethod
@@ -308,7 +314,6 @@ class ReportedTokens(TokenTotal):
         return used.with_size(self.count) if self.count > 0 else super().reading(used)
 
     def with_size(self, size: int) -> ContextReading:
-        from .context_reading import ContextUsage
         return ContextUsage(self.count, size)
 
     def otherwise(self, other: TokenTotal) -> TokenTotal:

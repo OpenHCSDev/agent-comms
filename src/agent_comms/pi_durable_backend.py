@@ -22,7 +22,7 @@ from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
 from .pi_commands import Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
-from .pi_payloads import PiResponseData
+from .pi_payloads import PiContextUsage, PiResponseData
 from .pi_vocabulary import ThinkingLevelField
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
@@ -237,7 +237,7 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
 
     async def context_usage(self, thread) -> ContextReading:
         child = await self.open(thread)
-        usage = (await child.request(GetSessionStats())).context_usage
+        usage: PiContextUsage | None = (await child.request(GetSessionStats())).context_usage
         if usage is None:
             raise ValueError('Durable session has no context observation')
         return usage.context_window.reading(usage.token_total)
