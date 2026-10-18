@@ -37,12 +37,9 @@ class UnstartedRuntime(RuntimeLocation):
     def read_keys(self):
         return ()
 
-    def transcript_cursor(self, frontier, offset):
+    def transcript_cursor(self, frontier, offset, *, source):
         from .transcripts import NoNativeTranscriptCursor
-        return NoNativeTranscriptCursor(offset=offset, wire=frontier)
-
-    def mark_read(self, reads, viewer, through):
-        """There is no native transcript to acknowledge yet."""
+        return NoNativeTranscriptCursor(source=source, offset=offset, wire=frontier)
 
     def history_locations(self, thread, registry, visited):
         yield from thread.inherited_history(registry, visited)

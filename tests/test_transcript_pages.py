@@ -178,18 +178,26 @@ def test_never_started_native_child_keeps_no_native_cursor_and_no_read_mark(tmp_
     checkpoint = comms.transcripts.transcript_checkpoint("child")
     inherited = comms.transcripts.thread_transcript_page("child").after
     painted = checkpoint.over_native((inherited,))
-    assert painted == NoNativeTranscriptCursor(wire=checkpoint.wire)
+    assert painted == NoNativeTranscriptCursor(source=comms.registry.require("child").runtime,
+                                               wire=checkpoint.wire)
+    assert inherited == NoNativeTranscriptCursor(source=comms.registry.require("parent").runtime,
+                                                 offset=path.stat().st_size, wire=checkpoint.wire)
     assert FieldCodec.decode(TranscriptCursor, FieldCodec.encode(painted)) == painted
     ledger = comms.bus.reads.path
     before = ledger.read_bytes() if ledger.exists() else b""
     comms.views.mark_thread_view_read("child", worktree=str(tmp_path), through=painted)
+    comms.views.mark_thread_view_read("child", worktree=str(tmp_path), through=inherited)
     assert (ledger.read_bytes() if ledger.exists() else b"") == before
 
     parent = comms.transcripts.transcript_checkpoint("parent")
+    unpainted = replace(checkpoint, wire=parent.wire)
+    assert parent.over_native((unpainted,)) == unpainted
+    comms.views.mark_thread_view_read("parent", worktree=str(tmp_path), through=unpainted)
+    assert (ledger.read_bytes() if ledger.exists() else b"") == before
     comms.views.mark_thread_view_read("parent", worktree=str(tmp_path), through=parent)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     assert comms.bus.reads.transcript_seen(viewer, str(path), path.stat().st_ino) == path.stat().st_size
 
     # The same cursor state retains its own external record coordinate, not a parent's.
-    own = NoNativeTranscriptCursor(offset=30, wire=checkpoint.wire)
+    own = replace(checkpoint, offset=30)
     assert own.over_native((replace(own, offset=12), inherited)) == replace(own, offset=12)

@@ -89,7 +89,7 @@ class ThreadViewRead(ConversationPreparation):
     through: TranscriptCursor
 
     def native(self):
-        self.thread.runtime.mark_read(self.views.transcript_reads, self.viewer.name, self.through)
+        self.through.mark_read(self.views.transcript_reads, self.viewer.name, self.thread.runtime)
 
     def external(self):
         self.through.wire.require_source(AssignedSourceIdentity(str(self.views.root), self.thread.incarnation))
