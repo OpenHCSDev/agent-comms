@@ -18,7 +18,6 @@ from .cli_commands import (
     ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
     _json_object, option,
 )
-from .cli_result import CliResult
 from .thread_execution import (
     ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
     StartOwnerControl, ThreadCommandAvailability,
@@ -61,7 +60,7 @@ from .todos import CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, To
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
-from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
+from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing, ToolCatalogResult
 from .tool_result import ToolResult
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
@@ -1165,17 +1164,14 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
         return ArchiveCliCommand(name=self.name).apply(comms)
 
 
-@dataclass(frozen=True)
-class ToolCatalogResult(CliResult):
-    tools: tuple[dict[str, object], ...]
-
-
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
+    name: str | None = option("--name", default=None, help="Calling thread")
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
-        return ToolCatalogResult(tuple(tool_catalog()))
+        caller = ToolCaller.from_actor(self.name)
+        return caller.catalog(ctx, tuple(tool_catalog()))
 
 
 @dataclass(frozen=True, kw_only=True)
