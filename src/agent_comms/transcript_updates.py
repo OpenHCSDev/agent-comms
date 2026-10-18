@@ -11,6 +11,7 @@ from acp.schema import AgentMessageChunk, TextContentBlock
 
 from .acp_extension import (
     TurnChangedUpdate,
+    TranscriptSnapshotUpdate,
     encode_updates,
 )
 from .comms import Comms
@@ -49,8 +50,6 @@ class TranscriptReplay:
     def reads(self):
         from .ui_model.observation import ObservationProcess
 
-        # A runtime subscription is a viewer read too. Use the same retained
-        # request/wait owner, rather than another replay retry mechanism.
         return self.runtime._resources.enter_context(
             ObservationProcess.awaited(self.comms.route)
         )
@@ -58,8 +57,20 @@ class TranscriptReplay:
     async def replay(self, session_id: str, name: str, client: Any = None) -> None:
         from .ui_model.observation import ReadTranscript
 
-        destination = client or self.runtime
         snapshot = await self.reads.read(ReadTranscript(str(self.comms.root), name))
+        await self._publish(session_id, snapshot, client)
+
+    async def subscribe(self, session_id: str, name: str, client: Any) -> None:
+        from .ui_model.observation import ReadTranscript
+
+        # A socket handshake returns its read refusal, preserving its cause;
+        # only the UI replay waits for a later source change.
+        read = ReadTranscript(str(self.comms.root), name)
+        snapshot = await Coordination.run_worker(partial(read.read, self.comms))
+        await self._publish(session_id, snapshot, client)
+
+    async def _publish(self, session_id: str, snapshot: TranscriptSnapshotUpdate, client: Any) -> None:
+        destination = client or self.runtime
         metadata = await Coordination.run_worker(partial(encode_updates, snapshot))
         await destination.session_update(
             session_id=session_id,
