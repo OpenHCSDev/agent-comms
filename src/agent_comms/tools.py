@@ -284,7 +284,7 @@ def tool_field(
     binding: type[ContextBinding] | None = None,
     choices=None,
 ):
-    metadata = {"description": description, "wire_nonnull": True}
+    metadata = {"description": description, "wire_nonnull": default is not None}
     if wire_name is not None:
         metadata["wire_name"] = wire_name
     if binding is not None:
@@ -298,7 +298,6 @@ def tool_field(
 class ToolRequest[Caller: ToolCaller = ToolCaller](
     ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
 ):
-    family_discriminator = "tool"
     description: ClassVar[str]
     context: ClassVar[str | None] = None
     action_label: ClassVar[str | None] = None
@@ -337,7 +336,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
-            raise ValueError("Unknown tool argument: tool")
+            raise ValueError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except MalformedRecord as error:
@@ -430,12 +429,8 @@ class CommsPinThreadTool(ToolRequest):
     pinned: bool = tool_field("True to pin; false to unpin")
 
     def apply(self, comms: Comms, caller: ToolCaller) -> ChannelView:
-        channel = self.channel
-        PinThreadCliCommand(channel=channel, name=self.name, pinned=self.pinned).apply(comms)
-        canonical = ChannelTarget.normalize_name(channel)
-        return next(
-            view for view in comms.views.channel_views() if view.channel.name == canonical
-        )
+        PinThreadCliCommand(channel=self.channel, name=self.name, pinned=self.pinned).apply(comms)
+        return comms.views.channel_view(ChannelTarget.normalize_name(self.channel))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1148,7 +1143,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
     description = (
         "Queue an exact live owner incarnation for restart when idle. Never interrupt an active "
         "turn. A changed owner or uncertain attempt is never retried automatically. "
-        "Restarts in the current installed runtime; does not deploy another runtime."
+        "Restarts in the calling process's runtime; does not deploy another runtime."
     )
     context = "thread"
     action_label = "Queue idle restart"
@@ -1157,7 +1152,7 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return RestartQueued(
-            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.current()))
+            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -59,7 +59,7 @@ def test_declared_family_roundtrip_and_strict_boundary(tmp_path):
                 owner.incarnation, NextContextTurn(), (), "source-codec-control"
             ), (),
         ),
-        RequestFailedUpdate(ACPFailure.from_error(-32603, "The usage limit has been reached")),
+        RequestFailedUpdate(ACPFailure.from_detail(-32603, "The usage limit has been reached")),
         PromptCancelledUpdate(None),
         SelectedWriteAcceptedUpdate("operation", 1, "claim"),
         CursorAdvancedUpdate(

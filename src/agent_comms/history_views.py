@@ -29,6 +29,7 @@ from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
 from .channel_targets import BuiltinChannel, CommandTarget
+from .channels import ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_transcript import NativeTranscript
@@ -238,11 +239,11 @@ class HistoryViews:
         return ChannelHistory(channel.name, channel.history_targets).page(self.presentation, bounds)
 
     def last_sent_timestamps(
-        self, sent: Mapping[str, float], *, registry: RegistrySnapshot,
-    ) -> Mapping[str, float]:
-        """Map captured sender clocks through the selected registry names."""
+        self, rows: Iterable[tuple[str, float]], *, registry: RegistrySnapshot,
+    ) -> dict[str, float]:
+        """Map each supplied sender clock through its current registry name."""
         canonical: dict[str, float] = {}
-        for sender, timestamp in sent.items():
+        for sender, timestamp in rows:
             name = registry.canonical_name(sender)
             canonical[name] = max(canonical.get(name, 0.0), timestamp)
         return canonical
@@ -293,9 +294,26 @@ class HistoryViews:
                 self.agents.all_activity(
                     snapshot.visible_threads(visibility), snapshot=snapshot,
                 ),
-                self.last_sent_timestamps(clocks.sent, registry=snapshot),
+                self.last_sent_timestamps(clocks.sent.items(), registry=snapshot),
                 ChannelActivity.for_views(channels, clocks.channels),
                 visibility,
+            )
+
+    def channel_view(self, name: str, visibility: RosterVisibility = DEFAULT_ROSTER) -> ChannelView:
+        """Read one channel; observe and order only its own members."""
+        snapshot = self.registry.snapshot()
+        catalog = self.channels.catalog.read()
+        channel = catalog.require_channel(name, snapshot.threads)
+        registered = channel.members(ChannelMemberIndex(snapshot.threads.values()))
+        with self.bus.opened_activity() as clocks:
+            rows = ((alias, clocks.sent[alias]) for thread in registered
+                    for alias in snapshot.names_for(thread.name) if alias in clocks.sent)
+            sent = self.last_sent_timestamps(rows, registry=snapshot)
+            history = ChannelActivity.for_views(
+                {channel.name: channel}, clocks.channels)[channel.name]
+            return ChannelView.capture(
+                channel, registered, snapshot, catalog.pinned_threads(channel.name),
+                self.agents.all_activity(registered, snapshot=snapshot), sent, history, visibility,
             )
 
     def thread_views(
@@ -349,7 +367,8 @@ class HistoryViews:
             clocks = self.bus.activity_index.snapshot(source)
             snapshot = CoordinationSnapshot.capture(
                 self.root, basis.registry, basis.catalog, self.agents, basis.channels,
-                self.last_sent_timestamps(clocks.sent, registry=basis.registry), display_activity,
+                self.last_sent_timestamps(clocks.sent.items(), registry=basis.registry),
+                display_activity,
                 unread=self.bus.pending_counts_opened(source, basis), channel_unread=display_unread,
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )

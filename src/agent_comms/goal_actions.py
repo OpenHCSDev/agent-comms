@@ -8,6 +8,7 @@ from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
+from .change_report import FileLine
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
@@ -94,7 +95,7 @@ class GoalAction(DeclaredFamily, Command, affix="GoalAction"):
 
     @classmethod
     def model_choices(cls) -> tuple[str, ...]:
-        return tuple(member.require_name() for member in cls.members_with(ModelInvocable))
+        return tuple(member.declared_name for member in cls.members_with(ModelInvocable))
 
     @classmethod
     async def submit_control(
@@ -454,11 +455,12 @@ class ProblemOrderGoalAction(GoalAction, RuntimeInvocable):
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(ProblemOrderGoalAction):
     expected_revision: int
+    traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
 
     def reserve(self, ctx):
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
             owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
-            generation=self.goal_id, deadline=self.deadline, order=self.order)
+            generation=self.goal_id, deadline=self.deadline, order=self.order, traced=self.traced)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -43,7 +43,7 @@ class MessageKind(DeclaredFamily, affix="Kind"):
 
     @classmethod
     def sendable_names(cls) -> tuple[str, ...]:
-        return tuple(member.require_name() for member in cls.members_with(SendableMessageKind))
+        return tuple(member.declared_name for member in cls.members_with(SendableMessageKind))
 
     @classmethod
     def require_sendable(cls) -> None:

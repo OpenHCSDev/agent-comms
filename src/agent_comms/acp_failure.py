@@ -11,6 +11,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
+from acp import RequestError
+
 if TYPE_CHECKING:
     from .agent_events import Done, Error
     from .input_disposition import InputDocument
@@ -169,20 +171,12 @@ class ACPFailure(DeliveryFailure):
         """Display classification only; input state comes from structured facts."""
 
     @classmethod
-    def from_error(
-        cls,
-        code: int | None,
-        message: str,
-        data: object = None,
-        *,
-        diagnostics: tuple[PiDiagnostic, ...] = (),
-    ) -> ACPFailure:
-        return FieldCodec.decode(ErrorValue, data).original_root().failure(
-            code, message, diagnostics=diagnostics
-        )
+    def from_error(cls, error: RequestError) -> ACPFailure:
+        return RequestFailure.from_error(error).failure
 
     @classmethod
     def from_detail(cls, code, detail, *, diagnostics=()):
+        detail = detail or "ACP request failed"
         owner = next(
             member
             for member in sorted(
@@ -206,12 +200,13 @@ class RequestFailure:
         return {"agentCommsFailure": FieldCodec.encode(self)}
 
     def request_error(self):
-        from acp import RequestError
         return RequestError.internal_error(self.error_data())
 
     @classmethod
-    def from_error(cls, code, message, data):
-        return FieldCodec.decode(ErrorValue, data).original_root().request_failure(code, message)
+    def from_error(cls, error: RequestError) -> RequestFailure:
+        return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
+            error.code, str(error)
+        )
 
 
 class NativeTurnOutcome(ABC):
@@ -258,7 +253,7 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         document: InputDocument, original: OriginalTurnInput,
     ) -> FailedNativeTurnOutcome:
         failure = replace(
-            ACPFailure.from_error(-32603, terminal.text or "Backend failed",
+            ACPFailure.from_detail(-32603, terminal.text or "Backend failed",
                                   diagnostics=error.diagnostics if error is not None else ()),
             input_state=document.shared_state(original.notice_keys),
             retry_result=terminal.retry_result,
@@ -382,7 +377,7 @@ class ErrorValue(DeclaredFamily, JsonShapeFamily, affix="ErrorValue"):
 
     def failure(self, code, message, *, diagnostics=()) -> ACPFailure:
         return ACPFailure.from_detail(
-            code, self.detail or message or "ACP request failed", diagnostics=diagnostics
+            code, self.detail or message, diagnostics=diagnostics
         )
 
     def request_failure(self, code, message) -> RequestFailure:

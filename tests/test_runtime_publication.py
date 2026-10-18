@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from agent_comms.active_route import LocalRoute
+from agent_comms.owner_cutover import StoppedOwnerInstallation
 from tools.publish_runtime import RuntimePublication
 
 
@@ -19,14 +20,15 @@ def test_cli_failure_leaves_links_untouched(tmp_path, monkeypatch, command):
     link = tmp_path / "command"
     link.symlink_to("previous-command")
     publication = RuntimePublication(runtime, {link: binary})
-    publication.current.parent.mkdir(parents=True)
-    publication.current.symlink_to("previous-runtime")
-    before = (link.lstat(), publication.current.lstat())
+    current = StoppedOwnerInstallation.current_pointer()
+    current.parent.mkdir(parents=True)
+    current.symlink_to("previous-runtime")
+    before = (link.lstat(), current.lstat())
     route = LocalRoute(tmp_path / "bus")
 
     with pytest.raises(RuntimeError, match="Runtime CLI refused publication"):
         publication.publish(route.root)
 
     assert link.readlink() == Path("previous-command")
-    assert publication.current.readlink() == Path("previous-runtime")
-    assert (link.lstat(), publication.current.lstat()) == before
+    assert current.readlink() == Path("previous-runtime")
+    assert (link.lstat(), current.lstat()) == before

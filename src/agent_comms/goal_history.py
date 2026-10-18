@@ -41,7 +41,6 @@ class RecordedGoalRevision:
 @dataclass(frozen=True)
 class GoalHistoryEntry(TypedTable):
     # The durable kind field is a journal fact, not the TypedTable family tag.
-    family_discriminator = "row"
 
     sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
     kind: Literal["transition", "baseline", "observed_gap"]

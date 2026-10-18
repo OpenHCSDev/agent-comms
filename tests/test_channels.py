@@ -534,7 +534,7 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
     assert len(joined) == 1 and joined[0].role.change.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].role.response_policy(joined[0]).starts_turn
     with comms.bus.opened_activity() as clocks:
-        assert "moving" not in comms.views.last_sent_timestamps(clocks.sent, registry=comms.registry.snapshot())
+        assert "moving" not in comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot())
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
     assert len(list(comms.views.channel_history_page("#api").messages)) == 2

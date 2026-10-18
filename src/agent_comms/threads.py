@@ -19,10 +19,9 @@ from .goals import (
     NoGoal,
 )
 from .pi_vocabulary import (
-    SERVICE_TIER_ENVIRONMENT,
     NoThinkingOverride,
     ServiceTier,
-    ThinkingLevel,
+    ThinkingChoice,
     ThinkingLevelField,
 )
 from .registration_inheritance import (
@@ -156,7 +155,6 @@ class Thread(ThreadProvenance):
         return {
             **replace(self.launch(), worktree=worktree, managed=True).encode(),
             "AGENT_COMMS_ROOT": str(root),
-            SERVICE_TIER_ENVIRONMENT: self.service_tier.value,
             **project.environment(root),
         }
 
@@ -204,7 +202,8 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("Thread configuration changed before publication")
 
     def with_model_configuration(
-        self, *, model: str | None = None, thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        self, *, model: str | None = None,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         service_tier: ServiceTier | None = None,
     ) -> Thread:
         return replace(
@@ -219,7 +218,7 @@ class Thread(ThreadProvenance):
         return self.model is None
 
     def initialized_native_configuration(
-        self, *, model: str | None, thinking_level: type[ThinkingLevel],
+        self, *, model: str | None, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """The native producer may fill unset fields, never replace a selection."""
         return replace(

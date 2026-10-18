@@ -412,7 +412,8 @@ class FieldCodec(Sealed):
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
-        declared = [(field, FieldCodec.wire_key(field)) for field in fields(cls) if field.init]
+        declared = [(field, FieldCodec.wire_key(field)) for field in fields(cls)
+                    if field.init and not field.metadata.get("wire_transient")]
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")
@@ -506,11 +507,10 @@ class FieldCodec(Sealed):
     @classmethod
     def encode_record(cls, value: object) -> dict[str, Any]:
         """Encode a record: its family tag, then its declared fields."""
-        tag = (
-            {value.family_discriminator: value.declared_name}
-            if isinstance(value, DeclaredFamily) else {}
-        )
-        return {**tag, **cls.encode_fields(value)}
+        if isinstance(value, DeclaredFamily):
+            root = cast(type[DeclaredFamily], type(value)._family_root)
+            return {root.family_discriminator: value.declared_name, **cls.encode_fields(value)}
+        return cls.encode_fields(value)
 
     @classmethod
     def encode_fields(cls, value: object) -> dict[str, object]:

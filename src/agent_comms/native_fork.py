@@ -9,8 +9,8 @@ from pathlib import Path
 from typing import ClassVar
 
 from .child_process import ChildResult, SignaledOutcome, TimedOutOutcome
-from .native_session_reopen import NativeSessionIdentity
 from .launch_runtime import LaunchRuntime
+from .native_session_reopen import NativeSessionIdentity
 from .pi_helper import PiHelper, PiHelperFailed, SessionHelperRequest
 
 
@@ -46,7 +46,7 @@ class ForkSessionHelper(PiHelper):
         if not isinstance(result.outcome, (TimedOutOutcome, SignaledOutcome)):
             return super().failure(request, result)
         return PiHelperFailed(
-            cls.require_name(),
+            cls.declared_name,
             result,
             f"killed (bound {cls.timeout_for(request):.0f}s) while it may hold the native "
             f"writer locks of {request.file}; that lock and any partial fork in "

@@ -20,7 +20,6 @@ from .store_files import ExclusiveLock, LockMode, SharedLock, StoreLock, _store_
 T = TypeVar("T")
 
 
-@dataclass(frozen=True, slots=True)
 class JsonDocument(ABC, Generic[T]):
     """Declared JSON codec and atomic file I/O; LockedStore owns transactions."""
 
@@ -153,6 +152,7 @@ class RootFile:
 class LockedStore(JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
+    path: Path
     lock_rank: ClassVar[int]
 
     def __init_subclass__(cls, **kwargs):

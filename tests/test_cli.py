@@ -302,7 +302,8 @@ class TestSelectedTargetActions:
         from agent_comms.cli_commands import CliCommand, RestartCliCommand, StopCliCommand
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
-        from agent_comms.turn_lease import ActiveTurn
+        from agent_comms.thread_identity import TurnIdentity
+        from agent_comms.turn_lease import ActiveTurn, StoredTurnRecord
 
         comms = self.declared(tmp_path)
         # Observe an authentic other process; this check never signals or restarts it.
@@ -336,8 +337,13 @@ class TestSelectedTargetActions:
             action.bound[0].edited({'all': True})
         assert StopCliCommand.help == 'Stop process'
         assert not RestartCliCommand.thread_bindings(comms, owner, StoppedThreadStatus())
+        busy = TurnIdentity(owner.incarnation, owner.turn_generation + 1)
+        record = StoredTurnRecord.begin(
+            comms.registry.store.path, busy,
+            ActiveTurn('busy', owner.require_process().pid, turn_generation=busy.generation),
+        )
         assert not RestartCliCommand.thread_bindings(comms,
-            replace(owner, active_turn=ActiveTurn('busy', owner.pid)), status)
+            replace(owner, turn_record=record, turn_generation=busy.generation), status)
         assert not RestartCliCommand.thread_bindings(comms,
             replace(owner, process_identity=ProcessIdentity.capture(os.getpid())), status)
         assert not RestartCliCommand.thread_bindings(comms,
@@ -462,6 +468,7 @@ class TestSelectedTargetActions:
         assert not result.reconnect_targets()
 
     def test_channel_start_uses_native_visible_roster_without_launching(self, tmp_path):
+        from agent_comms.child_process import NoProcess
         from agent_comms.cli_commands import StartCliCommand
         from agent_comms.thread_execution import ExternalThreadExecution
         from agent_comms.thread_identity import UserThreadRole
@@ -483,7 +490,7 @@ class TestSelectedTargetActions:
             comms, target, snapshot=snapshot, catalog=catalog,
             resolved=target.resolve(snapshot, catalog))
         assert tuple(command.name for command in commands) == ("alpha",)
-        assert all(comms.registry.require(name).process_identity is None
+        assert all(comms.registry.require(name).process_identity == NoProcess()
                    for name in ("alpha", "external", "archived", "human"))
 
     def test_mixed_pins_keep_each_rows_original_channel(self, tmp_path):

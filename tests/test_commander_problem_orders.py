@@ -4,6 +4,7 @@ import os
 import subprocess
 
 import pytest
+from dataclasses import replace
 
 from agent_comms.change_report import FileLine
 from agent_comms.comms import Comms
@@ -17,14 +18,14 @@ from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool)
 from agent_comms.todos import (AwaitingFirstCall, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
-    RecordedCommitDelivery,
+    RecordedCommitDelivery, MechanicalOrderRun,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    RecordHuntTodo, StrikeTodo, Todo, TodoConflict)
+    DoneTodoState, RecordHuntTodo, StrikeTodo, Todo, TodoConflict, VoidStrikeTodo)
 
 
 def order(root, identity, command='printf 1', expected=1):
-    return PendingProblemOrder(id=identity, owner=FileLine(__file__, 1),
+    return PendingProblemOrder(id=identity, owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(root), command, CountCheckResult(expected)),
         edits=('Repair the existing owner',), banned=('No second store',), report='Report the result',
         at=RecordedEventTime(100), first_call_deadline=RecordedEventTime(220))
@@ -233,6 +234,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qm', 'base')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     due = '23:59'
@@ -277,6 +279,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: grep -c two count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
@@ -315,6 +318,7 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
     (repo / 'count.txt').write_text('0\n')
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
@@ -327,8 +331,73 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
     script, repo = commander_script
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: git grep -c no-such-text -> 0\n"
+                    "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='the check printed no integer'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body))
     assert script.open_todos() == []
+
+
+def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander):
+    """Only the commander voids; a void needs a live strike on this todo; a closed todo is voided alike."""
+    comms, caller = commander
+    todo = create(commander, 'P1')
+    lead = comms.registry.require('lead').incarnation
+    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, lead, todo.assignment,
+        'The unit delivered its order after the recorded deadline had already passed.')).apply(comms, caller)
+    struck = comms.goals.todos.get('P1')
+    strike, = struck.strikes
+    assert struck.strike_count == 1 and struck.live_strikes('worker') == (strike,)
+    why = 'The commander recorded the later main merge as the delivery, so this lateness strike was wrong.'
+    worker = comms.registry.require('worker').incarnation
+    with pytest.raises(TodoConflict):
+        VoidStrikeTodo(struck.revision, worker, strike, why).apply(struck)
+    closed = replace(struck, state=DoneTodoState)
+    assert VoidStrikeTodo(struck.revision, lead, strike, why).apply(closed).live_strikes() == ()
+    CommsTodoTool(id='P1', operation=VoidStrikeTodo(struck.revision, lead, strike, why)).apply(comms, caller)
+    voided = comms.goals.todos.get('P1')
+    assert voided.strikes == (strike,) and voided.voided[0].strike == strike
+    assert voided.strike_count == 0 and voided.live_strikes('worker') == ()
+    with pytest.raises(TodoConflict):
+        VoidStrikeTodo(voided.revision, lead, strike, why).apply(voided)
+    assert FieldCodec.decode(Todo, FieldCodec.encode(voided)) == voided
+
+
+def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, commander_script, tmp_path, monkeypatch):
+    comms, _ = commander
+    script, repo = commander_script
+    create(commander, 'P1')
+    posted = []
+    monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
+    script.strike('worker', 'P1 was struck for lateness against the wrong delivered commit')
+    script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
+    current = comms.goals.todos.get('P1')
+    assert len(current.strikes) == 1 and script.struck(current, 'worker') == 0
+    assert 'strike voided on P1' in (tmp_path / 'narrative.md').read_text()
+    assert posted[-1][0] == ['#comms'] and 'strike voided on P1' in posted[-1][1]
+    with pytest.raises(SystemExit, match='no live strike'):
+        script.unstrike('P1', 'P1 has no strike left to take back after the first void was recorded')
+
+
+def test_todo_voids_carry_keeps_every_stored_strike(commander):
+    """A store from before voids gains the empty column once; its rows, strikes and schema then read as declared."""
+    import sqlite3
+    from contextlib import closing
+    from cutover.carry_todo_voids import TodoVoids
+    from agent_comms.todos import TodoStore
+    comms, caller = commander
+    todo = create(commander, 'P1')
+    CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
+        todo.assignment, 'The unit delivered its order after the recorded deadline had already passed.')).apply(comms, caller)
+    struck = comms.goals.todos.get('P1')
+    path = TodoStore.path_in(comms.root)
+    with closing(sqlite3.connect(path)) as db:
+        db.execute('ALTER TABLE todo DROP COLUMN voided')
+        db.commit()
+    with pytest.raises(Exception):
+        comms.goals.todos.get('P1')
+    assert TodoVoids.carry(comms.root, apply=False).changed == 1
+    assert TodoVoids.carry(comms.root, apply=True).changed == 1
+    assert TodoVoids.carry(comms.root, apply=False).changed == 0
+    assert comms.goals.todos.get('P1') == struck

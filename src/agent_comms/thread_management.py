@@ -38,12 +38,13 @@ from .native_arguments import NativeArguments
 from .native_settings import NativeThreadDefaults
 from .launch_runtime import LaunchRuntime
 from .owner_lifecycle import LaunchInput, TaskLaunchInput, OwnerLifecycle
-from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingLevel
+from .pi_vocabulary import NoThinkingOverride, ServiceTier, ThinkingChoice, ThinkingLevelField
 from .private_registry_guard import (
     PRIVATE_OWNER_RENAME_PENDING, PrivateOwnerRenameIntent, PrivateRegistryGuard, PublicRegistry,
     RegistryPrivacy, _require_no_private_owner_rename,
 )
 from .registry_document import RegistrySnapshot
+from .registry_provenance import RegistryNames
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
@@ -56,7 +57,7 @@ class NewThreadSpec:
     name: str
     project: str
     model: str
-    thinking_level: type[ThinkingLevel]
+    thinking_level: ThinkingLevelField
     task: LaunchInput = field(default_factory=LaunchInput)
     tags: frozenset[str] | None = None
 
@@ -234,19 +235,19 @@ class ThreadManagement:
 
     def claim_thread(
         self,
-        base_name: str,
+        wanted: str,
         *,
         tags: frozenset[str],
         worktree: str,
         process: ProcessState = NO_PROCESS,
         model: str | None = None,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         auto_title_pending: bool = False,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
         with _store_lock(self._wire_lock_path):
             thread = self.registry.new_thread(
-                name=base_name,
+                name=RegistryNames.thread_slug(wanted),
                 tags=tags,
                 worktree=worktree,
                 process_identity=process,
@@ -301,15 +302,7 @@ class ThreadManagement:
                 raise RelationViolationError(
                     f"Process {owner_pid} does not own thread {thread.name!r}."
                 )
-            base_name = re.sub(r"[^A-Za-z0-9_-]+", "-", display_name).strip("-_") or "session"
-
-            new_name = base_name
-            suffix = 2
-            while self.registry.name_reserved(new_name):
-                if self.registry.canonical_name(new_name) == thread.name:
-                    return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
-                new_name = f"{base_name}-{suffix}"
-                suffix += 1
+            new_name = self.registry.snapshot().claim_name(display_name, owner=thread.name)
             return self._rename_thread_unlocked(thread.name, new_name, title=display_name)
 
     def _rename_thread(
@@ -331,7 +324,7 @@ class ThreadManagement:
 
     def set_thread_configuration(
         self, original: Thread, *, model: str | None = None,
-        thinking_level: type[ThinkingLevel] = NoThinkingOverride, service_tier: ServiceTier | None = None,
+        thinking_level: type[ThinkingChoice] = NoThinkingOverride, service_tier: ServiceTier | None = None,
     ) -> Thread:
         """Publish next-turn settings together against their acquired declaration.
 
@@ -351,7 +344,7 @@ class ThreadManagement:
             return updated
 
     def initialize_native_configuration(
-        self, name: str, *, model: str | None, thinking_level: type[ThinkingLevel],
+        self, name: str, *, model: str | None, thinking_level: type[ThinkingChoice],
     ) -> Thread:
         """Persist one first-known producer observation through its declaration."""
         with _store_lock(self._wire_lock_path):
@@ -462,7 +455,7 @@ class ThreadManagement:
     def create(self, spec: NewThreadSpec) -> Thread:
         """Prepare the session, then register and launch the thread with its task as first input."""
         resolved_bin = NativeArguments.configured_binary()
-        runtime = LaunchRuntime.current()
+        runtime = LaunchRuntime.running()
         with spec.prepared(self, resolved_bin, runtime) as child:
             child = self.registry._declare_unlocked(child)
             try:

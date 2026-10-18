@@ -4,12 +4,15 @@
   Problems: P<n>[, P<m>...]                       (the listed problems it owns, batched by surface for one owner; one open order per problem)
   Owner: <path>:<line>                              (the existing owner the fix goes on; must exist)
   Check: <repo> :: <shell command> -> <integer>    (done runs it; the last integer printed must match)
+  Works when: <user-visible closing run, 8+ words> (unless mechanical; close requires the file)
   1. <edit> ...  Banned: <shape>; <shape>  Report: <what the unit sends back>
 Sending to the unit that already holds the problem replaces its order; without --clean that is a send-back strike.
 
 Incompetence is not tolerated: a unit is fired from a task, not berated about it.
-Two strikes on one task: the task is taken away and reassigned (`fire`). Nothing here judges
-code; it refuses orders that leave a unit room to interpret, and refuses to let a deadline lapse silently.
+Two strikes on one task: the task is taken away and reassigned (`fire`). A strike recorded in
+error is voided with `unstrike`, never deleted: it stays readable beside its void and stops
+counting. Nothing here judges code; it refuses orders that leave a unit room to interpret,
+and refuses to let a deadline lapse silently.
 """
 import argparse
 import asyncio
@@ -35,6 +38,10 @@ from ..goals import CountCheckResult, OrderCheck
 from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..todos import (
+    ApplicationOrderRun,
+    MechanicalOrderRun,
+    OrderRun,
+    VoidStrikeTodo,
     BluntText,
     CleanHunt,
     CommitDelivery,
@@ -106,7 +113,7 @@ def open_todos(unit=None):
 
 def struck(todo, unit):
     """Strikes count per unit and task, across every order of that task the unit held."""
-    return sum(s.previous.owner == unit for s in todo.strikes)
+    return len(todo.live_strikes(unit))
 
 
 def hhmm(event):
@@ -219,7 +226,7 @@ class Slop:
                 f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None):
+def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -233,6 +240,11 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
+    works = re.search(rf'(?m)^{re.escape(OrderRun.label)}\s*(.+)$', body)
+    try:
+        run = MechanicalOrderRun() if mechanical else ApplicationOrderRun(works[1] if works else '')
+    except ValueError as refused:
+        problems.append(str(refused))
     edits = tuple(re.findall(r'(?m)^\s*\d+[.)] (.+?)\s*$', body))
     if not edits:
         problems.append('no numbered edits: list each exact edit as "1. ...", "2. ..."')
@@ -282,6 +294,13 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
     holders = sorted({listed[pid].assignment.owner for pid in group if pid in listed} - {unit})
     replaces = not new and all(pid in listed and listed[pid].assignment.owner == unit for pid in group)
+    try:
+        trace = FileLine.from_wire(traced) if traced is not None else None
+        for pid in group:
+            if pid in listed:
+                listed[pid].assignment.require_trace(unit, trace)
+    except ValueError as refused:
+        problems.append(str(refused))
     if holders and not reassign:
         problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
     if reassign is not None and len(reassign.split()) < 8:
@@ -298,7 +317,8 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
         order = PendingProblemOrder(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
-            report=report[1], at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
+            report=report[1], run=run,
+            at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
     goal = COMMS.registry.require(unit).goal
@@ -308,7 +328,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, **common)))
+            problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
     post([unit], message)
     for other, text in taken.items():
         post([other], text)
@@ -664,6 +684,30 @@ class RuledVerb(CommanderVerb):
         rules.require(self.who)
 
 
+def unstrike(task: str, why: str, at: str | None = None) -> None:
+    """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
+    todo = COMMS.goals.todos.get(task)
+    live = [s for s in todo.live_strikes() if at in (None, hhmm(s.at))]
+    if not live:
+        sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
+    voided = live[-1]
+    refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the void
+    call(CommsTodoTool(id=task, operation=VoidStrikeTodo(
+        todo.revision, COMMS.registry.require(ME).incarnation, voided, why)))
+    unit = voided.previous.owner
+    n = struck(COMMS.goals.todos.get(task), unit)
+    line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike voided on {task}, '
+            f'recorded {hhmm(voided.at)}; {n} strike(s) remain): {why}')
+    with open(NARRATIVE, 'a') as f:
+        f.write(f'- {line}\n')
+    try:
+        post(['#comms'], f'On the record: {line}')
+    except SystemExit as failed:  # the void is on the record; a rerun would find no live strike
+        print(f'Void recorded, but the #comms post failed ({failed}). Repost with order.post.',
+              file=sys.stderr)
+    print(f'{unit}: {n} strike(s) on {task}')
+
+
 class LoadedVerb(RuledVerb):
     """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
 
@@ -686,10 +730,12 @@ class SendVerb(OrderVerb, LoadedVerb):
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     mechanical: bool = option("--mechanical", default=False)
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
+    traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
+                                help="the first failing source line, required after two owners")
 
     def run(self) -> None:
         send(self.unit, self.due, self.body_file, clean=self.clean, mechanical=self.mechanical,
-             reassign=self.reassign)
+             reassign=self.reassign, traced=self.traced)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -701,6 +747,18 @@ class StrikeVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         strike(self.unit, self.why, self.caught)
+
+
+@dataclass(frozen=True, kw_only=True)
+class UnstrikeVerb(OrderVerb, RuledVerb):
+    help = "void a strike recorded in error; it stays on the record and stops counting"
+    pid: str = option("pid")
+    why: str = option("--why")
+    at: str | None = option("--at", default=None,
+                            help="HH:MM the strike was recorded; default the newest")
+
+    def run(self) -> None:
+        unstrike(self.pid, self.why, self.at)
 
 
 @dataclass(frozen=True, kw_only=True)
