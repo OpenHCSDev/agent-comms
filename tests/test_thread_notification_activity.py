@@ -9,7 +9,9 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.presentation import MessageNotification, WireRevision
 from agent_comms.private_path import FileRevision
-from agent_comms.ui_model.observation import ObserveThreads, ReadNotifications, ThreadPresented
+from agent_comms.ui_model.observation import (
+    NotificationsObserved, ObserveNotifications, ObserveThreads, ReadNotifications, ThreadPresented,
+)
 from conftest import publish_initial
 
 
@@ -58,8 +60,39 @@ def test_activity_only_reads_views_addressing_the_actor(tmp_path, monkeypatch, a
                                              *expected.sent_references)))]
     assert reading.observed.results['Carol'] is previous.results['Carol']
     assert reading.observed.results['Dave'] is previous.results['Dave']
-    # Standalone mounted notification windows must still notice activity writes.
-    assert ReadNotifications(str(comms.root), ()).changed_since(current, revision)
+
+
+@pytest.mark.parametrize('change, reads', [
+    ('Unrelated', False), ('Recipient', True), ('registry', True), ('reads', True), ('notifications', True),
+])
+def test_a_notification_window_rereads_only_for_its_participants_or_a_window_change(
+        tmp_path, monkeypatch, change, reads):
+    comms, reading, revision = opened(tmp_path)
+    view = reading.observed.results['sender'].presentation
+    request = ReadNotifications(str(comms.root), (*view.incoming_references, *view.sent_references))
+    window = ObserveNotifications(frozenset({request})).observation()
+    (first,) = window.read(comms, revision)
+    assert isinstance(first, NotificationsObserved) and 'Recipient' in window.read_states[request].activity
+    assert not list(window.read(comms, revision))
+    calls = []
+    original = comms.views.message_notifications_for_references
+
+    def counted(references):
+        calls.append(references)
+        return original(references)
+
+    monkeypatch.setattr(comms.views, 'message_notifications_for_references', counted)
+    if change in ('Unrelated', 'Recipient'):
+        comms.agents.set_activity(change, ActivityState.WORKING, 'Tool start')
+        current = replace(comms.views.revision(), expiry_tick=revision.expiry_tick)
+        assert current.activity != revision.activity
+    else:
+        marker = tmp_path / 'changed-source'
+        marker.write_text('A different captured revision')
+        current = replace(revision, **{change: (FileRevision.capture(marker),)})
+    steps = list(window.read(comms, current))
+    assert calls == ([request.references] if reads else [])
+    assert [type(step) for step in steps] == ([NotificationsObserved] if reads else [])
 
 
 @pytest.mark.parametrize('source', ['registry', 'reads', 'notifications', 'expiry_tick'])

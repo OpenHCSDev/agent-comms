@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from dataclasses import MISSING, Field, dataclass, fields, is_dataclass
 from datetime import datetime
 from enum import Enum
-from functools import cached_property, lru_cache, reduce
+from functools import cache, cached_property, lru_cache, reduce
 from operator import or_
 from pathlib import Path
 from typing_extensions import TypeAliasType
@@ -469,7 +469,6 @@ class FieldCodec(Sealed):
     the single record codec and declaration-derived schema.
     """
 
-    _declaration_cache_capacity = 256
 
     @staticmethod
     def _representation(annotation: object) -> tuple[object, type[FieldRepresentation] | None]:
@@ -510,7 +509,7 @@ class FieldCodec(Sealed):
         return representation
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def record_fields(cls: Any) -> tuple[tuple[Field[Any], str], ...]:
         """The record's field declarations, in wire order; plans own expanded keys."""
         # Declarations are immutable for this process; cache only their derived
@@ -538,7 +537,7 @@ class FieldCodec(Sealed):
         return next(key for item, key in cls.record_fields(record) if item.name == name)
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _types(declaration: type) -> dict[str, Any]:
         return get_type_hints(declaration, include_extras=True)
 
@@ -799,7 +798,7 @@ class FieldCodec(Sealed):
             return properties
 
     @classmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _record_plan(cls, record: type) -> FieldCodec._RecordPlan:
         """Resolve every per-row type decision for one record declaration once."""
         declared = cls.record_fields(record)
@@ -846,7 +845,7 @@ class FieldCodec(Sealed):
         return InlineFamilyPlan if family else InlineFieldPlan
 
     @staticmethod
-    @lru_cache(maxsize=_declaration_cache_capacity)
+    @cache
     def _projections(declaration: type, view: str) -> types.MappingProxyType[str, Projected]:
         # Cache immutable declarations only. Each consumer still invokes the
         # original property on the current record; projected values are never cached.
