@@ -39,26 +39,6 @@ def setup_wire(tmp_path):
     return comms
 
 
-def test_group_owned_lookup_rebuilds_with_immutable_group(tmp_path):
-    from agent_comms.field_codec import FieldCodec
-
-    comms = setup_wire(tmp_path)
-    comms.messaging.send("owner", "peer", "Output")
-    for group in comms.relationships.snapshot("owner").groups:
-        assert group.targets == frozenset(group.entries)
-        for entry in group.entries.values():
-            assert group.entry(entry.target) is entry
-        with pytest.raises(KeyError, match="missing-target"):
-            group.entry("missing-target")
-        wire_keys = {key for _, key in FieldCodec.record_fields(type(group))}
-        assert "targets" not in wire_keys and "_by_target" not in wire_keys
-        emptied = replace(group, entries={})
-        assert emptied.targets == frozenset()
-        with pytest.raises(KeyError, match="peer"):
-            emptied.entry("peer")
-        assert group.targets == frozenset(group.entries)
-
-
 def test_agent_tools_persist_one_mutual_contact_without_sending(tmp_path, monkeypatch):
     from agent_comms.tool_caller import ThreadCaller
     comms = setup_wire(tmp_path)
@@ -108,8 +88,8 @@ def test_recent_contacts_survive_ack_and_do_not_infer_collaboration(tmp_path):
     groups = snapshot.groups_by_type
     assert list(groups[InboundRelationshipGroup].entries) == ["peer", "#team"]
     assert list(groups[OutboundRelationshipGroup].entries) == ["peer"]
-    assert groups[ParentRelationshipGroup].entry("origin").target == "origin"
-    assert groups[ChildrenRelationshipGroup].entry("child").target == "child"
+    assert groups[ParentRelationshipGroup].entries["origin"].target == "origin"
+    assert groups[ChildrenRelationshipGroup].entries["child"].target == "child"
     assert groups[CollaboratingRelationshipGroup].entries == {}
     assert comms.bus.pending_count("owner") == pending
     assert not snapshot.history_limited
@@ -193,7 +173,7 @@ def test_bounded_window_reports_omitted_history_and_reuses_tail(tmp_path, monkey
     service.snapshot("owner")
     assert service._recent is cached
     comms.messaging.send("owner", "peer", "New output")
-    assert service.snapshot("owner").groups[1].entry("peer").detail.endswith("New output")
+    assert service.snapshot("owner").groups[1].entries["peer"].detail.endswith("New output")
 
 
 def collaboration_rows(comms, owner="owner"):
@@ -379,8 +359,8 @@ def test_new_group_supplies_snapshot_choices_defaults_and_persistence(tmp_path):
         group = next(group for group in snapshot.sortable_groups if type(group) is SortedInboundRelationshipGroup)
         assert FieldCodec.encode(group)["key"] == "sorted_inbound"
         assert group.order is LastActivityThreadSort
-        assert group.entry("peer").target == "peer"
-        earlier = group.entry("peer")
+        assert group.entries["peer"].target == "peer"
+        earlier = group.entries["peer"]
         assert snapshot.groups_by_type[SortedInboundRelationshipGroup] is group
         assert snapshot.current_entry(SortedInboundRelationshipGroup, earlier) is earlier
         # The inbound capability is not the exact sorted-inbound group identity.
