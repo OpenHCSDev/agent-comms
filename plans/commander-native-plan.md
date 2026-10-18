@@ -204,18 +204,4 @@ Toad is a view of Core, so the commander's page is one more view over Core's ans
 
 ## Order and dependencies
 
-| Phase | Depends on |
-|---|---|
-| step zero: stop the split | none |
-| 0 retained-store conversion | none |
-| 1 one owner for orders | none (uses tools that exist) |
-| 2 design reconciled | 1 |
-| 3 record plane | 0 |
-| 4 review queue | 3 |
-| 5 story | 4 |
-| 6 commander page in Toad | 5 (its alarms pane fills with 7) |
-| 7 control plane | 3 (standing rules read orders and strikes) |
-| 8 cutover | 4, 5, 6, 7 and the parity gate |
-| 9 skill | 8 |
-
-Step zero is done today. Phases 0 and 1 can start at once and run in parallel. Phase 1 matters most: it ends the duplicate ownership of orders that exists on `main` today.
+The phases and what each waits for are declared once, in `src/agent_comms/plan_phases.py` (the `PlanPhase` family). An order names the phase it serves with a `Serves: <phase>` line, stored as `ProblemOrder.serves`; a phase is done when every order serving it is closed. Each rotation prints `PLAN IDLE` for every phase whose dependencies are done and that has no open order (`PlanIdle` in `src/agent_comms/standing_rules.py`).

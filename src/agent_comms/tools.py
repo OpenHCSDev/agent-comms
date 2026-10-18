@@ -47,6 +47,7 @@ from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, OrderCheck
+from .plan_phases import OrderPhase
 from .message_reference import MessageReference
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
@@ -56,8 +57,9 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import (CorrectCheckTodo, DeliverTodo, InstallTodo, OrderDelivery, OrderProgress,
-                    PullRequests, StrikeReason, Todo, TodoOperation)
+from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
+                    OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
+                    TodoOperation)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -748,6 +750,15 @@ class CommsTodoTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsVerdictTool(CommsTodoTool):
+    label = "Judge order tool call"
+    description = ("Record the commander's verdict on one tool call the holder made for its "
+                   "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
+                   "the holder and revises its Goal in the same write.")
+    operation: OrderVerdict = tool_field("Accepted or send-back verdict on the judged tool call ID")
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsFireTool(ThreadToolRequest):
     label = "Fire unit"
     description = ("Release every open problem the unit holds in one operation, recording one "
@@ -757,6 +768,30 @@ class CommsFireTool(ThreadToolRequest):
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> TodoList:
         return TodoList(comms.goals.fire(self.unit, self.reason, caller.name))
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsCorrectWordingTool(ThreadToolRequest):
+    label = "Correct unit wording"
+    description = ("Answer a unit's jargon with a correction naming its open orders; the unit's "
+                   "strikes stay as they are. Only its commander may invoke this tool.")
+    unit: str = tool_field("Unit thread whose message used jargon")
+    message_id: str = tool_field("The unit's message")
+    text: str = tool_field("The unit's message text")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> MessagePublished:
+        actor = comms.registry.require(caller.name).incarnation
+        orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
+                  if todo.state.open and todo.holder == self.unit]
+        if not orders:
+            raise ValueError(f"{self.unit} holds no open order from {caller.name}.")
+        if not (words := PlainText.found(self.text)):
+            raise ValueError(f"Message {self.message_id} is plain; there is nothing to correct.")
+        message = comms.messaging.send_message(
+            caller.name, self.unit,
+            f"Correction, no strike, on {', '.join(orders)}: message {self.message_id} used "
+            f"{', '.join(words)}. Say what you did and what broke in plain words from now on.")
+        return MessagePublished(message.message_id, SentTranscript.from_message(message))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -824,6 +859,22 @@ class CommsOrderCheckTool(ThreadToolRequest):
         actor = comms.registry.require(caller.name).incarnation
         changed = comms.goals.change_problem(self.problem, CorrectCheckTodo(
             todo.revision, actor, todo.order.check, self.check, self.why), caller.name)
+        return TodoChanged(changed, changed.strike_count)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderServeTool(ThreadToolRequest):
+    label = "Name order phase"
+    description = ("Name the plan phase an open order serves; only its commander may invoke this "
+                   "tool, and the order keeps its id, deadline and strikes.")
+    problem: str = tool_field("Problem ID")
+    serves: type[OrderPhase] = tool_field("The plan phase the order serves")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        todo = comms.goals.todos.get(self.problem)
+        actor = comms.registry.require(caller.name).incarnation
+        changed = comms.goals.change_problem(
+            self.problem, ServeTodo(todo.revision, actor, self.serves), caller.name)
         return TodoChanged(changed, changed.strike_count)
 
 

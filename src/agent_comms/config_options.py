@@ -27,8 +27,9 @@ from .coordinator import Coordination
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
 from .native_arguments import NativeArguments
-from .native_pi import NativePiUnavailable
-from .launch_runtime import RestartEnvironment
+from .native_pi import NativePiUnavailable, NativePiRpcLaunch
+from .native_package import VerifiedNativePackage
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .threads import Thread
 
 if TYPE_CHECKING:
@@ -86,9 +87,11 @@ class ConfigOption(DeclaredFamily, affix="ConfigOption"):
 class CatalogConfigOption(ConfigOption):
     """A selected option owns its catalog, auth revision and acquisition lock."""
 
-    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment):
+    def __init__(self, agent_bin: str, agent_args: NativeArguments, configuration: RestartEnvironment,
+                 package: VerifiedNativePackage):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
+        self.package = package
         self.catalogs: dict[str | None, list[CatalogChoice]] = {}
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
@@ -183,7 +186,7 @@ class ModelConfigOption(CatalogConfigOption):
             from .pi_commands import GetAvailableModels
 
             data = await GetAvailableModels().discover(
-                self.agent_bin, self.agent_args.argv, self.configuration.root
+                self.agent_bin, self.agent_args.argv, self.configuration.root, package=self.package
             )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -213,7 +216,8 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.configuration.root,
+            package=self.package,
         )
         levels = [member.declared_name for member in data.levels]
         return [CatalogChoice(value=level, name=level.title()) for level in levels]
@@ -236,20 +240,26 @@ class ConfigOptions:
         agent_bin: str,
         agent_args: NativeArguments,
         configuration: RestartEnvironment,
+        package: VerifiedNativePackage,
     ):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
+        self.package = package
         self.catalogs: dict[type[CatalogConfigOption], CatalogConfigOption] = {}
 
     @classmethod
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
-        return cls(NativeArguments.configured_binary(), NativeArguments.configured(),
-                   RestartEnvironment.inherit(os.environ))
+        command = NativeArguments.configured_binary()
+        configuration = RestartEnvironment.inherit(os.environ)
+        package = NativePiRpcLaunch.package_for_command(
+            command, LaunchRuntime.running(), configuration.root,
+        )
+        return cls(command, NativeArguments.configured(), configuration, package)
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
         if member not in self.catalogs:
-            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration)
+            self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration, self.package)
         return self.catalogs[member]
 
     async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect]:
@@ -284,6 +294,7 @@ class SessionConfigOptions(ConfigOptions):
             agent_bin,
             agent_args,
             replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
+            comms.owners.require_private_launch().native_package,
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
@@ -353,7 +364,7 @@ class SessionConfigOptions(ConfigOptions):
             thread.thinking_level
         )
         state = await command.configure(
-            self.agent_bin, arguments.argv, worktree=Path(thread.worktree), root=self.comms.root,
+            self.agent_bin, arguments.argv, package=self.package, worktree=Path(thread.worktree), root=self.comms.root,
         )
         model = state.model.display_name
         level = state.thinking_level.wire_value()

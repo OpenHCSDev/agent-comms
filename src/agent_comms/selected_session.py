@@ -11,6 +11,7 @@ from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
+from .native_package import VerifiedNativePackage
 from .native_pi import NativePiUnavailable, _session_location
 from .private_path import PrivateFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
@@ -74,7 +75,7 @@ class SelectedSession:
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @classmethod
-    def for_launch(cls, directory: Path, path: Path | None, package: Path) -> SelectedSession:
+    def for_launch(cls, directory: Path, path: Path | None, package: VerifiedNativePackage) -> SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,
