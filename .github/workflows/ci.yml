@@ -98,9 +98,14 @@ jobs:
 
       # Tests of the native runtime read the pinned package from stack/. The
       # locked install above fills the npm cache that preparation reads offline.
+      # Preparation runs agent_comms under the stack environment, never this job's python.
       - name: Prepare pinned native Pi
         if: matrix.os == 'ubuntu-latest'
-        run: stack/bin/prepare-pi-native
+        run: |
+          python -m pip install uv==0.12.0
+          uv lock --project stack --upgrade --python "$(command -v python)"
+          uv sync --project stack --locked --python "$(command -v python)"
+          stack/bin/prepare-pi-native
 
       - name: Run tests with coverage (85% enforced on Linux)
         if: matrix.os == 'ubuntu-latest'

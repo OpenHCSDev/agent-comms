@@ -249,6 +249,12 @@ def launcher(tmp_path):
     (source / '__init__.py').write_text('')
     for name in ('native_package.py', 'private_path.py', 'declared_family.py', 'errors.py'):
         shutil.copy2(repo / 'src/agent_comms' / name, source)
+    # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
+    # with its dependencies.
+    interpreter = stack / ".venv/bin/python"
+    interpreter.parent.mkdir(parents=True)
+    interpreter.write_text(f'#!/bin/sh\nPYTHONPATH={source.parent} exec {sys.executable} "$@"\n')
+    interpreter.chmod(0o755)
     for name in ("pi-native", "prepare-pi-native"):
         shutil.copy2(repo / "stack/bin" / name, stack / "bin" / name)
     staged = tmp_path / "staged"
@@ -362,6 +368,21 @@ def test_launch_and_publication_install_declared_source_with_one_link(launcher, 
     run()
     assert (destination.stat().st_ino, destination.stat().st_mtime_ns) == (
         installed.st_ino, installed.st_mtime_ns)
+
+
+def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3(launcher, tmp_path):
+    stack, _ = launcher
+    bare = tmp_path / "bare"
+    bare.mkdir()
+    (bare / "python3").write_text(f'#!/bin/sh\nexec {sys.base_prefix}/bin/python3 -S "$@"\n')
+    (bare / "python3").chmod(0o755)
+    env = dict(os.environ, PATH=f"{bare}:{os.environ['PATH']}")
+    assert subprocess.run(["python3", "-c", "import metaclass_registry"], env=env,
+                          capture_output=True).returncode
+    result = subprocess.run([str(stack / "bin/prepare-pi-native")], env=env,
+                            capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == f"PI_NATIVE_BIN={stack}/bin/pi-native\n"
 
 
 @pytest.mark.parametrize("script", ["pi-native", "prepare-pi-native"])
