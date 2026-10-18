@@ -14,7 +14,8 @@ from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 
-from .field_codec import FieldCodec, MalformedRecord
+from .errors import RelationViolationError
+from .field_codec import FieldCodec, MalformedRecord, NullMember, SubclassUnion
 from .goal_states import ActiveGoal, GoalState
 
 if TYPE_CHECKING:
@@ -339,8 +340,110 @@ class ProblemGoalOrder(GoalOrder):
         return "\n\n".join(todo.order.instructions(todo) for todo in todos if todo.pending)
 
 
+class ThreadGoal(SubclassUnion):
+    """What a thread's goal slot holds: its Goal, or AbsentGoal when none is set or active.
+
+    Each member answers what a thread projects from its goal, so no reader tests for absence.
+    """
+
+    @property
+    @abstractmethod
+    def active(self) -> ThreadGoal: ...
+
+    @abstractmethod
+    def identifies(self, goal_id: str) -> bool: ...
+
+    def matching(self, goal_id: str) -> ThreadGoal:
+        """This record when it is the named goal, at any later state or revision."""
+        return self if self.identifies(goal_id) else AbsentGoal()
+
+    @abstractmethod
+    def continuing(self, captured: ThreadGoal) -> ThreadGoal:
+        """This goal when it is still the goal captured earlier."""
+
+    @abstractmethod
+    def owes_project_resume(self, due: bool) -> bool:
+        """Whether an idle thread still owes its resume turn; a goal turn is that turn."""
+
+    @abstractmethod
+    def task_scope(self, project: str): ...
+
+    @abstractmethod
+    def context_segments(self, thread, goals) -> tuple: ...
+
+    @abstractmethod
+    def wake_view(self) -> dict[str, object] | None: ...
+
+    @abstractmethod
+    def task_facts(self) -> tuple: ...
+
+    @property
+    @abstractmethod
+    def goal_checkpoint(self) -> GoalCheckpoint: ...
+
+    @abstractmethod
+    def require_replacement(self, goals, owner) -> None: ...
+
+    @abstractmethod
+    def require_set(self) -> Goal: ...
+
+    @abstractmethod
+    def require_current(self) -> Goal: ...
+
+    @abstractmethod
+    def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool: ...
+
+
 @dataclass(frozen=True)
-class Goal:
+class AbsentGoal(NullMember, ThreadGoal):
+    """No goal is set, or the set goal is not active; stored as null."""
+
+    @property
+    def active(self) -> AbsentGoal:
+        return self
+
+    def identifies(self, goal_id: str) -> bool:
+        return False
+
+    def continuing(self, captured: ThreadGoal) -> AbsentGoal:
+        return self
+
+    def owes_project_resume(self, due: bool) -> bool:
+        return due
+
+    def task_scope(self, project: str):
+        from .task_sources import TurnTaskScope
+
+        return TurnTaskScope(project=project)
+
+    def context_segments(self, thread, goals) -> tuple:
+        return ()
+
+    def wake_view(self) -> None:
+        return None
+
+    def task_facts(self) -> tuple:
+        return ()
+
+    @property
+    def goal_checkpoint(self) -> AbsentGoalCheckpoint:
+        return AbsentGoalCheckpoint()
+
+    def require_replacement(self, goals, owner) -> None:
+        pass
+
+    def require_set(self) -> Goal:
+        raise ValueError("No goal is set for this thread.")
+
+    def require_current(self) -> Goal:
+        raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
+
+    def accepts_observation(self, goal_id: str, minimum_revision: int) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class Goal(ThreadGoal):
     """A goal owns one typed record for storage and agent-comms protocol boundaries."""
 
     text: str
@@ -365,6 +468,47 @@ class Goal:
     def require_replacement(self, goals, owner) -> None:
         self.order.require_replacement(self, goals, owner)
 
+    @property
+    def active(self) -> ThreadGoal:
+        return self if self.state.active else AbsentGoal()
+
+    def identifies(self, goal_id: str) -> bool:
+        return self.id == goal_id
+
+    def continuing(self, captured: ThreadGoal) -> ThreadGoal:
+        return self if captured.identifies(self.id) else AbsentGoal()
+
+    def owes_project_resume(self, due: bool) -> bool:
+        return False
+
+    def task_scope(self, project: str):
+        from .task_sources import GoalTaskScope
+
+        return GoalTaskScope(project=project, goal=self.checkpoint)
+
+    def context_segments(self, thread, goals) -> tuple:
+        from .turn_context import GoalSegment
+
+        return (GoalSegment.capture(thread, self, goals),)
+
+    def wake_view(self) -> dict[str, object]:
+        return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
+
+    def task_facts(self) -> tuple:
+        from .retained_task_facts import GoalTaskFact
+
+        return (GoalTaskFact(self),)
+
+    @property
+    def goal_checkpoint(self) -> PresentGoalCheckpoint:
+        return PresentGoalCheckpoint(self.checkpoint)
+
+    def require_set(self) -> Goal:
+        return self
+
+    def require_current(self) -> Goal:
+        return self
+
     def after_failed_turn(self, diagnostic: str) -> Goal:
         progress = f"{self.progress}\n\n{diagnostic}" if self.progress else diagnostic
         return self._failure_projection(self.state.after_failed_turn(diagnostic), progress)
@@ -379,8 +523,16 @@ class Goal:
             return self
         return replace(self, state=state, progress=progress, revision=self.revision + 1)
 
+    @classmethod
+    def from_wire(cls, data) -> Goal:
+        return FieldCodec.decode_record(cls, data)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return FieldCodec.record_schema(cls)
+
     def to_wire(self) -> dict[str, object]:
-        return FieldCodec.encode(self)
+        return FieldCodec.encode_record(self)
 
     def __post_init__(self) -> None:
         if not self.text.strip() or not self.id:

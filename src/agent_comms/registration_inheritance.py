@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
+from .field_codec import FieldCodec
 from .pi_vocabulary import ThinkingChoice
 
 
@@ -28,9 +29,11 @@ class PredicateInheritance[T](RegistrationInheritance[T]):
 
 
 class InheritMissing[T](PredicateInheritance[T]):
+    """An incoming value stored as null, such as AbsentGoal, keeps the previous one."""
+
     @classmethod
     def inherits(cls, incoming: object) -> bool:
-        return incoming is None
+        return FieldCodec.encode(incoming) is None
 
 
 class InheritEmpty[T](PredicateInheritance[T]):

@@ -18,11 +18,12 @@ from .launch_runtime import RestartEnvironment
 from .native_tools import NativeRequestTools
 from .store_files import _atomic_write_text
 from .goals import (
-    AbsentGoalCheckpoint,
+    AbsentGoal,
     Goal,
     GoalCheckpoint,
     GoalRevision,
     PresentGoalCheckpoint,
+    ThreadGoal,
 )
 from .pi_vocabulary import (
     NoThinkingOverride,
@@ -80,7 +81,7 @@ class Thread(ThreadProvenance):
         default=ServiceTier.PRIORITY, kw_only=True,
         metadata={"registration_inheritance": InheritPrevious},
     )
-    goal: Goal | None = field(default=None, metadata={"registration_inheritance": InheritMissing})
+    goal: ThreadGoal = field(default_factory=AbsentGoal, metadata={"registration_inheritance": InheritMissing})
     created_at: float = field(default_factory=_thread_creation_time, kw_only=True,
                               metadata={"wire_required": True})
     _generated_created_at: bool = field(init=False, default=False, repr=False, compare=False)
@@ -143,7 +144,7 @@ class Thread(ThreadProvenance):
     @property
     def owes_project_resume(self) -> bool:
         """Idle with the resume still due; a turn for the active goal is that turn."""
-        return self.project_resume_due and not self.executing and self.active_goal is None
+        return self.active_goal.owes_project_resume(self.project_resume_due and not self.executing)
 
     @property
     def turn_state(self) -> TurnState:
@@ -284,74 +285,48 @@ class Thread(ThreadProvenance):
     def require_goal_checkpoint(self, checkpoint: GoalRevision) -> Goal:
         if self.goal_checkpoint != PresentGoalCheckpoint(checkpoint):
             raise ValueError("The goal changed before this action; the action was not applied.")
-        assert self.goal is not None
-        return self.goal
+        return self.goal.require_set()
 
     @property
-    def active_goal(self) -> Goal | None:
+    def active_goal(self) -> ThreadGoal:
         """Project the original goal's declaration; retain no activity copy."""
-        goal = self.goal
-        return goal if goal is not None and goal.state.active else None
+        return self.goal.active
 
     @property
     def task_scope(self):
-        from .task_sources import GoalTaskScope, TurnTaskScope
-
-        goal = self.active_goal
-        return (GoalTaskScope(project=self.worktree, goal=goal.checkpoint)
-                if goal is not None else TurnTaskScope(project=self.worktree))
+        return self.active_goal.task_scope(self.worktree)
 
     def context_goal_segments(self, goals):
         """Project this declaration's active goal without a second goal state."""
-        from .turn_context import GoalSegment
-
-        goal = self.active_goal
-        return (GoalSegment.capture(self, goal, goals),) if goal is not None else ()
+        return self.active_goal.context_segments(self, goals)
 
     def wake_context(self) -> dict[str, object]:
         """This captured thread owns its selected-wake work and goal projection."""
-        goal = self.goal
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
-            "original_assignment": self.task,
-            "current_goal": (None if goal is None else {
-                "text": goal.text, "status": goal.state.declared_name,
-                "progress": goal.progress,
-            }),
+            "original_assignment": self.task, "current_goal": self.goal.wake_view(),
         }
 
     def retained_task_facts(self):
-        from .retained_task_facts import GoalTaskFact
+        return self.goal.task_facts()
 
-        return (GoalTaskFact(self.goal),) if self.goal is not None else ()
-
-    def continuation_goal(self, original: Thread) -> Goal | None:
+    def continuation_goal(self, original: Thread) -> ThreadGoal:
         """The current active goal still belongs to this captured project/goal."""
         if self.worktree != original.worktree:
-            return None
-        goal, captured = self.active_goal, original.active_goal
-        if goal is None or captured is None:
-            return None
-        return goal if goal.id == captured.id else None
+            return AbsentGoal()
+        return self.active_goal.continuing(original.active_goal)
 
-    def goal_for(self, goal_id: str) -> Goal | None:
+    def goal_for(self, goal_id: str) -> ThreadGoal:
         """Select the current record of this goal, including later state/revisions."""
-        goal = self.goal
-        return goal if goal is not None and goal.id == goal_id else None
+        return self.goal.matching(goal_id)
 
     def require_goal_replacement(self, goals) -> None:
-        if self.goal is not None:
-            self.goal.require_replacement(goals, self.incarnation)
+        self.goal.require_replacement(goals, self.incarnation)
 
     def require_goal(self, goal_id: str | None = None) -> Goal:
         if goal_id is None:
-            if self.goal is None:
-                raise ValueError("No goal is set for this thread.")
-            return self.goal
-        goal = self.goal_for(goal_id)
-        if goal is None:
-            raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
-        return goal
+            return self.goal.require_set()
+        return self.goal_for(goal_id).require_current()
 
     def require_active_goal(self, goal_id: str) -> Goal:
         goal = self.require_goal(goal_id)
@@ -360,8 +335,7 @@ class Thread(ThreadProvenance):
 
     @property
     def goal_checkpoint(self) -> GoalCheckpoint:
-        return (PresentGoalCheckpoint(self.goal.checkpoint)
-                if self.goal is not None else AbsentGoalCheckpoint())
+        return self.goal.goal_checkpoint
 
     def same_launch(self, other: Thread) -> bool:
         """Whether both records describe one process serving one saved session with one model setting.
@@ -463,7 +437,7 @@ class Thread(ThreadProvenance):
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
 
     def has_goal_revision(self, goal_id: str, minimum_revision: int) -> bool:
-        return self.goal is not None and self.goal.accepts_observation(goal_id, minimum_revision)
+        return self.goal.accepts_observation(goal_id, minimum_revision)
 
     @property
     def is_fork(self) -> bool:
