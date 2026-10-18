@@ -724,14 +724,12 @@ def _text(value: str, label: str, limit: int) -> str:
 
 
 def _thread(thread: Thread) -> ThreadIncarnation:
-    if type(thread) is not Thread or not thread.role.executable:
+    if not thread.role.executable:
         raise TodoError("Assignments require an executable registered thread snapshot.")
     return _participant(thread)
 
 
 def _participant(thread: Thread) -> ThreadIncarnation:
-    if type(thread) is not Thread:
-        raise TodoError("Creator must be a registered thread snapshot.")
     _text(thread.name, "Thread name", 128)
     try:
         thread.incarnation.require_recorded()
