@@ -747,8 +747,8 @@ class CommsTodoTool(ThreadToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class CommsFireTool(ThreadToolRequest):
     label = "Fire unit"
-    description = ("Release every open problem the unit holds in one operation, recording one plain "
-                   "reason on each; only their commander may invoke this tool.")
+    description = ("Release every open problem the unit holds in one operation, recording one "
+                   "plain reason on each; only their commander may invoke this tool.")
     unit: str = tool_field("Unit thread to fire")
     reason: StrikeReason = tool_field("What the unit did, plainly")
 

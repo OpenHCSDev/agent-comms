@@ -1049,7 +1049,8 @@ class Todo(TypedTable):
                      if unit in (None, recorded.previous.owner) and recorded not in taken_back)
 
     def struck_out(self, unit: str) -> bool:
-        """The unit has taken its goal's StrikeLimit live strikes here; only mechanical orders reach it."""
+        """The unit has taken its problem goal's StrikeLimit live strikes here; only mechanical
+        orders reach it."""
         return len(self.live_strikes(unit)) >= ProblemGoalOrder.StrikeLimit
 
     def require_result(self, result: Todo) -> None:
@@ -1258,13 +1259,13 @@ class TodoStore(TypedStore):
         """Release every open problem the unit holds from this commander in one write; each
         records the same reason, and its order and strikes stay."""
         with self.writing() as db:
-            held = tuple(todo for todo in self._rows(
+            held = tuple((todo, assignment) for todo in self._rows(
                 db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
-                (unit, actor.name, actor.created_at)) if todo.state.open)
+                (unit, actor.name, actor.wire_birth)) if todo.state.open and (assignment := todo.assignment))
             if not held:
                 raise TodoError(f"{unit} holds no open problem.")
-            released = tuple(ReleaseTodo(todo.revision, actor, todo.assignment, reason).apply(todo)
-                             for todo in held)
+            released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)
+                             for todo, assignment in held)
             for todo in released:
                 todo.upsert(db)
             return released

@@ -31,8 +31,8 @@ from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..recorded_time import RecordedEventTime
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool, CommsProblemCloseTool,
-                     CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
+from ..tools import (CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
+                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
@@ -290,7 +290,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
     fired = [pid for pid in group if pid in listed and listed[pid].struck_out(unit)]
     if not mechanical and fired:
-        sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. Reassign them; only --mechanical orders on them reach {unit}.')
+        sys.exit(f'Refused: {unit} has {ProblemGoalOrder.StrikeLimit} strikes on {fired}. '
+                 f'Reassign them; only --mechanical orders on them reach {unit}.')
     at = time.time()
     try:
         order = PendingProblemOrder(

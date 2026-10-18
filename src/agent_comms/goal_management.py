@@ -32,7 +32,7 @@ from .threads import Thread
 from .input_attempt import ReservedInput, UnresolvedInput
 from .input_disposition import DeliveryOverview, InputDispositions
 from .turn_lease import FinishedTurnFence
-from .todos import TodoStore
+from .todos import StrikeReason, Todo, TodoStore
 from .wire_log import ConversationSourceWindowRequest
 
 _LOG = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class Goals:
         with _store_lock(self._wire_lock_path):
             return self.todos.apply(problem, prepared)
 
-    def fire(self, unit, reason, commander):
+    def fire(self, unit: str, reason: StrikeReason, commander: str) -> tuple[Todo, ...]:
         actor = self.registry.require(commander).incarnation
         with _store_lock(self._wire_lock_path):
             return self.todos.fire(unit, actor, reason)
