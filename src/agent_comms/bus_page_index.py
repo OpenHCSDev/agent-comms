@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 import os
-from collections.abc import Generator, Mapping
+from collections.abc import Generator, Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager
 from functools import cached_property
 from dataclasses import dataclass, field, replace
@@ -261,6 +261,14 @@ class BusPageIndex:
             params.extend(sorted(targets))
         yield from self._offsets(clauses, params, lower=lower, upper=upper,
                                  descending=descending, before_offset=before_offset)
+
+    def sequence_offsets(
+        self, sequences: frozenset[int], *, before_offset: int,
+    ) -> Iterator[BusPageRow]:
+        """Exactly the named sequences' rows, ascending."""
+        yield from self._offsets(["seq IN (" + ",".join("?" for _ in sequences) + ")"],
+                                 [*sorted(sequences)], lower=None, upper=None,
+                                 descending=False, before_offset=before_offset)
 
     def conversation_offsets(
         self, first: frozenset[str], second: frozenset[str], *,
