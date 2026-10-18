@@ -19,6 +19,7 @@ from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.owned_turn import OwnedTurn
+from agent_comms.turn_input_source import OwnerOriginalInput
 from agent_comms.queued_input import InitialInput
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
@@ -124,7 +125,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
             turn = OwnedTurn(
                 agent.turns, session_id, agent.sessions.require(session_id), text,
                 original_keys=(item.key,), initial_display_text=text,
-                original_owner_input=True, original_goal_id=item.context.active_goal_id,
+                input_type=OwnerOriginalInput, original_goal_permission=item.context.goal_permission,
             )
             async with AsyncExitStack() as permits:
                 assert await turn.acquire(resources, permits)

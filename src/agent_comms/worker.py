@@ -13,6 +13,7 @@ from .comms import wire
 from .private_nk_entrypoint import PrivateNkLaunch, private_nk_from_environment
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment
+from .turn_input_source import OwnerOriginalInput
 
 
 async def run() -> None:
@@ -76,7 +77,7 @@ async def run_startup_input(agent: CommsAgent, name: str, key: str) -> None:
             name,
             row.source_text,
             original_keys=(key,),
-            original_owner_input=True,
+            input_type=OwnerOriginalInput,
         )
 
 

@@ -17,6 +17,7 @@ from .goal_states import (
     PausedGoal,
     UnrecordedBlockGoal,
 )
+from .goals import GoalDeclaration
 from .goals import Goal, GoalCheckpoint, AbsentGoalCheckpoint, PresentGoalCheckpoint
 from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
@@ -158,7 +159,7 @@ class GoalExecution(ThreadGoalExecution):
         return self.state.view.waiting
 
     def waiting_for(self, goal: Goal) -> bool:
-        return goal.state.active and self.goal_id == goal.id and self.standby()
+        return goal.permits_continuation(self.goal_id) and self.standby()
 
     def validate_goal(self, goal: GoalCheckpoint) -> None:
         goal.require_identity(self.goal_id)
@@ -213,10 +214,8 @@ class GoalSnapshot:
     The execution, when present, schedules exactly this goal.
     """
 
-    goal: Goal | None
+    goal: GoalDeclaration
     execution: ThreadGoalExecution
 
     def __post_init__(self) -> None:
-        checkpoint = (AbsentGoalCheckpoint() if self.goal is None
-                      else PresentGoalCheckpoint(self.goal.checkpoint))
-        self.execution.validate_goal(checkpoint)
+        self.execution.validate_goal(self.goal.captured)

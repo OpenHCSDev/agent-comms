@@ -6,6 +6,8 @@ import json
 from pathlib import Path
 
 import pytest
+
+from agent_comms.turn_input_source import OwnerOriginalInput
 from acp import RequestError
 
 from agent_comms import native_pi
@@ -97,7 +99,7 @@ async def test_installed_429_exhaustion_publishes_one_retry_owned_failure(
             with pytest.raises(RequestError) as caught:
                 await agent.turns.run_agent_turn(
                     "project", "project", "One isolated request that remains rate limited",
-                    original_owner_input=True,
+                    input_type=OwnerOriginalInput,
                 )
         reports = [item for update in updates for item in decode_updates(update.field_meta)
                    if isinstance(item, RequestFailedUpdate)]

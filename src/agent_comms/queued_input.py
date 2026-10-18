@@ -17,6 +17,7 @@ from acp import RequestError
 
 from .child_process import ProcessIdentity
 from .errors import RelationViolationError
+from .goals import GoalDeclaration, NoGoal
 from .goals import Goal
 from .image_inputs import ImageInput
 from .assignment_states import DeferredAssignment, DeliveredAssignment
@@ -29,7 +30,7 @@ from .store_files import _store_lock
 from .coordinator import Coordination
 from .coordination_session import ReadNativeCoordinationSession
 from .turn_goal_permission import AcceptedGoalPermission
-from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput
+from .turn_input_source import AcceptedFollowingInput, DeliveredFollowingInput, OwnerOriginalInput
 from .thread_identity import ClaimedIdentity
 from .threads import Thread
 
@@ -55,7 +56,7 @@ class InputHandoffRefused(RelationViolationError):
 @dataclass(frozen=True, slots=True)
 class QueuedInputContext:
     claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
-    goal: Goal | None = None
+    goal: GoalDeclaration = field(default_factory=NoGoal)
 
     @classmethod
     def capture(cls, owner: Thread, claim_scope: ClaimedIdentity):
@@ -75,8 +76,8 @@ class QueuedInputContext:
         return self.named(claim_scope.incarnation.name).claim_scope == claim_scope
 
     @property
-    def active_goal_id(self) -> str | None:
-        return self.goal.id if self.goal is not None and self.goal.state.active else None
+    def goal_permission(self) -> AcceptedGoalPermission:
+        return self.goal.active().accepted_permission()
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,7 +108,7 @@ class QueuedInput:
         return AcceptedFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=self.context.goal_permission,
         )
 
     @classmethod
@@ -233,8 +234,8 @@ class QueuedInput:
             images=self.images,
             original_keys=(self.key,),
             initial_display_text=self.text if self.echo else None,
-            original_owner_input=True,
-            original_goal_id=self.context.active_goal_id,
+            input_type=OwnerOriginalInput,
+            original_goal_permission=self.context.goal_permission,
             accepted_input_id=self.accepted_id,
         )
 
@@ -320,7 +321,7 @@ class DeliveredInput(QueuedInput):
         return DeliveredFollowingInput(
             keys=(self.key,),
             accepted_id=self.input_id,
-            goal_permission=AcceptedGoalPermission(self.context.active_goal_id),
+            goal_permission=self.context.goal_permission,
             origins=(self.message,),
         )
 

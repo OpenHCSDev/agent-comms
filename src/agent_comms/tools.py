@@ -466,7 +466,7 @@ class CommsSetGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         goal = comms.goals.update_goal(caller.name, SetGoalAction(text=self.text))
         return {
-            "goal": goal.to_wire() if goal else None,
+            "goal": goal.to_wire(),
             "instruction": (
                 "Persistent goal activated. Work toward it and report progress with comms_goal."
             ),
@@ -517,7 +517,7 @@ class CommsGoalTool(ThreadToolRequest):
         comms.goals.update_goal(name, command, actor=ModelInvocable)
         goal, execution = comms.goals.goal_snapshot(name)
         return {
-            "goal": goal.to_wire() if goal else None,
+            "goal": goal.to_wire(),
             "goal_execution": execution.to_wire(),
         }
 
@@ -535,10 +535,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).goal_for(goal_id)
-        if current is None:
-            raise ValueError("This goal cannot be resumed; refresh its state.")
-        current.state.require_model_resume()
+        current = comms.registry.require(name).goal.matching(goal_id).require_model_resume()
         progress = self.progress
         goal = comms.goals.update_goal(
             name,
@@ -550,8 +547,6 @@ class CommsResumeGoalTool(ThreadToolRequest):
                 progress=progress,
             ),
         )
-        if goal is None or not goal.state.active or goal.progress != progress:
-            raise ValueError("Goal changed during resume; refresh its state.")
         return {"goal": goal.to_wire()}
 
 
@@ -568,14 +563,14 @@ class CommsEditGoalTool(ThreadToolRequest):
     def apply(self, comms: Comms, caller: ThreadCaller) -> JsonObject:
         name = caller.name
         goal_id = self.goal_id
-        current = comms.registry.require(name).require_goal(goal_id)
+        current = comms.registry.require(name).goal.require_id(goal_id)
         goal = comms.goals.update_goal(
             name,
             EditGoalAction(
                 expect=GoalPrecondition(expected_goal=current, goal_id=goal_id), text=self.text
             ),
         )
-        return {"goal": goal.to_wire() if goal else None}
+        return {"goal": goal.to_wire()}
 
 
 @dataclass(frozen=True, kw_only=True)

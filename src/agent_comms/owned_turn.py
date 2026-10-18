@@ -15,7 +15,7 @@ from acp import RequestError
 from . import agent_events as events
 from .agent_backend import InputContent, TurnDelivery
 from .channel_input_batch import InputBatch
-from .goal_attempts import LaunchPermit
+from .goal_attempts import GoalPermit, NoGoalPermit
 from .messages import Message
 from .input_attempt import ReservedInput
 from .input_origin import WireInputOrigin
@@ -29,16 +29,14 @@ from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
-    ContinuationGoalPermission,
     InactiveGoalPermission,
     OwnerGoalPermission,
+    TurnGoalPermission,
 )
 from .turn_input_source import (
     CapturedInputDependency,
-    DependencyOriginalInput,
     NoInputDependency,
-    OwnerOriginalInput,
-    RoutedOriginalInput,
+    OriginalTurnInput,
     ScheduledOriginalInput,
 )
 from .turn_progress import TurnProgress
@@ -86,8 +84,8 @@ class OwnedTurn:
         original_keys: tuple[str, ...] = (),
         initial_display_text: str | None = None,
         autonomous_goal: bool = False,
-        original_owner_input: bool = False,
-        original_goal_id: str | None = None,
+        input_type: type[OriginalTurnInput] = ScheduledOriginalInput,
+        original_goal_permission: TurnGoalPermission = InactiveGoalPermission(),
         accepted_input_id: str | None = None,
         dependency_wait_id: str | None = None,
     ) -> None:
@@ -100,8 +98,8 @@ class OwnedTurn:
         self.original_keys = original_keys
         self.initial_display_text = initial_display_text
         self.autonomous_goal = autonomous_goal
-        self.original_owner_input = original_owner_input
-        self.original_goal_id = original_goal_id
+        self.input_type = input_type
+        self.original_goal_permission = original_goal_permission
         self.accepted_input_id = accepted_input_id
         self.dependency_wait_id = dependency_wait_id
 
@@ -114,17 +112,13 @@ class OwnedTurn:
         )
         self.thread_name = self.thread.name
         wait = self.runner.comms.goals.goal_wait(self.thread_name)
-        active_goal = self.thread.active_goal
         if self.dependency_wait_id is not None:
             if not wait.matches_id(self.dependency_wait_id):
                 return
-        elif not wait.allows_routed_input() and not self.original_owner_input:
+        elif not self.input_type.allows_start_wait(wait):
             return
-        if self.original_owner_input and self.original_goal_id != (
-            active_goal.id if active_goal is not None else None
-        ):
-            raise RequestError.invalid_params({"reason": "input_authority_changed"})
-        self.goal_permit: LaunchPermit | None = None
+        self.input_type.require_start_goal(self)
+        self.goal_permit: GoalPermit = NoGoalPermit()
         return True
 
     def begin(self, resources: AsyncExitStack, permits: ExitStack) -> bool:
@@ -140,20 +134,8 @@ class OwnedTurn:
             self.lease_cleanup, self.session_id, self.thread_name,
             self.turn_id, self.task[:80], self.routing,
         )
-        active_goal = self.thread.active_goal
-        if self.autonomous_goal and active_goal is None:
+        if not self.input_type.admit_goal(self, permits):
             return False
-        if active_goal is not None and not self.original_owner_input:
-            self.goal_permit = TurnGoalAccount.reserve(
-                owner=self.thread,
-                comms=self.runner.comms,
-                autonomous=self.autonomous_goal,
-            )
-            if self.goal_permit is None:
-                return False
-            permits.callback(
-                self.goal_permit.retire_unverified, self.runner.comms.goals.open_goal_store()
-            )
         self.input_cleanup = AsyncExitStack()
         resources.push_async_callback(self.input_cleanup.aclose)
         self.input_cleanup.push_async_callback(Coordination.run_worker, self.settle_unbound)
@@ -219,9 +201,7 @@ class OwnedTurn:
             tuple(origin.reference for origin in self.origins),
             batch.originals,
         )
-        if self.goal_permit is not None:
-            for segment in self.thread.context_goal_segments(self.runner.comms.goals):
-                self.context = self.context.prepend(segment)
+        self.goal_permit.prepare_context(self)
         if self.thread.auto_title_pending:
             self.context = self.context.prepend(AutomaticTitleSegment.capture(
                 (OwnerProvenance(self.thread.incarnation, self.turn_id),)))
@@ -232,23 +212,9 @@ class OwnedTurn:
 
     def reserve_input(self, batch: InputBatch):
         """Acquire the original durable input before opening loop capabilities."""
-        if self.original_owner_input:
-            permission = OwnerGoalPermission(self.thread.goal)
-        elif active_goal := self.thread.active_goal:
-            permission = ContinuationGoalPermission(active_goal)
-        else:
-            permission = InactiveGoalPermission()
-        if self.original_owner_input:
-            source_type = OwnerOriginalInput
-        elif not self.origins:
-            source_type = ScheduledOriginalInput
-        elif self.dependency_wait_id is not None:
-            source_type = DependencyOriginalInput
-        else:
-            source_type = RoutedOriginalInput
-        original = source_type(
+        original = self.input_type(
             accepted_id=self.accepted_input_id,
-            goal_permission=permission,
+            goal_permission=self.input_type.permission(self),
             prompt=self.context.render().text,
             original_display=self.original_display,
             origins=self.origins,

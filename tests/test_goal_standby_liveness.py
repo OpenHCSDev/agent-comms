@@ -147,7 +147,8 @@ def test_reply_read_failure_after_terminal_commit_raises_without_releasing(
     with pytest.raises(OSError, match="injected optional direct-reply read failure"):
         comms.goals.release_waits_after_terminal_turn(fence)
     assert comms.registry.require("child").active_turn is None
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert comms.registry.require("owner").goal.id == goal.id
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     monkeypatch.setattr(RecordedGoalWait, "has_reply", original)
@@ -167,7 +168,8 @@ def test_authoritative_goal_write_errors_are_not_swallowed_by_optional_read_guar
     monkeypatch.setattr(comms.registry, "register", denied)
     with pytest.raises(OSError, match="authoritative goal write failure"):
         comms.goals.release_waits_after_terminal_turn(fence)
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     monkeypatch.setattr(comms.registry, "register", original_register)
     assert comms.goals.release_waits_after_terminal_turn(fence) == ("owner",)
@@ -180,7 +182,8 @@ def test_mixed_targets_project_idle_without_suppressing_active_alternative(tmp_p
     assert [target.incarnation.name for target in execution.inactive_wait_for] == ["other"]
     assert "no active turn: @other" in execution.presentation("owner").summary
     assert comms.goals.release_waits_after_terminal_turn(other_fence) == ()
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     assert goal.id == comms.registry.require("owner").goal.id
 
@@ -278,7 +281,8 @@ def test_replaced_target_cannot_report_for_old_incarnation(tmp_path):
     assert [target.incarnation.name for target in execution.inactive_wait_for] == ["child"]
     assert comms.registry.require("owner").goal.id == goal.id
     # Removal/replacement has no subscribed terminal hook in this prototype.
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
 
 
 def test_owner_pause_still_prevents_quiet_dependency_release(tmp_path):
@@ -363,7 +367,8 @@ def test_delayed_old_finish_cannot_release_new_active_same_id(tmp_path):
     assert comms.agents.finish_turn(old_claim) is None
     assert comms.registry.require("child").active_turn == active
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     new_fence = comms.agents.finish_turn(new_claim)
     assert new_fence is not None and new_fence.identity.generation == new_claim.identity.generation
@@ -381,12 +386,14 @@ def test_delayed_old_terminal_cannot_release_newer_turn_before_reply(tmp_path, r
     assert new_fence is not None
     assert new_fence.identity.generation == old_fence.identity.generation + 1
     assert comms.goals.release_waits_after_terminal_turn(old_fence) == ()
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     # The newer turn publishes after the OLD callback, before its own callback.
     comms.messaging.send_message("child", "owner", "New turn's substantive answer")
     assert comms.goals.release_waits_after_terminal_turn(new_fence) == ()
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert comms.registry.require("owner").goal.id == goal.id
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
 
@@ -422,7 +429,8 @@ def test_terminal_fence_survives_rename_not_stop_or_metadata_edit(tmp_path):
     another.registry.unregister("child")
     another.registry.register(replace(child, active_turn=None), RunningThreadStatus())
     assert another.goals.release_waits_after_terminal_turn(stale) == ()
-    assert another.registry.require("owner").goal.state.active
+    observed_goal = (another.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
 
 
 def test_unbound_wait_is_rejected_without_replacing_current_wait(tmp_path):
@@ -469,7 +477,8 @@ async def test_acp_reply_read_failure_after_settled_reaches_terminal_caller(
         with pytest.raises(OSError, match="injected optional direct-reply read failure"):
             await agent.turns.run_agent_turn(child, child, "Finish work")
     assert terminal == ["settled"]
-    assert comms.registry.require("owner").goal.state.active
+    observed_goal = (comms.registry.require("owner").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
     assert comms.registry.require(child).active_turn is None
     assert native.provider.posts == len(native.saved_inputs()) == 1
@@ -505,7 +514,8 @@ async def test_quiet_dependency_finish_schedules_the_still_active_goal(tmp_path,
         assert not agent.inputs.pending_turns.get(owner)
         fence = comms.agents.finish_turn(lease)
         assert comms.goals.release_waits_after_terminal_turn(fence) == (owner,)
-        assert comms.registry.require(owner).goal.state.active
+        observed_goal = (comms.registry.require(owner).goal).require()
+        assert (observed_goal.active() is observed_goal)
         assert isinstance(comms.goals.goal_wait(owner), NoGoalWait)
         await agent.turns.goals.schedule_goal(owner)
         assert wakes == [owner]
@@ -548,11 +558,13 @@ async def test_acp_delayed_old_callback_after_new_finish_before_reply(
         new_fence = comms.agents.finish_turn(new_claim)
         release_old.set()
         await asyncio.wait_for(old_task, 5)
-        assert comms.registry.require("owner").goal.state.active
+        observed_goal = (comms.registry.require("owner").goal).require()
+        assert (observed_goal.active() is observed_goal)
         assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
         comms.messaging.send_message(child, "owner", "New turn's result")
         assert comms.goals.release_waits_after_terminal_turn(new_fence) == ()
-        assert comms.registry.require("owner").goal.state.active
+        observed_goal = (comms.registry.require("owner").goal).require()
+        assert (observed_goal.active() is observed_goal)
         assert native.provider.posts == len(native.saved_inputs()) == 1
     finally:
         release_old.set()
@@ -583,7 +595,8 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
         if isinstance(event, ae.StreamSettled):
             observed.append("native-settled")
             assert comms.registry.require(child).active_turn is not None
-            assert comms.registry.require("owner").goal.state.active
+            observed_goal = (comms.registry.require("owner").goal).require()
+            assert (observed_goal.active() is observed_goal)
             assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
         await real_emit(session_id, event, client, **kwargs)
 
@@ -598,9 +611,11 @@ async def test_acp_settled_is_not_terminal_reply_and_never_admits_waiter_model(
     assert not agent.inputs.pending_turns.get("owner")
     assert comms.registry.require(child).active_turn is None
     if reply:
-        assert comms.registry.require("owner").goal.state.active
+        observed_goal = (comms.registry.require("owner").goal).require()
+        assert (observed_goal.active() is observed_goal)
         assert isinstance(comms.goals.goal_wait("owner"), RecordedGoalWait)
         assert any(m.body == "Reported" for m in comms.bus.inbox("owner"))
     else:
-        assert comms.registry.require("owner").goal.state.active
+        observed_goal = (comms.registry.require("owner").goal).require()
+        assert (observed_goal.active() is observed_goal)
         assert isinstance(comms.goals.goal_wait("owner"), NoGoalWait)

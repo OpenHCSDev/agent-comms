@@ -20,8 +20,9 @@ from typing import Literal
 
 from .coordination_database import CoordinationStore
 from .field_codec import FieldCodec
+from .goals import GoalDeclaration, NoGoal
 from .goals import Goal
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
+from .typed_table import Column, Index, JsonStorage, SQLiteSchemaObject, TypedTable
 
 
 class GoalHistoryError(RuntimeError):
@@ -36,8 +37,8 @@ class GoalHistoryEntry(TypedTable):
     sequence: int | None = field(metadata={"sql": Column(primary_key=True)})
     kind: Literal["transition", "baseline", "observed_gap"]
     observed_at: float
-    before: Goal | None
-    after: Goal | None
+    before: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
+    after: GoalDeclaration = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
     owner_created_at: float = field(kw_only=True, metadata={"history_exclude": True})
     state: Literal["pending", "committed", "aborted", "uncertain"] = field(
         kw_only=True, metadata={"history_exclude": True}
@@ -46,7 +47,7 @@ class GoalHistoryEntry(TypedTable):
 
     def reports_turn(self, turn_id: str) -> bool:
         """A committed goal revision records its original model reporting turn."""
-        return self.after is not None and self.after.reported_turn == turn_id
+        return self.after.reports_turn(turn_id)
 
     def to_wire(self) -> dict[str, object]:
         # Preserve nested Goal family tags while projecting only public entry fields.
@@ -173,8 +174,8 @@ class GoalHistoryStore:
         owner_created_at: float,
         kind: Literal["transition", "baseline", "observed_gap"],
         state: Literal["pending", "committed"],
-        before: Goal | None,
-        after: Goal | None,
+        before: GoalDeclaration,
+        after: GoalDeclaration,
     ) -> int:
         with self._transaction() as connection:
             cursor = GoalHistoryEntry(
@@ -228,7 +229,7 @@ class GoalHistoryStore:
         except (sqlite3.Error, ValueError, TypeError) as error:
             raise GoalHistoryError("Cannot read goal history.") from error
 
-    def observe(self, owner_created_at: float, current: Goal | None) -> None:
+    def observe(self, owner_created_at: float, current: GoalDeclaration) -> None:
         """Reconcile uncertain writes and label unjournaled changes truthfully."""
         for row in self._rows(owner_created_at):
             if row.state != "pending":
@@ -243,15 +244,17 @@ class GoalHistoryStore:
                 self._set_state(row.sequence, "uncertain")
         committed = [row for row in self._rows(owner_created_at) if row.state == "committed"]
         if not committed:
-            if current is not None:
-                self._insert(owner_created_at, "baseline", "committed", None, current)
+            current.capture_baseline(self, owner_created_at)
             return
         last = committed[-1].after
         if last != current:
             # Known endpoints do not manufacture unobserved revisions or timing.
             self._insert(owner_created_at, "observed_gap", "committed", last, current)
 
-    def begin(self, owner_created_at: float, before: Goal | None, after: Goal | None) -> int:
+    def baseline(self, owner_created_at: float, goal: Goal) -> None:
+        self._insert(owner_created_at, "baseline", "committed", NoGoal(), goal)
+
+    def begin(self, owner_created_at: float, before: GoalDeclaration, after: GoalDeclaration) -> int:
         self.observe(owner_created_at, before)
         return self._insert(owner_created_at, "transition", "pending", before, after)
 
@@ -259,7 +262,7 @@ class GoalHistoryStore:
         self._set_state(sequence, "committed")
 
     def history(
-        self, owner_created_at: float, current: Goal | None, goal_id: str | None = None
+        self, owner_created_at: float, current: GoalDeclaration, goal_id: str | None = None
     ) -> tuple[GoalHistoryEntry, ...]:
         self.observe(owner_created_at, current)
         return tuple(
@@ -268,10 +271,7 @@ class GoalHistoryStore:
             if row.state == "committed"
             and (
                 goal_id is None
-                or goal_id
-                in {
-                    row.before.id if row.before is not None else None,
-                    row.after.id if row.after is not None else None,
-                }
+                or row.before.continues(goal_id)
+                or row.after.continues(goal_id)
             )
         )

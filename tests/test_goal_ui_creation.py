@@ -78,7 +78,8 @@ async def test_model_goal_has_authority_before_tool_return_and_ui_retry(tmp_path
         resumed = await proxy.request("retry_goal", goal_id=goal.id,
                                       expected_revision=blocked.revision)
         assert resumed["goal"]["id"] == goal.id
-        assert FieldCodec.decode(Goal, resumed["goal"]).state.active
+        observed_goal = (FieldCodec.decode(Goal, resumed["goal"])).require()
+        assert (observed_goal.active() is observed_goal)
         assert store.require_generation(goal.id).number == 2
         assert wakes == [session]
     finally:

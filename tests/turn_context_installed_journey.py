@@ -58,7 +58,8 @@ async def configured_terminal(owner, thread, output, acknowledgement, marker):
         state = service.registry.require(thread.name).turn_state
         assert not state.busy and state.finished_turn_id == lease.turn_id
         assert isinstance(service.goals.goal_wait('terminal-waiter'), NoGoalWait)
-        assert service.registry.require('terminal-waiter').goal.state.active
+        observed_goal = (service.registry.require('terminal-waiter').goal).require()
+        assert (observed_goal.active() is observed_goal)
         assert response.stop_reason == 'end_turn'
         assert any(marker in str(update) for update in subscriber.updates)
         child = owner.turns.persistent_backends[thread.name].child_state.idle().child

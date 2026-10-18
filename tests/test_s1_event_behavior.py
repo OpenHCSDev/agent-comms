@@ -257,7 +257,8 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
         execution.turn_lease,
     )
     assert isinstance(comms.goals.goal_wait("waiting"), NoGoalWait)
-    assert comms.registry.require("waiting").goal.state.active
+    observed_goal = (comms.registry.require("waiting").goal).require()
+    assert (observed_goal.active() is observed_goal)
     assert observed.index(ae.StreamSettled) < observed.index(ae.Done)
     if issubclass(case, SettingsCase):
         assert ae.ModelChanged in observed and ae.ThinkingChanged in observed
@@ -464,7 +465,8 @@ async def test_manual_bridge_real_native_terminal_releases_dependency(native_bac
         assert len([row for row in rows if row.get("type") == "compaction"]) == 1
         assert comms.registry.require(name).active_turn is None
         assert isinstance(comms.goals.goal_wait("waiting"), NoGoalWait)
-        assert comms.registry.require("waiting").goal.state.active
+        observed_goal = (comms.registry.require("waiting").goal).require()
+        assert (observed_goal.active() is observed_goal)
         terminal = next(i for i, event in enumerate(observed)
             if isinstance(event, TurnTranscriptUpdate) and not event.state.busy)
         compaction_end = next(i for i, event in enumerate(observed)

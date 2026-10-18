@@ -19,7 +19,7 @@ from agent_comms.turn_goal_account import OriginGoalSettlement, VerifiedGoalSett
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.input_attempt import NotSentInput
 from agent_comms.turn_goal_account import TurnGoalAccount
-from agent_comms.turn_input_source import OriginalTurnInput
+from agent_comms.turn_input_source import OriginalTurnInput, OwnerOriginalInput
 from test_s1_event_behavior import owner_turn as owner_turn
 from stored_inputs import stored_inputs
 
@@ -169,7 +169,7 @@ async def test_cancelled_acquisition_joins_reserved_input_before_rollback(
     session = await owner.new_session(cwd=str(tmp_path), mcp_servers=[])
     name = owner.sessions.bindings[session.session_id]
     execution = OwnedTurn(owner.turns, session.session_id, name, "cancel before native",
-                          original_owner_input=True)
+                          input_type=OwnerOriginalInput)
     captured, release = Event(), Event()
     reserve = OriginalTurnInput.reserve
 

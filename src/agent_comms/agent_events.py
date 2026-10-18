@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .native_turn_context import NativeContextManifestData
     from .comms import Comms
     from .goal_presentation import ThreadGoalExecution
+    from .goals import GoalDeclaration
     from .goals import Goal
     from .pi_events import RetryAttemptEvent
     from .turn_phase import TurnPhase
@@ -55,11 +56,11 @@ class GoalChanged(AgentEvent):
     authoritative snapshot supplies this event, never a tool's spelling.
     """
 
-    goal: Goal | None
+    goal: GoalDeclaration
     execution: ThreadGoalExecution
 
     @property
-    def signature(self) -> tuple[Goal | None, ThreadGoalExecution]:
+    def signature(self) -> tuple[GoalDeclaration, ThreadGoalExecution]:
         return self.goal, self.execution
 
 

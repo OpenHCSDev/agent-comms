@@ -10,6 +10,8 @@ import json
 from pathlib import Path
 
 import pytest
+
+from agent_comms.turn_input_source import OwnerOriginalInput
 from acp import RequestError
 
 from agent_comms import native_pi
@@ -80,7 +82,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
         async with asyncio.timeout(25):
             await agent.new_session(cwd=str(tmp_path / "project"), mcp_servers=[])
             await agent.turns.run_agent_turn("project", "project", "Seed this new isolated session",
-                                            original_owner_input=True)
+                                            input_type=OwnerOriginalInput)
             saved = Path(wired.registry.require("project").session_file)
             original = saved.read_bytes()
             # This existing HTTP fixture supports 400/503 errors. The shared
@@ -99,7 +101,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
                 provider.response_gate = AfterRequestHeaders()
             with pytest.raises(RequestError) as caught:
                 await agent.turns.run_agent_turn("project", "project", "New input receiving a refusal",
-                                                original_owner_input=True)
+                                                input_type=OwnerOriginalInput)
             failures = [item for update in attempted for item in decode_updates(update.field_meta)
                         if isinstance(item, RequestFailedUpdate)]
             assert len(failures) == 1
@@ -123,7 +125,7 @@ async def test_actual_native_outcome_classifies_once_and_next_input_is_independe
             provider.status = 200
             provider.text = "answered a genuinely new independent input"
             await agent.turns.run_agent_turn("project", "project", "Distinct new work after settled failure",
-                                            original_owner_input=True)
+                                            input_type=OwnerOriginalInput)
             assert len(calls) == 1  # Successful completion does not reclassify an old error.
             assert provider.posts == 3 + int(refuse_before_terminal)
             # Only a native re-request adds an HTTP post; user commits stay three.

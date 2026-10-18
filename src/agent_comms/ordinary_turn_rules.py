@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from .comms import Comms
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_waits import GoalWait
+    from .goals import GoalDeclaration
     from .goals import Goal
     from .queued_input import QueuedInput
     from .registry_document import RegistrySnapshot
@@ -155,7 +156,7 @@ class AcceptedInputSourceRule(ReservationRule):
 class OrdinaryContextCheck(RuleCheck):
     source: TurnInputSource
     owner: Thread
-    goal: Goal | None
+    goal: GoalDeclaration
     wait: GoalWait
     comms: Comms
 
