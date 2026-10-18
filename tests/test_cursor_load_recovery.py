@@ -115,9 +115,10 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         assert recovered.observation.status == "none"
         assert recovered.scope == loaded.scope
         assert recovered.revision > loaded.revision
-        for task in agent.inputs.drain_tasks.values():
+        drains = [state.drain_task for state in agent.inputs.drained.values() if state.drain_task]
+        for task in drains:
             task.cancel()
-        await asyncio.gather(*agent.inputs.drain_tasks.values(), return_exceptions=True)
+        await asyncio.gather(*drains, return_exceptions=True)
         await agent.inputs.drain_inbox(owner.name)
         settled_revision = agent.cursors.delivery(owner.name).revision
         for _ in range(20):
@@ -125,9 +126,10 @@ async def test_trusted_load_recovers_after_real_flock_contention(tmp_path):
         assert agent.cursors.delivery(owner.name).revision == settled_revision
         assert list(comms.views.full_history_page().messages) == []  # No input submitted or replayed.
     finally:
-        for task in agent.inputs.drain_tasks.values():
+        drains = [state.drain_task for state in agent.inputs.drained.values() if state.drain_task]
+        for task in drains:
             task.cancel()
-        await asyncio.gather(*agent.inputs.drain_tasks.values(), return_exceptions=True)
+        await asyncio.gather(*drains, return_exceptions=True)
         server_writer.close()
         writer.close()
         await asyncio.gather(server_writer.wait_closed(), writer.wait_closed())

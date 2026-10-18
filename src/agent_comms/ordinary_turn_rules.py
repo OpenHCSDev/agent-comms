@@ -86,8 +86,9 @@ class OrdinaryTurnRule(ReservationRule):
     explanation = "The captured ordinary turn is no longer the active turn."
 
     def violated(self, check: OrdinaryOwnerCheck) -> bool:
-        record = check.current.turn_record
-        return record is None or TurnId(record.read().id) != check.turn
+        return (
+            not check.current.turn_record.read().matches(check.turn)
+        )
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -279,13 +279,13 @@ class OwnedTurn:
         )
         self.finish_event = asyncio.Event()
         self.controller = (
-            self.runner.inputs.queued_inputs[self.session_id][self.accepted_input_id].controller
+            self.runner.inputs.state(self.session_id).queued[self.accepted_input_id].controller
             if self.accepted_input_id is not None
             else self.runner.runtime.controller.get()
         )
         if self.controller is UNBOUND_CONTROLLER:
             self.controller = None  # Autonomous/channel/goal turns have no controller.
-        self.runner.inputs.first_sources[self.session_id] = self.original
+        self.runner.inputs.state(self.session_id).first_source = self.original
         self.input_cleanup.pop_all()
         origin_claims = ExitStack()
         permits.callback(origin_claims.close)

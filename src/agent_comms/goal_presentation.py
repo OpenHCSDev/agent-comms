@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from .field_codec import FieldCodec, WireValue
 from .goal_states import (
@@ -215,6 +215,11 @@ class GoalSnapshot:
 
     goal: Goal | None
     execution: ThreadGoalExecution
+
+    @classmethod
+    def from_snapshot(cls, snapshot: GoalSnapshot, *extra: object) -> Self:
+        """This record carrying ``snapshot``, followed by its own declared fields."""
+        return cls(*(getattr(snapshot, item.name) for item in fields(GoalSnapshot)), *extra)
 
     def __post_init__(self) -> None:
         checkpoint = (AbsentGoalCheckpoint() if self.goal is None

@@ -227,7 +227,7 @@ async def configured_pure_channel(arguments):
                     # otherwise an observer can block publisher COMMIT while
                     # awaiting a registry lock held by that publisher.
                     active = tuple(name for name in names
-                        if service.registry.require(name).active_turn is not None)
+                        if service.registry.require(name).active_turn.executing)
                     observed = {'elapsed_seconds':time.perf_counter()-begun,
                             'active_owners':active,
                             'dispatched_unproven_inputs':[{'owner':row.owner_thread,
@@ -412,7 +412,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
                 'Original completed before cancellation; cancellation was not exercised'
             await asyncio.sleep(.03)
         await attachment.cancel(name)
-        while service.registry.require(name).active_turn is not None:
+        while service.registry.require(name).active_turn.executing:
             await asyncio.sleep(.03)
         cancelled_claims, cancelled_inputs, cancelled_receipts = observe(cancelled)
         assert {row.input_id for row in authorized}.issubset({row.input_id for row in cancelled_inputs})
@@ -421,7 +421,7 @@ async def configured_cancel_continue(arguments, service, attachment, name, sende
         while True:
             claims, inputs, receipts = observe(continuation)
             if claims and all(claim.lifecycle.completed for claim in claims) and \
-                    service.registry.require(name).active_turn is None:
+                    not service.registry.require(name).active_turn.executing:
                 full = tuple(row for row in inputs if row.reference_stage is FullNativeExecution)
                 assert len(full) == 1 and full[0].reference.recorded
                 assert len(receipts) == 1 and receipts[0].exact_target == '#openhcs'
@@ -515,7 +515,7 @@ async def configured_mixed_routes(arguments):
                     cursors = CurrentNativeCursor.select(db,where='input_id IS NOT NULL')
                     if late is not None and len(assignments) == len(originals)+1 and all(
                             row.lifecycle.completed for row in assignments) and len(cursors) == 1 and (
-                            cursors[0].covered_seq >= late.seq) and service.registry.require(name).active_turn is None:
+                            cursors[0].covered_seq >= late.seq) and not service.registry.require(name).active_turn.executing:
                         assert len(inputs) == 2 and all(row.reference_stage is FullNativeExecution for row in inputs)
                         links = ExecutionAssignmentLink.select(db,order_by=('execution_id','ordinal'))
                         original_claims = {row.assignment_id for row in assignments if row.wire_seq != late.seq}
@@ -1010,7 +1010,7 @@ async def run(arguments):
                 expected_posts = (4 if arguments.wave_size > 1 else
                                   2 if arguments.cancel_before_grant else len(names))
                 if arguments.wave_size > 1 and provider.posts == 1 and late_original is None:
-                    assert service.registry.require(names[0]).active_turn is not None
+                    assert service.registry.require(names[0]).active_turn.executing
                     # All original batch members were reserved before this late
                     # arrival, while the real provider's first response is held.
                     with closing(sqlite3.connect((service.root/'coordination.sqlite3').as_uri()+
@@ -1027,7 +1027,7 @@ async def run(arguments):
                     provider.response_gate.set()
                 if provider.posts == expected_posts:
                     if not provider.response_gate.is_set():
-                        assert all(service.registry.require(name).active_turn is not None
+                        assert all(service.registry.require(name).active_turn.executing
                                    for name in names)
                         concurrent_native = True
                         provider.response_gate.set()
@@ -1051,7 +1051,7 @@ async def run(arguments):
                             else:
                                 completed = len(rows)==len(names) and all(
                                     row.lifecycle.declared_name=='ignored' for row in rows)
-                    if completed and all(service.registry.require(name).active_turn is None
+                    if completed and all(not service.registry.require(name).active_turn.executing
                                          for name in names):
                         break
                 if not diagnosed and time.perf_counter()-started > 25:

@@ -28,7 +28,7 @@ from .thread_identity import (
     TurnId,
     TurnIdentity,
 )
-from .turn_lease import TurnFence, TurnLeaseFence, TurnRecord, TurnState
+from .turn_lease import NoTurnRecord, TurnFence, TurnLeaseFence, TurnRecord, TurnState
 
 if TYPE_CHECKING:
     from .launch_runtime import ThreadLaunch
@@ -91,7 +91,7 @@ class Thread(ThreadProvenance):
         default_factory=AgentBackend.for_new_threads, kw_only=True,
         metadata={"wire_omit_default": True, "registration_inheritance": InheritPrevious},
     )
-    turn_record: TurnRecord | None = None
+    turn_record: TurnRecord = field(default_factory=NoTurnRecord)
     channel_scope_generation: int = 0
     turn_generation: int = 0
     last_finished_turn_id: str | None = None
@@ -130,8 +130,7 @@ class Thread(ThreadProvenance):
 
     @property
     def turn_state(self) -> TurnState:
-        record = self.turn_record
-        return TurnState(record.read() if record is not None else None, self.last_finished_turn_id)
+        return TurnState(self.turn_record.read(), self.last_finished_turn_id)
 
     def restart_candidates(self, status):
         return self.execution.restart_candidates(self, status)
@@ -249,9 +248,7 @@ class Thread(ThreadProvenance):
             raise RelationViolationError("live owner already has an active turn")
 
     def require_current_turn(self, claim_scope: int) -> None:
-        record = self.turn_record
-        if record is not None and not record.read().current(claim_scope, self.turn_generation):
-            raise RelationViolationError("live owner turn claim_scope is no longer current")
+        self.turn_record.read().require_current(claim_scope, self.turn_generation)
 
     def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
         lease = self.turn_lease
@@ -357,7 +354,7 @@ class Thread(ThreadProvenance):
 
     def without_turn(self) -> Thread:
         """Drop the reference; the registry transaction owns revoking the record."""
-        return replace(self, turn_record=None)
+        return replace(self, turn_record=NoTurnRecord())
 
     def preserve_registration_history(self, previous: Thread) -> Thread:
         """Metadata writers cannot forge channel scope or reset a finished turn."""
@@ -409,20 +406,7 @@ class Thread(ThreadProvenance):
     @property
     def turn_lease(self) -> TurnLeaseFence | None:
         """Read this record's exact turn once; no phase is cached on the thread."""
-        record = self.turn_record
-        if record is None:
-            return None
-        turn = record.read()
-        if not self.process_identity.owns_turn(turn):
-            raise RelationViolationError("A turn must belong to the registered executor.")
-        if turn.turn_generation != self.turn_generation or self.turn_generation <= 0:
-            raise RelationViolationError("Active turn generation differs from its owner.")
-        if turn.claimed_generation is None:
-            return None
-        return TurnLeaseFence(
-            identity=TurnIdentity(self.incarnation, self.turn_generation),
-            turn_id=turn.id, claimed_generation=turn.claimed_generation, record=record,
-        )
+        return self.turn_record.lease(self.incarnation, self.process_identity, self.turn_generation)
 
     def require_turn_lease(self) -> TurnLeaseFence:
         lease = self.turn_lease
@@ -451,8 +435,7 @@ class Thread(ThreadProvenance):
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
-        record = self.turn_record
-        turn_id = record.read().id if record is not None else self.last_finished_turn_id
+        turn_id = self.turn_record.read().observed_id(self.last_finished_turn_id)
         if turn_id is None:
             return None
         return TurnFence(TurnIdentity(self.incarnation, self.turn_generation), turn_id, claim_scope)
@@ -466,12 +449,11 @@ class Thread(ThreadProvenance):
 
     def turn_started_by(self, updated_at_ms: int) -> bool:
         """Read the original start only when this decision needs it."""
-        record = self.turn_record
-        return record is not None and record.read().started_at * 1000 <= updated_at_ms + 1
+        return self.turn_record.read().started_by(updated_at_ms)
 
     @property
     def executing(self) -> bool:
-        return self.turn_record is not None
+        return self.turn_record.executing
 
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from .agent_events import GoalChanged
     from .message_reference import MessageReference
     from .native_input_owner import RegistryOwner
-from .goal_presentation import ThreadGoalExecution, GoalWaitTarget
+from .goal_presentation import GoalSnapshot, ThreadGoalExecution, GoalWaitTarget
 from .goals import Goal
 from .message_bus import MessageBus
 from .store_files import SharedLock, _store_lock
@@ -269,7 +269,7 @@ class Goals:
             )
             if (
                 source is None
-                or source.executing
+                or source.turn_record.read().executing
                 or observed is None
                 or not observed.matches(fence.renamed(canonical))
                 or not snapshot.statuses[canonical].active
@@ -320,11 +320,9 @@ class Goals:
             return tuple(released)
 
     def goal_execution(self, name: str) -> ThreadGoalExecution:
-        return self._goal_snapshot(name)[1]
+        return self._goal_snapshot(name).execution
 
-    def goal_changed(
-        self, name: str, previous: tuple[Goal | None, ThreadGoalExecution] | None
-    ) -> GoalChanged | None:
+    def goal_changed(self, name: str, previous: GoalSnapshot | None) -> GoalChanged | None:
         """Announce a durable change through S1's event vocabulary.
 
         Existing registry/history and wait persistence are the cross-process
@@ -333,19 +331,19 @@ class Goals:
         from .agent_events import GoalChanged
 
         current = self.goal_snapshot(name)
-        return GoalChanged(*current) if current != previous else None
+        return GoalChanged(current) if current != previous else None
 
-    def goal_snapshot(self, name: str) -> tuple[Goal | None, ThreadGoalExecution]:
+    def goal_snapshot(self, name: str) -> GoalSnapshot:
         """Read current goal and its scheduling projection as one owner snapshot."""
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             return self._goal_snapshot(name)
 
-    def _goal_snapshot(self, name: str) -> tuple[Goal | None, ThreadGoalExecution]:
+    def _goal_snapshot(self, name: str) -> GoalSnapshot:
         snapshot = self.registry.snapshot()
         canonical = snapshot.canonical_name(name)
         goal = snapshot.threads[canonical].goal
         execution = GoalWaits.execution(goal, self.waits.read(), snapshot, self.agents)
-        return goal, execution
+        return GoalSnapshot(goal, execution)
 
     def consume_goal_wait(self, name: str, wait_id: str) -> bool:
         """Called under the send-boundary wire lock after reserving an attempt."""

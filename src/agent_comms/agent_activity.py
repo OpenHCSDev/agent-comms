@@ -267,13 +267,13 @@ class AgentActivity:
     def transition_turn(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = lease.record.transition(lease, phase)
-            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            self._record_turn_activity(lease.identity.incarnation.name, (state.active.phase for state in effects))
             return effects
 
     def observe_native_phase(self, lease: TurnLeaseFence, phase: TurnPhase) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = lease.record.observe_native_phase(lease, phase)
-            self._record_turn_activity(lease.identity.incarnation.name, (state.phase for state in effects))
+            self._record_turn_activity(lease.identity.incarnation.name, (state.active.phase for state in effects))
             return effects
 
     def finish_turn(self, lease: TurnLeaseFence) -> FinishedTurnFence | None:

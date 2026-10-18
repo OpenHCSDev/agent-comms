@@ -17,20 +17,27 @@ import threading
 import time
 from collections.abc import Callable
 from contextlib import AbstractContextManager, ExitStack
+from typing import TYPE_CHECKING
 from .diagnostics import PublicationMeasurements
 from .coordination_errors import CoordinationError
+
+if TYPE_CHECKING:
+    from .tracked_turn import TrackedTurnSession
 
 _MAX_SEND_SECONDS = 5.0
 
 
 class PromptBoundary(ABC):
     @abstractmethod
-    async def send_prompt(self, turn) -> None: ...
+    async def send_prompt(self, turn: TrackedTurnSession) -> None: ...
 
 
 class UnguardedPrompt(PromptBoundary):
-    async def send_prompt(self, turn) -> None:
+    async def send_prompt(self, turn: TrackedTurnSession) -> None:
         await turn.send(turn.command)
+
+
+UNGUARDED_PROMPT = UnguardedPrompt()
 
 
 class PromptSendFailure(RuntimeError):  # noqa: N818 - original writer failure

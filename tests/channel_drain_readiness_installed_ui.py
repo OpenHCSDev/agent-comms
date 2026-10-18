@@ -66,7 +66,7 @@ async def acceptance(app, pilot, agent, comms, entered, release, hold_next, requ
     view.prompt.prompt_text_area.focus()
     await pilot.press('enter')
     await until(pilot, lambda: response_painted(app, view, 'NATIVE_RESPONSE_1'))
-    await until(pilot, lambda: not comms.registry.require('beta').executing)
+    await until(pilot, lambda: not comms.registry.require('beta').active_turn.executing)
     assert len(requests) == 1
     (evidence/'first-reply.svg').write_text(app.export_screenshot())
     user = comms.messaging.user_identity(str(agent.project_root_path)).name

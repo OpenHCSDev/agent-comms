@@ -21,7 +21,7 @@ from .registry_document import RegistryDocument, RegistryEntry
 from .routing import TurnRouting
 from .thread_identity import TurnIdentity
 from .threads import Thread
-from .turn_lease import ActiveTurn, TurnRecord
+from .turn_lease import ActiveTurn, StoredTurnRecord
 from .store_files import SharedLock
 
 
@@ -91,7 +91,7 @@ class RegistryEdit:
         leased = replace(
             current, turn_generation=identity.generation, last_finished_turn_id=None,
             project_resume_due=False,
-            turn_record=TurnRecord.begin(self.store.path, identity, turn),
+            turn_record=StoredTurnRecord.begin(self.store.path, identity, turn),
         )
         self.document.threads[current.name] = leased
         self.document.last_seen[current.name] = time.time()

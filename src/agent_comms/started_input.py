@@ -27,7 +27,7 @@ class StartedInput:
             stored = document.rows.get(key)
             if stored is not None and not stored.unresolved:
                 await inputs.emit_input_disposition(session_id, stored)
-        item = inputs.queued_inputs.get(session_id, {}).get(self.accepted_id)
+        item = inputs.state(session_id).queued.get(self.accepted_id)
         text = await item.started(inputs) if item is not None else self.notice_text
         public_id = row.public_id if self.notice_keys else self.accepted_id
         current = await inputs.queue_binding(session_id)
@@ -38,5 +38,5 @@ class StartedInput:
                 public_id, text, current, current.start_revision(inputs, session_id), row.native_id,
             ).acp_chunk(),
         )
-        inputs.queued_inputs.get(session_id, {}).pop(self.accepted_id, None)
+        inputs.state(session_id).queued.pop(self.accepted_id, None)
         await inputs.emit_queue_state(session_id)

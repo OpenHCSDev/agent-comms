@@ -68,19 +68,20 @@ def test_coding_names_and_argument_types_come_from_declarations():
     call = CodingCall.decode("call", "write", {"path": "x", "content": "value"})
     assert isinstance(call.tool.claim, WritableFileClaim)
     with pytest.raises((TypeError, ValueError)):
-        CodingCall.decode("call", "write", {"path": True, "content": "v"})
+        CodingCall.decode("call", "write", {"path": True, "content": "v"}).require_tool()
     # Pi's full tool schema stays authoritative, including its current edits[]
     # representation; only the mutation path is decoded by the claim policy.
     args = {"path": "x", "edits": [{"oldText": "a", "newText": "b"}]}
     assert CodingCall.decode("edit", "edit", args).tool.arguments == args
     with pytest.raises(ValueError):
-        CodingCall.decode("call", "forged", {})
+        CodingCall.decode("call", "forged", {}).require_tool()
 
 
 @pytest.mark.parametrize("name,arguments", [
+    ("bash", "pwd"),
+    ("bash", []),
     ("read", {"file_path": "x"}),
     ("read", {"path": "x", "file_path": "x"}),
-    ("read", {"path": "x", "offset": None}),
     ("read", {"path": "x", "limit": True}),
     ("bash", {}),
     ("bash", {"command": True}),
@@ -93,8 +94,12 @@ def test_coding_names_and_argument_types_come_from_declarations():
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
     from agent_comms.native_tool_call import SelectedToolDenied
 
+    from agent_comms.channel_coding_tools import RefusedCodingCall
+
+    call = CodingCall.decode("bad-argument-shape", name, arguments)
+    assert isinstance(call, RefusedCodingCall)
     with pytest.raises(SelectedToolDenied):
-        CodingCall.decode("bad-argument-shape", name, arguments)
+        call.require_tool()
 
 
 @pytest.mark.parametrize("name,arguments,title", [

@@ -13,8 +13,8 @@ import json
 import os
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
-from contextlib import asynccontextmanager, contextmanager
+from collections.abc import AsyncIterator, Iterator
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Literal
@@ -192,13 +192,16 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
 
 class MaintenanceIngress(ABC):
     @abstractmethod
-    def ingress_async(self): ...
+    def ingress_async(self) -> AbstractAsyncContextManager[MaintenanceStatus]: ...
 
 
 class UncoordinatedIngress(MaintenanceIngress):
     @asynccontextmanager
-    async def ingress_async(self):
+    async def ingress_async(self) -> AsyncIterator[MaintenanceStatus]:
         yield MaintenanceStatus()
+
+
+UNCOORDINATED_INGRESS = UncoordinatedIngress()
 
 
 class MaintenanceBarrier(MaintenanceIngress):
@@ -352,7 +355,7 @@ class MaintenanceBarrier(MaintenanceIngress):
             yield self.assert_open_unlocked()
 
     @asynccontextmanager
-    async def ingress_async(self):
+    async def ingress_async(self) -> AsyncIterator[MaintenanceStatus]:
         """Acquire the same ingress gate without blocking a native event loop.
 
         The borrower writes synchronously, then releases before waiting for

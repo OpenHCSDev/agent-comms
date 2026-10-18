@@ -184,7 +184,7 @@ async def test_actual_saved_terminal_failure_allows_only_new_input(journey, tria
     assert refusal.posts == 1
     assert caught.value.context.session_file == Path(seed.session_file)
     assert all(not child.alive() for child in journey.children)
-    assert journey.comms.registry.require("beta").active_turn is None
+    assert not journey.comms.registry.require("beta").active_turn.executing
     notice = list(journey.comms.views.full_history_page().messages)[-1]
     assert isinstance(notice.role, NoticeRole) and "No automatic retry" in notice.body
     delivery = journey.comms.bus.log.read_delivery_cohort(journey.root_id, notice.seq)

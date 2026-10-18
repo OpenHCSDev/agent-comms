@@ -6,7 +6,7 @@ from dataclasses import replace
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase
-from agent_comms.turn_lease import TurnRecord
+from agent_comms.turn_lease import StoredTurnRecord
 
 
 def test_phase_write_changes_only_the_leased_turn_at_point_of_use(tmp_path, monkeypatch):
@@ -27,7 +27,7 @@ def test_phase_write_changes_only_the_leased_turn_at_point_of_use(tmp_path, monk
 
     phase = ToolRunningPhase(tools=(('read-one', 'read'),))
     effects = comms.agents.observe_native_phase(lease, phase)
-    assert len(effects) == 1 and effects[0].phase == phase
+    assert len(effects) == 1 and effects[0].active.phase == phase
     assert registry.read_bytes() == root_bytes
     assert registry.stat().st_mtime_ns == root_stat.st_mtime_ns
     assert (guard.read_bytes() if guard.exists() else None) == guard_bytes
@@ -35,19 +35,19 @@ def test_phase_write_changes_only_the_leased_turn_at_point_of_use(tmp_path, monk
     assert b'"active_turn"' not in registry.read_bytes()
     after = comms.registry.entry('worker')
     assert after.revision == before.revision
-    assert after.entry.thread.turn_state.phase == phase
-    assert before.entry.thread.turn_state.phase == phase
-    assert captured_state.phase != phase
-    assert comms.registry.snapshot().threads['worker'].turn_state.phase == phase
+    assert after.entry.thread.turn_state.active.phase == phase
+    assert before.entry.thread.turn_state.active.phase == phase
+    assert captured_state.active.phase != phase
+    assert comms.registry.snapshot().threads['worker'].turn_state.active.phase == phase
 
     reads = []
-    read = TurnRecord.read
+    read = StoredTurnRecord.read
 
     def counted(record):
         reads.append(record.path)
         return read(record)
 
-    monkeypatch.setattr(TurnRecord, 'read', counted)
+    monkeypatch.setattr(StoredTurnRecord, 'read', counted)
     snapshot = comms.registry.snapshot()
     comms.registry.entry('worker')
     replace(snapshot.threads['worker'], title='metadata only')

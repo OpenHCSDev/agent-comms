@@ -47,7 +47,7 @@ def canonical_agent(comms, **options):
 
 async def reply_turn_finished(owner, session):
     """Wait for the reply turn a drain scheduled; the task removes itself when it ends."""
-    task = owner.inputs.wake_tasks.get(session)
+    task = owner.inputs.state(session).wake_task
     if task is not None:
         await task
 

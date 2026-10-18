@@ -183,15 +183,14 @@ class RegistryDocument(RegistryPresence):
         """Retire a withdrawn reference inside this registry transaction."""
         previous = self.threads.get(thread.name)
         if previous is not None and previous.turn_record != thread.turn_record:
-            if (record := previous.turn_record) is not None:
-                record.without_claim()
+            previous.turn_record.without_claim()
         self.threads[thread.name] = thread
 
     def advance_claim(self, name: str) -> int:
         """Revoke phase publication together with the original input permission."""
         thread = self.threads.get(name)
-        if thread is not None and (record := thread.turn_record) is not None:
-            record.without_claim()
+        if thread is not None:
+            thread.turn_record.without_claim()
         return self.claims.advance(name)
 
     def snapshot(self) -> RegistrySnapshot:
@@ -531,7 +530,7 @@ class RegistryDocument(RegistryPresence):
             return False, None
         canonical_lease = lease.renamed(name)
         record = current.turn_record
-        if record is None or record != canonical_lease.record:
+        if record != canonical_lease.record:
             return False, None
         if TurnIdentity(current.incarnation, current.turn_generation) != canonical_lease.identity:
             return False, None
