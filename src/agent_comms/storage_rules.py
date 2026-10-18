@@ -42,7 +42,8 @@ class StorageRule:
     volume: StoragePath = Path.home()
     scratch_base: StoragePath = Path.home() / '.cache' / 'agent-scratch'
     checkout_base: StoragePath = Path.home() / 'wt'
-    native_cache: StoragePath = Path.home() / '.cache' / 'agent-comms' / 'native'  # one test environment per native pin
+    # one test environment per native pin, shared by its digest
+    native_cache: StoragePath = Path.home() / '.cache' / 'agent-comms' / 'native'
 
     def __post_init__(self):
         limits = (self.floor_gib, self.cleanup_gib, self.scratch_cap_gib)

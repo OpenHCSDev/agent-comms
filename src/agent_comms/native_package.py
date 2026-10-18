@@ -49,15 +49,18 @@ MANIFEST = _resource_root() / "pi-native.sha256"
 OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
 
 
+PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"
+
+
 def pin_id() -> str:
     return hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
 
 
 def pinned_location() -> Path:
-    return MANIFEST.parent / f".pi-native-{pin_id()}" / "node_modules/@earendil-works/pi-coding-agent"
+    return MANIFEST.parent / f".pi-native-{pin_id()}" / PACKAGE_LAYOUT
 
 
-def native_environment(cache: Path = StorageRule().native_cache) -> Path:
+def native_environment(cache: Path = StorageRule.native_cache) -> Path:
     """This pin's test environment, shared by digest: its manifest beside its built artifact,
     laid out as stack/ is. stack/bin/pi-native-test-env builds it; the live install never does."""
     return cache / pin_id()
