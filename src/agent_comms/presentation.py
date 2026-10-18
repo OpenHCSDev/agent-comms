@@ -19,7 +19,7 @@ from .bus_activity_index import ChannelActivity
 from .bus_route_counts import OpenedRouteCounts
 from .bus_display_index import BusDisplayIndex, DisplayMetricScope
 from .channel_targets import CommandTarget
-from .channels import Channel
+from .channels import Channel, ChannelMemberIndex, Channels
 from .display_order import ChannelSort, NameChannelSort
 from .goal_presentation import ThreadGoalExecution, IdleGoalExecution
 from .goal_waits import GoalWaits
@@ -340,7 +340,7 @@ class DisplaySelection:
             yield selected
 
     @property
-    def channels(self) -> Mapping[str, Channel]:
+    def channels(self) -> Channels:
         return self.catalog.views(self.registry.threads)
 
     @property
@@ -522,7 +522,7 @@ class ChannelView:
     def roster(
         cls,
         snapshot: RegistrySnapshot,
-        channels: Mapping[str, Channel],
+        channels: Iterable[Channel],
         pins: Mapping[str, frozenset[str]],
         order: type[ChannelSort],
         activity: Mapping[str, ObservedActivity],
@@ -532,16 +532,14 @@ class ChannelView:
         show_stopped: bool,
         show_archived: bool,
     ) -> tuple[ChannelView, ...]:
+        index = ChannelMemberIndex(snapshot.threads.values())
         people = {thread.name: thread for thread in snapshot.visible_threads(
             show_stopped=show_stopped, show_archived=show_archived,
         )}
         views: list[ChannelView] = []
-        for channel in channels.values():
-            if channel.archived and not show_archived:
-                continue
+        for channel in channels:
             pinned_members = pins.get(channel.name, frozenset())
-            registered = tuple(name for name, thread in snapshot.threads.items()
-                               if thread.role.executable and channel.matches(thread.tags))
+            registered = tuple(thread.name for thread in channel.members(index))
             members = tuple(
                 sorted(
                     (name for name in registered if name in people),
@@ -669,7 +667,7 @@ class CoordinationSnapshot:
     @classmethod
     def capture(
         cls, root: Path, registry: RegistrySnapshot, catalog: CatalogDocument,
-        agents: AgentActivity, declarations: Mapping[str, Channel],
+        agents: AgentActivity, declarations: Channels,
         sent: Mapping[str, float], messages: Mapping[str, ChannelActivity], *,
         unread: Mapping[str, int], channel_unread: Mapping[str, int],
         show_stopped: bool, show_archived: bool, read_marker_notice: str | None = None,
@@ -682,7 +680,7 @@ class CoordinationSnapshot:
         activities = {name: view.activity for name, view in threads.items()}
         return cls(
             channels=OrderedDict((view.channel.name, view) for view in ChannelView.roster(
-                registry, declarations, catalog.pinned_members(), catalog.list_order,
+                registry, declarations.visible(show_archived), catalog.pinned_members(), catalog.list_order,
                 activities, sent, messages,
                 show_stopped=show_stopped, show_archived=show_archived,
             )),
