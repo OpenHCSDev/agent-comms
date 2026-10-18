@@ -178,6 +178,7 @@ class CarryChain:
                     known[name] = step
         if not known:
             return cls(())
+        known = cls.spliced(known, revision)
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -196,6 +197,26 @@ class CarryChain:
         if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
         return cls(tuple(reversed(steps)))
+
+    @staticmethod
+    def spliced(known: dict[str, Step], revision: str) -> dict[str, Step]:
+        """A line of deleted steps that nothing follows forked off the chain before it was
+        deleted; it runs after the line that kept a step in the tree, so no kept step moves."""
+        followed = {step.after for step in known.values()}
+        heads = sorted((step for step in known.values() if step.name not in followed),
+                       key=lambda step: step.revision == revision, reverse=True)
+        tail = heads[0].name if heads and heads[0].revision == revision else None
+        for head in heads[1 if tail else 0:]:
+            line = [head]
+            # Walk back to the fork: the first step whose parent another step also follows.
+            parents = [step.after for step in known.values()]
+            while line[-1].after in known and parents.count(line[-1].after) == 1:
+                line.append(known[line[-1].after])
+            if tail is None or any(step.revision == revision for step in line):
+                continue
+            known = {**known, line[-1].name: replace(line[-1], after=tail)}
+            tail = head.name
+        return known
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
