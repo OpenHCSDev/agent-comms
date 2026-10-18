@@ -43,6 +43,8 @@ from .goal_actions import (
     SetGoalAction,
 )
 from .goal_history import RecordedGoalRevision
+from .goal_waits import StandbyReview, StandbyReviewSummary
+from .input_attempt import UnresolvedInput
 from .goal_presentation import ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, OrderCheck
@@ -214,13 +216,13 @@ class InboxRead(ToolResult):
     """An oversized read names its snapshot file and counts in place of the arrays."""
     messages: tuple[Message, ...]
     acknowledged: int
-    unresolved_inputs: tuple[dict[str, JsonValue], ...]
+    unresolved_inputs: tuple[UnresolvedInput, ...]
     complete: bool | None = _omitted_when_absent()
     ack_deferred: bool | None = _omitted_when_absent(wire_name="ackDeferred")
     counts: dict[str, int] | None = _omitted_when_absent()
     result_file: str | None = _omitted_when_absent()
     instruction: str | None = _omitted_when_absent()
-    standby_review: dict[str, JsonValue] | None = _omitted_when_absent()
+    standby_review: StandbyReview | StandbyReviewSummary | None = _omitted_when_absent()
 
 
 @dataclass(frozen=True)
@@ -348,8 +350,8 @@ def _tag_set(value: str) -> frozenset[str]:
 
 def _bounded_inbox_response(
     messages: tuple[Message, ...],
-    unresolved: tuple[dict[str, JsonValue], ...],
-    review: dict[str, JsonValue] | None,
+    unresolved: tuple[UnresolvedInput, ...],
+    review: StandbyReview | None,
     result_file: str,
     *,
     ack: bool,
@@ -371,22 +373,8 @@ def _bounded_inbox_response(
         ),
     )
     if review is not None:
-        review_summary = {
-            "complete": False,
-            "counts": {
-                key: len(review[key])
-                for key in ("messages", "already_reviewed_inputs", "excluded_inputs")
-            },
-        }
-        bounded = replace(bounded, standby_review=review_summary)
-        candidate = replace(bounded, standby_review={
-            **review_summary,
-            "goal_id": review["goal_id"],
-            "wait_for": review["wait_for"],
-            "messages": review["messages"],
-            "reviewed_inputs": review["reviewed_inputs"],
-            "messages_complete": True,
-        })
+        bounded = replace(bounded, standby_review=review.summary())
+        candidate = replace(bounded, standby_review=review.eligible_summary())
         if len(serialize_tool_output(candidate).encode("utf-8")) <= MAX_INLINE_OUTPUT_BYTES:
             return candidate
     return bounded

@@ -56,7 +56,7 @@ def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, c
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b")],
         "acknowledged": 0,
-        "unresolved_inputs": comms.goals.unresolved_inputs("b"),
+        "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
     }
 
     result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
@@ -94,7 +94,7 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b")],
         "acknowledged": int(ack),
-        "unresolved_inputs": comms.goals.unresolved_inputs("b"),
+        "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
     }
     authority_before = ledger.path.read_bytes()
     assert invoke_tool(comms, "comms_inbox", {"thread": "b", "ack": ack}, caller=NoThreadCaller()) == expected
@@ -200,7 +200,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         invoke_tool(comms, "comms_goal", report, caller=ThreadCaller("b"))
     assert stored_inputs(dispositions.root) == before
     full_review = json.loads(Path(result["result_file"]).read_text())["standby_review"]
-    assert full_review == review
+    assert full_review == FieldCodec.encode(review)
     assert full_review["messages"][0]["text"] == messages[0].body
     comms.registry.register(
         replace(comms.registry.require("a"), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -301,7 +301,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     assert result["acknowledged"] == 0 and comms.bus.pending_count("b") == 2
     assert stored_inputs(dispositions.root) == before
     full = json.loads(Path(result["result_file"]).read_text())
-    assert full["standby_review"] == comms.goals.goal_input_review("b", goal.id, ["a"])
+    assert full["standby_review"] == FieldCodec.encode(comms.goals.goal_input_review("b", goal.id, ["a"]))
     assert len(full["standby_review"]["excluded_inputs"]) == 930
     report = {
         "goal_id": goal.id,
