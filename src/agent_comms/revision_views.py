@@ -36,6 +36,10 @@ class SidebarView(RevisionView):
     """Native unread progress updates counts without rebuilding thread presentations."""
 
 
+class CommanderView(RevisionView):
+    """Orders, retained deliveries, recent turns and time-derived commander attention."""
+
+
 class ExternalTranscriptsView(RevisionView):
     """CLI drafts and finished items, independently of coordination status."""
 

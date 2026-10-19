@@ -45,7 +45,7 @@ from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope
 from .read_ledger import NoReadNotice, ReadLedger, ReadNotice
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
-from .revision_views import (STATUS_SOURCE, BusSourceView, ExternalTranscriptsView,
+from .revision_views import (STATUS_SOURCE, BusSourceView, CommanderView, ExternalTranscriptsView,
                              NotificationsView, RegistrationsView, RevisionView,
                              SidebarView, StoresView)
 from .runtime_info import RuntimeInfo
@@ -771,7 +771,9 @@ class WireRevision(ReadState):
     """One observation of every Comms store a view derives from, by name."""
 
     registry: tuple[FileRevision, ...] = revision_source(lambda views: (views.registry.store.path,),
-        *STATUS_SOURCE, RegistrationsView, NotificationsView)
+        *STATUS_SOURCE, RegistrationsView, NotificationsView, CommanderView)
+    todos: tuple[FileRevision, ...] = revision_source(lambda views: views.goals.todos.source_paths(),
+        StoresView, CommanderView)
     catalog: tuple[FileRevision, ...] = revision_source(lambda views: (views.channels.catalog.path,),
         *STATUS_SOURCE, RegistrationsView)
     bus_log: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.log.path,),
@@ -793,12 +795,12 @@ class WireRevision(ReadState):
     relationships: tuple[FileRevision, ...] = revision_source(lambda views: (relationships.RelationshipStore.path_in(views.root),),
         *STATUS_SOURCE)
     notifications: tuple[FileRevision, ...] = revision_source(lambda views: NotificationAssignment.handling_paths(views.root),
-        *STATUS_SOURCE, NotificationsView)
+        *STATUS_SOURCE, NotificationsView, CommanderView)
     external_transcripts: tuple[FileRevision, ...] = revision_source(lambda views: ExternalTranscript.source_paths(views.root),
-        StoresView, ExternalTranscriptsView)
+        StoresView, ExternalTranscriptsView, CommanderView)
     # Notifications change once per expiry period, not per tick.
     expiry_tick: int = field(metadata={
-        "views": (NotificationsView,),
+        "views": (NotificationsView, CommanderView),
         "differs": lambda before, now: (
             before // WireRevision.expiry_seconds != now // WireRevision.expiry_seconds)})
 

@@ -329,6 +329,15 @@ class ProgressSource:
     def since(self) -> float:
         return self.todo.order.at.recorded_at("An order")
 
+    def progress(self) -> OrderProgress:
+        """One selection algorithm for measured tools and read-only status views."""
+        members = sorted(OrderProgress.members_with(FoundProgress), key=lambda member: member.precedence)
+        try:
+            return next((progress for member in members for progress in member.found(self)),
+                        NoCommitProgress())
+        except subprocess.TimeoutExpired as unread:
+            return UnreadProgress(str(unread))
+
     def requests(self, state: str) -> list[PullRequest]:
         """The order's explicit PR references survive checkout removal or branch reuse."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
@@ -373,6 +382,14 @@ class ProgressSource:
 
 
 @dataclass(frozen=True)
+class StatusProgressSource(ProgressSource):
+    """A display reads git/PR status, never executes the order's acceptance check."""
+
+    def readings(self) -> DistanceReadings:
+        return DistanceReadings()
+
+
+@dataclass(frozen=True)
 class OrderProgress(DeclaredFamily, affix="Progress"):
     """Where an order's work stands, derived on each read from its unit's checkout and PRs.
 
@@ -383,13 +400,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The first found member by its declared precedence; with none found, no commit yet."""
         owner = todo.holder
         assert owner, "Only a held order has progress."
-        source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
-        members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
-        try:
-            return next((progress for member in members for progress in member.found(source)),
-                        NoCommitProgress())
-        except subprocess.TimeoutExpired as unread:
-            return UnreadProgress(str(unread))
+        return ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls).progress()
 
     @property
     @abstractmethod
@@ -2147,6 +2158,11 @@ class TodoStore(TypedStore):
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+
+    def source_paths(self) -> tuple[Path, ...]:
+        """Both committed SQLite locations can change an observed order."""
+        path = self.path
+        return path, path.with_name(path.name + "-wal")
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
