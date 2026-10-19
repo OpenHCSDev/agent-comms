@@ -9,8 +9,6 @@ from contextlib import ExitStack
 from dataclasses import replace
 from functools import partial
 from itertools import groupby
-
-from .bus_activity_index import ActivityClocks
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +19,7 @@ from agent_comms.coordination_tables.publications import (
 
 from .active_route import guard_original_root_write
 from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
+from .bus_activity_index import ActivityClocks
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     InitialOrigin,
@@ -33,9 +32,9 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     ClaimRelease,
     ClaimTransition,
-    FileClaimPath,
+    ReleasedClaims,
     WakeClaim,
-    _release_resource,
+    WakeClaims,
 )
 from .errors import (
     ClaimEnvelopeUnknownError,
@@ -55,14 +54,14 @@ from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
-
     from .coordination_session import NativeBoundary
     from .private_bus_checkpoint import CheckedRead
     from .registration import Registration
+    from .threads import Thread
 
 from .catalog_document import CatalogDocument
-from .channels import Channel
 from .catalog_store import ChannelCatalog
+from .channels import Channel
 from .wire_log import WireLog, WireStoreLock
 from .wire_metadata import WireMetadata
 
@@ -70,7 +69,9 @@ from .wire_metadata import WireMetadata
 class Publisher:
     """Reads and validates publications; each private write is a capability below."""
 
-    def __init__(self, log: WireLog, registry: Registration, channels: ChannelCatalog, opened_activity):
+    def __init__(
+        self, log: WireLog, registry: Registration, channels: ChannelCatalog, opened_activity
+    ):
         self.log = log
         self._registry = registry
         self._channels = channels
@@ -81,8 +82,12 @@ class Publisher:
         """A publisher that only reads leaves its root as it finds it."""
 
     def _validate_publish_request(
-        self, message: Message, *, registry_snapshot: RegistrySnapshot,
-        catalog: CatalogDocument, activity: ActivityClocks,
+        self,
+        message: Message,
+        *,
+        registry_snapshot: RegistrySnapshot,
+        catalog: CatalogDocument,
+        activity: ActivityClocks,
     ) -> tuple[str, NamedTarget, Callable[[str], Channel]]:
         """Resolve the public route from the caller's acquired declarations."""
 
@@ -138,7 +143,10 @@ class ClaimWrites(PrivateWrites):
     """Publishes claim envelopes."""
 
     def release_resources(
-        self, boundary: NativeBoundary, claims: Sequence[ClaimOwner], wording: str,
+        self,
+        boundary: NativeBoundary,
+        claims: Sequence[ClaimOwner],
+        wording: str,
     ) -> None:
         """Release only still-current acquisitions, in bounded whole-set envelopes.
 
@@ -155,71 +163,69 @@ class ClaimWrites(PrivateWrites):
             owner = boundary.registry.require(recorded[0].owner)
             worktree = Path(owner.worktree).absolute()
             for offset in range(0, len(recorded), ClaimTransition.max_resources):
-                released = recorded[offset:offset + ClaimTransition.max_resources]
+                released = recorded[offset : offset + ClaimTransition.max_resources]
                 paths = (Path(claim.resource) for claim in released)
-                names = ", ".join(str(path.relative_to(worktree) if path.is_relative_to(worktree)
-                                      else path) for path in paths)
-                self._publish_claim_envelope_unlocked(
-                    boundary.bus_lock, boundary.registry,
+                names = ", ".join(
+                    str(path.relative_to(worktree) if path.is_relative_to(worktree) else path)
+                    for path in paths
+                )
+                self._publish_claim_transition_unlocked(
+                    boundary.bus_lock,
+                    boundary.registry,
                     Message(owner.name, owner.name, f"{wording}: {names}", ClaimNoticeKind),
-                    worktree=worktree, incarnation=incarnation, activity=boundary.activity,
-                    releases=tuple(ClaimRelease(claim.resource, claim.generation)
-                                   for claim in released),
+                    partial(
+                        ReleasedClaims,
+                        incarnation=incarnation,
+                        releases=tuple(
+                            ClaimRelease(claim.resource, claim.generation) for claim in released
+                        ),
+                    ),
+                    activity=boundary.activity,
                 )
 
-    def publish_claim_envelope(
+    def _publish_selected_claim_unlocked(
         self,
-        message: Message,
+        bus_lock: WireStoreLock,
+        snapshot: RegistrySnapshot,
+        owner: Thread,
+        resource: str,
+        claim: WakeClaim,
         *,
-        worktree: Path,
-        incarnation: str,
-        claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path | ClaimRelease] = (),
+        activity: ActivityClocks,
     ) -> Message:
-        """One guarded message and whole-set claim transition in ONE bus row.
+        return self._publish_claim_transition_unlocked(
+            bus_lock,
+            snapshot,
+            ClaimNoticeKind.claimed(owner),
+            partial(
+                WakeClaims,
+                incarnation=str(owner.created_at),
+                claims=(resource,),
+                releases=(),
+                generation=Id128Text.mint(),
+                claim_scope=claim,
+            ),
+            activity=activity,
+        )
 
-        Caller must hold the global Comms wire lock; the bus lock serializes all
-        cooperating claim decisions. Failed durability returns UNKNOWN: a later
-        guarded reader may re-fsync/adopt a complete visible row, but the caller
-        MUST NOT replay its message or provider/tool work automatically.
-        """
-        with self.opened_activity() as activity, self.log.locked() as bus_lock:
-            return self._publish_claim_envelope_unlocked(
-                bus_lock, self._registry.snapshot(), message,
-                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases, activity=activity,
-            )
-
-    def _publish_claim_envelope_unlocked(
+    def _publish_claim_transition_unlocked(
         self,
         bus_lock: WireStoreLock,
         snapshot: RegistrySnapshot,
         message: Message,
+        make_transition: Callable[..., WakeClaims | ReleasedClaims],
         *,
-        worktree: Path,
-        incarnation: str,
-        claims: Sequence[FileClaimPath] = (),
-        releases: Sequence[str | Path | ClaimRelease] = (),
-        claim: WakeClaim | None = None,
         activity: ActivityClocks,
     ) -> Message:
-        """The claim envelope under a held bus lock and its locked registry snapshot."""
-        if message.claim_transition is not None or (not claims and not releases):
-            raise RelationViolationError("A claim send needs exactly one fresh transition.")
-        if (
-            isinstance(claims, (str, bytes))
-            or isinstance(releases, (str, bytes))
-            or not isinstance(claims, Sequence)
-            or not isinstance(releases, Sequence)
-        ):
-            raise RelationViolationError("Claim and release sets must be finite sequences.")
-        if len(claims) + len(releases) > ClaimTransition.max_resources:
-            raise RelationViolationError("Claim envelope exceeds the bounded resource set.")
-        if claim is not None and (not claims or releases):
-            raise RelationViolationError("Bound claims require the selected wake boundary.")
+        """Publish one typed change under the held bus and registry boundary."""
+        if message.claim_transition is not None:
+            raise RelationViolationError("A claim send needs one fresh transition.")
         metadata = self.log.private_marker_unlocked()
         if not metadata.claims:
             raise RelationViolationError("Claim read barrier is unavailable.")
-        sender, target, require_channel = self._validate_publish_request(message, registry_snapshot=snapshot, catalog=self._channels.read(), activity=activity)
+        sender, target, require_channel = self._validate_publish_request(
+            message, registry_snapshot=snapshot, catalog=self._channels.read(), activity=activity
+        )
         with bus_lock.current_source(self.log, metadata) as source:
             # The checkpoint high-water also covers a prior visible append;
             # accepting new input never replays a historical message or claim.
@@ -227,30 +233,18 @@ class ClaimWrites(PrivateWrites):
             if last_sequence >= MAX_WIRE_SEQ:
                 raise RelationViolationError("Claim bus sequence is exhausted.")
             stored = self._prepare_message_unlocked(
-                message, sender=sender, target=target,
-                sequence=last_sequence + 1, snapshot=snapshot,
+                message,
+                sender=sender,
+                target=target,
+                sequence=last_sequence + 1,
+                snapshot=snapshot,
             )
-            owner_incarnation = str(incarnation)
-            requested = tuple(sorted(path.normalized(worktree) for path in claims))
-            release_records: list[ClaimRelease] = []
-            for release in releases:
-                if isinstance(release, ClaimRelease):
-                    # Recorded incarnation/generation, not current project,
-                    # determines whether this exact resource may be released.
-                    release_records.append(release)
-                else:
-                    resource = _release_resource(worktree, release)
-                    current = source.claim(resource)
-                    if current is None:
-                        raise RelationViolationError("Cannot release an unclaimed resource.")
-                    release_records.append(ClaimRelease(resource, current.generation))
-            release_records.sort(key=lambda release: release.resource)
-            transition = ClaimTransition(
-                stored.sender, owner_incarnation, stored.seq, stored.message_id,
-                requested, tuple(release_records),
-                Id128Text.mint() if requested else None, claim,
+            transition = make_transition(
+                owner=stored.sender, seq=stored.seq, message_id=stored.message_id
             )
-            source.prepare_claim(transition)  # pre-append conflict is synchronous
+            source.prepare_claim(
+                transition, snapshot
+            )  # pre-append conflict uses this locked registry cut
         stored = replace(stored, claim_transition=transition)
         try:
             self.log.append_private_unlocked(metadata, stored.to_wire())
@@ -272,15 +266,25 @@ class InitialWrites(PrivateWrites):
         rewrites history or falls back to an uncoordinated append.
         """
 
-        with self.opened_activity() as activity, guard_original_root_write(self.log.path.parent), self.log.locked() as bus_lock:
+        with (
+            self.opened_activity() as activity,
+            guard_original_root_write(self.log.path.parent),
+            self.log.locked() as bus_lock,
+        ):
             if not self.log.read_metadata_unlocked().private:
                 # Refuse invalid input before creating a protocol on a fresh
                 # root. Established roots validate against the same guarded
                 # snapshot that selects the audience below.
-                self._validate_publish_request(message, registry_snapshot=self._registry.snapshot(),
-                                               catalog=self._channels.read(), activity=activity)
+                self._validate_publish_request(
+                    message,
+                    registry_snapshot=self._registry.snapshot(),
+                    catalog=self._channels.read(),
+                    activity=activity,
+                )
                 self._initialize_private_protocol_unlocked()
-            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
+            return self._publish_initial_cohort_unlocked(
+                bus_lock, message, origin=origin, activity=activity
+            )
 
     def initialize_private_protocol(self, *, history: Sequence[Message] = ()) -> str:
         """Marker issuer for a NEW, isolated bus root only.
@@ -339,10 +343,17 @@ class InitialWrites(PrivateWrites):
         wire lock. It never publishes from a caller-supplied audience or claim.
         """
         with self.opened_activity() as activity, self.log.locked() as bus_lock:
-            return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
+            return self._publish_initial_cohort_unlocked(
+                bus_lock, message, origin=origin, activity=activity
+            )
 
     def _publish_initial_cohort_unlocked(
-        self, bus_lock: WireStoreLock, message: Message, *, origin: InitialOrigin, activity: ActivityClocks
+        self,
+        bus_lock: WireStoreLock,
+        message: Message,
+        *,
+        origin: InitialOrigin,
+        activity: ActivityClocks,
     ) -> Message:
         """An ordinary initial cohort under the held bus lock."""
         if message.claim_transition is not None:
@@ -362,7 +373,8 @@ class InitialWrites(PrivateWrites):
             catalog = resources.enter_context(self._channels.reading(self._registry.store))
             snapshot = self._registry.snapshot()
             sender, target, require_channel = self._validate_publish_request(
-                message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
+                message, registry_snapshot=snapshot, catalog=catalog, activity=activity
+            )
             sender_thread = snapshot.threads.get(sender)
             if sender_thread is None or not snapshot.statuses[sender].visible:
                 raise RelationViolationError("Initial sender must be visible and registered.")
@@ -371,7 +383,8 @@ class InitialWrites(PrivateWrites):
             message.type.require_publishable(message, Path(sender_thread.worktree))
             origin.require_sender(message, sender_thread, snapshot)
             target, message, names = target.initial_delivery(
-                sender, message, snapshot, require_channel)
+                sender, message, snapshot, require_channel
+            )
             selected = [snapshot.threads[name] for name in names]
             lookups = [thread.incarnation.lookup for thread in selected]
             sender_lookup = snapshot.threads[sender].incarnation.lookup
@@ -454,7 +467,10 @@ class ResponseWrites(PrivateWrites):
         message = intent.message
         # A durable exact replay above wins even after registry/route renames.
         sender, target, require_channel = self._validate_publish_request(
-            message, registry_snapshot=registry_snapshot, catalog=self._channels.read(), activity=activity
+            message,
+            registry_snapshot=registry_snapshot,
+            catalog=self._channels.read(),
+            activity=activity,
         )
         role = (
             self._registry.require(sender).role

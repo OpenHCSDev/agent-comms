@@ -7,17 +7,17 @@ from dataclasses import field as dataclass_field
 from typing import TYPE_CHECKING
 
 from agent_comms.coordination_errors import (
-    IntegrityViolationError,
-    StaleFence,
-    RecoveryBlocked,
-    PublicationUncertain,
     IdentityConflict,
+    IntegrityViolationError,
+    PublicationUncertain,
+    RecoveryBlocked,
+    StaleFence,
 )
 from agent_comms.coordination_schema import COORDINATION_SNAPSHOT_VERSION
 from agent_comms.coordination_tables.assignments import ExecutionAssignmentLink, WakeAssignment
 from agent_comms.coordination_tables.attempts import AttemptRecord, ReplayAssessments
 from agent_comms.coordination_tables.executions import ExecutionOrigin, ExecutionRecord
-from agent_comms.coordination_tables.publications import PublicationIntents, PublicationEvidence
+from agent_comms.coordination_tables.publications import PublicationEvidence, PublicationIntents
 from agent_comms.coordination_tables.recovery import ConnectivityFacet, RecoveryAudit
 from agent_comms.coordination_tables.responses import ResponseObligation
 from agent_comms.field_codec import projected
@@ -40,7 +40,9 @@ class RecoverySnapshot:
     replay: ReplayAssessments | None
     obligations: tuple[ResponseObligation, ...]
     publication_intents: tuple[PublicationIntents, ...]
-    publication_evidence: tuple[PublicationEvidence, ...] = dataclass_field(metadata={"wire_name": "publication_receipts"})
+    publication_evidence: tuple[PublicationEvidence, ...] = dataclass_field(
+        metadata={"wire_name": "publication_receipts"}
+    )
     connectivity: ConnectivityFacet | None
     last_recovery: RecoveryAudit | None
     current_execution_id: str | None
@@ -60,7 +62,9 @@ class RecoverySnapshot:
             raise IdentityConflict("response route is absent from original obligations")
         return obligation
 
-    def require_final_response(self, recipient_lookup: str, exact_target: str) -> ResponseObligation:
+    def require_final_response(
+        self, recipient_lookup: str, exact_target: str
+    ) -> ResponseObligation:
         if self.execution.owner_lookup != recipient_lookup:
             raise StaleFence("response turn belongs to a different SQL recipient")
         self.execution.lifecycle.require_final_response()
@@ -79,9 +83,13 @@ class RecoverySnapshot:
         if intent is None or not intent.matches_request(self.execution.execution_id, candidate):
             raise IdentityConflict("prepared response envelope conflicts")
 
-    def require_publishing_intent(self, exact_target: str) -> tuple[PublicationIntents, ResponseObligation]:
+    def require_publishing_intent(
+        self, exact_target: str
+    ) -> tuple[PublicationIntents, ResponseObligation]:
         if len(self.publication_intents) != len(self.require_wire_responses()):
-            raise IdentityConflict("all original response bodies must be frozen before first append")
+            raise IdentityConflict(
+                "all original response bodies must be frozen before first append"
+            )
         obligation = self.require_wire_response(exact_target)
         obligation.lifecycle.require_publishing()
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
@@ -91,7 +99,9 @@ class RecoverySnapshot:
 
     def require_published_evidence(self, exact_target: str):
         intent = ResponseObligation.response_record(self.publication_intents, exact_target)
-        acknowledgement = ResponseObligation.response_record(self.publication_evidence, exact_target)
+        acknowledgement = ResponseObligation.response_record(
+            self.publication_evidence, exact_target
+        )
         if intent is None or acknowledgement is None:
             raise StaleFence("response route has no frozen publication evidence")
         return intent, acknowledgement
@@ -217,12 +227,15 @@ class RecoverySnapshot:
         )
 
     def settle(
-        self, session, outcome, reason_code: str | None,
+        self,
+        session,
+        outcome,
+        reason_code: str | None,
         boundary: NativeBoundary | None = None,
     ) -> None:
-        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
         from .coordination_tables.assignments import WakeAssignment
-        from .coordination_tables.executions import ExecutionRecord, CurrentExecutions
+        from .coordination_tables.attempts import AttemptRecord, ReplayAssessments
+        from .coordination_tables.executions import CurrentExecutions, ExecutionRecord
         from .coordination_tables.responses import ResponseObligation
 
         db = session._connection
@@ -292,8 +305,8 @@ class RecoverySnapshot:
     def finish_publications(self, session, boundary: NativeBoundary) -> None:
         """Release this one native attempt only when every original route settled."""
         from .attempt_states import SucceededAttempt
-        from .execution_states import CompletedExecution
         from .coordination_tables.executions import CurrentExecutions
+        from .execution_states import CompletedExecution
 
         if not all(row.lifecycle.published for row in self.require_wire_responses()):
             return
@@ -302,31 +315,41 @@ class RecoverySnapshot:
         session.release_resources(self, outcome, boundary)
         db, execution = session._connection, self.execution
         AttemptRecord.update(
-            db, where="execution_id=? AND attempt_ordinal=? AND revision=?",
+            db,
+            where="execution_id=? AND attempt_ordinal=? AND revision=?",
             parameters=(execution.execution_id, attempt.attempt_ordinal, attempt.revision),
-            lifecycle=outcome, revision=attempt.revision + 1,
+            lifecycle=outcome,
+            revision=attempt.revision + 1,
             updated_at_ms=session.now(attempt.updated_at_ms),
         )
         ExecutionRecord.update(
-            db, where="execution_id=? AND revision=?",
+            db,
+            where="execution_id=? AND revision=?",
             parameters=(execution.execution_id, execution.revision),
             lifecycle=CompletedExecution(attempt.attempt_ordinal),
-            revision=execution.revision + 1, updated_at_ms=session.now(execution.updated_at_ms),
+            revision=execution.revision + 1,
+            updated_at_ms=session.now(execution.updated_at_ms),
         )
         for assignment in self.assignments:
             WakeAssignment.update(
-                db, where="assignment_id=? AND revision=?",
+                db,
+                where="assignment_id=? AND revision=?",
                 parameters=(assignment.assignment_id, assignment.revision),
                 lifecycle=CompletedExecution.assignment_state().build(
-                    assignment.lifecycle.mode, assignment.lifecycle.execution_id,
+                    assignment.lifecycle.mode,
+                    assignment.lifecycle.execution_id,
                     assignment.lifecycle.exact_target,
-                ), revision=assignment.revision + 1,
+                ),
+                revision=assignment.revision + 1,
                 updated_at_ms=session.now(assignment.updated_at_ms),
             )
         CurrentExecutions.update(
-            db, where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
+            db,
+            where="owner_lookup=? AND pointer_revision=? AND execution_id=?",
             parameters=(execution.owner_lookup, self.pointer_revision, execution.execution_id),
-            execution_id=None, attempt_ordinal=None, pointer_revision=self.pointer_revision + 1,
+            execution_id=None,
+            attempt_ordinal=None,
+            pointer_revision=self.pointer_revision + 1,
         )
 
     def release_resources(self, boundary: NativeBoundary, outcome: TerminalAttempt) -> None:
@@ -341,14 +364,7 @@ class RecoverySnapshot:
         metadata = bus.log.private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
             current = source.claim_projection()
-        owned = tuple(
-            claim for claim in current.values()
-            if claim.claim_scope is not None
-            and claim.claim_scope.execution_id == attempt.execution_id
-            and claim.claim_scope.attempt_ordinal == attempt.attempt_ordinal
-            and claim.claim_scope.recipient_lookup == attempt.owner_lookup
-            and claim.claim_scope.participant_generation == attempt.owner_generation
-        )
+        owned = tuple(claim for claim in current.values() if claim.belongs_to(attempt))
         bus.publisher.release_resources(boundary, owned, outcome.release_wording)
 
     def require_nonpublication_response(self) -> None:

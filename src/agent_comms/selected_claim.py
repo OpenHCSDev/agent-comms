@@ -22,19 +22,18 @@ from .coordination_cohort import _claim_record
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
-    ClaimConflict,
-    ClaimOwner,
     ExistingFileClaim,
     FileClaimPath,
     WakeClaim,
+    WakeClaimOwner,
+    WakeClaims,
 )
 from .errors import RelationViolationError
-from .messages import ClaimNoticeKind
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import SharedLock, _store_lock
-from .wire_log import CheckedWireStoreLock
 from .threads import Thread
+from .wire_log import CheckedWireStoreLock
 
 
 def verify_selected_wake(
@@ -92,7 +91,8 @@ def _verify_selected_wake_state(
         if assignment.require_engaged_binding() != claim_scope.binding:
             raise IdentityConflict("Wake assignment binding changed")
         expected_owner = OwnerGenerations(
-            owner_lookup=claim_scope.recipient_lookup, owner_thread=owner.name,
+            owner_lookup=claim_scope.recipient_lookup,
+            owner_thread=owner.name,
             generation=claim_scope.participant_generation,
         )
         if not participant.committed or participant.owner_identity != expected_owner:
@@ -101,7 +101,10 @@ def _verify_selected_wake_state(
             attempt = snapshot.require_current_attempt()
         except StaleFence as error:
             raise IdentityConflict("Wake execution is not the current selected attempt") from error
-        if attempt.owner_identity != expected_owner or attempt.attempt_ordinal != claim_scope.attempt_ordinal:
+        if (
+            attempt.owner_identity != expected_owner
+            or attempt.attempt_ordinal != claim_scope.attempt_ordinal
+        ):
             raise IdentityConflict("Wake selected attempt owner changed")
         if snapshot.execution.owner_thread != owner.name:
             raise IdentityConflict("Wake execution owner changed")
@@ -109,7 +112,6 @@ def _verify_selected_wake_state(
             raise IdentityConflict("Wake execution is not the current selected attempt")
         if assignment not in snapshot.assignments or assignment.recipient != owner.name:
             raise IdentityConflict("Wake assignment is not a member of this owner's execution")
-
 
 
 def _committed_source(
@@ -138,7 +140,9 @@ def _selected_claim_boundary(
         registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)
         try:
-            captured = RegistryOwner.capture(registry, canonical, "Selected wake owner stopped or changed")
+            captured = RegistryOwner.capture(
+                registry, canonical, "Selected wake owner stopped or changed"
+            )
             captured.require_active_turn()
         except StaleFence as error:
             raise IdentityConflict("Selected wake owner stopped or changed") from error
@@ -149,7 +153,9 @@ def _selected_claim_boundary(
             raise IdentityConflict("Selected wake belongs to another wire root")
         if claim_scope.source_seq <= metadata.claimed_after_seq:
             raise IdentityConflict("Selected wake precedes the current claim_scope floor")
-        initial = _committed_source(bus_lock, claim_scope, "Selected wake has no committed initial row")
+        initial = _committed_source(
+            bus_lock, claim_scope, "Selected wake has no committed initial row"
+        )
         with store.session.read():
             _verify_selected_wake_state(initial, owner, generation, store, claim_scope)
             yield bus, bus_lock, metadata, registry, owner
@@ -161,52 +167,42 @@ def publish_selected_resource_claim(
     claim_scope: WakeClaim,
     owner_name: str,
     resource_path: FileClaimPath,
-) -> ClaimOwner:
+) -> WakeClaimOwner:
     """Bind one existing file claim to a live selected wake in a durable bus row.
 
     The common lock order keeps stop and coordinator settlement behind the
     pre-append check. A lost append result is UNKNOWN; this call never retries it.
     The returned claim is an ownership acknowledgement, not file-write authorization.
     """
-    with comms.bus.opened_activity() as activity, _selected_claim_boundary(comms, store, claim_scope, owner_name) as (
-        bus,
-        bus_lock,
-        metadata,
-        registry,
-        owner,
+    with (
+        comms.bus.opened_activity() as activity,
+        _selected_claim_boundary(comms, store, claim_scope, owner_name) as (
+            bus,
+            bus_lock,
+            metadata,
+            registry,
+            owner,
+        ),
     ):
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
             existing = source.claim(resource)
             if existing is not None:
-                if (
-                    existing.claim_scope == claim_scope
-                    and existing.incarnation == str(owner.created_at)
-                    and existing.owner == owner.name
-                ):
+                if WakeClaimOwner.selected(existing, claim_scope):
                     return existing
-                raise ClaimConflict(existing)
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
-        committed = bus.publisher._publish_claim_envelope_unlocked(
-            bus_lock, registry,
-            ClaimNoticeKind.claimed(owner),
-            worktree=Path(owner.worktree),
-            incarnation=str(owner.created_at),
-            claims=[resource_path],
-            claim=claim_scope, activity=activity,
+        committed = bus.publisher._publish_selected_claim_unlocked(
+            bus_lock,
+            registry,
+            owner,
+            resource,
+            claim_scope,
+            activity=activity,
         )
         transition = committed.claim_transition
-        assert transition is not None and transition.generation is not None
-        return ClaimOwner(
-            resource,
-            transition.owner,
-            transition.incarnation,
-            transition.generation,
-            committed.seq,
-            committed.message_id,
-            claim_scope,
-        )
+        assert isinstance(transition, WakeClaims)
+        return transition.claimed(resource)
 
 
 @contextmanager
@@ -277,7 +273,7 @@ def write_selected_claimed_file(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    claimed: ClaimOwner,
+    claimed: WakeClaimOwner,
     contents: bytes,
 ) -> None:
     """Mediate one bounded existing-file replacement under *current* authority.
@@ -301,7 +297,9 @@ def write_selected_claimed_file(
         registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)
         try:
-            captured = RegistryOwner.capture(registry, canonical, "Selected write owner stopped or changed")
+            captured = RegistryOwner.capture(
+                registry, canonical, "Selected write owner stopped or changed"
+            )
             captured.require_active_turn()
         except StaleFence as error:
             raise IdentityConflict("Selected write owner stopped or changed") from error
