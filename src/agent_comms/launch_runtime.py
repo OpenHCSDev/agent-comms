@@ -115,9 +115,9 @@ class RestartEnvironment:
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
         annotations = get_type_hints(type(self), include_extras=True)
-        return {key: encoded[key] for declaration, key in FieldCodec.record_fields(type(self))
-                if any(isinstance(marker, NativeField)
-                       for marker in get_args(annotations[declaration.name]))}
+        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+                for declaration in fields(self) if any(isinstance(marker, NativeField)
+                    for marker in get_args(annotations[declaration.name]))}
 
     def auth_revision(self) -> tuple[int, int]:
         info = (self.native_config / "auth.json").stat()
