@@ -72,6 +72,11 @@ class Edit:
             edits = (cls.from_row(**json.loads(line)) for line in f if line.strip())
             return {edit.id: edit for edit in edits}
 
+    def append(self) -> None:
+        """Write this edit as one row of edits.jsonl, the shape from_row reads back."""
+        with open(EDITS, 'a') as f:
+            f.write(json.dumps(asdict(self)) + '\n')
+
     @classmethod
     def unjudged(cls, comms: Comms, commander: str) -> list[Edit]:
         """The recorded edits that commander has judged on none of its orders in that Comms."""

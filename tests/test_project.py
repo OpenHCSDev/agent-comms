@@ -95,7 +95,7 @@ async def test_project_update_is_published_and_old_saved_cwd_can_resume(tmp_path
         await resumed.shutdown()
 
 
-async def test_saved_native_identity_changes_publish_one_complete_update(tmp_path):
+async def test_saved_native_identity_changes_publish_one_complete_update(tmp_path, native_runtime_package):
     """Original saved owner, actual socket publication; no native input/provider."""
     from agent_comms.runtime import RuntimeProxy, socket_path
 
@@ -109,7 +109,7 @@ async def test_saved_native_identity_changes_publish_one_complete_update(tmp_pat
                 raise OSError("Identity publication transport failed")
             self.updates.append(update)
 
-    async with native_backend_fixture(tmp_path) as native:
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         await native.author_history()
         saved = native.session.read_bytes()
         async with native.open_owner() as (agent, session_id):

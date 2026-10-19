@@ -56,17 +56,19 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
             origin=AgentOrigin(),
         )
 
+def pytest_addoption(parser):
+    from agent_comms.storage_rules import StorageRule
+
+    parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
+                     help="Root of the native test environments stack/bin/pi-native-test-env builds")
+
+
 @pytest.fixture(scope="session")
-def native_runtime_package():
-    """Borrow this interpreter's installed artifact; source and runtime pins must agree."""
-    from importlib.metadata import distribution
+def native_runtime_package(pytestconfig):
+    """The artifact of this checkout's own pin from its test environment; the pins must agree."""
     from agent_comms import native_package
 
-    manifest = Path(distribution("agent-comms").locate_file("agent_comms/_native/pi-native.sha256")).resolve(strict=True)
-    assert manifest.read_bytes() == native_package.MANIFEST.read_bytes()
-    with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(native_package, "MANIFEST", manifest)
-        return native_package.VerifiedNativePackage.acquire(native_package.pinned_native_package())
+    return native_package.VerifiedNativePackage.from_environment(pytestconfig.getoption("native_cache"))
 
 
 @pytest.fixture(autouse=True)
@@ -282,7 +284,8 @@ def tool_watch(commander_script):
     """The tool-call watcher reading the commander config commander_script installed."""
     import importlib
 
-    from agent_comms.commander import tool_watch
+    from agent_comms.commander import judge, tool_watch
+    importlib.reload(judge)
     return importlib.reload(tool_watch)
 
 
@@ -341,11 +344,11 @@ def selected_model(monkeypatch, tmp_path, native_runtime_package):
 
 
 @pytest.fixture
-async def native_backend(tmp_path_factory, monkeypatch, selected_model):
+async def native_backend(tmp_path_factory, monkeypatch, selected_model, native_runtime_package):
     monkeypatch.delenv("AGENT_COMMS_THREAD", raising=False)
     # Native originals belong to the persistent run, even when a consuming
     # module supplies a separate auto-deleting sealed-bus tmp_path fixture.
-    async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner")) as owner:
+    async with native_backend_fixture(tmp_path_factory.mktemp("saved-native-owner"), package=native_runtime_package) as owner:
         yield owner
 
 

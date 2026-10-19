@@ -629,18 +629,18 @@ def test_unchanged_old_sites_are_not_forced_to_zero(repo, measure, source):
     assert report["introduced"][identity] == 0
 
 
-def test_none_as_absence_fails_with_its_line_except_in_a_listed_boundary_decoder(repo):
-    decoder = "class FieldPlan:\n    def decoded(self, value: str):\n        return value\n"
-    owner = "def owner(value: str):\n    return value\n"
-    base = repo.commit({"plan.py": decoder, "owner.py": owner})
-    head = repo.commit({"plan.py": decoder.replace("value: str", "value: str | None"),
-                        "owner.py": owner.replace("value: str", "value: str | None")})
+def test_none_as_absence_fails_with_its_line_except_in_a_declared_boundary_decoder(repo):
+    marked = ("from agent_comms.field_codec import boundary_decoder\n\n\n"
+              "@boundary_decoder\ndef decoded(value: str):\n    return value\n")
+    files = {"plan.py": marked, "foreign.py": marked.replace("agent_comms.field_codec", "elsewhere"),
+             "owner.py": "def owner(value: str):\n    return value\n"}
+    base = repo.commit(files)
+    head = repo.commit({name: source.replace("value: str", "value: str | None")
+                        for name, source in files.items()})
     status, report = repo.compare(base, head)
     identity = f"{NoneAbsence.__name__}:{repo.root}"
-    assert "FieldPlan.decoded" in NoneAbsence.boundary_decoders
     assert status == 1
-    assert report["introduced"][f"{identity}/owner.py"] == report["delta"][f"{identity}/owner.py"] == 1
-    assert report["introduced_lines"] == {f"{identity}/owner.py": [1]}
+    assert report["introduced_lines"] == {f"{identity}/owner.py": [1], f"{identity}/foreign.py": [5]}
     assert report["introduced"][f"{identity}/plan.py"] == report["delta"][f"{identity}/plan.py"] == 0
 
 

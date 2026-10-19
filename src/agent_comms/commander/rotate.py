@@ -9,11 +9,6 @@ from .config import CommanderConfig
 
 CONFIG = CommanderConfig.installed()
 
-def unjudged(unit=None):
-    edits = judge.Edit.unjudged(order.COMMS, order.ME)
-    return sum(1 for edit in edits if unit in (None, edit.thread))
-
-
 def broken_rules(after=0.0):
     """Every standing rule that broke after ``after``, as Core's StandingRule family derives it."""
     read: StandingRulesRead = order.call(CommsStandingRulesTool(after=after))
@@ -49,7 +44,9 @@ def main(a):
             read = order.progress()
             orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)} ({read[t.id].line})"
                                for t in owed[unit])
-            print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {unjudged(unit)} -> read its git state and newest turn, judge, push or hunt", flush=True)
+            edits = judge.Edit.unjudged(order.COMMS, order.ME)
+            waiting = sum(edit.thread == unit for edit in edits)
+            print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {waiting} -> read its git state and newest turn, judge, push or hunt", flush=True)
         for line in detached(owed):
             print(line, flush=True)
         for line in request.stalled():

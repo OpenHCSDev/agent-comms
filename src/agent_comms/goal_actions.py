@@ -133,9 +133,7 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
             for entry in ctx.goals.registry.goal_history(ctx.thread.name)
         ):
             raise ValueError("This goal was already reported in this turn.")
-        goal = ctx.thread.goal.project(
-            lambda current: self.change(current, ctx), lambda: self.create(ctx),
-        )
+        goal = ctx.thread.goal.apply_action(self, ctx)
         if goal == ctx.thread.goal:
             return goal
         self.before_publish(goal, ctx)
@@ -407,7 +405,8 @@ class PausedGoalAction(
 @dataclass(frozen=True, kw_only=True)
 class ReplacementGoalAction[Result: GoalDeclaration](GoalAction[Result]):
     def before_publish(self, goal: GoalDeclaration, ctx: GoalActionContext) -> None:
-        ctx.thread.goal.project(lambda previous: self.retire(previous, ctx), lambda: None)
+        for previous in ctx.thread.goal:
+            self.retire(previous, ctx)
 
     @staticmethod
     def retire(goal: Goal, ctx: GoalActionContext) -> None:

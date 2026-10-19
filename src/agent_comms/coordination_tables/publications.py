@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, fields
 from dataclasses import field as dataclass_field
+from typing import ClassVar
 
 from agent_comms.coordination_contracts import (
     MAX_IDENTIFIER_CHARS,
@@ -38,6 +39,15 @@ def canonical_publication_key(execution_id: str, exact_target: str) -> str:
 @dataclass(frozen=True, slots=True)
 class PublicationIntents(CoordinatorTable, TypedTable):
     """One obligation route's frozen response: the exact Message it publishes."""
+
+    validator_function: ClassVar[str] = "coordination_validate_publication_intent"
+
+    @classmethod
+    def configure_connection(cls, connection) -> None:
+        connection.create_function(
+            cls.validator_function, sum(item.init for item in fields(cls)),
+            cls.validate_sql, deterministic=True,
+        )
 
     def matches_request(self, execution_id: str, message: Message) -> bool:
         return self.execution_id == execution_id and self.message == message
@@ -132,7 +142,7 @@ class PublicationIntents(CoordinatorTable, TypedTable):
             "publication_intent_envelope_authority": (
                 f""" BEFORE INSERT ON
 publication_intents
-WHEN coordination_validate_publication_intent(
+WHEN {cls.validator_function}(
   {", ".join("NEW." + field.name for field in fields(cls) if field.init)}) != 1
 BEGIN SELECT RAISE(ABORT, 'publication intent envelope is invalid' );
 END"""

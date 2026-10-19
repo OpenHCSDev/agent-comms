@@ -10,7 +10,7 @@ from typing import ClassVar
 
 from ..comms import Comms
 from ..standing_rules import ReasonedStandingRule, StandingRule
-from . import capacity, judge, rules
+from . import capacity, judge
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -56,22 +56,6 @@ class Unjudged(ReasonedStandingRule):
     def reason(cls, comms: Comms, commander: str) -> str | None:
         total = len(judge.Edit.unjudged(comms, commander))
         return str(total) if total > cls.limit else None
-
-
-@dataclass(frozen=True)
-class RulesDue(ReasonedStandingRule):
-    text = (
-        "RULES DUE ({why}) -> agent-comms-commander rules review"
-        " and answer the drawn rules before any order"
-    )
-
-    @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
-        return rules.stale(commander)
-
-    @classmethod
-    def broken_at(cls, comms: Comms, commander: str) -> float | None:
-        return refusal[1] if (refusal := rules.refused(commander)) else None
 
 
 @dataclass(frozen=True)
