@@ -154,6 +154,26 @@ def test_malformed_checkpoint_keeps_its_rebuild_boundary(tmp_path, private_comms
         index.catch_up_committed_append(hint)
 
 
+def test_verified_replacement_rebuilds_inside_the_index_read(private_comms, participants):
+    comms = private_comms
+    root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
+    message = publish_initial(comms, "sender", "Alice", "original committed message")
+    index = WakeCandidateIndex(comms.bus.log)
+    assert index.maintain(start=FirstBuild())
+    source = comms.bus.log.path
+    replacement = source.with_name("replacement.jsonl")
+    replacement.write_bytes(source.read_bytes())
+    replacement.chmod(0o600)
+    replacement.replace(source)
+    # Source authority is still the canonical wire owner, not this projection.
+    with comms.bus.log.checked_read() as checked:
+        checked.require_current()
+    page = index.page(root_id=root_id, recipient_lookup=participants["Alice"],
+                      after_seq=0, required_through_seq=message.seq)
+    assert [entry.source_seq for entry in page.entries] == [message.seq]
+    assert index._verified_checkpoint(root_id).byte_offset == source.stat().st_size
+
+
 def test_existing_candidate_schema_reopens_in_wal_through_the_store_owner(tmp_path, private_comms, participants):
     comms = private_comms
     index = WakeCandidateIndex(comms.bus.log)

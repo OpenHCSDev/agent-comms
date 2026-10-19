@@ -21,7 +21,7 @@ from .checkpoint_seals import PrefixSource
 from .delivery_policy import KeyedResponseAcknowledgement
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
-from .private_path import FileIdentity, FileRevision
+from .private_path import FileRevision
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedStore, TypedTable
 from .wake_policy import WakePolicy
 from .wire_log import CurrentSnapshotOpening, SavedPrefixOpening, WireSnapshot, WireLog
@@ -37,8 +37,19 @@ class ProjectionRebuildRequiredError(ProjectionUnavailableError):
 
 
 class CheckpointState(ABC):
+    byte_offset: int
+
     @abstractmethod
-    def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint: ...
+    def require_source(self, source: WireSnapshot, root_id: str) -> CheckpointState: ...
+
+    def start(self) -> IndexStart:
+        return RebuildIndex()
+
+    def checkpoint(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
+        return CandidateCheckpoint.initial(root_id, source.revision)
+
+    def read(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
+        raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
 
     @abstractmethod
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint: ...
@@ -46,11 +57,24 @@ class CheckpointState(ABC):
 
 @dataclass(frozen=True)
 class NoCheckpoint(CheckpointState):
-    def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
-        raise ProjectionRebuildRequiredError("candidate index needs explicit initial build")
+    byte_offset = 0
+
+    def require_source(self, source: WireSnapshot, root_id: str) -> CheckpointState:
+        return self
 
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
         raise ProjectionUnavailableError("candidate projection is stale or unrelated")
+
+
+@dataclass(frozen=True)
+class OutdatedCheckpoint(NoCheckpoint):
+    """Disposable rows no longer describe this bus's captured prefix."""
+
+    def read(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
+        index.maintain(start=self.start())
+        # One bounded rebuild, not a retry loop. A later source replacement
+        # remains a state; the next maintenance pass owns its next batch.
+        return index._captured_checkpoint(root_id)
 
 
 class CandidateTable:
@@ -85,13 +109,22 @@ class CandidateCheckpoint(CandidateTable, TypedTable, CheckpointState):
     def source_identity(self) -> PrefixSource:
         return PrefixSource(self.root_id, self.device, self.inode)
 
-    def require_source(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
+    def require_source(self, source: WireSnapshot, root_id: str) -> CheckpointState:
         if self.source_identity != PrefixSource(root_id, source.revision.identity.device, source.revision.identity.inode):
-            raise ProjectionRebuildRequiredError("candidate bus source changed")
+            return OutdatedCheckpoint()
         if self.byte_offset > source.boundary:
-            raise ProjectionRebuildRequiredError("candidate bus prefix was truncated")
+            return OutdatedCheckpoint()
         if source.fingerprint(self.byte_offset) != self.tail_digest:
-            raise ProjectionRebuildRequiredError("candidate bus prefix changed")
+            return OutdatedCheckpoint()
+        return self
+
+    def start(self) -> IndexStart:
+        return ResumeIndex()
+
+    def checkpoint(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
+        return self
+
+    def read(self, index: WakeCandidateIndex, root_id: str) -> CheckpointState:
         return self
 
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
@@ -190,9 +223,13 @@ class IndexStart(ABC):
 
 
 class ResumeIndex(IndexStart):
+    def for_source(self, checkpoint: CheckpointState, source: WireSnapshot,
+                   root_id: str) -> IndexStart:
+        return checkpoint.require_source(source, root_id).start()
+
     def start(self, checkpoint: CheckpointState, source: WireSnapshot,
               root_id: str) -> CandidateCheckpoint:
-        return checkpoint.require_source(source, root_id)
+        return checkpoint.require_source(source, root_id).checkpoint(source, root_id)
 
     def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
         return index._verified_checkpoint(hint.root_id).byte_offset
@@ -209,19 +246,11 @@ class RebuildIndex(IndexStart):
 
 
 class FirstBuild(ResumeIndex):
-    """Maintenance starts a first build for each verified replacement source.
+    """Admit the first maintenance batch without a prior-checkpoint shortcut.
 
-    Pages and strict resume still refuse it. Schema failure happens before this
-    selection; a malformed store is not permission to discard arbitrary tables.
+    The checkpoint state selects resume or rebuild. Schema failure happens
+    before selection; malformed storage never permits discarding tables.
     """
-
-    def for_source(self, checkpoint: CheckpointState, source: WireSnapshot,
-                   root_id: str) -> IndexStart:
-        try:
-            checkpoint.require_source(source, root_id)
-        except ProjectionRebuildRequiredError:
-            return RebuildIndex()
-        return self
 
     def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
         # Validate/adopt under maintain's captured source and revision check,
@@ -230,7 +259,7 @@ class FirstBuild(ResumeIndex):
 
 
 class WakeCandidateIndex(TypedStore):
-    """Read-only candidate pages plus an explicit, bounded maintenance API.
+    """Bounded candidate pages and maintenance of their disposable source state.
 
     Never call ``maintain`` in the send or wake path. Each call only
     processes up to max_rows/max_bytes; rows are keyed by original bus identity
@@ -318,9 +347,8 @@ class WakeCandidateIndex(TypedStore):
         return _ReplayBatch(through, last_seq, tuple(rows), tuple(response_keys))
 
     def _source_end(self, source: WireSnapshot, next_offset: int) -> str:
-        current = self.log.path.stat()
-        if source.revision.identity != FileIdentity.from_stat(current):
-            raise ProjectionRebuildRequiredError("candidate bus was replaced")
+        # The checkpoint records this captured source, not a lease on the
+        # pathname. Every reader validates it against its own source snapshot.
         return source.fingerprint(next_offset)
 
     @staticmethod
@@ -400,14 +428,17 @@ class WakeCandidateIndex(TypedStore):
         return CommittedAppendHint.capture(root_id, through_bytes)
 
 
-    def _verified_checkpoint(self, root_id: str) -> CandidateCheckpoint:
-        """Check one WAL checkpoint row against its bounded source prefix-tail witness."""
+    def _verified_checkpoint(self, root_id: str) -> CheckpointState:
+        return self._captured_checkpoint(root_id).read(self, root_id)
+
+    def _captured_checkpoint(self, root_id: str) -> CheckpointState:
+        """Capture the row and its source state without rebuilding under a reader."""
         try:
             with self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source:
                 if source.metadata.root_id != root_id:
                     raise ProjectionRebuildRequiredError("candidate private root changed")
                 with self.snapshot() as db:
-                    return ResumeIndex().start(CandidateCheckpoint.current(db), source, root_id)
+                    return CandidateCheckpoint.current(db).require_source(source, root_id)
         except (OSError, RelationViolationError, sqlite3.DatabaseError) as error:
             raise ProjectionUnavailableError("candidate checkpoint unavailable") from error
 
@@ -424,8 +455,8 @@ class WakeCandidateIndex(TypedStore):
         Run outside publisher locks and off its latency path. An absent
         derived index may be explicitly bootstrapped in bounded batches; a
         mismatched schema or corrupt WAL never gets an implicit rebuild.
-        FirstBuild explicitly adopts a verified changed/truncated source;
-        strict ResumeIndex refuses it. If ``caught_up`` is false and
+        The checkpoint state adopts a verified changed/truncated source.
+        If ``caught_up`` is false and
         ``more_source_bytes`` is true, a deferred worker may schedule another
         finite batch. Pages remain unavailable for required high-water until
         the index catches up. This
@@ -478,9 +509,9 @@ class WakeCandidateIndex(TypedStore):
                      after_seq=after_seq, required_through_seq=required_through_seq,
                      limit=limit)
         try:
+            self._verified_checkpoint(root_id).require_fresh(request)
             with self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source, self.snapshot() as db:
-                checkpoint = CandidateCheckpoint.current(db).require_fresh(request)
-                checkpoint.require_source(source, request.root_id)
+                checkpoint = CandidateCheckpoint.current(db).require_source(source, request.root_id).require_fresh(request)
                 data = Candidate.read(
                     db.execute(
                         f'SELECT * FROM "{Candidate.declared_name}" '
