@@ -24,7 +24,10 @@ from .change_report import FileLine
 from .child_process import BoundedRun, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
-from .field_codec import FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue
+from .field_codec import (
+    FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
+    boundary_decoder,
+)
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -144,6 +147,7 @@ class PullRequest:
     orders: tuple[str, ...] = ()
 
     @classmethod
+    @boundary_decoder
     def listed(cls, number: int, branch: str, head: str, merge: str, merged: str,
                updated: str, body: str) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
@@ -219,7 +223,6 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
     """Where an order's work stands, derived on each read from its unit's checkout and PRs.
 
     Never stored: the checkout and GitHub are its owners."""
-    strikes: ClassVar[bool] = True
 
     @classmethod
     def read(cls, todo: Todo, storage: StorageRule, pulls: PullRequests) -> OrderProgress:
@@ -243,9 +246,6 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     def stalled_between(self, ordered: float, since: float, now: float) -> bool:
         """Whether this work entered its stall after ``since`` and before ``now``."""
-        return False
-
-    def moved_after(self, since: float) -> bool:
         return False
 
     def untouched(self, now: float) -> bool:
@@ -288,9 +288,6 @@ class Moving(Stalling):
 
     def stall_at(self, ordered: float) -> float:
         return self.at + 900
-
-    def moved_after(self, since: float) -> bool:
-        return self.at > since
 
 
 @dataclass(frozen=True)
@@ -363,7 +360,6 @@ class OpenPrProgress(Moving, FoundProgress):
 class MergedProgress(FoundProgress):
     """A merge awaits its order record; its alarm does not itself draw a strike."""
     precedence: ClassVar[int] = 1
-    strikes: ClassVar[bool] = False
     sha: str
 
     @classmethod

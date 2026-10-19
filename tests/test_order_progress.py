@@ -58,16 +58,16 @@ def read(checkout, pulls=None):
     return OrderProgress.read(todo, StorageRule(checkout_base=unit.parent), pulls or Listed())
 
 
-def test_no_commit_since_the_order_draws_a_strike(checkout):
+def test_no_commit_since_the_order_is_explicit(checkout):
     progress = read(checkout)
-    assert progress == NoCommitProgress() and progress.strikes
+    assert progress == NoCommitProgress()
     assert progress.line == 'no commit since the order'
 
 
 def test_an_unpushed_commit_names_its_sha_and_time(checkout):
     sha = commit(checkout[1])
     progress = read(checkout)
-    assert type(progress) is CommittedProgress and progress.sha == sha and progress.strikes
+    assert type(progress) is CommittedProgress and progress.sha == sha
     assert progress.line == f"committed {sha} at {time.strftime('%H:%M', time.localtime(progress.at))}, not pushed"
 
 
@@ -82,7 +82,7 @@ def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
     pulls = Listed(open=(PullRequest(12, 'fix/p10', 'f' * 40, orders=('order-P10',)), PullRequest(7, 'fix/p1', 'a' * 40,
                                                                               updated_at=400.0, orders=('order-P1',))))
     progress = read(checkout, pulls)
-    assert progress == OpenPrProgress(7, 'a' * 9, at=400.0) and progress.strikes
+    assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
     assert progress.line == 'PR #7 open at aaaaaaaaa'
 
 
@@ -107,17 +107,17 @@ def test_a_pr_merged_before_the_order_is_not_its_merge(checkout):
     assert read(checkout, pulls) == NoCommitProgress()
 
 
-def test_a_merged_order_records_done_and_draws_no_strike(checkout):
+def test_a_merged_order_still_awaits_its_record(checkout):
     progress = read(checkout, Listed(merged=(PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)))
-    assert progress == MergedProgress('d' * 9) and not progress.strikes
+    assert progress == MergedProgress('d' * 9)
     assert progress.line == 'merged as ddddddddd, awaiting record'
 
 
-def test_unread_github_is_said_and_still_draws_a_strike(checkout):
+def test_unread_github_is_explicit(checkout):
     pulls = Listed()
     pulls.states = ValueError('gh: not logged in')
     progress = read(checkout, pulls)
-    assert progress == UnreadProgress('gh: not logged in') and progress.strikes
+    assert progress == UnreadProgress('gh: not logged in')
 
 
 def test_board_and_overdue_name_a_merge_awaiting_its_record(commander, commander_script, monkeypatch, tmp_path):
