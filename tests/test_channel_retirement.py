@@ -88,7 +88,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
         m.target for m in rows
     ]
     for send in (
-        lambda: comms.messaging.send("other", "#engineering", "blocked"),
+        lambda: comms.messaging.send("other", "#engineering", "blocked").message.message_id,
         lambda: comms.messaging.send_user_message(
             "#engineering", "blocked", worktree=str(tmp_path)
         ),

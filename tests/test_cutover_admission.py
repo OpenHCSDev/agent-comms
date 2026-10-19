@@ -93,13 +93,13 @@ def test_persisted_marker_cannot_omit_claim_authority(tmp_path):
 def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     source, store, _root_id, _lookups = _root(tmp_path)
     store.close()
-    sent = source.messaging.send("alice", "bob", "retained message")
+    sent = source.messaging.send("alice", "bob", "retained message").message.message_id
     reader = Comms(tmp_path / "reader")
     attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
     before = snapshot.bus.log.path.read_bytes()
     assert [message.message_id for message in list(snapshot.bus.full_history_page().messages)] == [sent]
     with pytest.raises(RelationViolationError, match="read-only"):
-        snapshot.messaging.send("alice", "bob", "must never append")
+        snapshot.messaging.send("alice", "bob", "must never append").message.message_id
     assert snapshot.bus.log.path.read_bytes() == before
     attached.validate()

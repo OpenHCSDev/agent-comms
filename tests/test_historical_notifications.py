@@ -276,7 +276,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
             DeliveredAssignment,
             expected_revision=paused.revision,
         )
-    unrelated = old.messaging.send_message("agent", "sender", "unrelated later message")
+    unrelated = old.messaging.send("agent", "sender", "unrelated later message").message
     notification, = old.views.message_notifications_for_references(
         (original.reference,)
     )[original.seq, original.message_id]
@@ -322,7 +322,7 @@ def test_delivered_assignment_uses_its_recorded_conversation_response(archived_n
     assert inputs.started(
         key, turn_id=lease.turn_id, native_id=native_id, text=source_text
     )
-    response = old.messaging.send_message("agent", "sender", "recorded reply")
+    response = old.messaging.send("agent", "sender", "recorded reply").message
 
     notification, = old.views.message_notifications_for_references(
         (original.reference,)

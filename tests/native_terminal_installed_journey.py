@@ -55,7 +55,7 @@ async def main(output, package, launcher, provider, model, thinking):
             "Do not read or modify any other file and do not retry the command. "
             "After it succeeds, reply with exactly NATIVE_TERMINAL_OK."
         )
-        original = comms.messaging.send_message('verifier', opened.session_id, instruction)
+        original = comms.messaging.send('verifier', opened.session_id, instruction).message
         await agent.turns.run_agent_turn(
             opened.session_id, opened.session_id, instruction, origins=(original,),
         )

@@ -19,7 +19,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
     c = wire(tmp_path)
     c.registry.declare(c.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
-    original = c.messaging.send_message('sender', viewer, 'current source')
+    original = c.messaging.send('sender', viewer, 'current source').message
 
     def measured():
         with c.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
@@ -45,7 +45,7 @@ def test_discovery_ignores_retired_source_history(tmp_path, rebound):
                 c.registry.unregister(name)
                 c.registry.remove(name)
             c.registry.declare(c.registry.new_thread(name, frozenset(), str(tmp_path)))
-            published = c.messaging.send_message(name, viewer, 'current source')
+            published = c.messaging.send(name, viewer, 'current source').message
             if rebound:
                 original = published
             else:
@@ -58,7 +58,7 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
     c = wire(tmp_path)
     c.registry.declare(c.registry.new_thread('sender', frozenset(), str(tmp_path)))
     viewer = c.messaging.user_identity(str(tmp_path)).name
-    original = c.messaging.send_message('sender', viewer, 'assigned source')
+    original = c.messaging.send('sender', viewer, 'assigned source').message
     with c.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         from agent_comms.registry_provenance import RegistryProvenance
 

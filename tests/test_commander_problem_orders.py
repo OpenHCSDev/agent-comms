@@ -652,16 +652,67 @@ def test_unit_wording_gets_a_correction_not_a_strike(commander):
     assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
-def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
+@pytest.mark.parametrize('claim', [False, True])
+def test_published_unit_jargon_is_corrected_on_its_open_order(commander, claim):
     """No watch runs: publishing the message is what records the correction on the order."""
     comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
     create(commander, 'P1')
-    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed')
-    comms.messaging.send('worker', 'lead', 'The tests pass now.')
-    comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.')
+    from agent_comms.envelope_claim_transitions import WritableFileClaim
+    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
+    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed', claims=claims).message.message_id
+    comms.messaging.send('worker', 'lead', 'The tests pass now.').message.message_id
+    comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.').message.message_id
     corrected = comms.goals.todos.get('P1')
     assert [(c.message_id, c.words) for c in corrected.corrections] == [(vague, ('canonical', 'ownership'))]
     assert corrected.strike_count == 0
+
+
+@pytest.mark.parametrize('claim', [False, True])
+@pytest.mark.parametrize('body', ['The tests pass now.', 'The canonical ownership changed'])
+def test_old_todo_schema_refuses_before_any_bus_publication(commander, claim, body):
+    from agent_comms.envelope_claim_transitions import WritableFileClaim
+    from agent_comms.errors import RelationViolationError
+
+    comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
+    create(commander, 'P1')
+    with closing(sqlite3.connect(TodoStore.path_in(comms.root))) as db:
+        for column in ('corrections', 'verdicts', 'released'):
+            db.execute(f'ALTER TABLE todo DROP COLUMN {column}')
+        db.commit()
+    path = comms.root / 'bus.jsonl'
+    before = path.read_bytes() if path.exists() else b''
+    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
+    with pytest.raises(RelationViolationError, match='todos.sqlite3 differs from its declaration'):
+        comms.messaging.send('worker', 'lead', body, claims=claims).message.message_id
+    assert (path.read_bytes() if path.exists() else b'') == before
+
+
+def test_committed_send_reports_correction_failure_to_tool_and_cli(commander, monkeypatch):
+    import sqlite3
+    from agent_comms.cli_commands import SendCliCommand
+    from agent_comms.pi_payloads import PublishedMessageToolDetails
+    from agent_comms.tools import invoke_tool
+
+    comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
+    create(commander, 'P1')
+
+    def fail_correction(self, unit, message_id, text):
+        assert message_id.encode() in (comms.root / 'bus.jsonl').read_bytes()
+        raise sqlite3.OperationalError('P563 forced correction write failure')
+
+    monkeypatch.setattr(TodoStore, 'correct', fail_correction)
+    reply = invoke_tool(comms, 'comms_send', {
+        'from': 'worker', 'to': 'lead', 'body': 'The canonical result is on the order'}, caller=commander[1])
+    decoded = PublishedMessageToolDetails.from_wire(reply)
+    assert decoded.id == decoded.message.source.message_id
+    assert 'P563 forced correction write failure' in decoded.correction.error
+    cli = SendCliCommand(sender='worker', target='lead', body='A separate fresh CLI message').apply(comms).encoded()
+    assert 'was sent' in cli['message']
+    assert 'P563 forced correction write failure' in cli['correction']['error']
+    assert cli['id'] in cli['notices'][0]
 
 
 @pytest.mark.parametrize('step, name, column', [
@@ -858,7 +909,7 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
         comms.goals.update_goal(unit, SetGoalAction(text='Commander brief', goal_id=f'{unit}-brief'))
     create(commander, 'P1', owner='parted')
     create(commander, 'P2', owner='watching')
-    comms.messaging.send('lead', 'parted', 'Are you there?')
+    comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
     rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
         lines = rotate.detached(rotate.owed_orders())
@@ -868,7 +919,7 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
 def order_message(commander, problem, text):
     """The commander's bus message, recorded as the one the order was sent in."""
     comms, caller = commander
-    message = comms.messaging.send('lead', 'worker', text)
+    message = comms.messaging.send('lead', 'worker', text).message.message_id
     CommsTodoTool(id=problem, operation=OrderMessage(
         comms.goals.todos.get(problem).revision, comms.registry.require('lead').incarnation, message)).apply(comms, caller)
     return message
@@ -927,7 +978,7 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
     Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
     fields = dict(ids=(f'orphan-edit:{judge.Edit.from_row(**edit).code()}',),
                   why='The changes repair the existing canonical state owner', lines=('value = 2',),
-                  msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner'))
+                  msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner').message.message_id)
     command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
         **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')

@@ -40,8 +40,8 @@ def test_historical_terminal_release_keeps_recorded_incarnation_and_path(monkeyp
         later_file.write_text("later\n")
         comms.registry.remove("Alice")
         comms.registry.declare(thread_registration.new_thread('Alice', original.tags, str(other_project), created_at=original.created_at + 100))
-        comms.messaging.send_message("Alice", "sender", "Independent manual claim",
-                                     claims=(ExistingFileClaim(later_file),))
+        comms.messaging.send("Alice", "sender", "Independent manual claim",
+                                     claims=(ExistingFileClaim(later_file),)).message
         later = comms.bus.log.claim_projection()[str(later_file)]
         assert later.incarnation != claimed.incarnation
         with store.session.settlement() as boundary:
@@ -58,9 +58,9 @@ def test_old_terminal_cleanup_preserves_later_generation_of_same_file(monkeypatc
     with selected_turn() as (comms, store, selected, resource):
         publish_selected_resource_claim(comms, store, selected, "Alice", ExistingFileClaim(resource))
         terminal = strand_terminal(monkeypatch, store)
-        comms.messaging.send_message("Alice", "sender", "Replace old generation", releases=(str(resource),))
-        comms.messaging.send_message("Alice", "sender", "Later manual generation",
-                                     claims=(ExistingFileClaim(resource),))
+        comms.messaging.send("Alice", "sender", "Replace old generation", releases=(str(resource),)).message
+        comms.messaging.send("Alice", "sender", "Later manual generation",
+                                     claims=(ExistingFileClaim(resource),)).message
         later = comms.bus.log.claim_projection()[str(resource)]
         before = (comms.root / "bus.jsonl").read_bytes()
         with store.session.settlement() as boundary:

@@ -36,7 +36,7 @@ def test_first_wait_ignores_unreserved_reply_before_goal_publication(tmp_path):
     comms = canonical_goal_wire(tmp_path / "wire")
     register(comms, "owner")
     register(comms, "peer")
-    old = comms.messaging.send_message("peer", "owner", "Before this goal")
+    old = comms.messaging.send("peer", "owner", "Before this goal").message
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for later work"))
     assert goal.published_seq == old.seq
     assert FieldCodec.decode(Goal, goal.to_wire()) == goal
@@ -57,7 +57,7 @@ def test_first_wait_reviews_reply_after_goal_publication(tmp_path):
     register(comms, "owner")
     register(comms, "peer")
     goal = comms.goals.update_goal("owner", SetGoalAction(text="Wait for later work"))
-    reply = comms.messaging.send_message("peer", "owner", "After this goal")
+    reply = comms.messaging.send("peer", "owner", "After this goal").message
     assert reply.seq > goal.published_seq
     assert list(comms.goals.goal_input_review("owner", goal.id, ["peer"]).reviewed_inputs) == [
         f"bus:{reply.seq}"
@@ -80,7 +80,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
         "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
     )
     wait = comms.goals.goal_wait("owner")
-    reply = comms.messaging.send_message("peer", "owner", "Original dependency reply")
+    reply = comms.messaging.send("peer", "owner", "Original dependency reply").message
     with comms.bus.log.certified_read() as source:
         original = source.delivery(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
@@ -115,9 +115,9 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
         "owner", StandbyGoalAction(expect=GoalPrecondition(goal_id=goal.id), wait_for=("peer",))
     )
     wait = comms.goals.goal_wait("owner")
-    wrong = comms.messaging.send_message("peer", "other", "Different addressed recipient")
-    notice = comms.messaging.send_message("peer", "owner", "Diagnostic only", role=NoticeRole())
-    reply = comms.messaging.send_message("peer", "owner", "Original addressed reply")
+    wrong = comms.messaging.send("peer", "other", "Different addressed recipient").message
+    notice = comms.messaging.send("peer", "owner", "Diagnostic only", role=NoticeRole()).message
+    reply = comms.messaging.send("peer", "owner", "Original addressed reply").message
     with comms.bus.log.certified_read() as source:
         assert not wait.matches(source.delivery(wrong.seq), owner.incarnation.require_recorded())
         assert not wait.matches(source.delivery(notice.seq), owner.incarnation.require_recorded())
