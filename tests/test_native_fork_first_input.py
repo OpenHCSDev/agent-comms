@@ -156,7 +156,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
 
     state = await probe(GetState(id="parent-state"))
     stats = await probe(GetSessionStats(id="parent-stats"))
-    fraction = stats.context_usage.tokens / state.model.context_window.require_count()
+    fraction = stats.context_usage.tokens.require_count() / state.model.context_window.require_count()
     case.verify_fraction(fraction)
     print("PHYSICAL_PARENT_STATS", repr(stats), flush=True)
     assert state.model.context_window.require_count() == 32768
@@ -164,7 +164,7 @@ async def test_underbudget_physical_native_owner_answers_without_compaction(
     # Pi's own threshold engine stays idle below contextWindow - reserveTokens.
     reserve_tokens = json.loads((native.config / "settings.json").read_text())[
         "compaction"]["reserveTokens"]
-    assert stats.context_usage.tokens < state.model.context_window.require_count() - reserve_tokens
+    assert stats.context_usage.tokens.require_count() < state.model.context_window.require_count() - reserve_tokens
     original = native.session.read_bytes()
 
     native.provider.text = "FIRST_OWNER_ANSWER"

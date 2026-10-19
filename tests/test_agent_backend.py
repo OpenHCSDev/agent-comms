@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.pi_counts import PiCount
+
 import asyncio
 import json
 import os
@@ -11,7 +13,6 @@ from types import MappingProxyType
 
 import pytest
 
-from agent_comms.context_reading import ContextUsage
 
 import agent_comms.agent_backend as ab
 import agent_comms.agent_events as ae
@@ -105,7 +106,7 @@ def test_validation_names_missing_roles_and_abstract_methods():
     with pytest.raises(ab.BackendDeclarationError) as error:
         ab.validate_backends([HalfBackend])
     message = str(error.value)
-    for role in ("ReportsContext", "ConfiguresModel"):
+    for role in ("ConfiguresModel",):
         assert role in message
     assert "leaves methods abstract" in message
     for method in ("compact", "run_turn", "abort", "close_idle"):
@@ -383,11 +384,9 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         assert starts == ["ping"]
         assert backend.child_state.retained
 
-        usage = await backend.context_usage(thread)
-        assert usage == ContextUsage(321, 1000)
         outcome = await backend.compact(thread, "keep the plan")
         assert outcome == ab.PlacedCompaction(
-            summary="summary of keep the plan", first_kept="k1", tokens_before=900,
+            summary="summary of keep the plan", first_kept="k1", tokens_before=PiCount.from_wire(900),
         )
         assert published and published[0][0] == "owner"
     finally:

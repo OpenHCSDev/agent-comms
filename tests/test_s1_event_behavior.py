@@ -1,4 +1,6 @@
 """Current S1 consumer effects and fenced settlement, with real durable owners."""
+
+from agent_comms.pi_counts import PiCount
 from agent_comms.messages import NoticeRole
 
 import asyncio
@@ -68,15 +70,15 @@ class CompactionCase(EffectCase):
             ae.CompactionStart(),
             ae.ToolStart("tool", "read", "Read after summary"),
             ae.CompactionEnd(summary="summary"),
-            ae.AgentInfo(model="model", session_name="saved", context_size=1000),
-            ae.ContextUsageObservation(context_used=20),
+            ae.AgentInfo(model="model", session_name="saved", context_size=PiCount.from_wire(1000)),
+            ae.ContextUsageObservation(context_used=PiCount.from_wire(20)),
             ae.Chunk("answer"),
         )
 
     async def assert_effect(self, execution, progress):
         await super().assert_effect(execution, progress)
         info = execution.runner.comms.agents.agent_info_of(execution.thread_name)
-        assert info.context_used == 20 and info.context_size == 1000
+        assert info.context_used == PiCount.from_wire(20) and info.context_size == PiCount.from_wire(1000)
 
 
 class CompactionAbortCase(CompactionCase):
@@ -84,8 +86,8 @@ class CompactionAbortCase(CompactionCase):
         return (
             ae.CompactionStart(),
             ae.CompactionEnd(aborted=True),
-            ae.AgentInfo(model="model", session_name="saved", context_size=1000),
-            ae.ContextUsageObservation(context_used=20),
+            ae.AgentInfo(model="model", session_name="saved", context_size=PiCount.from_wire(1000)),
+            ae.ContextUsageObservation(context_used=PiCount.from_wire(20)),
             ae.Chunk("answer"),
         )
 
@@ -93,10 +95,10 @@ class CompactionAbortCase(CompactionCase):
 class ContextCase(EffectCase):
     def body(self):
         return (
-            ae.AgentInfo(model="model", session_name="saved", context_size=1000),
-            ae.ContextUsageObservation(context_used=20),
-            ae.ContextInfo(context_used=None, context_size=1000),
-            ae.ContextInfo(context_used=35, context_size=1000),
+            ae.AgentInfo(model="model", session_name="saved", context_size=PiCount.from_wire(1000)),
+            ae.ContextUsageObservation(context_used=PiCount.from_wire(20)),
+            ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(1000)),
+            ae.ContextInfo(context_used=PiCount.from_wire(35), context_size=PiCount.from_wire(1000)),
             ae.Chunk("answer"),
         )
 
@@ -263,9 +265,9 @@ async def test_current_stream_effects_then_terminal_release(owner_turn, monkeypa
 async def test_usage_observation_keeps_metadata_without_reattachment(owner_turn, monkeypatch):
     execution, progress = owner_turn
     comms, name = execution.runner.comms, execution.thread_name
-    comms.agents.observe_runtime_info(name, ae.ContextUsageObservation(context_used=20))
+    comms.agents.observe_runtime_info(name, ae.ContextUsageObservation(context_used=PiCount.from_wire(20)))
     comms.agents.observe_runtime_info(name, ae.AgentInfo(
-        model="test/model", session_name="saved", context_size=1000,
+        model="test/model", session_name="saved", context_size=PiCount.from_wire(1000),
     ))
 
     async def unexpected_metadata(event):
@@ -277,13 +279,13 @@ async def test_usage_observation_keeps_metadata_without_reattachment(owner_turn,
     class SampledContext(ae.ContextInfo):
         """Another producer needs no new dispatch or persistence enrollment."""
 
-    await progress.consume(SampledContext(context_used=None, context_size=1000))
+    await progress.consume(SampledContext(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(1000)))
     info = comms.agents.agent_info_of(name)
     assert (info.model, info.session_name) == ("test/model", "saved")
     assert (info.context_used, info.context_size) == (None, 1000)
-    await progress.consume(SampledContext(context_used=35, context_size=1000))
+    await progress.consume(SampledContext(context_used=PiCount.from_wire(35), context_size=PiCount.from_wire(1000)))
     comms.agents.observe_runtime_info(name, ae.AgentInfo(
-        model="test/new-model", session_name="renamed", context_size=2000,
+        model="test/new-model", session_name="renamed", context_size=PiCount.from_wire(2000),
     ))
     info = comms.agents.agent_info_of(name)
     assert (info.model, info.session_name) == ("test/new-model", "renamed")

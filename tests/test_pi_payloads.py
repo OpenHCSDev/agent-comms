@@ -10,21 +10,8 @@ from agent_comms.native_arguments import SelectedModel
 
 from agent_comms.pi_commands import GetSessionStats, GetState, PiCommand, Prompt
 from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
-from agent_comms.pi_payloads import (
-    AssistantMessage,
-    MissingData,
-    MissingToolResult,
-    ProvidedToolResult,
-    ReportedModel,
-    ReportedTokens,
-    StateData,
-    TextContent,
-    ToolCallContent,
-    UnknownData,
-    UnreportedModel,
-    UnreportedTokens,
-    UnreportedUsage,
-)
+from agent_comms.pi_payloads import AssistantMessage, MissingData, MissingToolResult, ProvidedToolResult, ReportedModel, StateData, TextContent, ToolCallContent, UnknownData, UnreportedModel, UnreportedUsage
+from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.turn_usage import UsageAccount
 from agent_comms.agent_events import ContextInfo
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
@@ -85,51 +72,51 @@ def test_known_nested_payload_has_one_typed_authority():
     assert event.message.tool_calls == (
         ToolCallContent(id="call", name="read", arguments={"path": "a"}),
     )
-    assert event.message.usage.total_tokens == 9
+    assert event.message.usage.total_tokens == PiCount.from_wire(9)
     assert event.message.stop_reason.tool_round
     assert not isinstance(event, Mapping)
     assert not hasattr(event, "wire") and not hasattr(event.message, "wire")
 
 
-@pytest.mark.parametrize("observation", ["reported", "omitted", "null"])
+@pytest.mark.parametrize("observation", ["reported", "omitted", "null", "zero"])
 def test_pi_counts_share_reported_members_and_reader_outputs(observation):
     model = {"provider": "p", "id": "m"}
     wire = {"model": model}
     if observation != "omitted":
-        value = 1000 if observation == "reported" else None
+        value = 1000 if observation == "reported" else 0 if observation == "zero" else None
         model.update(contextWindow=value, maxTokens=value)
-        wire.update(messageCount=0 if observation == "reported" else None,
-                    pendingMessageCount=0 if observation == "reported" else None)
+        wire.update(messageCount=0 if observation in ("reported", "zero") else None,
+                    pendingMessageCount=0 if observation in ("reported", "zero") else None)
     response = decode({"type": "response", "command": "get_state", "success": True, "data": wire})
     state = response.data
-    expected = ReportedTokens(1000) if observation == "reported" else UnreportedTokens()
+    expected = ReportedCount(1000) if observation == "reported" else UnreportedCount()
     assert state.model.context_window == state.model.max_tokens == expected
     assert state.message_count == state.pending_message_count == (
-        ReportedTokens(0) if observation == "reported" else UnreportedTokens())
-    assert state.pending_message_count.matches(0) is (observation == "reported")
+        ReportedCount(0) if observation in ("reported", "zero") else UnreportedCount())
+    assert state.pending_message_count.matches(0) is (observation in ("reported", "zero"))
     assert StateData.from_wire(state.to_wire()) == state
     assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
 
-    account = UsageAccount(used=7, size=4096)
+    account = UsageAccount(used=PiCount.from_wire(7), size=PiCount.from_wire(4096))
     attestation = SimpleNamespace(uncertain=False)
     attestation.observe = lambda state: attestation
     session = SimpleNamespace(usage=account, native=SimpleNamespace(attestation=attestation),
         active_session_file=None, persistent_session=object(),
         context_info=lambda: ContextInfo(context_used=account.used, context_size=account.size))
     info, = GetState.on_response(response, session)
-    assert info.context_size == account.size == (1000 if observation == "reported" else None)
-    painted = info.project_runtime_info(AgentRuntimeInfo(thread="unit", context_used=7, timestamp=1.0))
+    assert info.context_size == account.size == (1000 if observation in ("reported", "zero") else None)
+    painted = info.project_runtime_info(AgentRuntimeInfo(thread="unit", context_used=PiCount.from_wire(7), timestamp=1.0))
     assert painted.context_reading() == (
         ContextUsage(7, 1000) if observation == "reported" else UnmeasuredContext())
     context_wire = {"tokens": 7}
     if observation != "omitted":
-        context_wire["contextWindow"] = 2000 if observation == "reported" else None
+        context_wire["contextWindow"] = 2000 if observation in ("reported", "zero") else None
     stats = decode({"type": "response", "command": "get_session_stats", "success": True,
                     "data": {"contextUsage": context_wire}})
-    account.size = 4096
+    account.size = PiCount.from_wire(4096)
     emitted, = GetSessionStats.on_response(stats, session)
-    assert emitted.context_used == 7
-    assert emitted.context_size == (2000 if observation == "reported" else 4096)
+    assert emitted.context_used == PiCount.from_wire(7)
+    assert emitted.context_size == (PiCount.from_wire(2000) if observation == "reported" else PiCount.from_wire(4096))
     context = stats.data.context_usage
     assert context.context_window.reading(context.token_total) == (
         ContextUsage(7, 2000) if observation == "reported" else UnmeasuredContext())
@@ -149,7 +136,7 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
     )
     assert isinstance(event, Response) and event.command is GetState
     assert isinstance(event.data, StateData)
-    assert event.data.model.context_window == ReportedTokens(1000)
+    assert event.data.model.context_window == ReportedCount(1000)
     unknown = decode({"type": "future_notice", "nested": [True, 7]})
     assert isinstance(unknown, UnknownPiEvent)
     assert unknown.payload == {"type": "future_notice", "nested": [True, 7]}
@@ -370,7 +357,7 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
         else:
             assert [charge.usage for charge in charged] == [event.message.usage]
         if usage == {"totalTokens": 7}:
-            assert event.message.measured_tokens == ReportedTokens(7) and account.confirmed == 7
+            assert event.message.measured_tokens == ReportedCount(7) and account.confirmed == PiCount.from_wire(7)
         else:
-            assert event.message.measured_tokens == UnreportedTokens() and account.confirmed is None
+            assert event.message.measured_tokens == UnreportedCount() and account.confirmed == PiCount.from_wire(None)
         assert "usage" not in event.to_wire() and decode(event.to_wire()).usage == event.usage

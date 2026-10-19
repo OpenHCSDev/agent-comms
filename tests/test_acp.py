@@ -4,6 +4,8 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
+from agent_comms.pi_counts import PiCount
+
 from agent_comms.messages import NoticeRole
 from unittest.mock import AsyncMock
 
@@ -196,17 +198,17 @@ class TestHandlers:
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextUsageObservation(context_used=38723)
+            "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model="test/model", context_size=272000)
+            "proj", ae.AgentInfo(model="test/model", context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextInfo(context_used=None, context_size=272000)
+            "proj", ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
         )
         assert (
             facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
@@ -717,7 +719,7 @@ class TestAgentTurn:
             elif empty_kind == "unfinished_tool":
                 yield ae.ToolStart(id="unfinished", name="read")
             yield ae.StreamSettled()
-            yield ae.ContextInfo(context_used=None, context_size=1000)
+            yield ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(1000))
             yield ae.Done(ok=True, text="")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)

@@ -1,3 +1,5 @@
+
+from agent_comms.pi_counts import PiCount
 import asyncio
 import sys
 
@@ -18,9 +20,9 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
     comms = wire(tmp_path / "wire")
     comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(session)))
-    comms.agents.observe_runtime_info("worker", ContextUsageObservation(context_used=23))
+    comms.agents.observe_runtime_info("worker", ContextUsageObservation(context_used=PiCount.from_wire(23)))
     comms.agents.observe_runtime_info(
-        "worker", AgentInfo(model="test/model", session_name="preserved", context_size=100)
+        "worker", AgentInfo(model="test/model", session_name="preserved", context_size=PiCount.from_wire(100))
     )
     comms.ledger.merge({"saved": {"worker": ["work remains", 23]}}, "worker")
     metadata = comms.agents.runtime_info.path.read_bytes()
@@ -48,7 +50,7 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
         assert comms.agents.runtime_info.path.read_bytes() == metadata
         assert comms.ledger.path.read_bytes() == collaboration
         reopened = wire(comms.root)
-        assert reopened.agents.agent_info_of("worker").context_used == 23
+        assert reopened.agents.agent_info_of("worker").context_used == PiCount.from_wire(23)
         assert reopened.ledger.read()["saved"] == {"worker": ["work remains", 23]}
     finally:
         await asyncio.to_thread(comms.owners.stop, "worker")

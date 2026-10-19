@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from agent_comms.pi_counts import PiCount
+
 import multiprocessing
 import os
 import sqlite3
@@ -425,7 +427,7 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     assert totals.responses == 2
     assert totals.input_tokens == 140
     assert totals.output_tokens == 30
-    assert totals.total_tokens == 170
+    assert totals.total_tokens == PiCount.from_wire(170)
     assert str(totals.cost_total) == "0.3"
 
 

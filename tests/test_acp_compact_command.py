@@ -6,6 +6,8 @@ The runner's separate fake-provider tests establish no-retry and session safety.
 
 from __future__ import annotations
 
+from agent_comms.pi_counts import PiCount
+
 import pytest
 from acp import RequestError
 from acp.agent.router import build_agent_router
@@ -23,7 +25,7 @@ from agent_comms.field_codec import FieldCodec
 from delivery_owner_fixture import canonical_agent
 
 
-PLACED = PlacedCompaction("summary", "first-kept", 1200)
+PLACED = PlacedCompaction("summary", "first-kept", PiCount.from_wire(1200))
 PLACED_REPLY = PromptResponse(
     stop_reason="end_turn",
     field_meta=encode_updates(CompactionCommittedUpdate("summary", "first-kept")),

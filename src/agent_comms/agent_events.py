@@ -19,6 +19,7 @@ from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiUsage
+from .pi_counts import PiCount, UnreportedCount
 from .pi_vocabulary import CompactionReason, NoThinkingOverride, ThinkingLevelField, UnknownCompactionReason
 from .tool_results import ToolDiff
 from .tool_declaration import ToolDeclaration
@@ -202,7 +203,7 @@ class CompactionStart(CompactionEvent):
 class CompactionEnd(CompactionEvent):
     aborted: bool = False
     summary: str | None = None
-    context_used: int | None = None
+    context_used: PiCount = field(default_factory=UnreportedCount)
     will_retry: bool = False
 
     @property
@@ -282,7 +283,7 @@ class RuntimeInfoObservation(AgentEvent):
 class ContextUsageObservation(RuntimeInfoObservation):
     """Observe usage without claiming a model, identity or context window."""
 
-    context_used: int | None = None
+    context_used: PiCount = field(default_factory=UnreportedCount)
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
         return replace(super().project_runtime_info(current), context_used=self.context_used)
@@ -292,7 +293,7 @@ class ContextUsageObservation(RuntimeInfoObservation):
 class ContextSizeObservation(RuntimeInfoObservation):
     """Observe the context window without restating unobserved usage."""
 
-    context_size: int | None = None
+    context_size: PiCount = field(default_factory=UnreportedCount)
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
         return replace(super().project_runtime_info(current), context_size=self.context_size)

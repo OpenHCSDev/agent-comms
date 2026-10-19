@@ -1,5 +1,7 @@
 """The observed empty native1011 response retains typed stage without send inference."""
 
+from agent_comms.pi_counts import PiCount
+
 import copy
 import json
 from pathlib import Path
@@ -27,7 +29,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert isinstance(event, MessageEnd)
     assert event.message.content == ()
     assert event.message.stop_reason is ErrorStopReason
-    assert event.message.usage.total_tokens == 0
+    assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics
     assert diagnostic.error.name == "WebSocketCloseError"
     assert diagnostic.error.code == 1011

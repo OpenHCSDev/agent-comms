@@ -7,7 +7,8 @@ from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
+from .context_reading import ContextReading, UnmeasuredContext
+from .pi_counts import PiCount, UnreportedCount
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
@@ -29,14 +30,12 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     def model_or(self, default: str) -> str: ...
 
     session_name: str | None
-    context_used: int | None
-    context_size: int | None
+    context_used: PiCount
+    context_size: PiCount
 
     @property
     def context_percent(self) -> float | None:
-        if self.context_used is None or not self.context_size:
-            return None
-        return self.context_used / self.context_size * 100
+        return self.context_reading().context_percent
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,7 +45,8 @@ class UnobservedRuntimeInfo(RuntimeInfo):
     def context_reading(self) -> ContextReading:
         return UnmeasuredContext()
 
-    session_name = context_used = context_size = None
+    session_name = None
+    context_used = context_size = UnreportedCount()
 
     def model_or(self, default: str) -> str:
         return default
@@ -59,23 +59,16 @@ class AgentRuntimeInfo(RuntimeInfo):
     thread: str
     model: str | None = None
     session_name: str | None = None
-    context_used: int | None = None
-    context_size: int | None = None
+    context_used: PiCount = field(default_factory=UnreportedCount)
+    context_size: PiCount = field(default_factory=UnreportedCount)
     timestamp: float = field(metadata={"wire_name": "ts", "wire_required": True}, kw_only=True)
 
     def __post_init__(self) -> None:
         FieldCodec.decode(float, self.timestamp)
         if not self.thread:
             raise RelationViolationError("Runtime-info thread cannot be empty.")
-        if self.context_used is not None and self.context_used < 0:
-            raise ValueError("Context usage cannot be negative.")
-        if self.context_size is not None and self.context_size < 0:
-            raise ValueError("Context size cannot be negative.")
-
     def context_reading(self) -> ContextReading:
-        if self.context_used is None or not self.context_size:
-            return UnmeasuredContext()
-        return ContextUsage(self.context_used, self.context_size)
+        return self.context_size.reading(self.context_used)
 
     def model_or(self, default: str) -> str:
         return self.model or default

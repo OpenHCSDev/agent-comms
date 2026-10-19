@@ -1,5 +1,7 @@
 """A late native settlement cannot terminate a started dependency reply."""
 
+from agent_comms.pi_counts import PiCount
+
 from pathlib import Path
 import asyncio
 import sys
@@ -94,9 +96,9 @@ for line in sys.stdin:
         ):
             events.append(event)
             inject = (
-                isinstance(event, ae.ContextUsageObservation) and event.context_used == 2
+                isinstance(event, ae.ContextUsageObservation) and event.context_used == PiCount.from_wire(2)
                 if inject_during_stats
-                else isinstance(event, ae.ProviderUsage) and event.usage.total_tokens == 1
+                else isinstance(event, ae.ProviderUsage) and event.usage.total_tokens == PiCount.from_wire(1)
             )
             if inject and not injected:
                 injected = True

@@ -1,5 +1,7 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
+from agent_comms.pi_counts import PiCount
+
 from agent_comms.pi_vocabulary import HighThinkingLevel
 import asyncio
 import logging
@@ -179,12 +181,12 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 
         async def compact_context(runner, session_id, instructions):
             compact_calls.append((session_id, instructions))
-            return PlacedCompaction("summary", "first-kept", 1200)
+            return PlacedCompaction("summary", "first-kept", PiCount.from_wire(1200))
 
         monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
         assert FieldCodec.decode(
             CompactionOutcome, await proxy.request("compact", instructions="focus")
-        ) == PlacedCompaction("summary", "first-kept", 1200)
+        ) == PlacedCompaction("summary", "first-kept", PiCount.from_wire(1200))
         assert compact_calls == [(response.session_id, "focus")]
         with pytest.raises(ValueError, match="not registered"):
             RuntimeProxy(client, "missing-thread", path)

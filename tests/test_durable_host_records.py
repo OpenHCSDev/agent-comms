@@ -12,8 +12,8 @@ from agent_comms.pi_durable_backend import (
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_commands import GetSessionStats
-from agent_comms.pi_payloads import PiContextUsage, UnreportedTokens
-from agent_comms.context_reading import UnmeasuredContext
+from agent_comms.pi_payloads import PiContextUsage
+from agent_comms.pi_counts import PiCount, UnreportedCount
 from agent_comms.pi_events import PiEvent, UnknownPiEvent
 from agent_comms.threads import Thread
 
@@ -25,7 +25,7 @@ def decode(wire):
 @pytest.mark.parametrize('result,expected', [
     ({'kind': 'nothing_to'}, NothingToCompaction()),
     ({'kind': 'placed', 'summary': 'summary', 'first_kept': '7', 'tokens_before': 30},
-     PlacedCompaction('summary', '7', 30)),
+     PlacedCompaction('summary', '7', PiCount.from_wire(30))),
     ({'kind': 'stale'}, StaleCompaction()),
     ({'kind': 'failed', 'message': 'failure'}, FailedCompaction('failure')),
 ])
@@ -95,12 +95,11 @@ def test_real_host_context_and_request_error_remain_typed_and_live(tmp_path, thr
             await backend.close_idle()
             first, second = await asyncio.gather(backend.open(thread), backend.open(thread))
             assert first is second
-            assert await backend.context_usage(thread) == UnmeasuredContext()
             assert (await (await backend.open(thread)).request(Inspect())).work == ()
             with pytest.raises(RuntimeError, match='Recovery is only available before resume'):
                 await backend.child.request(Settle('task:missing', 'ABANDON'))
             assert (await backend.child.request(Inspect())).work == ()
-            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(0, UnreportedTokens())
+            assert (await backend.child.request(GetSessionStats())).context_usage == PiContextUsage(UnreportedCount(), UnreportedCount())
             assert (await backend.child.request(Inspect())).work == ()
             assert backend.child.proc.alive()
         finally:

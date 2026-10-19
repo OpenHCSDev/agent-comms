@@ -1,5 +1,7 @@
 """Native streaming: external RPC parsing and failure handling."""
 
+from agent_comms.pi_counts import PiCount
+
 import asyncio
 import json
 import os
@@ -450,7 +452,7 @@ for line in sys.stdin:
             "completed reply"
         ]
         assert any(
-            event.context_used == 64330 for event in events if isinstance(event, ae.ContextUsageObservation)
+            event.context_used == PiCount.from_wire(64330) for event in events if isinstance(event, ae.ContextUsageObservation)
         )
         assert events[-1] == ae.Done(ok=True, text="completed reply", diagnostic={"exit_code": 0})
 
@@ -630,8 +632,8 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         assert info[0].session_file == "/tmp/pi-session.jsonl"
         assert len(info) == 1
         context = [event for event in events if isinstance(event, ae.ContextUsageObservation)]
-        assert context[-1].context_used == 200
-        assert context[-1].context_size == 1000
+        assert context[-1].context_used == PiCount.from_wire(200)
+        assert context[-1].context_size == PiCount.from_wire(1000)
 
     @pytest.mark.parametrize("stats", [0, None, 60, 260, "invalid", True, "missing"])
     async def test_final_assistant_usage_survives_unavailable_stats(self, tmp_path, stats):
@@ -692,11 +694,11 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
             ],
         )
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            None,
-            78330,
-            78330,
+            PiCount.from_wire(None),
+            PiCount.from_wire(78330),
+            PiCount.from_wire(78330),
         ]
-        assert all(e.context_size == 272000 for e in events if isinstance(e, ae.ContextSizeObservation))
+        assert all(e.context_size == PiCount.from_wire(272000) for e in events if isinstance(e, ae.ContextSizeObservation))
         assert events[-1] == ae.Done(ok=True, text="", diagnostic={"exit_code": 0})
 
     @pytest.mark.parametrize("nested", [False, True])
@@ -731,7 +733,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [210, 150, 150]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [PiCount.from_wire(210), PiCount.from_wire(150), PiCount.from_wire(150)]
 
     @pytest.mark.parametrize("prior", [None, 150])
     @pytest.mark.parametrize("invalid", ["missing", 0, -1, True, "200", None, 12.5])
@@ -816,14 +818,14 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
             ],
         )
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            150,
-            310,
-            150,
-            150,
+            PiCount.from_wire(150),
+            PiCount.from_wire(310),
+            PiCount.from_wire(150),
+            PiCount.from_wire(150),
         ]
         assert [e.usage.total_tokens for e in events if isinstance(e, ae.ProviderUsage)] == [
-            150,
-            500,
+            PiCount.from_wire(150),
+            PiCount.from_wire(500),
         ]
         assert events[-1].ok is False
 
@@ -870,7 +872,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [PiCount.from_wire(None)]
 
     @pytest.mark.parametrize(
         "compaction",
@@ -905,10 +907,10 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         # An aborted or malformed compaction does not prove the old meter is
         # still current; typed usage stays unknown until fresh stats.
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            250,
-            None,
-            None,
-            None,
+            PiCount.from_wire(250),
+            PiCount.from_wire(None),
+            PiCount.from_wire(None),
+            PiCount.from_wire(None),
         ]
 
     @pytest.mark.parametrize("post_compaction", [False, True])
@@ -961,7 +963,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         ]
         events = await _rpc_events(tmp_path, records)
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == (
-            [None, 250, None, None, 40, 30] if post_compaction else [None, 250, None, None, None]
+            [PiCount.from_wire(None), PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(None), PiCount.from_wire(40), PiCount.from_wire(30)] if post_compaction else [PiCount.from_wire(None), PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(None), PiCount.from_wire(None)]
         )
 
     async def test_positive_pi_stats_after_compaction_need_no_locally_seen_final(self, tmp_path):
@@ -986,7 +988,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [250, None, 35]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(35)]
 
     @pytest.mark.parametrize("changed_field", ["sessionId", "sessionFile"])
     @pytest.mark.parametrize("final_state_observed", [False, True])
@@ -1033,10 +1035,10 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
         events = await _rpc_events(tmp_path, records)
         info = [e for e in events if isinstance(e, ae.AgentInfo)]
         context = [e for e in events if isinstance(e, ae.ContextUsageObservation)]
-        assert [e.context_used for e in context] == [250, None, None]
+        assert [e.context_used for e in context] == [PiCount.from_wire(250), PiCount.from_wire(None), PiCount.from_wire(None)]
         assert len(info) == 1
         assert all(e.session_file == "/tmp/first.jsonl" for e in info)
-        assert all(e.context_size == 1000 for e in context)
+        assert all(e.context_size == PiCount.from_wire(1000) for e in context)
         assert all(e.model == "test/A" for e in info)
         assert events[-1].reason_code == "session_identity_uncertain"
         assert events[-1].ok is False
@@ -1072,8 +1074,8 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
             ],
         )
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            250,
-            None,
+            PiCount.from_wire(250),
+            PiCount.from_wire(None),
         ]
         assert events[-1].reason_code == "session_identity_uncertain"
         assert events[-1].ok is False
@@ -1112,7 +1114,7 @@ send({{'type':'message_start','message':{{'role':'user','content':'foreign later
                 },
             ],
         )
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [250, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [PiCount.from_wire(250), PiCount.from_wire(None)]
         assert events[-1].reason_code == "session_identity_uncertain"
         assert events[-1].ok is False
         assert not any(isinstance(e, ae.StreamSettled) for e in events)
@@ -1204,7 +1206,7 @@ for line in sys.stdin:
                 process = backend.TurnSession.active[owner].native.proc
                 queue.put_nowait(pending)
         assert [e.text for e in events if isinstance(e, ae.Chunk)] == ["A-before"]
-        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [250, None]
+        assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [PiCount.from_wire(250), PiCount.from_wire(None)]
         assert all(
             e.session_file != "/tmp/second.jsonl" for e in events if isinstance(e, ae.AgentInfo)
         )
@@ -1272,11 +1274,11 @@ for line in sys.stdin:
             ],
         )
         assert [e.context_used for e in events if isinstance(e, ae.ContextUsageObservation)] == [
-            250,
-            None,
-            70,
-            None,
-            None,
+            PiCount.from_wire(250),
+            PiCount.from_wire(None),
+            PiCount.from_wire(70),
+            PiCount.from_wire(None),
+            PiCount.from_wire(None),
         ]
         assert events[-1].ok is False
 
@@ -2988,8 +2990,8 @@ class TestPrRpcParsing:
         assert info[0].session_file == "/tmp/pi-session.jsonl"
         assert len(info) == 1
         context = [event for event in events if isinstance(event, ae.ContextUsageObservation)]
-        assert context[-1].context_used == 200
-        assert context[-1].context_size == 1000
+        assert context[-1].context_used == PiCount.from_wire(200)
+        assert context[-1].context_size == PiCount.from_wire(1000)
 
     async def test_rpc_stays_open_for_steered_child_reply(self, tmp_path):
         stub = _stub(
@@ -3062,16 +3064,16 @@ echo '{{"type":"response","command":"get_session_stats","success":true,"data":{{
         assert next(
             event
             for event in events
-            if isinstance(event, ae.ContextUsageObservation) and event.context_used == 83
+            if isinstance(event, ae.ContextUsageObservation) and event.context_used == PiCount.from_wire(83)
         )
         start = next(event for event in events if isinstance(event, ae.CompactionStart))
         end = next(event for event in events if isinstance(event, ae.CompactionEnd))
         assert start.reason is ThresholdCompactionReason
         assert end.reason is ThresholdCompactionReason
         assert end.aborted is aborted
-        assert end.context_used is None
+        assert end.context_used == PiCount.from_wire(None)
         assert end.summary == (None if aborted else summary)
-        assert isinstance(events[-2], ae.ContextUsageObservation) and events[-2].context_used is None
+        assert isinstance(events[-2], ae.ContextUsageObservation) and events[-2].context_used == PiCount.from_wire(None)
         assert events[-1].ok is True
 
     async def test_failed_tool_does_not_fail_recovered_turn(self, tmp_path):

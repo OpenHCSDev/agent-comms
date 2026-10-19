@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .pi_counts import PiCount
+
 from abc import ABC, abstractmethod
 from collections import OrderedDict
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
@@ -693,11 +695,11 @@ class ThreadView(ThreadRecord):
         return self.runtime.session_name
 
     @projected(view="presence")
-    def context_used(self) -> int | None:
+    def context_used(self) -> PiCount:
         return self.runtime.context_used
 
     @projected(view="presence")
-    def context_size(self) -> int | None:
+    def context_size(self) -> PiCount:
         return self.runtime.context_size
 
     @projected(view="presence")

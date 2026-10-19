@@ -1,3 +1,5 @@
+
+from agent_comms.pi_counts import PiCount
 import json
 import os
 import subprocess
@@ -57,16 +59,16 @@ def test_private_bus_rejects_unattestable_windows_ownership(tmp_path: Path) -> N
 class TestAgentRuntimeInfo:
     def test_context_percent_and_persistence(self, tmp_path: Path):
         info = AgentRuntimeInfo(
-            thread="a", model="provider/model", context_used=25, context_size=100, timestamp=1.0
+            thread="a", model="provider/model", context_used=PiCount.from_wire(25), context_size=PiCount.from_wire(100), timestamp=1.0
         )
         assert info.context_percent == 25
         store = RuntimeInfoStore(tmp_path / "runtime.json")
-        store.observe("a", 1.0, AgentInfo(model="provider/model", context_size=100))
-        store.observe("a", 1.0, ContextUsageObservation(context_used=25))
+        store.observe("a", 1.0, AgentInfo(model="provider/model", context_size=PiCount.from_wire(100)))
+        store.observe("a", 1.0, ContextUsageObservation(context_used=PiCount.from_wire(25)))
         assert store.read()["a"] == info
 
     def test_unknown_context_stays_unknown(self):
-        assert AgentRuntimeInfo(thread="a", context_size=100, timestamp=1.0).context_percent is None
+        assert AgentRuntimeInfo(thread="a", context_size=PiCount.from_wire(100), timestamp=1.0).context_percent is None
 
     def test_negative_context_is_rejected(self):
         with pytest.raises(ValueError, match="negative"):
