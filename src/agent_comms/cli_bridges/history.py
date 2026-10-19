@@ -211,25 +211,24 @@ class JsonLinesFile(JsonLines, ReadAtOnce):
         """Session facts that precede the selected history; none unless the format keeps them apart."""
         return iter(())
 
-    def import_records(self) -> Iterator[tuple[int, bytes]]:
-        """Import all saved records, not just the current post-compaction window."""
-        with self.source.open('rb') as stream:
-            boundary = stream.seek(0, 2)
-            yield from self.complete_lines(stream, 0, boundary)
-            offset = stream.tell()
-            if raw := stream.read(boundary - offset).strip():
-                yield offset, raw
+    def import_records(self, stream: BinaryIO, boundary: int) -> Iterator[tuple[int, bytes]]:
+        """Import all records at one captured cut; malformed content fails, never disappears."""
+        yield from self.complete_lines(stream, 0, boundary)
+        offset = stream.tell()
+        if raw := stream.read(boundary - offset).strip():
+            yield offset, raw
 
     def import_updates(self, record, state, offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
         yield from self.record_updates(record, state, offset, raw)
 
     def read_import(self) -> Iterator[RuntimeUpdate]:
         with self.source.open('rb') as stream:
-            yield from self.facts(stream, stream.seek(0, 2))
-        state = self.start_state()
-        for offset, raw in self.import_records():
-            record = self.decode_line(raw, offset)
-            yield from self.import_updates(record, state, offset, raw)
+            boundary = stream.seek(0, 2)
+            yield from self.facts(stream, boundary)
+            state = self.start_state()
+            for offset, raw in self.import_records(stream, boundary):
+                record = self.decode_line(raw, offset)
+                yield from self.import_updates(record, state, offset, raw)
 
     async def import_history(self) -> AsyncIterator[RuntimeUpdate]:
         for update in self.read_import():

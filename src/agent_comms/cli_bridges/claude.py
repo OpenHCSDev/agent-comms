@@ -12,6 +12,7 @@ from typing import AsyncIterator, BinaryIO, Self
 from agent_comms.cli_protocol import WireModel
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_path import FileRevision
+from agent_comms.importing import ImportSnapshot
 from agent_comms.wire_watch import WatchSource, WireWatch
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
@@ -46,11 +47,14 @@ class ClaudeJsonLines(JsonLinesFile):
         for update in record.updates(state):
             yield from update.during(state.phase)
 
-    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
-        """The file is named by its session; a subagent's task description is beside it, not in it."""
+    @property
+    def launch_description(self) -> str | None:
+        """Claude saves launch descriptions beside the JSONL, not in its first record."""
         meta = self.source.with_suffix('.meta.json')
-        title = SubagentMeta.model_validate_json(meta.read_bytes()).description if meta.is_file() else ''
-        yield SessionFacts(source_id=self.source.stem, title=title)
+        return SubagentMeta.model_validate_json(meta.read_bytes()).description if meta.is_file() else None
+
+    def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
+        yield SessionFacts(source_id=self.source.stem, title=self.launch_description or '')
 
 
 class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
@@ -59,10 +63,7 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
 
     suffixes = frozenset({'.jsonl'})
 
-    def __init__(self, source: Path, session_id: str | None = None,
-                 *, ancestors: tuple[Path, ...] = ()) -> None:
-        super().__init__(source, session_id)
-        self.ancestors = ancestors
+    ancestors: tuple[Path, ...] = ()
 
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         if self.session_id not in (None, self.source.stem):
@@ -78,24 +79,28 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
             directory = directory.parent.parent
         if Path(session_id).name != session_id:
             raise ValueError(f'Invalid inherited Claude session id: {session_id}')
-        parent = ClaudeTranscript(directory / f'{session_id}.jsonl',
-                                  ancestors=(*self.ancestors, self.source))
+        parent = ClaudeTranscript(directory / f'{session_id}.jsonl')
+        parent.ancestors = (*self.ancestors, self.source)
         if parent.source in parent.ancestors:
             raise ValueError(f'Cyclic inherited Claude context: {parent.source}')
         state = parent.start_state()
-        for offset, raw in parent.import_records():
-            record = parent.decode_line(raw, offset)
-            yield from parent.import_updates(record, state, offset, raw)
-            if json.loads(raw).get('uuid') == last_uuid:
-                return
+        with parent.source.open('rb') as stream:
+            for offset, raw in parent.import_records(stream, stream.seek(0, 2)):
+                record = parent.decode_line(raw, offset)
+                for update in parent.import_updates(record, state, offset, raw):
+                    # Inherit conversation, never the parent's identity, project or title.
+                    if not isinstance(update, SessionFacts):
+                        yield update
+                if json.loads(raw).get('uuid') == last_uuid:
+                    return
         raise ValueError(f'Inherited Claude context {session_id} has no record {last_uuid}')
 
     def subagent_info(self) -> SubagentInfo:
-        from agent_comms.importing import ImportSnapshot
-
         snapshot = ImportSnapshot.read(self)
-        return SubagentInfo(self.source.stem.removeprefix('agent-'), snapshot.title,
-                            len(snapshot.messages), sum(1 for _ in self.import_records()))
+        with self.source.open('rb') as stream:
+            source_records = sum(1 for _ in self.import_records(stream, stream.seek(0, 2)))
+        return SubagentInfo(self.source.stem.removeprefix('agent-'), self.launch_description,
+                            len(snapshot.messages), source_records)
 
     @classmethod
     def select_subagents(cls, session: Path, agents: tuple[str, ...]) -> tuple[Path, ...]:

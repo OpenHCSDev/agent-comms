@@ -146,8 +146,9 @@ class ImportBuffer:
     def summarize(self, text: str) -> None:
         """Keep the source checkpoint in order without discarding its original history."""
         self.summary = text
-        self.messages.append(ImportedInput("Source compaction/context summary:\n" + text))
-        self.seen += 1
+        if text:
+            self.messages.append(ImportedInput("Source compaction/context summary:\n" + text))
+            self.seen += 1
 
     def describe(self, facts: SessionFacts) -> None:
         self.source_id = facts.source_id or self.source_id
