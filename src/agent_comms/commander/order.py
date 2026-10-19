@@ -471,7 +471,7 @@ def on_record(line: str, recorded: str, audience: tuple[str, ...] = ('#comms',))
                     'Written by agent-comms-commander order; never edited.\n\n')
         f.write(f'- {line}\n')
     try:
-        post(audience, f'On the record: {line}')
+        post([*audience], f'On the record: {line}')
     except SystemExit as failed:
         print(f'{recorded} recorded, but the post failed ({failed}). '
               'Repost with order.post; do not record it again.', file=sys.stderr)

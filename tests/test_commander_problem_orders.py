@@ -1043,7 +1043,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     assert why in comms.registry.require('worker').goal.progress
     assert judge.Edit.unjudged(comms, 'lead') == []
     audience = SendBackVerdict.audience.targets(saved)
-    assert [to for to, _ in posted] == [audience, audience]
+    assert [tuple(to) for to, _ in posted] == [audience, audience]
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
@@ -1051,9 +1051,9 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
 def test_each_verdict_kind_reaches_its_unit_and_the_threads_whose_goal_the_order_serves(commander, kind):
     comms, _ = commander
     todo = create(commander, 'P1')
-    assert kind.audience.targets(todo) == ('worker',)
-    led = replace(todo, goal=GoalRef('lead', comms.registry.require('lead').created_at, 'goal'))
-    assert kind.audience.targets(led) == ('worker', 'lead')
+    assert kind.audience.targets(todo) == ('worker', 'lead')
+    own = replace(todo, goal=GoalRef('worker', comms.registry.require('worker').created_at, 'goal'))
+    assert kind.audience.targets(own) == ('worker',)
 
 
 def test_an_accepted_verdict_quotes_the_order_it_serves(commander):

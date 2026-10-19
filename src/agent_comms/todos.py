@@ -849,7 +849,6 @@ class GoalReference(SubclassUnion):
         pass
 
     def threads(self) -> tuple[str, ...]:
-        """The thread whose goal this is; none without a goal."""
         return ()
 
 
@@ -1049,9 +1048,7 @@ class StrikeTodo(TodoOperation):
 
 
 class VerdictAudience:
-    """Who must read a verdict: the unit holding the order and the thread whose goal it
-    serves. No verdict kind today is one every unit must act on, so none is collective."""
-
+    """The order's unit and its goal's thread; no verdict kind today concerns every unit."""
     @staticmethod
     def targets(todo: Todo) -> tuple[str, ...]:
         return tuple(dict.fromkeys((todo.held().owner, *todo.goal.threads())))

@@ -101,7 +101,7 @@ def roast(audience, thread, lines, text, fix, slop):
             + '\n'.join(f'    {l.strip()}' for l in lines)
             + f'\nThe slop: {slop.render()}'
             + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
-    print(f'roast sent to {", ".join(audience)}: ' + order.post(audience, body))
+    print(f'roast sent to {", ".join(audience)}: ' + order.post([*audience], body))
 
 
 def alarm():
