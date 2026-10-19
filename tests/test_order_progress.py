@@ -259,15 +259,17 @@ def test_install_due_fires_once_the_schedule_passes_with_main_moved(commander, t
         return [rule.line() for rule in InstallDue.violations(comms, 'lead')]
 
     installed = commit('installed')
-    assert due() == ['INSTALL DUE (no install of main is recorded on this bus) -> bus-upgrade '
+    assert due() == ['INSTALL DUE (no install of main is recorded on this bus) -> the installer '
                      'rehearses and installs main with tools/upgrade_bus.py and posts the result '
                      'to the commander']
-    PlannedInstallDeadline.after(installed, installation, time.time()).plan(comms.root)
+    PlannedInstallDeadline.after(installed, installation, 'worker', time.time()).plan(comms.root)
     moved = commit('merged after the install')
     assert due() == []
-    PlannedInstallDeadline.after(installed, installation, 0.0).plan(comms.root)
+    PlannedInstallDeadline.after(installed, installation, 'worker', 0.0).plan(comms.root)
     assert len(due()) == 1 and f'main is {moved[:9]}, the bus runs {installed[:9]}' in due()[0]
-    PlannedInstallDeadline.after(moved, installation, 0.0).plan(comms.root)
+    assert due()[0].endswith('installer worker) -> the installer rehearses and installs main with '
+                             'tools/upgrade_bus.py and posts the result to the commander')
+    PlannedInstallDeadline.after(moved, installation, 'worker', 0.0).plan(comms.root)
     assert due() == []
 
 

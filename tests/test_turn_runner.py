@@ -12,7 +12,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.turn_runner import TurnRunner
-from stored_inputs import stored_inputs
+from stored_inputs import sent_text, stored_inputs
 
 
 @pytest.fixture
@@ -76,6 +76,13 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     prepared_owner, monkeypatch
 ):
     owner, session, native = prepared_owner
+    updates = []
+
+    class Client:
+        async def session_update(self, **kwargs):
+            updates.append(kwargs["update"])
+
+    owner.on_connect(Client())
     original = native.session.read_bytes()
     source = OSError("native diagnostic source")
     failure = RuntimeError("selected operation failed")
@@ -94,6 +101,7 @@ async def test_turn_failure_preserves_exact_exception_cause_and_releases_state(
     assert caught.value.__cause__ is failure and failure.__cause__ is source
     request_failure = RequestFailure.from_error(caught.value)
     assert request_failure.notification_published and request_failure.failure.input_state.public_status == "not_sent"
+    assert len(failure_facts(updates, RequestFailedUpdate)) == 1
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
     assert not owner.turns.turn_locks[session].locked()
@@ -180,7 +188,7 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
         assert "Open diagnostic" in errors[-1].failure.detail
     assert native.session.read_bytes() == original
     assert native.provider.posts == 0  # Preparation/fault must not send or replay input.
-    assert not owner._comms.registry.require(session).active_turn.executing
+    assert not owner._comms.registry.require(session).executing
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
 
@@ -217,9 +225,9 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     with NativeEntry.open_evidence(native.session) as evidence:
         evidence.observe()
         assert tuple(evidence.inputs) == (original.native_id,)
-        assert evidence.tracked(original.native_id).message.text == original.sent_text
-    assert original.sent_text.endswith("Actual failed input")
-    assert not owner._comms.registry.require(session).active_turn.executing
+        assert evidence.tracked(original.native_id).message.text == sent_text(native, original)
+    assert sent_text(native, original).endswith("Actual failed input")
+    assert not owner._comms.registry.require(session).executing
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
 

@@ -19,6 +19,7 @@ from agent_comms.connector import (
     ApproveVerb,
     RevokeVerb,
 )
+from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
 from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
@@ -101,6 +102,10 @@ async def test_connector_lists_every_tool(client, store, comms):
 
 async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
     headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
+    reviews = RuleReviews(comms.root)
+    reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
+    reviews.write("claude-ai", AnsweredRuleReviewEntry(
+        1, "This tick moves rules.py:47 into one typed Core record that Core owns."))
     calls = ({"name": "comms_set_goal", "arguments": {"text": "Ship the connector"}},
              {"name": "comms_send", "arguments": {"from": "claude-ai", "to": "worker", "body": "Owner said go"}})
     for call in calls:

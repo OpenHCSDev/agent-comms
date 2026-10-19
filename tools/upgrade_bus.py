@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Upgrade a retained bus and the checkout that runs it, in one command.
 
-    python tools/upgrade_bus.py [--checkout DIR] [--root ~/.agent-comms] [--to origin/main] [--rehearse]
+    python tools/upgrade_bus.py --installer UNIT [--checkout DIR] [--root ~/.agent-comms] [--to origin/main] [--rehearse]
 
 ``--checkout`` is the installation to upgrade (by default, the one holding
 this file); run the command from the target revision so its steps are known.
@@ -388,7 +388,7 @@ def route_readers(patience: int = 120) -> None:
         os.close(descriptor)
 
 
-def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dict:
+def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_only: bool) -> dict:
     current = run("git", "-C", checkout, "rev-parse", "HEAD").strip()
     run("git", "-C", checkout, "fetch", "-q", "origin")
     target = run("git", "-C", checkout, "rev-parse", "--verify", f"{target}^{{commit}}").strip()
@@ -414,14 +414,15 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
                       "rehearsal": rehearse(root, pending, staged, revisions)}
             if rehearse_only:
                 return report
-            report["live"] = live(checkout, root, current, target, pending, installed, staged, revisions)
+            report["live"] = live(checkout, root, current, target, pending, installed, staged, revisions,
+                                  installer)
             return report
         finally:
             revisions.close()
 
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
-         installed: Stack, staged: Stack, revisions: Revisions) -> dict:
+         installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> dict:
     """The rehearsal's passes under the rehearsal's stack; ``installed`` only stops, starts
     and reads back its own owners."""
     running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
@@ -454,7 +455,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         read = installed.verify(root)
         maintenance.clear(held)
         round_trip = installed.round_trip(root)
-        PlannedInstallDeadline.after(target, checkout, time.time()).plan(root)
+        PlannedInstallDeadline.after(target, checkout, installer, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
         if maintenance.read().phase is ReadyPhase:  # the round trip failed on the opened bus
@@ -496,12 +497,13 @@ def main() -> None:
     parser.add_argument("--root", type=lambda value: Path(value).expanduser().resolve(),
                         default=Path.home() / ".agent-comms")
     parser.add_argument("--to", default="origin/main")
+    parser.add_argument("--installer", required=True, help="The unit running this install; the plan names it")
     parser.add_argument("--rehearse", action="store_true", help="Carry and read a copy of the bus; change nothing")
     args = parser.parse_args()
     for signum in (signal.SIGTERM, signal.SIGINT):
         signal.signal(signum, stopped)
     try:
-        print(json.dumps(upgrade(args.checkout, args.root, args.to, args.rehearse), indent=2))
+        print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse), indent=2))
     except UpgradeRefused as error:
         raise SystemExit(f"upgrade-bus: {error}")
 

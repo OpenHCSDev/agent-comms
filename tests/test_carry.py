@@ -578,7 +578,7 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
     checkout.mkdir()
 
     def upgrading():
-        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None)
+        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
 
     failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
     if registered:

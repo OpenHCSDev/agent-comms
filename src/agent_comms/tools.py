@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
+from .progress_claims import ProgressClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .cli_commands import (
     ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
@@ -60,7 +61,7 @@ from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, OrderDelivery,
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
-                    TodoOperation)
+                    TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -656,9 +657,12 @@ class CommsGoalTool(ThreadToolRequest):
         "Exact unresolved inputId keys inspected and handled for this goal; standby only",
         default=None,
     )
+    claims: tuple[ProgressClaim, ...] = tool_field(
+        "Merged, installed or working claims, each with the artifact Core verifies", default=())
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
+        ProgressClaim.require_all(self.claims, comms, Path(comms.registry.require(name).worktree))
         command = replace(
             self.status(progress=self.progress),
             expect=self.status.model_precondition(self.goal_id),
@@ -873,8 +877,12 @@ class CommsOrderDoneTool(ThreadToolRequest):
     description = "Verify the order's check on its clean delivered commit before completing its Goal."
     problem: str = tool_field("Problem ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
+    claims: tuple[ProgressClaim, ...] = tool_field(
+        "Merged, installed or working claims, each with the artifact Core verifies", default=())
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
+        ProgressClaim.require_all(
+            self.claims, comms, Path(comms.registry.require(caller.name).worktree))
         todo = comms.goals.todos.get(self.problem)
         todo.require_commander(comms.registry.require(caller.name).incarnation)
         assignment = todo.assignment
@@ -1030,6 +1038,9 @@ class CommsSendTool(ToolRequest):
     sender: str = tool_field("Sender thread name", wire_name="from")
     target: str = tool_field("Target thread name or channel", wire_name="to")
     body: str = tool_field("Message text")
+    audience: tuple[str, ...] = tool_field(
+        "Threads a channel message is for; no other member is woken", default=()
+    )
     type: Type[MessageKind] = tool_field(
         "Message kind", default=InfoKind, choices=MessageKind.sendable_names
     )
@@ -1038,9 +1049,10 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        result = comms.messaging.send(
-            self.sender, self.target, self.body, self.type, report=self.report
-        )
+        caller.require_directive(comms, self.body)
+        body = VerdictAudience(self.audience).addressed(self.target, self.body)
+        result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 
 

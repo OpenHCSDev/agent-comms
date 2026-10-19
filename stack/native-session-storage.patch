@@ -11,19 +11,19 @@
  import { readdir, stat } from "fs/promises";
  import { dirname, join, resolve } from "path";
  import { createInterface } from "readline";
-@@ -18,147 +22,15 @@
+@@ -18,147 +22,9 @@
      }
  }
- /** Generate a unique short ID (8 hex chars, collision-checked) */
+-/** Generate a unique short ID (8 hex chars, collision-checked) */
 -function generateId(byId) {
-+function generateId(store) {
-     for (let i = 0; i < 100; i++) {
-         const id = randomUUID().slice(0, 8);
+-    for (let i = 0; i < 100; i++) {
+-        const id = randomUUID().slice(0, 8);
 -        if (!byId.has(id))
-+        if (!store.has(id))
-             return id;
-     }
-     // Fallback to full UUID if somehow we have collisions
+-            return id;
+-    }
+-    // Fallback to full UUID if somehow we have collisions
++/** UUID identity does not require a historical absence query. */
++function generateId() {
      return randomUUID();
  }
 -/** Migrate v1 → v2: add id/parentId tree structure. Mutates in place. */
@@ -505,7 +505,7 @@
 -            return;
 +        if (!this.persist || !this.sessionFile) return;
 +        let hasAssistant = entry.type === 'message' && entry.message.role === 'assistant';
-+        if (!hasAssistant) for (const meta of this.entryStore.metadataEntries()) {
++        if (!this.flushed && !hasAssistant) for (const meta of this.entryStore.metadataEntries()) {
 +            if (meta.role === 'assistant') { hasAssistant = true; break; }
          }
 +        if (!this.flushed && !hasAssistant) return;
@@ -607,18 +607,18 @@
      }
      /** Append a message as child of current leaf, then advance leaf. Returns entry id.
       * Does not allow writing CompactionSummaryMessage and BranchSummaryMessage directly.
-@@ -876,36 +671,41 @@
+@@ -876,36 +671,38 @@
       * These need to be appended via appendCompaction() and appendBranchSummary() methods.
       */
      appendMessage(message) {
 +        return this.#acMutation(() => {
-         if (message?.role === "user" && message.inputId && this.getTrackedInput(message.inputId)) {
-             throw new Error("Native input ID is already present in this session");
-         }
+-        if (message?.role === "user" && message.inputId && this.getTrackedInput(message.inputId)) {
+-            throw new Error("Native input ID is already present in this session");
+-        }
          const entry = {
              type: "message",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              message,
@@ -633,7 +633,7 @@
          const entry = {
              type: "thinking_level_change",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              thinkingLevel,
@@ -648,7 +648,7 @@
          const entry = {
              type: "model_change",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              provider,
@@ -664,7 +664,7 @@
          const entry = {
              type: "compaction",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              summary,
@@ -682,7 +682,7 @@
              customType,
              data,
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
@@ -697,7 +697,7 @@
          const entry = {
              type: "session_info",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              name: sanitizedName,
@@ -719,9 +719,9 @@
 -        }
 -        return undefined;
 +        this.#acAssertUsable();
-+        let id;
-+        for (const meta of this.entryStore.metadataEntries()) if (meta.type === 'session_info') id = meta.id;
-+        return id ? this.entryStore.get(id).name?.trim() || undefined : undefined;
++        for (const meta of this.entryStore.metadataEntries()) if (meta.type === 'session_info')
++            return this.entryStore.get(meta.id).name?.trim() || undefined;
++        return undefined;
      }
      /**
       * Append a custom message entry (for extensions) that participates in LLM context.
@@ -737,7 +737,7 @@
              display,
              details,
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
@@ -796,7 +796,7 @@
          const entry = {
              type: "label",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              targetId,
@@ -930,7 +930,7 @@
          const entry = {
              type: "branch_summary",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: branchFromId,
              timestamp: new Date().toISOString(),
              fromId,
@@ -1445,50 +1445,15 @@
          const result = [];
          for (const entry of entries) {
              if (entry.type !== "message")
-@@ -2950,32 +2940,31 @@
+@@ -2950,7 +2940,7 @@
          let totalMessages = 0;
          let toolCalls = 0;
          const usageTotals = createUsageTotals();
 -        for (const entry of this.sessionManager.getEntries()) {
-+        const store = this.sessionManager.entryStore;
-+        store.assertCurrent();
-+        for (const entry of store.metadataEntries()) {
++        for (const entry of this.sessionManager.entryStore.contextEntries()) {
              if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
                  addUsageToTotals(usageTotals, entry.usage);
              }
-             if (entry.type !== "message")
-                 continue;
-             totalMessages++;
--            const message = entry.message;
--            if (message.role === "user") {
-+            if (entry.role === "user") {
-                 userMessages++;
-             }
--            else if (message.role === "toolResult") {
-+            else if (entry.role === "toolResult") {
-                 toolResults++;
--                if (message.usage) {
--                    addUsageToTotals(usageTotals, message.usage);
-+                if (entry.usage) {
-+                    addUsageToTotals(usageTotals, entry.usage);
-                 }
-             }
--            else if (message.role === "assistant") {
-+            else if (entry.role === "assistant") {
-                 assistantMessages++;
--                const assistantMsg = message;
--                if (Array.isArray(assistantMsg.content)) {
--                    toolCalls += assistantMsg.content.filter((c) => c.type === "toolCall").length;
--                }
--                addUsageToTotals(usageTotals, assistantMsg.usage);
-+                toolCalls += entry.toolCallCount;
-+                addUsageToTotals(usageTotals, entry.usage);
-             }
-         }
-+        store.assertCurrent();
-         return {
-             sessionFile: this.sessionFile,
-             sessionId: this.sessionId,
 @@ -3005,30 +2994,20 @@
          // After compaction, the last assistant usage reflects pre-compaction context size.
          // We can only trust usage from an assistant that responded after the latest compaction.
@@ -1683,7 +1648,7 @@
      // Second pass: walk from newest to oldest, adding messages until token budget
 -    for (let i = entries.length - 1; i >= 0; i--) {
 -        const entry = entries[i];
-+    for (const entry of entries.reverse()) {
++    for (const entry of entries.newestFirst()) {
          const message = getMessageFromEntry(entry);
          if (!message)
              continue;
@@ -2244,13 +2209,13 @@
          const stats = this.session.getSessionStats();
          const sessionName = this.sessionManager.getSessionName();
 -        const entries = this.sessionManager.getEntries();
-+        const entries = this.sessionManager.entryStore.entries();
++        const entries = this.sessionManager.entryStore.contextEntries();
          const cacheWaste = computeCacheWaste(entries, this.session.modelRuntime);
          // Cost/token totals per provider/model actually used (e.g. OpenRouter `auto`
          // resolves to a concrete responseModel). Usage without model attribution is
          // grouped separately so the breakdown reconciles with the session total.
 -        const usageBreakdown = getUsageCostBreakdown(entries);
-+        const usageBreakdown = getUsageCostBreakdown(this.sessionManager.entryStore.entries());
++        const usageBreakdown = getUsageCostBreakdown(this.sessionManager.entryStore.contextEntries());
          let info = `${theme.bold("Session Info")}\n\n`;
          if (sessionName) {
              info += `${theme.fg("dim", "Name:")} ${sessionName}\n`;
@@ -2294,7 +2259,14 @@
                  return success(id, "new_session", result);
              }
              // =================================================================
-@@ -480,16 +489,10 @@
+@@ -472,5 +481,4 @@
+             case "get_session_stats": {
+-                const stats = session.getSessionStats();
+-                return success(id, "get_session_stats", stats);
++                return success(id, "get_session_stats", { contextUsage: session.getContextUsage() });
+             }
+             case "export_html": {
+@@ -480,16 +488,10 @@
              }
              case "switch_session": {
                  const result = await runtimeHost.switchSession(command.sessionPath);
@@ -2311,7 +2283,7 @@
                  return success(id, "fork", { text: result.selectedText, cancelled: result.cancelled });
              }
              case "clone": {
-@@ -498,9 +501,6 @@
+@@ -498,9 +500,6 @@
                      return error(id, "clone", "Cannot clone session: no current entry selected");
                  }
                  const result = await runtimeHost.fork(leafId, { position: "at" });
@@ -2321,7 +2293,7 @@
                  return success(id, "clone", { cancelled: result.cancelled });
              }
              case "get_fork_messages": {
-@@ -509,15 +509,15 @@
+@@ -509,15 +508,15 @@
              }
              case "get_entries": {
                  const sessionManager = session.sessionManager;
@@ -2342,7 +2314,7 @@
              }
              case "get_tree": {
                  const sessionManager = session.sessionManager;
-@@ -539,7 +539,7 @@
+@@ -539,7 +538,7 @@
              // Messages
              // =================================================================
              case "get_messages": {
@@ -2351,3 +2323,48 @@
              }
              // =================================================================
              // Commands (available for invocation via prompt)
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -238,12 +238,3 @@
+     _loadNativeInputState() {
+-        // SessionManager's historical index owns durable claims on every branch.
+-        // This map holds only newly admitted, not-yet-committed live requests.
+-        for (const entry of this.sessionManager.entryStore.trackedMetadata()) {
+-            const { inputId, inputDigest } = entry;
+-            if (entry.role !== "user" || typeof inputId !== "string" || typeof inputDigest !== "string" ||
+-                !/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
+-                this.sessionManager.entryStore.trackedInputMetadata(inputId)?.id !== entry.id) {
+-                throw new Error("Invalid or duplicate native input in persisted Pi session");
+-            }
+-        }
++        // Core's input ledger owns whether an input was sent; recover committed journal records.
+         if (!this.sessionManager.isPersisted()) return;
+@@ -261,4 +252,3 @@
+         const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
+-        const previous = this.sessionManager.entryStore.trackedInputMetadata(inputId)?.inputDigest
+-            ?? this._nativeInputClaims.get(inputId);
++        const previous = this._nativeInputClaims.get(inputId);
+         if (previous !== undefined) {
+@@ -271,3 +261,3 @@
+     _releaseUnqueuedNativeInput(inputId) {
+-        if (!inputId || this.sessionManager.getTrackedInput(inputId) ||
++        if (!inputId || !this._nativeInputClaims.has(inputId) ||
+             this._awaitingNativeInputIds.has(inputId) ||
+@@ -1566,4 +1556,3 @@
+         for (const inputId of removedIds) {
+-            if (!this.sessionManager.getTrackedInput(inputId))
+-                this._nativeInputClaims.delete(inputId);
++            this._nativeInputClaims.delete(inputId);
+         }
+--- a/dist/modes/rpc/rpc-types.d.ts
++++ b/dist/modes/rpc/rpc-types.d.ts
+@@ -321,3 +321,3 @@
+     success: true;
+-    data: SessionStats;
++    data: Pick<SessionStats, "contextUsage">;
+ } | {
+--- a/dist/modes/rpc/rpc-client.d.ts
++++ b/dist/modes/rpc/rpc-client.d.ts
+@@ -170,1 +170,1 @@
+-    getSessionStats(): Promise<SessionStats>;
++    getSessionStats(): Promise<Pick<SessionStats, "contextUsage">>;

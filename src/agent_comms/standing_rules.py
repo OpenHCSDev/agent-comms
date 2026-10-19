@@ -17,7 +17,8 @@ from .rule_reviews import RuleReviews
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .storage_rules import StorageRule
+    from .goals import Goal, RequestDirective
+    from .storage_rules import MemoryUse, StorageRule
     from .todos import Todo
 
 
@@ -99,6 +100,35 @@ class HuntDue(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
+class DirectiveUnacted(StandingRule):
+    """A claude-ai directive recorded on an open request, past its deadline with no order since."""
+
+    goal: Goal
+    directive: RequestDirective
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        thread, now = comms.registry.require(commander), time.time()
+        return tuple(
+            cls(goal, directive)
+            for goal in thread.goal.active()
+            for directive in goal.order.overdue_directives(
+                goal, comms.goals, thread.incarnation, now
+            )
+        )
+
+    def began(self) -> float:
+        return self.directive.deadline
+
+    def line(self) -> str:
+        due = time.strftime("%H:%M", time.localtime(self.directive.deadline))
+        return (
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.goal.id},"
+            f" due {due} -> order its next step or mark the request done"
+        )
+
+
+@dataclass(frozen=True)
 class RulesDue(StandingRule):
     """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
@@ -177,6 +207,30 @@ class PlanIdle(StandingRule):
         return (
             f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
             " -> dispatch it this wake"
+        )
+
+
+@dataclass(frozen=True)
+class MemoryLow(StandingRule):
+    """Under the memory threshold a cleanup owner is due, told what holds the memory."""
+
+    rule: StorageRule
+    memory: MemoryUse
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        rule = comms.registry.storage_rule
+        memory = rule.memory()
+        return (cls(rule, memory),) if rule.memory_due(memory) else ()
+
+    def line(self) -> str:
+        dirs = ", ".join(map(str, self.memory.idle_dirs)) or "none"
+        processes = ", ".join(map(str, self.memory.processes)) or "none"
+        return (
+            f"MEMORY LOW: {self.memory.available_gib:.1f} GiB available (cleanup due under"
+            f" {self.rule.memory_gib:g} GiB); pytest temp dirs idle over"
+            f" {self.rule.idle_minutes:g} min: {dirs}; test processes: {processes}"
+            " -> put a cleanup owner on it now"
         )
 
 

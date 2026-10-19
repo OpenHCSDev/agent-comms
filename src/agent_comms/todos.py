@@ -28,6 +28,7 @@ from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
     boundary_decoder,
 )
+from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -406,8 +407,8 @@ class MergedProgress(FoundProgress):
 
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
     """When main is next installed on the bus. Each live install by ``tools/upgrade_bus.py``
-    records the commit it installed and plans the next install one cadence later. No order
-    waits on it; the InstallDue standing rule checks it."""
+    records the commit it installed and its installer, and plans the next install one cadence
+    later. No order waits on it; the InstallDue standing rule checks it."""
 
     cadence: ClassVar[int] = 30 * 60
 
@@ -426,10 +427,19 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
     def due(self, now: float) -> str:
         """Why main is due on the bus now; empty while it is installed or not yet due."""
 
+    @abstractmethod
+    def refusal(self, work: str, commander: str) -> str:
+        """Why the commander does not run the installer's work itself."""
+
 
 class UnplannedInstallDeadline(InstallDeadline):
     def due(self, now: float) -> str:
         return "no install of main is recorded on this bus"
+
+    def refusal(self, work: str, commander: str) -> str:
+        return (f"{work.capitalize()} is the installer's work, and no install is planned. "
+                "A live tools/upgrade_bus.py run plans the next one; "
+                f"order the {work} from the unit that runs it.")
 
 
 @dataclass(frozen=True)
@@ -437,17 +447,24 @@ class PlannedInstallDeadline(InstallDeadline):
     at: RecordedEventTime
     installed: str
     checkout: str
+    installer: str
 
     @classmethod
-    def after(cls, installed: str, checkout: Path, now: float) -> PlannedInstallDeadline:
+    def after(cls, installed: str, checkout: Path, installer: str,
+              now: float) -> PlannedInstallDeadline:
         """The schedule a live install leaves: the commit it installed, next due a cadence on."""
-        return cls(RecordedEventTime(now + cls.cadence), installed, str(checkout))
+        return cls(RecordedEventTime(now + cls.cadence), installed, str(checkout), installer)
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
         staged = path.with_suffix(".tmp")
         staged.write_text(json.dumps(FieldCodec.encode(self)))
         staged.replace(path)
+
+    def refusal(self, work: str, commander: str) -> str:
+        return (f"{work.capitalize()} is {self.installer}'s work, as the planned installer, not "
+                f"{commander}'s. Send it as an order: agent-comms-commander order send --to "
+                f"{self.installer}, naming the {work} to run.")
 
     def due(self, now: float) -> str:
         if now < self.at.at:
@@ -459,14 +476,15 @@ class PlannedInstallDeadline(InstallDeadline):
             return ""
         due = time.strftime("%H:%M", time.localtime(self.at.at))
         main = listed[0][:9] if listed else "unreadable"
-        return f"main is {main}, the bus runs {self.installed[:9]}; due {due}"
+        return (f"main is {main}, the bus runs {self.installed[:9]}; due {due}, "
+                f"installer {self.installer}")
 
 
 @dataclass(frozen=True)
 class InstallDue(ReasonedStandingRule):
     """Merged work reaches the bus on the install schedule, not at the end of an order."""
 
-    text = ("INSTALL DUE ({why}) -> bus-upgrade rehearses and installs main with "
+    text = ("INSTALL DUE ({why}) -> the installer rehearses and installs main with "
             "tools/upgrade_bus.py and posts the result to the commander")
 
     @classmethod
@@ -644,6 +662,30 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
+class DefectText(BluntText):
+    """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
+    a text naming no defect needs no label."""
+
+    SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
+
+    @classmethod
+    def found(cls, text: str) -> list[str]:
+        named = cls.SLOP.search(text)
+        return super().found(cls.SLOP.sub(' ', text)) if named else ['no defect named']
+
+
+class DirectiveText:
+    """What the commander and the owner's voice send units: order send, order say and the
+    connector's send refuse a text failing any of these."""
+
+    OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
+        FairText, HierarchyText, PlainText, OrderText, DefectText)
+
+    @classmethod
+    def refused(cls, text: str) -> tuple[str, ...]:
+        return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+
+
 class OrderRun(DeclaredFamily, affix="OrderRun"):
     label: ClassVar[str] = "Works when:"
 
@@ -805,6 +847,11 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return replace(self, check=correction.check,
                        check_corrections=(*self.check_corrections, correction))
 
+    def require_checked(self, problem: str) -> None:
+        """An installed claim stands on this order's recorded check result."""
+        raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
+                         "its order has none.")
+
     def require_close(self):
         raise ValueError("An order closes at its delivery, merged and checked, or its withdrawal.")
 
@@ -840,6 +887,8 @@ class DeliveredProblemOrder(ProblemOrder):
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
+    def require_checked(self, problem: str) -> None:
+        """The delivery passed the order's check, so its result is recorded."""
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1100,14 +1149,35 @@ class StrikeTodo(TodoOperation):
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
+        if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
+            return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return False
 
+
+@dataclass(frozen=True)
+class StorageStrikeTodo(StrikeTodo):
+    """Repeated reports of one storage violation retain its recorded strike."""
+
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return (self.actor == recorded.actor and self.previous.owner == recorded.previous.owner
+                and self.reason == recorded.reason)
+
+
+@dataclass(frozen=True)
 class VerdictAudience:
-    """The order's unit and its goal's thread; no verdict kind today concerns every unit."""
-    @staticmethod
-    def targets(todo: Todo) -> tuple[str, ...]:
-        return tuple(dict.fromkeys((todo.held().owner, *todo.goal.threads())))
+    """The threads a send is for; a send reaching many threads wakes no thread outside it."""
+    threads: tuple[str, ...]
+
+    @classmethod
+    def of(cls, unit: str, goal: GoalReference) -> VerdictAudience:
+        """An order's unit and its goal's thread; no verdict kind today concerns every unit."""
+        return cls(tuple(dict.fromkeys((unit, *goal.threads()))))
+
+    def addressed(self, target: str, body: str) -> str:
+        return CommandTarget.named(target).addressed(self.threads, body)
 
 
 @dataclass(frozen=True)
@@ -1579,8 +1649,8 @@ class TodoStore(TypedStore):
             (owner.name, owner.wire_birth)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        """The orders serving one request: a Goal on the commander's thread."""
-        return self._open(
+        """Every order that served one request, a Goal on the commander's thread, open or done."""
+        return self._select(
             "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 

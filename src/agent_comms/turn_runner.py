@@ -235,7 +235,7 @@ class TurnRunner:
         name = self.sessions.bindings.get(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
         if thread is not None:
-            await Coordination.run_worker(self.pause_active_goal, thread)
+            await Coordination.run_worker(partial(self.pause_active_goal, thread))
         task = self.turn_tasks.get(session_id)
         if task is not None:
             current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None

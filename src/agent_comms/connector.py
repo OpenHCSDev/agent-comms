@@ -35,18 +35,44 @@ from pydantic import JsonValue
 
 from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
-from .comms import client_wire
+from .comms import Comms, client_wire
 from .coordination_errors import CoordinationError
 from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
+from .goal_actions import DirectiveGoalAction
 from .locked_store import LockedStore, RootFile
+from .messages import Message
+from .standing_rules import RulesDue
+from .todos import DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import ReadTool, ToolRequest
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
-CALLER = ThreadCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
+
+
+@dataclass(frozen=True)
+class DirectorCaller(ThreadCaller):
+    """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
+    request when that thread holds owner requests."""
+
+    def require_directive(self, comms: Comms, body: str) -> None:
+        """A directive passes DirectiveText and needs this caller's rules review, drawn,
+        answered and under 20 minutes old."""
+        due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
+        if refused := (*DirectiveText.refused(body), *due):
+            raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
+
+    def sent(self, comms: Comms, message: Message) -> None:
+        if message.target in comms.registry:  # a channel holds no requests
+            comms.goals.update_goal(
+                message.target,
+                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
+            )
+
+
+CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
