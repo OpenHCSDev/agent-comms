@@ -375,7 +375,7 @@ class ReadAll(ChannelReadMark):
                 scope = basis.scope(target)
             yield source.query_page_index(lambda index: scope.capture_all(
                 presentation.bus.reads, basis.require_viewer(), basis.registry, source, index,
-                document=basis.document, audience=scope,
+                document=basis.document, within=scope,
             ))
 
 
