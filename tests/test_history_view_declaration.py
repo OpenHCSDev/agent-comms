@@ -23,8 +23,8 @@ class ReviewHistory(HistoryView):
             self.capture(presentation.registry.snapshot()), bounds
         ).read(presentation.bus.log)
 
-    def page_result(self, page):
-        return ChannelHistoryPageResult.for_target("#review", page.messages, page.has_older)
+    def result_for(self, messages, has_older):
+        return ChannelHistoryPageResult.for_target("#review", messages, has_older)
 
 
 def test_new_history_case_owns_both_source_interpretations_without_reader_dispatch(tmp_path, *, thread_registration):

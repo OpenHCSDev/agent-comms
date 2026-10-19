@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 from pydantic import JsonValue
 
 from .cli_result import CliResult
-from .field_codec import FieldCodec
+from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
 
 if TYPE_CHECKING:
@@ -28,12 +28,14 @@ class HistoryPageResult(CliResult):
     @classmethod
     def decode(cls, wire: Mapping[str, JsonValue]) -> Self:
         """The page ``encoded`` wrote, read back under this member's own keys."""
-        return cls(cls.decoded_messages(wire), FieldCodec.decode(bool, wire["has_older"]))
+        match wire:
+            case {cls.messages_key: list(rows), "has_older": bool(has_older)}:
+                return cls(cls.decoded_messages(rows), has_older)
+        raise MalformedRecord(f"Not a {cls.__name__} page.")
 
-    @classmethod
-    def decoded_messages(cls, wire: Mapping[str, JsonValue]) -> tuple[Message, ...]:
-        rows = FieldCodec.decode(tuple[dict[str, JsonValue], ...], wire[cls.messages_key])
-        return tuple(map(Message.from_wire, rows))
+    @staticmethod
+    def decoded_messages(rows: list[JsonValue]) -> tuple[Message, ...]:
+        return tuple(map(Message.from_wire, FieldCodec.decode(tuple[dict[str, JsonValue], ...], rows)))
 
     @property
     def before(self) -> PageCursor | None:
@@ -65,5 +67,7 @@ class ChannelHistoryPageResult(HistoryPageResult):
 
     @classmethod
     def decode(cls, wire: Mapping[str, JsonValue]) -> Self:
-        return cls(cls.decoded_messages(wire), FieldCodec.decode(bool, wire["has_older"]),
-                   FieldCodec.decode(str, wire["channel"]))
+        match wire:
+            case {cls.messages_key: list(rows), "has_older": bool(has_older), "channel": str(channel)}:
+                return cls(cls.decoded_messages(rows), has_older, channel)
+        raise MalformedRecord(f"Not a {cls.__name__} page.")

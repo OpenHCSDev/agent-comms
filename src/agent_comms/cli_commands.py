@@ -60,6 +60,7 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .field_codec import FieldCodec, PathText, compile_decoder
+from .historical_views import ChannelHistory, DMHistory
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .presentation import CountedRead, InboxRead, UncountedRead
 from .harness_install import Harness, HarnessInstalled
@@ -1294,7 +1295,8 @@ class HistoryCliCommand(CliCommand):
         target = CommandTarget.named(self.target)
         traversal = self.before.older() if self.before is not None else OlderTraversal()
         bounds = PageBounds(traversal, self.limit)
-        return ctx.views.history_result(target, bounds, viewer=self.me)
+        view = target.history_view(self.me, ctx.bus.require_channel, ChannelHistory, DMHistory)
+        return view.page_result(view.page(ctx.views.presentation, bounds))
 
 
 @dataclass(frozen=True, kw_only=True)

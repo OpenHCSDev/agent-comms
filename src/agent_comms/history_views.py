@@ -44,8 +44,7 @@ from .exporting import (
     WireTranscriptExporter,
 )
 from .goal_management import Goals
-from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory, HistoryView
-from .history_result import HistoryPageResult
+from .historical_views import ChannelDisplayHistory, ChannelHistory, DMDisplayHistory, DMHistory
 from .message_bus import MessageBus
 from .message_page import NEWEST_PAGE, MessagePage, PageBounds
 from .page_traversal import OlderTraversal
@@ -209,15 +208,8 @@ class HistoryViews:
     def history_page(self, target: CommandTarget, bounds: PageBounds = NEWEST_PAGE,
                      *, viewer: str | None = None) -> MessagePage:
         """The decoded target selects its scope and participant requirements."""
-        return self.history_view(target, viewer).page(self.presentation, bounds)
-
-    def history_result(self, target: CommandTarget, bounds: PageBounds,
-                       *, viewer: str | None) -> HistoryPageResult:
-        view = self.history_view(target, viewer)
-        return view.page_result(view.page(self.presentation, bounds))
-
-    def history_view(self, target: CommandTarget, viewer: str | None) -> HistoryView:
-        return target.history_view(viewer, self.bus.require_channel, ChannelHistory, DMHistory)
+        view = target.history_view(viewer, self.bus.require_channel, ChannelHistory, DMHistory)
+        return view.page(self.presentation, bounds)
 
     def attach_history(self, source_root: Path, *, source_read: HistorySource | None = None) -> HistorySource:
         """Attach preserved history without allowing any historical execution."""
