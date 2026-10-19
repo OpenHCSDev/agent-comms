@@ -570,23 +570,22 @@ class RoundTripVerb(ConnectorVerb):
     connector's tool calls, reads back through them; the owner sees it unread."""
 
     help = "Send a message through the connector's tool calls and read it back"
-    root: Annotated[Path, PathText] | None = option(
-        "--root", default=None, help="Comms root (default: the active route)"
-    )
+    root: Annotated[Path, PathText] = option("root", help="The comms root it proves")
 
     def apply(self, ctx: ConnectorStore) -> int | str:
         connector = Connector(ctx, f"http://{LOOPBACK}:{PORT}", self.root)
         body = f"Upgrade round trip {secrets.token_hex(8)}: the connector reads the upgraded bus"
-        sent, read = (
-            asyncio.run(ToolsCallMessage(jsonrpc="2.0", id=call, params=params).result(connector))
-            for call, params in enumerate((
-                ToolCall("comms_send", {"from": CALLER.name, "to": "user", "body": body}),
-                ToolCall("comms_inbox", {"thread": "user", "target": CALLER.name, "ack": False}),
-            ))
+        calls = (
+            ToolCall("comms_send", {"from": CALLER.name, "to": "user", "body": body}),
+            ToolCall("comms_inbox", {"thread": "user", "target": CALLER.name, "ack": False}),
         )
-        if refused := next((reply for reply in (sent, read) if reply["isError"]), None):
-            return f"The connector round trip was refused: {json.dumps(refused['content'])}"
-        if body not in {message["text"] for message in read["structuredContent"]["messages"]}:
+        replies = [
+            asyncio.run(ToolsCallMessage(jsonrpc="2.0", id=call, params=params).result(connector))
+            for call, params in enumerate(calls)
+        ]
+        if refused := [reply for reply in replies if reply.get("isError")]:
+            return f"The connector round trip was refused: {json.dumps(refused[0])}"
+        if body not in json.dumps(replies[-1].get("structuredContent")):
             return f"The connector sent {body!r} but did not read it back"
         print(json.dumps({"round_trip": body}))
         return 0

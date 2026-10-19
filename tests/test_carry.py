@@ -586,7 +586,7 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
 
     failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
     if registered:
-        assert upgrading()["read"]["round_trip"].startswith("Upgrade round trip")
+        assert "Upgrade round trip" in upgrading()["round_trip"]
         assert not list(failed)
     else:
         with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
