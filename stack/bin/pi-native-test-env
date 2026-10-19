@@ -6,48 +6,46 @@ umask 077
 usage='Usage: pi-native-test-env [--python PATH] [--cache DIR] [--from BUILT_STACK_DIR]'
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
-python=$(command -v python3)
-cache=
+# The stack environment `uv sync --project stack` installs, as prepare-pi-native uses.
+python="$stack_root/.venv/bin/python"
+cache=()
 built=$stack_root
 while [[ $# -gt 0 ]]; do
     [[ $# -ge 2 ]] || { printf '%s\n' "$usage" >&2; exit 1; }
     case "$1" in
         --python) python=$2 ;;
-        --cache) mkdir -p -- "$2"; cache=$(cd -- "$2" && pwd) ;;
+        --cache) mkdir -p -- "$2"; cache=(--cache "$(cd -- "$2" && pwd)") ;;
         --from) built=$(cd -- "$2" && pwd) ;;
         *) printf '%s\n' "$usage" >&2; exit 1 ;;
     esac
     shift 2
 done
-# The checkout's own agent_comms reads the checkout's own pin.
+if [[ ! -x "$python" ]]; then
+    printf 'The stack environment is unavailable; run uv sync --project %s or pass --python.\n' "$stack_root" >&2
+    exit 1
+fi
+# The checkout's own agent_comms reads the checkout's own pin and owns its layout.
 export PYTHONPATH="$repo_root/src"
 manifest="$stack_root/pi-native.sha256"
-build_id=$(sha256sum "$manifest" | cut -c1-16)
-# native_environment owns the layout; StorageRule.native_cache is the root when --cache names none.
-environment=$("$python" -c '
-import sys
-from pathlib import Path
-from agent_comms.native_package import native_environment
-from agent_comms.storage_rules import StorageRule
-print(native_environment(Path(sys.argv[1]) if sys.argv[1:] else StorageRule.native_cache))
-' ${cache:+"$cache"})
-package=.pi-native-$build_id/node_modules/@earendil-works/pi-coding-agent
+native() { "$python" -m agent_comms.cli_native_package "$@"; }
+environment=$(native environment "${cache[@]}")
 
 verify() (
-    cd -- "$1/$package"
-    sha256sum --check --status "$manifest" && "$python" -m agent_comms.native_package "$PWD"
+    cd -- "$(native package "$1")"
+    sha256sum --check --status "$manifest" && native verify "$PWD"
 )
 
 if [[ ! -e "$environment" ]]; then
-    if [[ ! -e "$built/.pi-native-$build_id" ]]; then
+    if [[ ! -e "$(native package "$built")" ]]; then
         "$stack_root/bin/prepare-pi-native" --python "$python" >&2
         built=$stack_root
     fi
+    build=$(native build "$built")
     mkdir -p -- "$(dirname -- "$environment")"
     stage=$(mktemp -d "$environment.stage.XXXXXXXX")
     trap 'rm -rf -- "$stage"' EXIT
     cp -- "$manifest" "$stage/pi-native.sha256"
-    cp -a --reflink=auto -- "$built/.pi-native-$build_id" "$stage/.pi-native-$build_id"
+    cp -a --reflink=auto -- "$build" "$stage/"
     verify "$stage"
     mv -- "$stage" "$environment"
     trap - EXIT

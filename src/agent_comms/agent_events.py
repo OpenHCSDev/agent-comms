@@ -12,31 +12,42 @@ from functools import partial
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from .acp_failure import (
-    FailureSource, UnrecordedFailureSource, NativeTurnOutcome, ProviderRetryResult,
-    UnresolvedNativeTurnOutcome, SuccessfulNativeTurnOutcome, FailedNativeTurnOutcome,
+    FailedNativeTurnOutcome,
+    FailureSource,
+    NativeTurnOutcome,
+    ProviderRetryResult,
+    SuccessfulNativeTurnOutcome,
+    UnrecordedFailureSource,
+    UnresolvedNativeTurnOutcome,
 )
+from .child_process import ProcessIdentity
 from .declared_family import DeclaredFamily
 from .input_attempt import InputAttempt
 from .mro_dispatch import MroDispatch, handles
+from .pi_counts import PiCount, UnreportedCount
 from .pi_payloads import McpLiveAcknowledgement, PiDiagnostic, PiUsage
-from .pi_vocabulary import CompactionReason, NoThinkingOverride, ThinkingLevelField, UnknownCompactionReason
-from .tool_results import ToolDiff
+from .pi_vocabulary import (
+    CompactionReason,
+    NoThinkingOverride,
+    ThinkingLevelField,
+    UnknownCompactionReason,
+)
 from .tool_declaration import ToolDeclaration
-from .child_process import ProcessIdentity
+from .tool_results import ToolDiff
 
 if TYPE_CHECKING:
-    from .started_input import StartedInput
-    from .transcript_events import SentTranscript
-    from .pi_commands import PiCommand
-    from .native_turn_context import NativeContextManifestData
     from .comms import Comms
     from .goal_presentation import GoalSnapshot
-    from .pi_events import RetryAttemptEvent
-    from .turn_phase import TurnPhase
     from .input_disposition import InputDocument
-    from .turn_input_source import OriginalTurnInput
-    from .runtime_info import AgentRuntimeInfo
     from .input_drain import InputDrain
+    from .native_turn_context import NativeContextManifestData
+    from .pi_commands import PiCommand
+    from .pi_events import RetryAttemptEvent
+    from .runtime_info import AgentRuntimeInfo
+    from .started_input import StartedInput
+    from .transcript_events import SentTranscript
+    from .turn_input_source import OriginalTurnInput
+    from .turn_phase import TurnPhase
 
 
 class AgentEvent(ABC):
@@ -202,7 +213,7 @@ class CompactionStart(CompactionEvent):
 class CompactionEnd(CompactionEvent):
     aborted: bool = False
     summary: str | None = None
-    context_used: int | None = None
+    context_used: PiCount = field(default_factory=UnreportedCount)
     will_retry: bool = False
 
     @property
@@ -282,7 +293,7 @@ class RuntimeInfoObservation(AgentEvent):
 class ContextUsageObservation(RuntimeInfoObservation):
     """Observe usage without claiming a model, identity or context window."""
 
-    context_used: int | None = None
+    context_used: PiCount = field(default_factory=UnreportedCount)
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
         return replace(super().project_runtime_info(current), context_used=self.context_used)
@@ -292,7 +303,7 @@ class ContextUsageObservation(RuntimeInfoObservation):
 class ContextSizeObservation(RuntimeInfoObservation):
     """Observe the context window without restating unobserved usage."""
 
-    context_size: int | None = None
+    context_size: PiCount = field(default_factory=UnreportedCount)
 
     def project_runtime_info(self, current: AgentRuntimeInfo) -> AgentRuntimeInfo:
         return replace(super().project_runtime_info(current), context_size=self.context_size)

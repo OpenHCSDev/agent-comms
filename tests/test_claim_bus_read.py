@@ -207,7 +207,7 @@ def test_claim_operation_is_refused_after_its_claim_was_released() -> None:
 
 
 async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus(
-    tmp_path, monkeypatch: pytest.MonkeyPatch
+    tmp_path, monkeypatch: pytest.MonkeyPatch, native_runtime_package
 ) -> None:
     """The live journey: the real Pi child asks its owner before a write, then answers."""
     import asyncio
@@ -215,7 +215,7 @@ async def test_write_in_a_direct_message_turn_runs_without_reading_the_whole_bus
     from agent_comms.wire_log import WireLog
     from native_backend_fixture import native_backend_fixture
 
-    async with native_backend_fixture(tmp_path) as native:
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         await native.author_history()
         target = native.project / "module.py"
         target.write_text("value = 1\n")

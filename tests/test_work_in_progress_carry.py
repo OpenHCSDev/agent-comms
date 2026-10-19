@@ -16,7 +16,7 @@ def _patch_module():
     return module
 
 
-def test_the_instruction_and_the_compaction_reader_declare_one_format():
+def test_the_instruction_and_the_compaction_reader_declare_one_format(monkeypatch):
     module = _patch_module()
     prose = INSTRUCTION.read_text()
     # The coordination instruction names the three markers, in order, backticked.
@@ -28,6 +28,10 @@ def test_the_instruction_and_the_compaction_reader_declare_one_format():
     assert not re.search(module.WORK_IN_PROGRESS_PATTERN,
                          "Now: a\nNext: b\nUncommitted: c")
     assert not re.search(module.WORK_IN_PROGRESS_PATTERN, "Now: a\nUncommitted: c")
+    # Labels elsewhere in the instruction never become compaction markers.
+    monkeypatch.setattr(Path, "read_text", lambda self: "`Other:` unrelated\n\n" + prose
+                        + "\n`Later:` unrelated\n")
+    assert _patch_module().WORK_IN_PROGRESS_MARKERS == module.WORK_IN_PROGRESS_MARKERS
 
 
 def test_the_prepared_reader_carries_the_declared_markers():

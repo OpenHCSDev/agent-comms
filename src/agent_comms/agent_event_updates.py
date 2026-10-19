@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
 from dataclasses import replace
 from functools import partial
-from .coordinator import Coordination
+from typing import TYPE_CHECKING, Any, cast
 
 from acp.schema import (
     AgentMessageChunk,
@@ -15,7 +14,6 @@ from acp.schema import (
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
-    UsageUpdate,
 )
 
 from . import agent_events as events
@@ -26,6 +24,7 @@ from .acp_extension import (
     PromptCancelledUpdate,
     encode_updates,
 )
+from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
 
@@ -146,19 +145,8 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.ContextInfo)
     async def on_context_info(self, event: events.ContextInfo) -> None:
-        session_id = self.session_id
-        client = self.client
-        used = event.context_used
-        size = event.context_size
-        if used is not None and size:
-            await client.session_update(
-                session_id=session_id,
-                update=UsageUpdate(
-                    session_update="usage_update",
-                    used=used,
-                    size=size,
-                ),
-            )
+        await event.context_size.reading(event.context_used).publish_usage(
+            self.client, self.session_id)
 
     @handles(events.CompactionEvent)
     async def on_compaction(

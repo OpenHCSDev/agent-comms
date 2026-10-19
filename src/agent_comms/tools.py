@@ -47,7 +47,8 @@ from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goal_states import ActiveGoal
 from .goals import Goal, GoalDeclaration, OrderCheck
-from .standing_rules import StandingRule
+from .rule_reviews import RuleReviewEntry, RuleReviews
+from .standing_rules import RulesDue, StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
 from .messages import Message
@@ -817,6 +818,18 @@ class CommsStandingRulesTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsRuleReviewTool(ThreadToolRequest):
+    label = "Record rule review"
+    description = "Record the rules a review drew, or one drawn rule's answer; replies what is due."
+    entry: RuleReviewEntry = tool_field("A drawn review, or the answer to drawn rule n")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> StandingRulesRead:
+        RuleReviews(comms.root).write(caller.name, self.entry)
+        due = RulesDue.violations(comms, caller.name)
+        return StandingRulesRead(tuple(rule.line() for rule in due))
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsOrderTool(ThreadToolRequest):
     label = "Assign problem order"
     description = "Reserve a Todo assignment and publish its Goal with a deadline; does not replay input."
@@ -1133,23 +1146,21 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
-    target: str = tool_field("Channel or peer conversation; #any reads every channel",
-                             default=BuiltinChannel.ANY.value)
+    target: str = tool_field("Channel or peer conversation", default=BuiltinChannel.ANY.value)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxRead:
         thread = self.thread
-        if not self.target.strip():
+        if not (target := self.target.strip()):
             raise ValueError("An inbox target cannot be empty.")
-        target = CommandTarget.named(self.target.strip())
         standby = self.standby
         review = (
             comms.goals.goal_input_review(thread, standby.goal_id, standby.wait_for)
             if standby is not None
             else None
         )
-        messages = tuple(comms.bus.inbox(thread, target))
+        messages = tuple(comms.bus.inbox(thread, CommandTarget.named(target)))
         unresolved = tuple(comms.goals.unresolved_inputs(thread))
         response = InboxRead(messages, 0, unresolved, standby_review=review)
         result_file = materialize_oversized_output(

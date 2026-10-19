@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .plan_phases import PlanPhase
+from .rule_reviews import RuleReviews
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -95,6 +96,28 @@ class HuntDue(ReasonedStandingRule):
     @classmethod
     def broken_at(cls, comms: Comms, commander: str) -> float | None:
         return cls.hunted(comms, commander) + cls.seconds
+
+
+@dataclass(frozen=True)
+class RulesDue(StandingRule):
+    """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
+
+    max_age: ClassVar[int] = 20 * 60
+    why: str
+    since: float
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return RuleReviews(comms.root).review(commander).due(cls, commander)
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (
+            f"RULES DUE ({self.why}) -> agent-comms-commander rules review"
+            " and answer the drawn rules before any order"
+        )
 
 
 @dataclass(frozen=True)

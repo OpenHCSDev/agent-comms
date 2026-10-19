@@ -16,7 +16,6 @@ from contextlib import closing
 from dataclasses import replace
 
 from cutover.carry import CarryChain
-from cutover.carry_todo_corrections import TodoCorrections
 
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import BoundedRun
@@ -160,7 +159,7 @@ def test_delivery_checks_once_and_only_last_problem_completes_goal(commander):
 def test_failed_check_keeps_problem_pending(commander):
     comms, caller = commander
     original = create(commander, 'P1', 'printf 9', 1)
-    with pytest.raises(ValueError, match='expected last integer'):
+    with pytest.raises(ValueError, match='printed 9, not its expected count 1'):
         CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
     assert comms.goals.todos.get('P1') == original
     assert comms.registry.require('worker').goal.state.active
@@ -395,7 +394,7 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     """A miss struck with `order strike` and then sent back is one strike; the next send-back strikes again."""
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    monkeypatch.setattr(script, 'post', lambda recipients, body: 'sent')
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
@@ -411,7 +410,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
     """P12 deleted acp_ingress.py while Toad imported it; the check must read Toad's imports too."""
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    monkeypatch.setattr(script, 'post', lambda recipients, body: 'sent')
     toad = tmp_path / 'toad'
     (toad / 'src').mkdir(parents=True)
     (toad / 'src' / 'app.py').write_text('from agent_comms.acp_ingress import Ingress\n')
@@ -428,7 +427,7 @@ def test_a_deletion_order_must_check_the_imports_of_every_repo_that_imports_the_
 def test_an_order_changing_tools_must_ratchet_both_roots(commander, commander_script, monkeypatch):
     comms, _ = commander
     script, repo = commander_script
-    monkeypatch.setattr(script, 'post', lambda recipients, body: None)
+    monkeypatch.setattr(script, 'post', lambda recipients, body: 'sent')
     (repo / 'count.txt').write_text('0\n')
     edit = 'Count the measure in tools/debt_ratchet.py.'
     with pytest.raises(SystemExit, match='--root tools and with --root src'):
@@ -468,7 +467,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('commit', '-qam', 'fix')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     fixed = git('rev-parse', 'HEAD')
-    with pytest.raises(ValueError, match='expected last integer'):
+    with pytest.raises(ValueError, match='printed 0, not its expected count 1'):
         script.done('P1', fixed, fixed)
     script.correct_check('P1', corrected, why)
     current = comms.goals.todos.get('P1')
@@ -775,26 +774,36 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
 
 
 def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
-    """The deleted goal carry runs before the verdicts column carry, from the revision that added
-    it, whose Todo reads a pre-verdicts store; the current Todo reports that column missing."""
+    """On a pre-verdicts store every step from the deleted goal carry on runs in chain order, each
+    from the revision that last wrote it; the current Todo reports the missing column until then."""
     comms, _ = commander
     completed_with_pending(commander)
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
         db.execute('ALTER TABLE todo DROP COLUMN verdicts')
         db.execute('ALTER TABLE todo DROP COLUMN corrections')
+        db.execute('ALTER TABLE todo DROP COLUMN messages')
         db.commit()
     with (closing(CoordinationStore.read_snapshot(path)) as db,
           pytest.raises(sqlite3.OperationalError, match='no such column: "verdicts"')):
         list(Todo.stream(db))
     repo = Path(__file__).parents[1]
     steps = {step.name: step for step in CarryChain.at(repo, 'HEAD').steps}
-    assert list(steps).index('carry_todo_verdicts') > list(steps).index('carry_problem_goals')
-    for name, member, changed in (('carry_problem_goals', 'ProblemGoals', 2),
-                                   ('carry_todo_verdicts', 'TodoVerdicts', 3)):
+    members = {'carry_problem_goals': ('ProblemGoals', 2),
+               'carry_todo_verdicts': ('TodoVerdicts', 3),
+               'carry_todo_corrections': ('TodoCorrections', 3),
+               'carry_todo_open_indexes': ('TodoOpenIndexes', 2),
+               'carry_todo_messages': ('TodoMessages', 3)}
+    names = list(steps)
+    assert names[names.index('carry_problem_goals'):] == list(members)
+    for name, (member, changed) in members.items():
         held = tmp_path / name
         held.mkdir()
-        archive = subprocess.run(['git', '-C', str(repo), 'archive', steps[name].revision,
+        # A deleted step is declared where it was last written; one still in the tree, at HEAD.
+        wrote = steps[name].revision if steps[name].revision != 'HEAD' else subprocess.run(
+            ['git', '-C', str(repo), 'log', '-1', '--diff-filter=AM', '--format=%H', 'HEAD', '--',
+             f'tools/cutover/{name}.py'], capture_output=True, text=True, check=True).stdout.strip()
+        archive = subprocess.run(['git', '-C', str(repo), 'archive', wrote,
                                   'src', 'tools'], capture_output=True, check=True).stdout
         subprocess.run(['tar', '-x', '-C', str(held)], input=archive, check=True)
         ran = subprocess.run([sys.executable, '-c',
@@ -807,7 +816,6 @@ def test_column_carry_then_goal_carry_reads_todos(commander, tmp_path):
                              env={**os.environ, 'PYTHONPATH': f'{held / "src"}:{held / "tools"}'})
         assert ran.returncode == 0, ran.stderr
         assert json.loads(ran.stdout.splitlines()[-1])['changed'] == changed
-    assert TodoCorrections.carry(comms.root, apply=True).changed == 3
     with closing(CoordinationStore.read_snapshot(path)) as db:
         assert {todo.id for todo in Todo.stream(db)} == {'P1', 'P2', 'P3'}
 
@@ -904,7 +912,7 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
     assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
     assert not saved.strikes
-    assert importlib.reload(judge).Edit.unjudged() == []
+    assert importlib.reload(judge).Edit.unjudged(comms, 'lead') == []
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
@@ -950,7 +958,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     assert len(saved.verdicts) == len(saved.strikes) == 1
     assert isinstance(saved.verdicts[0], SendBackVerdict)
     assert why in comms.registry.require('worker').goal.progress
-    assert judge.Edit.unjudged() == []
+    assert judge.Edit.unjudged(comms, 'lead') == []
     assert any(to == ['worker', '#comms'] for to, _ in posted)
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
@@ -1051,7 +1059,7 @@ def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):
     (copied / 'flag.py').write_text('def checked(value):\n    if value is None:\n        raise ValueError\n')
     callers.write_text('from flag import checked\n\ndef read(v):\n    try:\n        checked(v)\n'
                        '    except ValueError:\n        return 0\n    return 1\n')
-    with pytest.raises(ValueError, match='expected last integer 0'):
+    with pytest.raises(ValueError, match='printed 1, not its expected count 0'):
         CommsOrderDoneTool(problem='P520', delivery=OperationDelivery()).apply(comms, caller)
     assert comms.goals.todos.get('P520') == pending
     (copied / 'flag.py').unlink()

@@ -142,9 +142,8 @@ class TranscriptPage:
     after: TranscriptCursor
     has_older: bool
     has_newer: bool
-    # Captured with the source read, not reconstructed from rendered events.
-    # None is reserved for hand-built pages without a retained source witness.
-    snapshot: TranscriptReadIdentity | None = None
+    # The read owns this witness; no page exists without its source snapshot.
+    snapshot: TranscriptReadIdentity
 
     def resolve_sent_messages(self, reports):
         """Prove bounded full reports without replacing their input objects."""
