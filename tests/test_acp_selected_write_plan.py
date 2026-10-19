@@ -196,8 +196,6 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
             return
         with pytest.raises(IdentityConflict, match="already accepted or UNKNOWN"):
             await agent.prompt("beta", [], field_meta=options)
-        monkeypatch.setattr(private_nk_entrypoint, "_trusted_package", lambda _: None)
-        monkeypatch.setattr("agent_comms.native_pi._trusted_package", lambda _: None)
         fake, calls = _fake_model(
             decision="FULL", fail_on=1 if scenario == "native_failure" else None
         )

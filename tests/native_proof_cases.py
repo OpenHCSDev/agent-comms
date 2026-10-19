@@ -18,7 +18,7 @@ def write_proof_rows(session: Path, rows) -> None:
         with db:
             for row in rows:
                 FieldCodec.decode(
-                    NativeContextJournal, {"kind": NativeContextJournal.declared_name, **row}
+                    NativeContextJournal, {NativeContextJournal.family_discriminator: NativeContextJournal.declared_name, **row}
                 ).insert(db)
 
 

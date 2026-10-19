@@ -17,7 +17,7 @@ counting. An order sent in error is retired with `withdraw`: its problem closes 
 Nothing here judges code; it refuses orders that leave a unit room to interpret,
 and refuses to let a deadline lapse silently.
 """
-import argparse, asyncio, calendar, json, os, re, subprocess, sys, time
+import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,7 +29,7 @@ from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..recorded_time import RecordedEventTime
@@ -38,7 +38,7 @@ from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+from ..todos import (ApplicationOrderRun, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
                      WithdrawTodo, AssignTodo, OrderProgress, Todo)
@@ -80,6 +80,16 @@ def call(tool):
 def todos():
     """The problems this commander created; Core's Todo store is their one owner."""
     return COMMS.goals.todos.for_commander(COMMS.registry.require(ME).incarnation)
+
+
+def held_orders() -> tuple[Todo, ...]:
+    """This commander's open orders that a unit holds."""
+    return COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+
+
+def held_by(unit: str) -> tuple[Todo, ...]:
+    """This commander's open orders held by one unit."""
+    return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
 
 
 def progress() -> dict[str, OrderProgress]:
@@ -261,13 +271,8 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     if check and os.path.isdir(check.directory) and not problems:
         try:
             ran = subprocess.run(['bash', '-c', check.command], cwd=check.directory, capture_output=True, timeout=90)
-            if (got := CountCheckResult.printed(ran.stdout)) is None:
-                problems.append('the check printed no integer; '
-                                'use grep -c PATTERN FILE or ... | wc -l')
-            elif got == check.result.expected:
-                problems.append(f'Check already prints {got} before any work: `{check.command}` '
-                                'proves nothing; '
-                                'write a check that fails now')
+            printed = CheckPrinted.decoded(ran.stdout)
+            problems += printed.unproven(check.command, check.result.expected)
         except subprocess.TimeoutExpired:
             problems.append('Check took over 90 s; done runs it too, so make it a focused count')
     for path, line in re.findall(r'(?<![\w.])(/\S+?\.\w+):(\d+)', body):
@@ -329,7 +334,11 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
-    post([unit], message)
+    sent = post([unit], message)
+    # The message is each order's recorded link; a verdict citing it lands on that order.
+    for pid in group:
+        call(CommsTodoTool(id=pid, operation=OrderMessage(
+            COMMS.goals.todos.get(pid).revision, COMMS.registry.require(ME).incarnation, sent)))
     for other, text in taken.items():
         post([other], text)
     print(order.id)
@@ -532,7 +541,7 @@ def first_calls():
     lines = open(ACTIVITY).read().splitlines()[-4000:]
     watched = {line[9:].split(' ', 1)[0] for line in lines}
     missing = []
-    for todo in COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation):
+    for todo in held_orders():
         unit, order = todo.assignment.owner, todo.order
         if not todo.pending or unit not in watched:
             continue  # tool_watch cannot see this unit's harness; its clock is the commit deadline
@@ -559,12 +568,12 @@ def hunt(where, why, sent=None):
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
     if sent:
-        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        held = held_orders()
         todo = next((t for t in held if t.order.id == sent), None) or sys.exit(
             f'Refused: {sent} is not an open tracked order; send it first. {HuntVerb.usage()}')
     else:
         named = set(re.findall(r'\bP\d+\b', why))
-        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        held = held_orders()
         todo = next((t for t in held if t.id in named), None) or sys.exit(
             'Refused: a clean hunt is recorded on its open problem; name the P-number in --why. '
             + HuntVerb.usage())
@@ -625,12 +634,10 @@ def replied(latest: dict | None) -> str:
     return f'; REPLIED {at} [{latest["id"]}]: {" ".join(str(latest.get("text")).split())[:160]} -- read it before pushing'
 
 
-def deadline_lines(held: list[Todo], since: float = 0.0) -> list[str]:
+def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
     """Each order that entered lateness (OVERDUE or DUE PASSED), changed it by a reply or push, or
     entered STALL after the previous poll at ``since``; a tick where nothing changed is silent."""
     now = time.time()
-    pending = [t for t in held if t.pending]
-    read = progress() if pending else {}
     late, stalled, passed = [], [], []
     for t in pending:
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
@@ -657,26 +664,19 @@ def overdue():
         if missing := first_calls():
             print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
                   flush=True)
-        held = COMMS.goals.todos.held_for_commander(COMMS.registry.require(ME).incarnation)
+        held = held_orders()
         stale = [f'{t.id} {t.assignment.owner} (last {seen})' for t in held
                  if (seen := last_activity(t.assignment.owner)) and seen < time.strftime('%H:%M:%S', time.localtime(time.time() - 1200))]
         if stale:
             print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
-        for line in deadline_lines(held, since):
+        pending = [t for t in held if t.pending]
+        read = progress() if pending else {}
+        for line in deadline_lines(pending, read, since):
             print(line, flush=True)
-        # Units leave finished PRs open and wander off. An open PR naming an ordered problem that
-        # nobody has touched for 5 minutes is a stall, whatever the unit says it is doing.
-        ordered = {t.id: (t.assignment.owner, t.order.at.at, t.deadline.at) for t in held if t.pending}
-        idle_prs = []
-        for repo in (repo.github for repo in CONFIG.repos):
-            listed = subprocess.run(['gh', 'pr', 'list', '-R', repo, '--state', 'open', '--limit', '40',
-                                     '--json', 'number,title,updatedAt'], capture_output=True, text=True, timeout=60)
-            for pr in json.loads(listed.stdout or '[]'):
-                touched = calendar.timegm(time.strptime(pr['updatedAt'], '%Y-%m-%dT%H:%M:%SZ'))
-                for pid in re.findall(r'P\d+', pr['title']):
-                    # An order sent after the last touch is the push; until its deadline, OVERDUE owns the alarm.
-                    if pid in ordered and time.time() - touched > 300 and ordered[pid][1] < touched and time.time() > ordered[pid][2]:
-                        idle_prs.append(f'{ordered[pid][0]} {repo.split("/")[1]}#{pr["number"]} ({pid})')
+        # Units leave finished PRs open and wander off. An order's open PR that nobody has touched for
+        # 5 minutes is a stall, whatever the unit says it is doing; until its deadline, OVERDUE owns the alarm.
+        idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
+                    for t in pending if now > t.deadline.at and read[t.id].untouched(now)]
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
         for _ in HuntDue.broken(COMMS, ME, since):

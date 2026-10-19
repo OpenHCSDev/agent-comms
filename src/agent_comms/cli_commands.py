@@ -252,6 +252,10 @@ class CommandOption:
     def of(declaration: Field) -> CommandOption:
         return declaration.metadata[CommandOption]
 
+    def argument_flags(self, declaration: Field) -> tuple[str, ...]:
+        """The declared flags; a field that declares none is the option its own name spells."""
+        return self.flags or ("--" + declaration.name.replace("_", "-"),)
+
 
 def option(
     *flags: str,
@@ -791,11 +795,12 @@ class DeclaredOptions(Command):
                     options["default"] = decoder.argument_text(
                         FieldCodec.encode(default, annotation)
                     )
-            if any(flag.startswith("-") for flag in option.flags):
+            flags = option.argument_flags(declared)
+            if any(flag.startswith("-") for flag in flags):
                 options["dest"] = FieldCodec.wire_key(declared)
             else:
                 options.pop("required", None)
-            owner.add_argument(*option.flags, **options)
+            owner.add_argument(*flags, **options)
 
     @classmethod
     def from_namespace(cls, args: argparse.Namespace) -> Self:
