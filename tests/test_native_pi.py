@@ -1114,7 +1114,7 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch, tmp_pat
         ("aborted", "provider failed"),
     ],
 )
-def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
+async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
     from types import SimpleNamespace
 
     from agent_comms.pi_events import PiEvent
@@ -1131,7 +1131,8 @@ def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detai
         },
     })
     output = TurnOutput()
-    event.message.tracked_end(SimpleNamespace(output=output))
+    from agent_comms.external_transcript import DraftPublication
+    await event.message.tracked_end(SimpleNamespace(output=output, draft_publication=DraftPublication()))
 
     assert output.declared_failure == ModelRequestFailed(detail)
     with pytest.raises(NativePiTerminalFailure, match=detail) as caught:

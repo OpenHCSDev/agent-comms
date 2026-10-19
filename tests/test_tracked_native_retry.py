@@ -57,7 +57,9 @@ async def test_exhausted_native_request_records_required_final_error(previous):
     with pytest.raises(NativePiTerminalFailure, match="final refusal") as caught:
         turn.output.raise_if_failed(None, SelectedModel("configured", "model"))
     assert not isinstance(caught.value.failure, RetryableProviderFailure)
-    PiMessage.from_wire({
+    from agent_comms.external_transcript import DraftPublication
+    turn.draft_publication = DraftPublication()
+    await PiMessage.from_wire({
         "role": "assistant", "content": [], "stopReason": "error",
         "errorMessage": "final refusal",
     }).tracked_end(turn)
