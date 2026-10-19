@@ -28,7 +28,7 @@ def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_pa
         "call", "edit", {"path": "absent.py", "edits": [{"oldText": "1", "newText": "2"}]}
     )
     with pytest.raises(ClaimTransitionError) as refused:
-        edit.tool.claim.normalized(project)
+        edit.allowed_claim().normalized(project)
     assert reply(tmp_path, refused.value) == f"File does not exist: {project / 'absent.py'}"
 
 
