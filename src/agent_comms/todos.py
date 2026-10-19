@@ -907,10 +907,11 @@ class Slop:
     USAGE: ClassVar[str] = ('An order naming slop needs Slop: PATTERN-ID; fact WORDS; '
                             'at PATH:LINE; derive MECHANISM on PATH:LINE')
     LINE: ClassVar[re.Pattern] = re.compile(
-        r'Slop: (?P<pattern>\S+); fact (?P<fact>.+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)\s*')
+        r'^Slop: (?P<pattern>\S+); fact (?P<fact>[^\n]+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)[ \t]*$', re.M)
 
     def __post_init__(self):
-        PatternCatalog.require(self.pattern)
+        with MalformedRecord.refusing(self.USAGE):
+            PatternCatalog.require(self.pattern)
         if len(self.fact.split()) < 4:
             raise ValueError('The duplicated fact needs 4+ words.')
         self.at.require_exists()
@@ -918,12 +919,10 @@ class Slop:
 
     @classmethod
     def from_order(cls, body):
-        found = []
-        for line in re.findall(r'(?m)^Slop:.*$', body):
-            cited = cls.LINE.fullmatch(line)
-            if cited is None:
-                raise ValueError(cls.USAGE)
-            found.append(FieldCodec.decode(cls, cited.groupdict()))
+        matches = tuple(cls.LINE.finditer(body))
+        if len(matches) != len(re.findall(r'(?m)^Slop:.*$', body)):
+            raise ValueError(cls.USAGE)
+        found = [FieldCodec.decode(cls, cited.groupdict()) for cited in matches]
         if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
             raise ValueError(cls.USAGE)
         return found

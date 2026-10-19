@@ -430,11 +430,17 @@ def test_slop_uses_every_pinned_catalog_entry_and_refuses_unknown_ids():
     with pytest.raises(ValueError, match='MADEUP-999'):
         Slop('MADEUP-999', 'the count of open orders', location, DeclarationDerivation, location)
     for pattern in ('MADEUP-999', 'state'):
-        with pytest.raises(ValueError, match=pattern):
+        with pytest.raises(ValueError, match=pattern) as refused:
             Slop.from_order(f'Slop: {pattern}; fact the count of open orders; at {__file__}:1; '
                             f'derive declaration on {__file__}:1')
-    with pytest.raises(ValueError, match='Slop: PATTERN-ID'):
-        Slop.from_order('Slop: MADEUP-999; an incomplete line must not disappear')
+        assert Slop.USAGE in str(refused.value)
+    valid = (f'Slop: MEMB-1; fact the count of open orders; at {__file__}:1; '
+             f'derive declaration on {__file__}:1')
+    malformed = 'Slop: MADEUP-999; an incomplete line must not disappear'
+    for body in (malformed, valid + '\n' + malformed, malformed + '\n' + valid):
+        with pytest.raises(ValueError, match='Slop: PATTERN-ID'):
+            Slop.from_order(body)
+    assert len(Slop.from_order(valid + '\n' + valid)) == 2
 
 
 def test_order_send_refuses_unknown_pattern_before_recording(commander_script):
