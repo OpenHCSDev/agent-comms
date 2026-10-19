@@ -19,6 +19,7 @@ import hashlib, json, os, re, sys, time
 from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
+from ..comms import Comms
 from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo
 from ..tools import CommsVerdictTool
 from . import order
@@ -72,9 +73,10 @@ class Edit:
             return {edit.id: edit for edit in edits}
 
     @classmethod
-    def unjudged(cls) -> list[Edit]:
-        judged = {v.tool_call_id for todo in order.COMMS.goals.todos.history_for_commander(
-            order.COMMS.registry.require(ME).incarnation) for v in todo.verdicts}
+    def unjudged(cls, comms: Comms, commander: str) -> list[Edit]:
+        """The recorded edits that commander has judged on none of its orders in that Comms."""
+        judged = {v.tool_call_id for todo in comms.goals.todos.history_for_commander(
+            comms.registry.require(commander).incarnation) for v in todo.verdicts}
         return [edit for edit in cls.recorded().values() if edit.id not in judged]
 
     def code(self) -> str:
@@ -122,7 +124,7 @@ def roast(thread, lines, text, fix, slop):
 
 def alarm():
     while True:
-        late = [edit for edit in Edit.unjudged() if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(order.COMMS, ME) if time.time() - edit.at > 300]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
@@ -144,7 +146,7 @@ class ShowVerb(JudgeVerb):
         return True
 
     def run(self) -> None:
-        show([edit for edit in Edit.unjudged() if self.selects(edit)])
+        show([edit for edit in Edit.unjudged(order.COMMS, ME) if self.selects(edit)])
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -212,7 +214,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         for i, todo in selected.items():
             result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
             current[todo.id] = result.todo
-        print(f'{self.declared_name}: {len(ids)} edits; {len(Edit.unjudged())} still unjudged')
+        print(f'{self.declared_name}: {len(ids)} edits; {len(Edit.unjudged(order.COMMS, ME))} still unjudged')
         self.report(tuple(current.values()))
 
 

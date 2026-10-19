@@ -887,7 +887,7 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
     assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
     assert not saved.strikes
-    assert importlib.reload(judge).Edit.unjudged() == []
+    assert importlib.reload(judge).Edit.unjudged(comms, 'lead') == []
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
@@ -933,7 +933,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     assert len(saved.verdicts) == len(saved.strikes) == 1
     assert isinstance(saved.verdicts[0], SendBackVerdict)
     assert why in comms.registry.require('worker').goal.progress
-    assert judge.Edit.unjudged() == []
+    assert judge.Edit.unjudged(comms, 'lead') == []
     assert any(to == ['worker', '#comms'] for to, _ in posted)
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 

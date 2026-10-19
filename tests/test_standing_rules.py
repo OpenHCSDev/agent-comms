@@ -99,6 +99,25 @@ def test_fork_now_and_unjudged_follow_the_unjudged_edits(standing):
     assert fork.startswith("FORK NOW: load 7 (0 open orders, 0 overdue, 70 unjudged edits) needs 1")
 
 
+def test_fork_now_reads_the_load_of_the_bus_it_is_asked_about(commander, standing, tmp_path):
+    """Three overdue orders on one bus need a fork there; a second bus without orders carries no load."""
+    from agent_comms.tool_caller import ThreadCaller
+
+    comms, _, _ = standing
+    for problem in ("P1", "P2", "P3"):
+        create(commander, problem)
+    other = Comms(tmp_path / "other-bus")
+    other.registry.declare(other.registry.new_thread("lead", frozenset(), str(tmp_path), created_at=1.0))
+
+    def fork_now(bus):
+        read = CommsStandingRulesTool().apply(bus, ThreadCaller("lead"))
+        return [line for line in read.broken if line.startswith("FORK NOW")]
+
+    assert [line.split(") ")[0] for line in fork_now(comms)] == [
+        "FORK NOW: load 9 (3 open orders, 3 overdue, 0 unjudged edits"]
+    assert fork_now(other) == []
+
+
 def test_rules_due_until_a_fresh_review_is_answered(standing):
     comms, state, module = standing
     assert lines(comms, module.RulesDue) == [

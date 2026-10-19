@@ -7,21 +7,20 @@ forks/NAME.beat; a beat younger than BEAT_AGE is a live fork. While load needs m
 live, order refuses the main commander's actions and rotate prints FORK NOW, so the only
 way forward is forking a slice.
 """
+from __future__ import annotations
+
 import math, os, sys, time
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .config import CommanderConfig
+
+if TYPE_CHECKING:
+    from ..comms import Comms
 
 FORKS = f'{CommanderConfig.installed().state}/forks'
 PER_COMMANDER = 6
 BEAT_AGE = 10 * 60
-
-
-def load() -> tuple[float, str]:
-    from . import judge, order
-    owed = [t for t in order.held_orders() if t.pending]
-    overdue = sum(t.late_since(time.time()) is not None for t in owed)
-    unjudged = len(judge.Edit.unjudged())
-    return len(owed) + 2 * overdue + unjudged / 10, f'{len(owed)} open orders, {overdue} overdue, {unjudged} unjudged edits'
 
 
 def live_forks() -> list[str]:
@@ -35,21 +34,41 @@ def beat(name: str):
         os.utime(f'{FORKS}/{name}.beat')
 
 
-def short() -> str | None:
-    """Why the commander must fork now, or None when live forks cover the load."""
-    total, parts = load()
-    needed = math.ceil(total / PER_COMMANDER) - 1
-    forks = live_forks()
-    if len(forks) < needed:
-        return (f'load {total:.0f} ({parts}) needs {needed} live fork(s), {len(forks)} live {forks}; '
-                f'fork a slice now (each fork passes --fork NAME to order)')
-    return None
+@dataclass(frozen=True)
+class Load:
+    """The commander load on one Comms: its open and overdue orders and the edits it has not judged."""
+    owed: int
+    overdue: int
+    unjudged: int
 
+    @classmethod
+    def of(cls, comms: Comms, commander: str) -> Load:
+        from . import judge
+        actor = comms.registry.require(commander).incarnation
+        owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
+        return cls(len(owed), sum(t.late_since(time.time()) is not None for t in owed),
+                   len(judge.Edit.unjudged(comms, commander)))
 
-def require():
-    if why := short():
-        sys.exit(f'REFUSED, nothing recorded: overloaded: {why}.')
+    @property
+    def total(self) -> float:
+        return self.owed + 2 * self.overdue + self.unjudged / 10
+
+    def short(self) -> str | None:
+        """Why the commander must fork now, or None when live forks cover the load."""
+        needed = math.ceil(self.total / PER_COMMANDER) - 1
+        forks = live_forks()
+        if len(forks) < needed:
+            return (f'load {self.total:.0f} ({self.owed} open orders, {self.overdue} overdue, '
+                    f'{self.unjudged} unjudged edits) needs {needed} live fork(s), {len(forks)} live {forks}; '
+                    f'fork a slice now (each fork passes --fork NAME to order)')
+        return None
+
+    def require(self) -> None:
+        if why := self.short():
+            sys.exit(f'REFUSED, nothing recorded: overloaded: {why}.')
 
 
 def main(a):
-    print(short() or f'covered: load {load()[0]:.0f}, forks {live_forks()}')
+    from . import order
+    load = Load.of(order.COMMS, order.ME)
+    print(load.short() or f'covered: load {load.total:.0f}, forks {live_forks()}')

@@ -10,7 +10,7 @@ from .config import CommanderConfig
 CONFIG = CommanderConfig.installed()
 
 def unjudged(unit=None):
-    return sum(1 for edit in judge.Edit.unjudged() if unit in (None, edit.thread))
+    return sum(1 for edit in judge.Edit.unjudged(order.COMMS, order.ME) if unit in (None, edit.thread))
 
 
 def broken_rules(after=0.0):

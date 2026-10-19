@@ -38,7 +38,7 @@ class ForkNow(ReasonedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        return capacity.short()
+        return capacity.Load.of(comms, commander).short()
 
 
 @dataclass(frozen=True)
@@ -48,7 +48,7 @@ class Unjudged(ReasonedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        total = len(judge.Edit.unjudged())
+        total = len(judge.Edit.unjudged(comms, commander))
         return str(total) if total > cls.limit else None
 
 
