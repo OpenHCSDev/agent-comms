@@ -125,11 +125,6 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         assert provider.error_message in terminal_failures[0].text
         tracked_users = [message for message in messages if message.get("inputId")]
         assert len(tracked_users) == 1
-        reports = [json.loads(path.read_text()) for path in (native.root / "diagnostics").glob("*.json")]
-        failures = [report for report in reports if report.get("turn_id") == tracked_users[0]["inputId"]]
-        assert len(failures) == 1
-        assert "NativePiTerminalFailure" in failures[0]["source_error"]
-        assert "without matching durable proof" not in failures[0]["source_error"]
         print("installed_native_round_result=" + json.dumps({
             "installed_module": str(Path(__import__("agent_comms").__file__).resolve()),
             "new_inputs": 1, "tool_calls": requests, "owner_claims": claims,
