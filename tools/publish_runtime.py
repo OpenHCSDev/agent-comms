@@ -60,7 +60,8 @@ class RunningProcess:
         if fields[0] in {'Z', 'X'}:
             raise ProcessLookupError(entry.name)
         argv0 = Path(os.fsdecode((entry / 'cmdline').read_bytes().split(b'\0', 1)[0]))
-        launched = (argv0.parent.resolve() / argv0.name,) if argv0.is_absolute() else ()
+        launched: tuple[Path, ...] = ((argv0.parent.resolve() / argv0.name,)
+                                      if argv0.is_absolute() else ())
         with suppress(PermissionError):
             launched += (Path(os.readlink(entry / 'exe')),)
         identity = ProcessIdentity.in_group(int(entry.name), int(fields[19]), int(fields[2]))
