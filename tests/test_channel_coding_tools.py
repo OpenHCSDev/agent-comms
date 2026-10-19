@@ -292,7 +292,10 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog,
 
 
 @pytest.mark.asyncio
-async def test_tool_call_pi_never_started_is_refused_with_its_reason(tmp_path):
+async def test_tool_call_pi_never_started_is_cancelled_by_transport_retirement(tmp_path):
+    import asyncio
+    import os
+
     class Owner:
         input_id = secrets.token_hex(16)
 
@@ -304,12 +307,23 @@ async def test_tool_call_pi_never_started_is_refused_with_its_reason(tmp_path):
     socket.turn = object()
     call = ("never", "read", {"path": "a"})
     socket.announce([ToolCallContent(id=call[0], name=call[1], arguments=call[2])])
-    with pytest.raises(ValueError, match="did not report this tool call as started within 10 s") as refused:
-        await socket.handle_request(_request(socket, *call))
-    # The child shows the model this text; it used to be empty.
-    assert socket.failure_response(refused.value)["error"].endswith(
-        "The tool was not started; call it again."
-    )
-    # The call stays refused if Pi asks again; a new call is checked afresh.
-    with pytest.raises(ValueError, match="not executing"):
-        await socket.handle_request(_request(socket, *call))
+    socket.bind_process(os.getpid())
+    await socket.start()
+    reader, writer = await asyncio.open_unix_connection(str(socket.address))
+    try:
+        writer.write(_request(socket, *call))
+        await writer.drain()
+        async with asyncio.timeout(5):
+            while not socket._handlers or not socket.calls.require(0, call[0]).progress.started._waiters:
+                await asyncio.sleep(0)
+        await socket.close()
+        assert await reader.read() == b""
+        assert not socket._handlers
+        # Retirement consumes the interrupted request; a late start is not
+        # permission to replay it. Main deliberately has no ten-second timer.
+        with pytest.raises(ValueError, match="not executing"):
+            await socket.handle_request(_request(socket, *call))
+    finally:
+        writer.close()
+        await writer.wait_closed()
+        await socket.close()
