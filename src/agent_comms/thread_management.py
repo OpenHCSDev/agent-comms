@@ -199,7 +199,7 @@ class ThreadManagement:
             _atomic_write_text(session_path, snapshot.pi_session(project))
             try:
                 self.registry._declare_unlocked(thread, StoppedThreadStatus())
-                self.bus.mark_delivered_through(name, self.bus.log.latest_sequence())
+                self.bus.mark_delivered_through_unlocked(name, self.bus.log.latest_sequence())
             except (OSError, ValueError, CoordinationError):
                 if name in self.registry:
                     self.registry.remove(name)
