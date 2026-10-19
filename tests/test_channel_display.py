@@ -190,7 +190,8 @@ def test_alias_retag_and_tag_rename_reproject_without_new_wire_row(tmp_path):
     comms.channels.rename_tag("api", "services")
     assert comms.bus.log.latest_sequence() == high_water
     assert comms.channels.catalog.read().require_channel("#services").any_mode
-    assert not comms.channels.catalog.read().require_channel("#api").any_mode
+    with pytest.raises(ValueError, match="Unknown channel"):
+        comms.channels.catalog.read().require_channel("#api")
     assert bodies(comms.views.channel_display_page("#services")) == ["old sender DM"]
     comms.channels.delete_tag("services")
     metadata = comms.channels.catalog.path

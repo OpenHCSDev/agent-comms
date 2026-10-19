@@ -278,7 +278,8 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     )
     restarted = wire(tmp_path)
     assert restarted.channels.catalog.read().require_channel("#child").parent is None
-    assert not restarted.channels.catalog.read().require_channel("#api").archived
+    with pytest.raises(ValueError, match="Unknown channel"):
+        restarted.channels.catalog.read().require_channel("#api")
     assert [message.body for message in list(restarted.views.channel_history_page("#api").messages)] == [
         "target-owned historical row"
     ]

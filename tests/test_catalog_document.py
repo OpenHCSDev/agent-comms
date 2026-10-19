@@ -62,14 +62,13 @@ def test_message_decode_fields_are_declared_not_a_second_roster():
 
 
 def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeypatch):
-    import agent_comms.audience_manifest as audience_manifest
+    import agent_comms.publisher as publisher
     from agent_comms.errors import RelationViolationError
     from test_private_human_ingress import _root
 
     comms, _store, _root_id, _lookups = _root(tmp_path)
-    comms.channels.create_tag("team")
     sequence = comms.bus.log.latest_sequence()
-    original = audience_manifest.freeze_audience
+    original = publisher.freeze_audience
 
     def capture_then_change(*args, **kwargs):
         result = original(*args, **kwargs)
@@ -79,7 +78,7 @@ def test_initial_publication_rechecks_current_catalog_revision(tmp_path, monkeyp
             document.list_order = CreatedChannelSort
         return result
 
-    monkeypatch.setattr(audience_manifest, "freeze_audience", capture_then_change)
+    monkeypatch.setattr(publisher, "freeze_audience", capture_then_change)
     with pytest.raises(RelationViolationError, match="registry/catalog revision changed"):
         comms.messaging.send_user_message("#team", "must not append", worktree=str(tmp_path))
     assert comms.bus.log.latest_sequence() == sequence
