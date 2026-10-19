@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from .native_tool_transport import ToolTransport
     from .envelope_claim_transitions import FileClaimPath
     from .storage_room import RoomReservation
+    from .registration import Registration
+    from .storage_rules import StorageEffect
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -283,9 +285,16 @@ class CodingCall(NativeToolCall):
     def digest(self) -> str: ...
 
     @classmethod
-    def storage_effects(cls, cwd):
+    def storage_effects(cls, cwd: Path) -> tuple[StorageEffect, ...]:
         """A call without executable effects needs no room."""
         return ()
+
+    def decide_storage(self, registry: Registration, thread: str) -> tuple[StorageEffect, ...]:
+        """Judge this call's declared effects once, shared by execution and observation."""
+        effects = self.storage_effects(Path(registry.require(thread).worktree))
+        if effects:
+            registry.decide_storage(thread, effects)
+        return effects
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
