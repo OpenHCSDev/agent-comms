@@ -13,5 +13,5 @@ def main(a):
     raw = re.search(r'\bsend\b[^|;&]*--from\s+' + re.escape(order.ME) + r'\b', command)
     targets = set(re.findall(r'--to\s+(\S+)', command))
     if raw and 'agent-comms-commander' not in command and targets & order.units():
-            print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                  "permissionDecisionReason": "Raw send to a unit. Use agent-comms-commander order send (orders, with deadline) or order say (no work)."}}))
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+              "permissionDecisionReason": "Raw send to a unit. Use agent-comms-commander order send (orders, with deadline) or order say (no work)."}}))
