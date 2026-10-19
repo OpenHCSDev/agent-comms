@@ -30,6 +30,7 @@ from uuid import uuid4
 from .coordination_database import CoordinationStore
 from .declared_family import DeclaredFamily
 from .field_codec import MalformedRecord
+from .pi_payloads import PiUsage
 from .goal_attempt_identity import GoalAttemptIdentity
 from .goal_attempt_phase import (
     ClaimedAttempt,
@@ -491,7 +492,7 @@ class GoalTurnPermit(ABC):
 
     @abstractmethod
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool: ...
+                   usage: PiUsage) -> bool: ...
 
     @abstractmethod
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext: ...
@@ -504,7 +505,7 @@ class NoLaunchPermit(GoalTurnPermit):
         return False
 
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool:
+                   usage: PiUsage) -> bool:
         return False
 
     def add_context(self, context: TurnContext, owner: Thread, goals: Goals) -> TurnContext:
@@ -534,7 +535,7 @@ class LaunchPermit(GoalTurnPermit):
         )).phase.verified_progress
 
     def charge_for(self, goal_id: str | None, goals: Goals, response: str,
-                   usage: Mapping[str, object]) -> bool:
+                   usage: PiUsage) -> bool:
         if goal_id != self.reservation.goal_id:
             return False
         self.record_provider_usage(goals.open_goal_store(), response, usage)
@@ -630,29 +631,12 @@ class LaunchPermit(GoalTurnPermit):
         )
 
     def record_provider_usage(
-        self, store: GoalAttemptStore, response_id: str, usage: Mapping[str, object]
+        self, store: GoalAttemptStore, response_id: str, usage: PiUsage
     ) -> None:
         """Attribute one provider response to its claimed goal attempt exactly once."""
         if not response_id:
             raise ValueError("Provider response ID is required.")
-        for usage_field in ("input", "output", "totalTokens"):
-            value = usage.get(usage_field, 0)
-            if type(value) is not int or value < 0:
-                raise ValueError(f"Provider usage {usage_field} must be a nonnegative integer.")
-        cost = usage.get("cost", {})
-        if not isinstance(cost, Mapping):
-            raise ValueError("Provider cost must be an object.")
-        cost_total = cost.get("total", 0)
-        if (
-            type(cost_total) not in {int, float}
-            or not Decimal(str(cost_total)).is_finite()
-            or cost_total < 0
-        ):
-            raise ValueError("Provider cost total must be a nonnegative number.")
-        try:
-            raw = json.dumps(usage, sort_keys=True, separators=(",", ":"), allow_nan=False)
-        except ValueError as error:  # json.dumps refuses a non-finite number
-            raise MalformedRecord("Provider usage must be JSON serializable.") from error
+        raw = json.dumps(usage.to_wire(), sort_keys=True, separators=(",", ":"), allow_nan=False)
         reservation = self.reservation
 
         def write(conn: sqlite3.Connection) -> str:
