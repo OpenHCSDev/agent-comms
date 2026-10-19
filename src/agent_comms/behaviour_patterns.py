@@ -204,8 +204,8 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
             "A pending check records a known gap, not enforcement. Adding a pattern means"
             " adding one `BehaviourPattern` subclass; membership and this document derive"
             " from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.\n\n"
-            f"The [Codex postmortem]({POSTMORTEM}) names these failures; each pattern cites the"
-            " ones it checks:\n\n"
+            f"The [Codex postmortem]({POSTMORTEM}) names these failures; coverage below derives"
+            " from the patterns that cite them:\n\n"
             f"{failures}\n" + "\n".join(member.section() for member in members)
         )
 
@@ -241,7 +241,7 @@ class PlainTextPattern(BehaviourPattern):
         "A commander order, strike, roast or directive whose words outside cited spans match"
         " the declared jargon list in `PlainText`."
     )
-    checks = (CallableCheck(PlainText.refused),)
+    checks = (CallableCheck(PlainText),)
     sources = (CommanderRule("Hate jargon."), CeremonyFailure())
 
 

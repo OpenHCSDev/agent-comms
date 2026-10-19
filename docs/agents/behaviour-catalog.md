@@ -7,7 +7,7 @@ Each behaviour failure pattern is declared once in Core with its signature (what
 
 A pending check records a known gap, not enforcement. Adding a pattern means adding one `BehaviourPattern` subclass; membership and this document derive from those classes. `tests/test_behaviour_catalog.py` rejects hand edits.
 
-The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) names these failures; each pattern cites the ones it checks:
+The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) names these failures; coverage below derives from the patterns that cite them:
 
 - [Failure 1](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It rewrote the framework instead of questioning its own design: no pattern cites it yet
 - [Failure 2](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It added states instead of removing them: no pattern cites it yet
@@ -56,7 +56,7 @@ A commander order, strike, roast or directive whose words outside cited spans ma
 
 Checked by:
 
-- check in `agent_comms.todos.OrderWords.refused`
+- check in `agent_comms.todos.PlainText`
 
 Learned from: [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Hate jargon."; [Codex postmortem, failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
 
