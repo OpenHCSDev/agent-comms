@@ -7,14 +7,12 @@ and ``tools`` on the path. Three rules make a step safe to run on any bus at any
 - It is idempotent: data it already carried reports no change.
 - It names the step it runs ``after`` (``None`` for the first), so the order is
   declared once, by the step that depends on it.
-- It is never edited once it is on main; a different change is a new step.
-  The debt ratchet's ``EditedCarry`` measure refuses an edit, a rename and the
-  reuse of a deleted step's name.
+- Its conversion is never edited once it is on main; a different change is a
+  new step. Its predecessor may change when a finished step is retired.
 
-A step that can no longer run against the current source is deleted. Its code
-stays in Git: a bus whose ledger lacks it runs it from the revision that last wrote
-it, against the source it was written for (``tools/upgrade_bus.py``). So deleting a
-step never strands a bus.
+A finished step is deleted and its successor names the preceding kept step.
+Only predecessors still explicitly named by a kept step are recovered from Git;
+unreferenced deleted steps cannot run again.
 
 Each bus records the steps applied to it in ``carries.json``. Only this family
 reads or writes that file; nothing in ``src/`` depends on it.
@@ -23,7 +21,6 @@ from __future__ import annotations
 
 import argparse
 import ast
-import importlib
 import inspect
 import json
 import os
@@ -32,7 +29,7 @@ import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -146,11 +143,7 @@ class Carry(ABC):
 
 class TodoRows(Carry):
     """A carry over the saved todo rows: one write transaction on the todo store that
-    re-reads every row as declared, then commits on apply and rolls back otherwise.
-
-    The bus this step meets holds the columns declared by every step before it in chain
-    order; a column a later step declares is absent, and reads as that column's empty record.
-    """
+    re-reads every row as declared, then commits on apply and rolls back otherwise."""
 
     @classmethod
     @contextmanager
@@ -159,18 +152,12 @@ class TodoRows(Carry):
         if not TodoStore.path_in(root).exists():
             yield None
             return
-        with cls.todo_store(root, apply=apply) as db:
-            yield db
-
-    @classmethod
-    @contextmanager
-    def todo_store(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection]:
-        """The existing todo store, kept only when applied and every row still reads."""
         with closing(CoordinationStore.writer(TodoStore.path_in(root))) as db:
             db.execute("BEGIN IMMEDIATE")
             try:
                 yield db
-                cls.declared_rows(db)
+                for _row in Todo.stream(db):
+                    pass
                 if apply:
                     db.commit()
                 else:
@@ -178,35 +165,6 @@ class TodoRows(Carry):
             except BaseException:
                 db.rollback()
                 raise
-
-    @classmethod
-    def uncarried_columns(cls) -> frozenset[str]:
-        """The columns that column steps from this one onward in the chain declare."""
-        checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
-        names = [step.name for step in CarryChain.at(Path(checkout), "HEAD").steps]
-        columns: set[str] = set()
-        for name in names[names.index(cls.name()):]:
-            if (cls.module().parent / f"{name}.py").exists():
-                module = importlib.import_module(f"{cls.module().parent.name}.{name}")
-                columns.update(value.column for value in vars(module).values()
-                               if isinstance(value, type) and issubclass(value, TodoColumnCarry)
-                               and value.__module__ == module.__name__)
-        return frozenset(columns)
-
-    @classmethod
-    def declared_rows(cls, db: sqlite3.Connection) -> int:
-        """Read every row through the Todo declaration; refuse a column the chain
-        does not explain."""
-        table, fields = Todo.declared_name, Todo._fields()
-        actual = {row[1] for row in db.execute(f'PRAGMA table_info("{table}")')}
-        absent = tuple(item for item in fields if item.wire_name not in actual)
-        if not {item.name for item in absent} <= cls.uncarried_columns():
-            raise ValueError(f"Unexpected todo columns: {sorted(actual)!r}")
-        selected = ", ".join(f'? AS "{item.wire_name}"' if item in absent
-                             else f'"{item.wire_name}"' for item in fields)
-        empty = tuple(item.encode(()) for item in absent)
-        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
-        return sum(1 for _row in Todo.iterate(rows))
 
     @classmethod
     def carried(
@@ -275,19 +233,19 @@ class CarryChain:
                 step = Step.declared(name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
                 if step is not None:
                     known[name] = step
-        # Oldest first: the order every step reached this revision along its first parents.
-        added = git(repo, "log", "--first-parent", "-m", "--no-renames", "--format=", "--name-only",
-                    "--diff-filter=A", revision, "--", str(STEPS)).decode().split()
-        entered = [Path(path).stem for path in reversed(added)
-                   if Path(path).name.startswith("carry_") and path.endswith(".py")]
-        for name in entered:
-            if f"{name}.py" not in tree:
-                step = cls.deleted(repo, revision, name)
-                if step is not None:
-                    known[name] = step
+        # Only a declared predecessor can keep a historical step reachable.
+        # Deleting a finished step and reconnecting its successor retires it.
+        waiting = list(known.values())
+        while waiting:
+            step = waiting.pop()
+            if step.after is not None and step.after not in known:
+                predecessor = cls.deleted(repo, revision, step.after)
+                if predecessor is None:
+                    raise ValueError(f"Carry step {step.after} is in no revision of {revision}")
+                known[predecessor.name] = predecessor
+                waiting.append(predecessor)
         if not known:
             return cls(())
-        known = cls.spliced(known, revision, entered.index)
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -306,31 +264,6 @@ class CarryChain:
         if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
         return cls(tuple(reversed(steps)))
-
-    @staticmethod
-    def spliced(
-        known: dict[str, Step], revision: str, entered: Callable[[str], int]
-    ) -> dict[str, Step]:
-        """Each step runs after the step it names, and of the steps ready to run, the one
-        that entered history first runs first: a bus ran steps in the order they reached
-        it, so a step added after a deleted line runs after that line instead of stranding
-        every bus that ran it. Two steps in the tree that name one step are a fork in the
-        tree, and stay refused."""
-        named = [step.after for step in known.values() if step.revision == revision]
-        if len(named) != len(set(named)):
-            return known
-        waiting = sorted(known.values(), key=lambda step: entered(step.name))
-        ordered: dict[str, Step] = {}
-        tail = None
-        while waiting:
-            ready = next((step for step in waiting
-                          if step.after == tail or step.after in ordered), None)
-            if ready is None:
-                return known
-            waiting.remove(ready)
-            ordered[ready.name] = replace(ready, after=tail)
-            tail = ready.name
-        return ordered
 
     @staticmethod
     def deleted(repo: Path, revision: str, name: str) -> Step | None:
@@ -366,31 +299,47 @@ class CarryChain:
         return tuple(step for step, applied_step in zip(self.steps, done) if not applied_step)
 
 
-class TodoColumnCarry(TodoRows):
-    """Todo rows gain one declared record column, empty; every other column stays as it was.
-    A column a later step declares is that step's to write, never this one's."""
+class TodoColumnCarry(Carry):
+    """Todo rows gain one declared record column, empty; every other column stays as it was."""
 
     column: ClassVar[str]
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        if not TodoStore.path_in(root).exists():
+        path = TodoStore.path_in(root)
+        if not path.exists():
             return Carried(0)
-        with cls.todo_store(root, apply=apply) as db:
-            changed = cls._carry(db, apply=apply)
-        return cls.carried(root, changed, {}, apply=apply)
+        with closing(CoordinationStore.writer(path)) as db:
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                changed = cls._carry(db, apply=apply)
+            except BaseException:
+                db.rollback()
+                raise
+        rewritten = tuple(item.name for item in root.glob(f"{path.name}*"))
+        return Carried(changed, {}, rewritten if changed and apply else ())
 
     @classmethod
     def _carry(cls, db: sqlite3.Connection, *, apply: bool) -> int:
         table, fields = Todo.declared_name, Todo._fields()
         (added,) = (item for item in fields if item.name == cls.column)
-        actual = {row[1] for row in db.execute(f'PRAGMA table_info("{table}")')}
-        if added.wire_name in actual:
+        actual = tuple(row[1] for row in db.execute(f'PRAGMA table_info("{table}")'))
+        expected = tuple(item.wire_name for item in fields)
+        if actual == expected:
+            for _row in Todo.stream(db):
+                pass
+            db.rollback()
             return 0
-        count = cls.declared_rows(db)
+        if actual != tuple(item.wire_name for item in fields if item is not added):
+            raise ValueError(f"Unexpected todo columns: {actual!r}")
+        selected = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
+                             for item in fields)
+        empty = (added.encode(()),)
+        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
+        count = sum(1 for _row in Todo.iterate(rows))
         if not apply:
+            db.rollback()
             return count
-        kept = tuple(item for item in fields if item.wire_name in actual or item is added)
         saved = f"{table}_before_{cls.column}"
         indexes = tuple(db.execute(
             "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name=? AND sql IS NOT NULL",
@@ -399,13 +348,8 @@ class TodoColumnCarry(TodoRows):
             db.execute(f'DROP INDEX "{name}"')
         db.execute(f'ALTER TABLE "{table}" RENAME TO "{saved}"')
         Todo.create(db)
-        for item in fields:
-            if item not in kept:
-                db.execute(f'ALTER TABLE "{table}" DROP COLUMN "{item.wire_name}"')
-        columns = Todo._column_list(tuple(item.wire_name for item in kept))
-        copied = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
-                           for item in kept)
-        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {copied} FROM "{saved}"',
-                   (added.encode(()),))
+        columns = Todo._column_list(expected)
+        db.execute(f'INSERT INTO "{table}" ({columns}) SELECT {selected} FROM "{saved}"', empty)
         db.execute(f'DROP TABLE "{saved}"')
+        db.commit()
         return count
