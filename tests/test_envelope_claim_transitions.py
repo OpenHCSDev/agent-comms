@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict, ClaimOwner, ClaimProjection, ClaimRelease, ClaimTransition,
-    ClaimTransitionError, ExistingFileClaim, WakeClaim,
+    ClaimTransitionError, ExistingFileClaim, NoLiveAttempt, OwnedAttemptClaim, SelectedAttemptClaim,
 )
 from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.messages import Message, InfoKind
@@ -19,7 +19,7 @@ G2 = "b" * 32
 
 def test_selected_wake_binding_survives_claim_projection(tmp_path):
     _, resource, _ = resources(tmp_path)
-    claim_scope = WakeClaim(
+    claim_scope = SelectedAttemptClaim(
         wire_root_id="c" * 32, source_seq=7, source_message_id="source-7",
         wake_assignment_id="cohort-v1:" + "d" * 64, wake_revision=3,
         recipient_lookup="e" * 32, execution_id="execution-7", operation_id="f" * 32,
@@ -109,6 +109,22 @@ def test_same_holder_moves_scope_but_another_holder_cannot(tmp_path):
     assert dict(transition(3, releases=(ClaimRelease(resource, G2),)).apply(moved)) == {}
 
 
+def test_finished_attempt_does_not_block_same_holder_next_attempt(tmp_path):
+    _, resource, _ = resources(tmp_path)
+    old = OwnedAttemptClaim(turn_id="turn-A", owner_claimed_generation=1, operation_id=G1)
+    new = OwnedAttemptClaim(turn_id="turn-B", owner_claimed_generation=1, operation_id=G2)
+    held = replace(transition(1, claims=(resource,), generation=G1), claim_scope=old).apply(
+        ClaimProjection())
+    assert held[resource].claim_scope.finished_turn("turn-A", 1)
+    advanced = replace(transition(2, claims=(resource,), generation=G2), claim_scope=new).apply(held)
+    assert advanced[resource].claim_scope.same_attempt(new)
+    assert not advanced[resource].claim_scope.same_attempt(old)
+    assert advanced[resource].generation == G2
+    with pytest.raises(ClaimConflict):
+        replace(transition(3, owner="other", claims=(resource,), generation=G1),
+                claim_scope=new).apply(advanced)
+
+
 def test_full_set_claim_and_release_are_all_or_nothing(tmp_path):
     _, a, b = resources(tmp_path)
     first = transition(1, claims=(b,), generation=G1).apply(ClaimProjection())
@@ -142,7 +158,7 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
     new = transition(3, owner="peer", claims=(a,), generation=G2).apply(released)
     assert new[a].owner == "peer" and new[a].seq == 3
     with pytest.raises(ClaimTransitionError, match="malformed"):
-        ClaimProjection(0, {a: ClaimOwner(a, "peer", "epoch", G2, 3, "msg-3")})
+        ClaimProjection(0, {a: ClaimOwner(a, "peer", "epoch", G2, 3, "msg-3", NoLiveAttempt())})
     with pytest.raises(MalformedRecord, match="JSON object"):
         ClaimProjection(1, [])
     with pytest.raises(ClaimTransitionError, match="exact owner"):

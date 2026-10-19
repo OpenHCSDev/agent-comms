@@ -196,17 +196,21 @@ class OwnedSend(CodingToolOwner):
             self.verify(store, turn, snapshot)
             owner = snapshot.require(self.owner_name)
             canonical = resource.normalized(Path(self.thread.worktree))
+            scope = OwnedAttemptClaim(
+                turn_id=self.turn.value, owner_claimed_generation=self.claim_scope,
+                operation_id=slot)
             with self.comms.bus.log.checked_read() as source:
-                if prior is not None and source.claim(canonical) == prior:
-                    return prior
+                existing = source.claim(canonical)
+                if existing is not None:
+                    existing.require_holder(owner.name, str(owner.created_at))
+                    if existing.claim_scope.same_attempt(scope):
+                        return existing
             committed = self.comms.bus.publisher.publish_claim_envelope(
                 ClaimNoticeKind.claimed(owner),
                 worktree=Path(self.thread.worktree),
                 incarnation=str(owner.created_at),
                 claims=(resource,),
-                claim=OwnedAttemptClaim(
-                    turn_id=self.turn.value, owner_claimed_generation=self.claim_scope,
-                    operation_id=slot),
+                claim=scope,
             )
             return committed.require_claim_transition().claimed(canonical)
 
