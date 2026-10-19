@@ -41,7 +41,9 @@ from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .goal_actions import DirectiveGoalAction
-from .connector_store import ConnectorStore
+from .connector_store import (
+    AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode, RegisteredClient, digest,
+)
 from .messages import Message
 from .standing_rules import RulesDue
 from .todos import DirectiveText
@@ -77,78 +79,12 @@ ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
 CODE_SECONDS = 300
-ACCESS_SECONDS = 3600
-
-
-def digest(secret: str) -> str:
-    return hashlib.sha256(secret.encode()).hexdigest()
 
 
 def declared(record: type, values: Mapping[str, object]) -> dict[str, object]:
     """The values a record declares; an OAuth peer may send parameters it does not read."""
     names = {FieldCodec.wire_key(item) for item in fields(record)}
     return {key: value for key, value in values.items() if key in names}
-
-
-@dataclass(frozen=True)
-class RegisteredClient:
-    name: str
-
-
-@dataclass(frozen=True)
-class AuthorizationRequest:
-    """One authorization waiting for the owner, keyed by its PKCE challenge."""
-
-    client_id: str
-    code_challenge: str
-    state: str
-    approved: bool = False
-
-
-@dataclass(frozen=True)
-class IssuedCode:
-    client_id: str
-    code_challenge: str
-    expires_at: float
-
-
-@dataclass(frozen=True)
-class IssuedAccess:
-    client_id: str
-    expires_at: float
-
-
-@dataclass(frozen=True)
-class ConnectorGrants:
-    """Registered clients and outstanding grants; every secret is stored as its digest."""
-
-    clients: dict[str, RegisteredClient] = field(default_factory=dict)
-    requests: dict[str, AuthorizationRequest] = field(default_factory=dict)
-    codes: dict[str, IssuedCode] = field(default_factory=dict)
-    access: dict[str, IssuedAccess] = field(default_factory=dict)
-    refresh: dict[str, str] = field(default_factory=dict)
-
-    def issued(self, client_id: str) -> tuple[ConnectorGrants, dict[str, JsonValue]]:
-        """A new access and refresh token pair for the client, dropping expired grants."""
-        now = time.time()
-        access, refresh = secrets.token_urlsafe(32), secrets.token_urlsafe(32)
-        grants = replace(
-            self,
-            codes={key: code for key, code in self.codes.items() if code.expires_at > now},
-            access={key: held for key, held in self.access.items() if held.expires_at > now}
-            | {digest(access): IssuedAccess(client_id, now + ACCESS_SECONDS)},
-            refresh=self.refresh | {digest(refresh): client_id},
-        )
-        return grants, {
-            "access_token": access,
-            "token_type": "Bearer",
-            "expires_in": ACCESS_SECONDS,
-            "refresh_token": refresh,
-        }
-
-    def holds(self, token: str) -> bool:
-        held = self.access.get(digest(token))
-        return held is not None and held.expires_at > time.time()
 
 
 class OAuthError(Exception):

@@ -14,10 +14,10 @@ from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
-from inspect import isabstract
 from pathlib import Path
 from typing import BinaryIO, ClassVar, TYPE_CHECKING
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import PrivateFileRole
 
@@ -254,7 +254,13 @@ class StoreLock:
             yield refreshed
 
 
-class StoreLockOwner:
+class StoreOwner(DeclaredFamily):
+    """Shared declaration membership for composable store capabilities."""
+
+    __slots__ = ()
+
+
+class StoreLockOwner(StoreOwner, declared_name=None):
     """The composition root orders owners; each rank derives from that order."""
 
     __slots__ = ()
@@ -269,19 +275,12 @@ class StoreLockOwner:
 
     @classmethod
     def declare_lock_order(cls, *owners: type[StoreLockOwner]) -> None:
-        # A slots dataclass replaces its type but leaves the old type in
-        # __subclasses__ until collection. Both are one qualified declaration.
-        declared = {(owner.__module__, owner.__qualname__) for owner in owners}
-        if len(declared) != len(owners):
+        if len(set(owners)) != len(owners):
             raise TypeError("A store owner occurs twice in the lock order")
-        missing, pending = set(), list(cls.__subclasses__())
-        while pending:
-            owner = pending.pop()
-            pending.extend(owner.__subclasses__())
-            if not isabstract(owner) and (owner.__module__, owner.__qualname__) not in declared:
-                missing.add(owner.__qualname__)
+        missing = set(cls.members_with(cls)) - set(owners)
         if missing:
-            raise TypeError(f"Store owners missing from the lock order: {', '.join(sorted(missing))}")
+            names = ", ".join(sorted(owner.__name__ for owner in missing))
+            raise TypeError(f"Store owners missing from the lock order: {names}")
         StoreLockOwner._lock_order = owners
 
     @property
