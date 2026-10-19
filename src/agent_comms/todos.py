@@ -244,8 +244,7 @@ class PullRequests:
              "--jq", '.data | map_values(.nodes | map([.number, .headRefName, .headRefOid,'
              ' .mergeCommit.oid // "", .mergedAt // "", .updatedAt, .body]))'),
             capture_output=True, text=True, timeout=60)
-        if listed.returncode:
-            raise ValueError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
+        listed.check_returncode()
         rows = FieldCodec.decode(dict[str, tuple[tuple[int, str, str, str, str, str, str], ...]],
                                  FieldCodec.parse(listed.stdout))
         for alias, candidate in aliases.items():
@@ -494,8 +493,13 @@ class ProgressSource:
         """One selection algorithm for measured tools and read-only status views."""
         members = sorted(OrderProgress.members_with(FoundProgress),
                          key=lambda member: member.precedence)
-        return next((progress for member in members for progress in member.found(self)),
-                    NoCommitProgress())
+        try:
+            return next((progress for member in members for progress in member.found(self)),
+                        NoCommitProgress())
+        except subprocess.CalledProcessError as unread:
+            return UnreadProgress(unread.stderr.strip() or str(unread))
+        except subprocess.TimeoutExpired as unread:
+            return UnreadProgress(str(unread))
 
     def requests(self, state: str) -> list[PullRequest]:
         """Explicit PR references survive checkout removal or branch reuse."""

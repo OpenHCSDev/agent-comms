@@ -135,7 +135,7 @@ def test_a_merged_order_still_awaits_its_record(checkout):
 
 def test_unread_github_is_explicit(checkout):
     pulls = Listed()
-    pulls.states = ValueError('gh: not logged in')
+    pulls.states = subprocess.CalledProcessError(1, 'gh api graphql', stderr='gh: not logged in')
     progress = read(checkout, pulls)
     assert progress == UnreadProgress('gh: not logged in')
 

@@ -15,6 +15,12 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
+from textual.pilot import Pilot
+from toad.app import ToadApp
+from toad.navigation_target import FeedTarget
+from toad.screens.commander import CommanderScreen, CommanderUnit
+from toad.widgets.conversation import Conversation
+
 from agent_comms.active_route import LocalRoute
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import NoProcess
@@ -33,14 +39,14 @@ COMMANDER = "claude-code"
 UNITS = ("pi-cn-phase2", "pi-cn-phase5")
 
 
-def prepare(output: Path, units: tuple[str, ...], ordered_at: float | None) -> None:
+def prepare(output: Path, units: tuple[str, ...], ordered_at: float) -> None:
     live = Comms(LocalRoute.default())
     root = output / "bus"
     if root.exists():
         raise ValueError("Scratch bus already exists; preserve it and choose another output path.")
     root.mkdir(parents=True)
     comms = Comms(root)
-    receipts = []
+    source_notes = []
     for name in (COMMANDER, *units):
         original = live.registry.require(name)
         session = original.session_file
@@ -53,7 +59,7 @@ def prepare(output: Path, units: tuple[str, ...], ordered_at: float | None) -> N
             copied.write_bytes(captured.rsplit(b"\n", 1)[0] + b"\n")
             copied.chmod(0o600)
             session = str(copied)
-            receipts.append(f"{name}: {source} -> {copied} ({copied.stat().st_size} bytes)")
+            source_notes.append(f"{name}: {source} -> {copied} ({copied.stat().st_size} bytes)")
         comms.registry.declare(
             replace(original, process_identity=NoProcess(), session_file=session, goal=NoGoal()),
             StoppedThreadStatus(),
@@ -78,11 +84,7 @@ def prepare(output: Path, units: tuple[str, ...], ordered_at: float | None) -> N
             edits=("Render the canonical order owner without copying its state",),
             banned=("Do not launch a provider or change the original saved session",),
             report="Report the actual visible commander page and its expanded unit card",
-            at=RecordedEventTime(
-                ordered_at
-                if ordered_at is not None and not index
-                else now - 1200 if not index else now
-            ),
+            at=RecordedEventTime(ordered_at if not index else now),
             first_call_deadline=RecordedEventTime(now + 120),
             run=MechanicalOrderRun(),
         )
@@ -105,17 +107,14 @@ def prepare(output: Path, units: tuple[str, ...], ordered_at: float | None) -> N
             body="Verify that the commander can read an actual refused send.",
         ).apply(comms, ThreadCaller(COMMANDER))
     except ToolRefusedError as error:
-        receipts.append(f"Actual refused send: {error}")
+        source_notes.append(f"Actual refused send: {error}")
     else:
         raise AssertionError("The deliberately absent target unexpectedly accepted a send.")
-    (output / "sources.txt").write_text("\n".join(receipts) + "\n")
+    (output / "sources.txt").write_text("\n".join(source_notes) + "\n")
 
 
-async def journey(app, pilot, output: Path, units: tuple[str, ...], momentum: bool) -> None:
-    from toad.navigation_target import FeedTarget
-    from toad.screens.commander import CommanderScreen, CommanderUnit
-    from toad.widgets.conversation import Conversation
-
+async def journey(app: ToadApp, pilot: Pilot, output: Path,
+                  units: tuple[str, ...], momentum: bool) -> None:
     await pilot.pause(2)
     # Open a real bus conversation and submit through its actual local-command boundary.
     await app.selected_session.open_sidebar_target(FeedTarget())
@@ -151,9 +150,10 @@ async def journey(app, pilot, output: Path, units: tuple[str, ...], momentum: bo
         assert screen.rows[next(unit for unit in screen.rows if unit.name == units[1])].collapsed
     capture("level-1")
 
-    def deliver():
+    def deliver() -> None:
         comms = Comms(output / "bus")
         todo = comms.goals.todos.get("P1")
+        assert isinstance(todo.order, PendingProblemOrder)
         CommsOrderDoneTool(
             problem=todo.id,
             order_id=todo.order.id,
@@ -184,16 +184,14 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--prepare", action="store_true")
     parser.add_argument("--units", nargs="+", default=UNITS)
-    parser.add_argument("--ordered-at", type=float)
+    parser.add_argument("--ordered-at", type=float, default=time.time() - 1200)
     parser.add_argument("--momentum", action="store_true")
     args = parser.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     if args.prepare:
         prepare(args.output, tuple(args.units), args.ordered_at)
         return
-    os.environ["AGENT_COMMS_ROOT"] = str(args.output / "bus")
-    from toad.app import ToadApp
-
+    os.environ.update(AGENT_COMMS_ROOT=str(args.output / "bus"))
     app = ToadApp(project_dir=str(args.output))
     app.run(
         auto_pilot=lambda pilot: journey(app, pilot, args.output, tuple(args.units), args.momentum)
