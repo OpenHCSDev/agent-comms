@@ -396,6 +396,14 @@ class OrderCheck:
         return checked.result
 
 
+class GitCommandFailed(ValueError):
+    """The actual Git result, so its caller can recognize a command's absent state."""
+
+    def __init__(self, run: subprocess.CompletedProcess[str]):
+        self.run = run
+        super().__init__(run.stderr.strip() or f"git failed with exit {run.returncode}")
+
+
 @dataclass(frozen=True)
 class CheckedCommit:
     """What an order's check printed at a commit. A commit's result never changes, so the git
@@ -418,15 +426,18 @@ class CheckedCommit:
         run = subprocess.run(("git", "-C", repository, *args), capture_output=True, text=True,
                              timeout=60)
         if run.returncode:
-            raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
+            raise GitCommandFailed(run)
         return run.stdout
 
     @classmethod
     def stored(cls, repository: str, sha: str) -> tuple[CheckedCommit, ...]:
         """Every check result the commit's note records; a commit no check ran on has none."""
-        noted = {line.split()[1] for line in cls.git(repository, *cls.NOTES, "list").splitlines()}
-        if sha not in noted:
-            return ()
+        try:
+            cls.git(repository, *cls.NOTES, "list", sha)
+        except GitCommandFailed as failure:
+            if failure.run.returncode == 1 and not failure.run.stderr:
+                return ()  # No check ran on this commit.
+            raise
         return tuple(FieldCodec.decode(cls, FieldCodec.parse(line)) for line in
                      cls.git(repository, *cls.NOTES, "show", sha).splitlines() if line)
 
