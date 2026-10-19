@@ -22,7 +22,6 @@ const server=createServer(async(request,response)=>{
 const root=mkdtempSync(join(tmpdir(),'native-fork-context-'));
 let parent,child,session,runtime;
 try {
-    process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
     process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
     await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
     const fetch=globalThis.fetch;

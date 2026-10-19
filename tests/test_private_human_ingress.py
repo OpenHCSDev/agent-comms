@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from agent_comms.channel_targets import CommandTarget
 from conftest import publish_initial
 import asyncio
 import os
@@ -64,7 +65,7 @@ def test_private_human_channel_and_dm_seal_original_full_audience(tmp_path: Path
     assert acknowledgement.value.assignment_count == 1  # Bob is a frozen unmentioned observer.
     dm = comms.messaging.send_user_message("bob", "direct", worktree=str(tmp_path))
     assert dm.seq > channel.seq and dm.sender == channel.sender
-    assert list(comms.views.dm_history_page(channel.sender, "bob").messages)[-1] == dm
+    assert list(comms.views.history_page(CommandTarget.named("bob"), viewer=channel.sender).messages)[-1] == dm
     dm_initial = comms.bus.log.read_delivery_cohort(root_id, dm.seq)
     assert [
         (member.canonical_thread, member.recipient_lookup)
