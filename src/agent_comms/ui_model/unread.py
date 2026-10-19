@@ -1,11 +1,11 @@
-"""What a thread's or channel's unread state shows; only complete counts are numbers."""
+"""Exact counts and record-capped lower bounds, as supplied by their backend owners."""
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from agent_comms.presentation import CoordinationSnapshot
@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 class UnreadPresentation(ABC):
     @classmethod
     def _for_count(
-        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int]
+        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int],
     ) -> UnreadPresentation:
         if name in snapshot.unread_pending:
             return IndexingUnread()
@@ -22,7 +22,7 @@ class UnreadPresentation(ABC):
 
     @classmethod
     def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.thread_unread)
+        return snapshot.thread_unread[name]
 
     @classmethod
     def for_bus(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
@@ -56,6 +56,36 @@ class ExactUnread(UnreadPresentation):
     @property
     def highlighted(self) -> bool:
         return bool(self.count)
+
+
+@dataclass(frozen=True)
+class ReplyUnread(UnreadPresentation):
+    count: int
+
+    @property
+    def label(self) -> str:
+        return f"({self.count})"
+
+    @property
+    def highlighted(self) -> bool:
+        return bool(self.count)
+
+
+@dataclass(frozen=True)
+class CappedReplyUnread(ReplyUnread):
+    @classmethod
+    def for_count(cls, count: int) -> CappedReplyUnread:
+        return cls(count) if count else EmptyCappedReplyUnread()
+
+    @property
+    def label(self) -> str:
+        return f"({self.count}+)"
+
+
+@dataclass(frozen=True)
+class EmptyCappedReplyUnread(CappedReplyUnread):
+    count: ClassVar[int] = 0
+    label = ""
 
 
 @dataclass(frozen=True)

@@ -6,7 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.channel_coding_tools import CodingCall, CodingToolSocket
+from agent_comms.native_tool_call import CodingCall
+from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import ClaimTransitionError
 from agent_comms.native_tool_call import CoordinationBusy, SelectedToolDenied
@@ -27,7 +28,7 @@ def test_edit_of_a_missing_file_inside_the_project_says_it_does_not_exist(tmp_pa
         "call", "edit", {"path": "absent.py", "edits": [{"oldText": "1", "newText": "2"}]}
     )
     with pytest.raises(ClaimTransitionError) as refused:
-        edit.tool.claim.normalized(project)
+        edit.allowed_claim().normalized(project)
     assert reply(tmp_path, refused.value) == f"File does not exist: {project / 'absent.py'}"
 
 

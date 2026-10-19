@@ -46,6 +46,7 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
+from .acp_failure import NativeTurnError
 from .acp_extension import (
     CompactRequest,
     TextRouteUpdate,
@@ -185,7 +186,10 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         if re.match(r"^/compact(?:\s|$)", text):
             self._require_compaction_text(prompt)
             request = CompactRequest(text[len("/compact") :].strip())
-        return await AcpRequestConsumer(self, session_id, prompt).run(request)
+        try:
+            return await AcpRequestConsumer(self, session_id, prompt).run(request)
+        except NativeTurnError as error:
+            raise RequestError.internal_error(error.request.error_data()) from error.__cause__
 
     async def _compact_request(self, session_id: str, instructions: str | None) -> PromptResponse:
         from . import manual_compaction_bridge
@@ -320,9 +324,9 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return self._comms.owners.require_private_launch().wire_root_id
 
     def _private_nk_marker(self) -> str:
-        """Require the configured, certified root before any selected request."""
+        """Check that the bus belongs to the configured root before a request runs."""
         configured_root_id = self.configured_root_id
-        with self._comms.bus.log.certified_read() as source:
+        with self._comms.bus.log.checked_read() as source:
             if source.marker.root_id != configured_root_id:
                 raise PublicationActivationBlocked(
                     "private N/K ACP root does not match configuration"
@@ -358,7 +362,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             raise IdentityConflict("private N/K ACP recipient is not this process owner")
         bus = MessageBus(self._comms.root / "bus.jsonl", self._comms.registry, ResponseWrites)
         def read_claim():
-            with bus.log.certified_read() as source:
+            with bus.log.checked_read() as source:
                 return source.marker.claimed_after_seq
         claimed_after_seq = await Coordination.run_worker(read_claim)
         store_path = self._comms.root / "coordination.sqlite3"
@@ -369,6 +373,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
             wire_root_id=wire_root_id,
             owner_name=thread_name,
             native_package=package,
+            cursor_delivery=self.cursors.delivery(session_id),
             write_authority=AcpSelectedWriteAuthority(
                 self, session_id, SelectedWritePlans(self._comms, wire_root_id)
             ),
@@ -378,10 +383,11 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
                 else {}
             ),
         )
-        await _accept_visible_deliveries(
-            bus, wire_root_id, store_path, owner.incarnation.lookup, 0,
-            owner_name=owner.name, acquire_package=execution.validate,
-        )
+        with execution.cursor_delivery.measurements.operation("accept_deliveries"):
+            await _accept_visible_deliveries(
+                bus, wire_root_id, store_path, owner.incarnation.lookup, 0,
+                owner_name=owner.name, acquire_package=execution.validate,
+            )
         if self.inputs.owns_execution(session_id, owner):
             # A running turn takes its owner's pending messages as inputs;
             # whatever it cannot take wakes this owner once the turn ends.

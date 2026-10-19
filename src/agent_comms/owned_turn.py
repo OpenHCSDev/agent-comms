@@ -345,6 +345,7 @@ class OwnedTurn:
         context = await self.backend.context_for_input(self.thread, self.context)
         rendered = context.render(images=self.images)
         sender = OwnedSend(
+            owner_name=self.thread.name,
             comms=self.runner.comms,
             inputs=self.runner.inputs,
             goal_store=await Coordination.run_worker(self.runner.comms.goals.open_goal_store),
@@ -355,7 +356,10 @@ class OwnedTurn:
             goal_permit=self.goal_permit,
             original=replace(self.original, prompt=rendered.text),
         )
+        from .channel_coding_tools import CodingToolMode
+
         delivery = TurnDelivery(
+            tool_mode=CodingToolMode(sender),
             worktree=self.worktree,
             environment=self.env_extra,
             inbox=self.backend_inbox,

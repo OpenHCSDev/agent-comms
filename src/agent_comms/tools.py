@@ -17,6 +17,7 @@ from .cli_commands import (
     ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
     PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand,
     ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand,
+    HistoryCliCommand,
     _json_object, option,
 )
 from .thread_execution import (
@@ -34,7 +35,6 @@ from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
-    DeliveredOrderGoalAction,
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
@@ -43,7 +43,7 @@ from .goal_actions import (
     SetGoalAction, TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_waits import StandbyReview, StandbyReviewSummary
+from .goal_waits import StandbyReview
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration, OrderCheck
@@ -51,10 +51,14 @@ from .rule_reviews import RuleReviewEntry, RuleReviews
 from .standing_rules import RulesDue, StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
+from .message_page import PageBounds
+from .history_result import HistoryPageResult
+from .page_traversal import PageCursor
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
 from .presentation import ChannelView
 from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
+from .owner_lifecycle import OwnerRestartSelection
 from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as enqueue_restart
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
@@ -64,7 +68,7 @@ from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, Order
                     TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
-from .native_tools import NativeExecutableTool, NativeRequestTools
+from .native_tools import NativeToolDeclaration, NativeRequestTools
 from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
@@ -74,14 +78,10 @@ from .task_sources import (
     TaskScopeSelection, OriginalTaskChange,
 )
 from .order_work import OrderWork
-from .turn_digests import LastTurns, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
+from .turn_digests import LastTurns, OrderEditCountRead, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
-from .tool_output import (
-    MAX_INLINE_OUTPUT_BYTES,
-    materialize_oversized_output,
-    serialize_tool_output,
-)
+from .tool_output import MAX_INLINE_OUTPUT_BYTES
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -230,17 +230,13 @@ class TaskPublished(ToolResult):
 
 
 @dataclass(frozen=True)
-class InboxRead(ToolResult):
-    """An oversized read names its snapshot file and counts in place of the arrays."""
+class InboxPageRead(ToolResult):
+    """One unread page; only its returned references can be acknowledged."""
     messages: tuple[Message, ...]
     acknowledged: int
+    remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
-    complete: bool | None = _omitted_when_absent()
-    ack_deferred: bool | None = _omitted_when_absent(wire_name="ackDeferred")
-    counts: dict[str, int] | None = _omitted_when_absent()
-    result_file: str | None = _omitted_when_absent()
-    instruction: str | None = _omitted_when_absent()
-    standby_review: StandbyReview | StandbyReviewSummary | None = _omitted_when_absent()
+    standby_review: StandbyReview | None = _omitted_when_absent()
 
 
 @dataclass(frozen=True)
@@ -291,7 +287,7 @@ def tool_field(
 
 @dataclass(frozen=True, kw_only=True)
 class ToolRequest[Caller: ToolCaller = ToolCaller](
-    ThreadCommandAvailability, NativeRequestTools, NativeExecutableTool
+    ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     description: ClassVar[str]
     bus_effect: ClassVar[str] = ("Changes the bus. Tristan has authorized claude-ai "
@@ -338,7 +334,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except MalformedRecord as error:
             raise MalformedRecord(f"Invalid {cls.declared_name} arguments: {error}") from error
-        return FieldCodec.encode(caller.invoke(request, comms))
+        return FieldCodec.encode(caller.invoke(request, comms).to_wire())
 
     @abstractmethod
     def apply(self, comms: Comms, caller: Caller) -> ToolResult:
@@ -377,38 +373,6 @@ class ThreadToolRequest(ToolRequest[ThreadCaller]):
 
 def _tag_set(value: str) -> frozenset[str]:
     return frozenset(tag.strip() for tag in value.split(",") if tag.strip())
-
-
-def _bounded_inbox_response(
-    messages: tuple[Message, ...],
-    unresolved: tuple[UnresolvedInput, ...],
-    review: StandbyReview | None,
-    result_file: str,
-    *,
-    ack: bool,
-) -> InboxRead:
-    """Project a saved inbox snapshot without changing any delivery or goal authority."""
-    bounded = InboxRead(
-        (), 0, (), complete=False, ack_deferred=ack,
-        counts={"messages": len(messages), "unresolved_inputs": len(unresolved)},
-        result_file=result_file,
-        instruction=(
-            "The messages and unresolved_inputs arrays are omitted, not empty. The file is "
-            "a complete public result snapshot, not current authority. Read it selectively "
-            "with read offset/limit or a JSON query; do not dump the whole file into "
-            "context. No messages were acknowledged. UNKNOWN inputs are unchanged. When "
-            "standby_review.messages is present, its complete eligible messages and exact "
-            "reviewed_inputs are inline; other review arrays are omitted with counts. "
-            "Otherwise read the review from the file. Inspect the full relevant messages "
-            "before passing their reviewed_inputs to comms_goal."
-        ),
-    )
-    if review is not None:
-        bounded = replace(bounded, standby_review=review.summary())
-        candidate = replace(bounded, standby_review=review.eligible_summary())
-        if len(serialize_tool_output(candidate).encode("utf-8")) <= MAX_INLINE_OUTPUT_BYTES:
-            return candidate
-    return bounded
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -775,17 +739,23 @@ class CommsUnjudgedTool(ThreadReadTool):
     label = "Unjudged edits"
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        commander = comms.registry.require(caller.subject(self.thread)).incarnation
-        edits = []
-        for todo in comms.goals.todos.held_for_commander(commander):
+    @classmethod
+    def readers(cls, comms: Comms, commander: str, read_type=OrderEditsRead):
+        actor = comms.registry.require(commander).incarnation
+        for todo in comms.goals.todos.held_for_commander(actor):
             assignment = todo.held()
             holder = comms.registry.require(assignment.owner)
             if holder.incarnation != assignment.owner_identity:
                 raise ValueError(f"Order {todo.id} holder incarnation no longer exists")
-            read = TurnDigestRead(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")))
-            edits.extend(read.unjudged(todo))
-        return UnjudgedEdits(tuple(edits))
+            yield read_type(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")), todo)
+
+    @classmethod
+    def count(cls, comms: Comms, commander: str) -> int:
+        return sum(read.read() for read in cls.readers(comms, commander, OrderEditCountRead))
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
+        return UnjudgedEdits(tuple(edit for read in self.readers(comms, caller.subject(self.thread))
+                                  for edit in read.read()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -886,23 +856,23 @@ class CommsTodoCreateTool(CommsOrderTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderDoneTool(ThreadToolRequest):
     label = "Check delivered order"
-    description = "Verify the order's check on its clean delivered commit before completing its Goal."
+    description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
     problem: str = tool_field("Problem ID")
+    order_id: str = tool_field("Exact open order ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
     claims: tuple[ProgressClaim, ...] = tool_field(
         "Merged, installed or working claims, each with the artifact Core verifies in the order's "
         "checkout; at least one")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         ProgressClaim.require_claimed(self.claims, "delivered")
         todo = comms.goals.todos.get(self.problem)
         ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
         todo.require_commander(comms.registry.require(caller.name).incarnation)
-        assignment = todo.assignment
-        goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
-            expect=GoalPrecondition(goal_id=assignment.generation), problem=self.problem,
-            operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery)))
-        return GoalRead(goal)
+        changed = comms.goals.change_problem(self.problem, DeliverTodo(
+            todo.revision, comms.registry.require(caller.name).incarnation,
+            self.delivery, self.order_id), caller.name)
+        return TodoChanged(changed, changed.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1177,23 +1147,43 @@ class StandbyRequest:
 
 
 @dataclass(frozen=True, kw_only=True)
+class CommsHistoryTool(ReadTool, ToolRequest):
+    label = "Conversation history"
+    description = ("Read one bounded, newest-first page of a two-participant conversation. "
+                   "Pass before from the previous page to read older messages. Does not acknowledge messages.")
+    peer: str = tool_field("Other participant's thread name; channels are not accepted")
+    participant: str = tool_field("Participant reading the conversation; omit to use the caller", default="")
+    limit: int = tool_field("Maximum messages in this page", default=20)
+    before: PageCursor | None = tool_field("Exclusive older-page cursor from the previous result", default=None)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> HistoryPageResult:
+        peer = comms.registry.require(self.peer).name
+        return HistoryCliCommand(
+            target=f"@{peer}", me=caller.subject(self.participant),
+            limit=self.limit, before=self.before,
+        ).apply(comms)
+
+
+@dataclass(frozen=True, kw_only=True)
 class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
     description = (
-        "Fetch undelivered messages and unresolved native input attempts for a thread. "
-        "Optional target limits the conversation. ACK marks exactly the returned "
-        "message references; unresolved_inputs remain UNKNOWN. Oversized results return "
-        "complete=false, counts, and a complete result_file; ACK is deferred. Read that "
-        "file selectively, never dump it into context. For standby, supply standby "
+        "Fetch one oldest-first page of undelivered messages and unresolved native input "
+        "attempts for a thread. Optional target limits the conversation. ACK marks exactly "
+        "the returned message references; remaining counts unread messages in that snapshot "
+        "after this page's acknowledgment. "
+        "Call again to drain the next page. One oversized message is returned alone for "
+        "progress. Unresolved inputs remain UNKNOWN and are not paged. For standby, supply standby "
         "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
     target: str = tool_field("Channel or peer conversation", default=ANY_CHANNEL.name)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
+    limit: int = tool_field("Maximum messages in this page; must be positive", default=100)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> InboxRead:
+    def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
         if not (target := self.target.strip()):
             raise ValueError("An inbox target cannot be empty.")
@@ -1203,19 +1193,18 @@ class CommsInboxTool(ToolRequest):
             if standby is not None
             else None
         )
-        messages = tuple(comms.bus.inbox(thread, CommandTarget.named(target)))
-        unresolved = tuple(comms.goals.unresolved_inputs(thread))
-        response = InboxRead(messages, 0, unresolved, standby_review=review)
-        result_file = materialize_oversized_output(
-            comms.root, response, inline_limit=MAX_INLINE_OUTPUT_BYTES - 64
+        page = comms.bus.inbox_at(
+            thread, comms.registry.snapshot(), CommandTarget.named(target),
+            bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
         )
-        if result_file is not None:
-            return _bounded_inbox_response(
-                messages, unresolved, review, str(result_file), ack=self.ack
-            )
+        messages = page.page.messages
+        unresolved = tuple(comms.goals.unresolved_inputs(thread))
         references = tuple(message.reference for message in messages)
-        return replace(response, acknowledged=(
-            comms.messaging.acknowledge(thread, references) if self.ack else 0))
+        acknowledged = comms.messaging.acknowledge(thread, references) if self.ack else 0
+        return InboxPageRead(
+            messages, acknowledged, page.remaining + len(messages) - acknowledged,
+            unresolved, standby_review=review,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1285,7 +1274,8 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return RestartQueued(
-            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.running()))
+            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
+                            launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)

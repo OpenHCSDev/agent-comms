@@ -3,6 +3,9 @@
 Only HTTP provider responses and process termination are controlled. The native
 package, claim_scope writer, proof journal, bus and SQLite lifetime are real.
 """
+from contextlib import closing
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.native_entries import NativeEvidenceScope
 
 from conftest import publish_initial
 from agent_comms.messages import NoticeRole
@@ -62,14 +65,16 @@ class SelectedNativeJourney:
         self.replies.append(LoopbackProvider(status=200, text=text))
 
     def execution(self):
-        WakeCandidateIndex(self.comms.bus.log).maintain(start=RebuildIndex())
-        return SelectedExecution(
-            root=self.root,
-            wire_root_id=self.root_id,
-            owner_name="beta",
-            native_package=self.package,
-            session_file=self.session_file,
-        )
+        with closing(CursorDelivery()) as cursor_delivery:
+            WakeCandidateIndex(self.comms.bus.log).maintain(start=RebuildIndex())
+            return SelectedExecution(
+                root=self.root,
+                wire_root_id=self.root_id,
+                owner_name="beta",
+                native_package=self.package,
+                session_file=self.session_file,
+                cursor_delivery=cursor_delivery,
+            )
 
     def send(self, text):
         message = publish_initial(self.comms, 

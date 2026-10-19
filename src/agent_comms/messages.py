@@ -9,7 +9,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
-from typing import ClassVar, Type
+from typing import TYPE_CHECKING, ClassVar, Type
 
 from .channel_targets import CommandTarget
 from .change_report import FileLine, ChangeReport
@@ -23,8 +23,12 @@ from .response_policy import InformationalPolicy, ResponseEligibility
 from .thread_identity import AgentThreadRole, ThreadRole
 from .task_sources import Decision, TaskAttachment, NoTaskAttachment
 from .wake_policy import BoundedTriageWake, PassiveWake
+from .ui_model.message_category import MessageCategory, InboundCategory, OtherCategory
 
 from .page_traversal import LiveCursor, PageCursor
+
+if TYPE_CHECKING:
+    from .threads import Thread
 
 
 class SendableMessageKind:
@@ -59,6 +63,12 @@ class ClaimNoticeKind(MessageKind, declared_name="claim-notice"):
     """A claim-owner record, not a delivery to a reader."""
 
     conversation_message = False
+
+    @classmethod
+    def claimed(cls, owner: Thread) -> Message:
+        return Message(
+            owner.name, owner.name, "Claimed", cls,
+        )
 
 
 class InfoKind(SendableMessageKind, MessageKind):
@@ -139,6 +149,8 @@ class MessageRoleWire:
 
 
 class MessageRole(InlineRecord):
+    category: ClassVar[type[MessageCategory]]
+
     @classmethod
     def wire_record(cls):
         return MessageRoleWire
@@ -179,6 +191,8 @@ class InformationalMessage:
 
 @dataclass(frozen=True, slots=True)
 class ConversationRole(MessageRole):
+    category = InboundCategory
+
     def wire_fields(self):
         return MessageRoleWire()
 
@@ -206,6 +220,8 @@ class ConversationRole(MessageRole):
 
 @dataclass(frozen=True, slots=True)
 class NoticeRole(InformationalMessage, MessageRole):
+    category = OtherCategory
+
     def wire_fields(self):
         return MessageRoleWire(notice=True)
 

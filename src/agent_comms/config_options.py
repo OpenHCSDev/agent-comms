@@ -411,9 +411,11 @@ class SessionConfigOptions(ConfigOptions):
     async def send_menu(self, client: Client | SocketClient, session_id: str) -> None:
         options = await self.options_for_session(session_id)
         async with self.catalog_publish_lock:
-            await client.session_update(session_id=session_id, update=ConfigOptionUpdate(
+            update = ConfigOptionUpdate(
                 session_update="config_option_update", config_options=options,
-            ))
+            )
+            await client.session_update(session_id=session_id, update=update)
+            self.publications[session_id] = update
 
     async def options_for_session(
         self, session_id: str,

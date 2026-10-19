@@ -5,17 +5,16 @@ from __future__ import annotations
 import math
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
-from dataclasses import Field, dataclass, field, fields, replace
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from dataclasses import Field, dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord
 from .registration_change import (
     InitialRegistration,
-    NativeSourcePublication,
     RegistrationChange,
     UpdatedRegistration,
 )
@@ -40,7 +39,6 @@ from .turn_lease import FinishedTurnFence, NoFinishedTurn, TurnCompletion, TurnL
 if TYPE_CHECKING:
     from .audience_manifest import FrozenRecipient
     from .bus_publication import CommittedDelivery
-    from .native_input_owner import RegistryOwner
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,6 +92,54 @@ class RegistryPresence(RegistryNames[Thread]):
         return self.visible_threads(DEFAULT_ROSTER)
 
 
+class UserThreadLookup[Value](ABC):
+    """The registry's human selection, including a registry with no human yet."""
+
+    @abstractmethod
+    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]: ...
+
+    @abstractmethod
+    def existing(self) -> tuple[Value, ...]: ...
+
+    @abstractmethod
+    def or_create(self, create: Callable[[], Value]) -> Value: ...
+
+    @abstractmethod
+    def require(self, refusal: Exception) -> Value: ...
+
+
+@dataclass(frozen=True, slots=True)
+class FoundUserThread[Value](UserThreadLookup[Value]):
+    value: Value
+
+    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]:
+        return FoundUserThread(resolve(self.value))
+
+    def existing(self) -> tuple[Value, ...]:
+        return (self.value,)
+
+    def or_create(self, create: Callable[[], Value]) -> Value:
+        return self.value
+
+    def require(self, refusal: Exception) -> Value:
+        return self.value
+
+
+@dataclass(frozen=True, slots=True)
+class NoUserThread[Value](UserThreadLookup[Value]):
+    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]:
+        return NoUserThread()
+
+    def existing(self) -> tuple[Value, ...]:
+        return ()
+
+    def or_create(self, create: Callable[[], Value]) -> Value:
+        return create()
+
+    def require(self, refusal: Exception) -> Value:
+        raise refusal
+
+
 class ThreadSlice[Value](ABC):
     """How one thread's part of a registry document field is cut from the wire, and
     how the field is copied. Every document field names its kind in its metadata."""
@@ -120,7 +166,7 @@ class ThreadSlice[Value](ABC):
     @staticmethod
     def required[Document: type](document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
-        for declared in fields(document):
+        for declared, _ in FieldCodec.record_fields(document):
             if not issubclass(declared.metadata.get("thread_slice", type), ThreadSlice):
                 raise TypeError(f"{document.__name__}.{declared.name} declares no thread slice")
         return document
@@ -162,9 +208,23 @@ class GenerationOf(ThreadSlice[GenerationCounter]):
         return GenerationCounter(value.counter, dict(value.generations))
 
 
+class WholeDocumentValue(ThreadSlice[int]):
+    """A scalar shared by the whole document and every one-thread view."""
+
+    @staticmethod
+    def cut(raw: int, canonical: str) -> int:
+        return raw
+
+    @classmethod
+    def copy(cls, value: int) -> int:
+        return value
+
+
 @ThreadSlice.required
 @dataclass(slots=True)
 class RegistryDocument(RegistryPresence):
+    version: Literal[1] = field(
+        default=1, metadata={"thread_slice": WholeDocumentValue, "wire_required": True})
     threads: dict[str, Thread] = field(default_factory=dict, metadata={"thread_slice": OwnRow})
     statuses: dict[str, ThreadStatus] = field(
         default_factory=dict, metadata={"thread_slice": OwnRow})
@@ -176,12 +236,24 @@ class RegistryDocument(RegistryPresence):
         default_factory=GenerationCounter,
         metadata={"wire_name": 'admissions', "thread_slice": GenerationOf})
 
+    _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # This answer belongs to the decoded revision. Keep the name, not an
+        # unbound Thread: store binding and later reads use the current row.
+        self._human = next((FoundUserThread(human.name)
+                            for thread in self.threads.values()
+                            for human in thread.role.human(thread)), NoUserThread())
+
+    def user_thread(self) -> UserThreadLookup[Thread]:
+        return self._human.map(self.require)
+
     def copy(self) -> RegistryDocument:
         return replace(
             self,
             **{
                 declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
-                for declared in fields(self)
+                for declared, _ in FieldCodec.record_fields(cast(type, type(self)))
             },
         )
 
@@ -196,14 +268,11 @@ class RegistryDocument(RegistryPresence):
         self.threads[thread.name] = thread
 
     def advance_claim(self, name: str) -> int:
-        """Revoke phase publication together with the original input permission."""
+        """Remove the thread's permission to publish and advance its input claim."""
         thread = self.threads.get(name)
         if thread is not None:
             thread.turn_record.without_claim()
         return self.claims.advance(name)
-
-    def snapshot(self) -> RegistrySnapshot:
-        return RegistrySnapshot.capture(self)
 
     def entry(self, name: str) -> RegistryEntry:
         thread = self.require(name)
@@ -227,8 +296,8 @@ class RegistryDocument(RegistryPresence):
         thread's declaration is neither decoded nor validated here.
         """
         try:
-            keyed = [(ThreadSlice.of(declared), FieldCodec.record_key(cls, declared.name))
-                     for declared in fields(cls)]
+            keyed = [(ThreadSlice.of(declared), key)
+                     for declared, key in FieldCodec.record_fields(cast(type, cls))]
             canonical = name
             for kind, key in keyed:
                 canonical = kind.canonical(raw[key], canonical)
@@ -240,7 +309,7 @@ class RegistryDocument(RegistryPresence):
     @classmethod
     def thread_rows(cls) -> tuple[str, ...]:
         """The sections that hold one row per thread name."""
-        return tuple(declared.name for declared in fields(cls)
+        return tuple(declared.name for declared, _ in FieldCodec.record_fields(cast(type, cls))
                      if ThreadSlice.of(declared) is OwnRow)
 
     @classmethod
@@ -277,14 +346,15 @@ class RegistryDocument(RegistryPresence):
                               if name not in kept[section]}
                     for section in thread_rows
                 }})
-                document = replace(changed, **{
+                reused: dict[str, Any] = {
                     section: {
                         name: (getattr(decoded, section) if name in kept[section]
                                else getattr(changed, section))[name]
                         for name in raw[section]
                     }
                     for section in thread_rows
-                })
+                }
+                document = replace(changed, **reused)
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
                 raise MalformedRecord("thread presence does not match declarations")
@@ -419,15 +489,14 @@ class RegistryDocument(RegistryPresence):
         The outer wire lock alone cannot exclude a direct registry claim; this
         check and the STOPPED transition share the registry's own lock.
         """
-        snapshot = self.snapshot()
-        current = snapshot.require_active(expected.name)
+        current = self.require_active(expected.name)
         try:
             current.require_idle()
         except RelationViolationError as error:
             raise OwnerBusyRefusal() from error
         if current != expected:
             raise OwnerChangedBeforeFenceRefusal()
-        if snapshot.claimed_generations[current.name] != expected_claimed_generation:
+        if self.claims.generations[current.name] != expected_claimed_generation:
             raise OwnerGenerationChangedRefusal()
         self.statuses[expected.name] = expected.execution.registered_status(
             expected, StoppedThreadStatus())
@@ -556,18 +625,6 @@ class RegistryDocument(RegistryPresence):
             identity=canonical_lease.identity,
             turn_id=lease.turn_id,
             claimed_generation=lease.claimed_generation,
-        )
-
-    def prepare_native_source(self, original: RegistryOwner, session_file: str) -> NativeSourcePublication:
-        """Publish only the source fact of an already authorized original owner."""
-        current = original.require_source_snapshot(self.snapshot())
-        return self._native_source_publication(current, session_file)
-
-    def _native_source_publication(self, current: Thread, session_file: str) -> NativeSourcePublication:
-        return NativeSourcePublication(
-            thread=replace(current, session_file=session_file),
-            status=self.statuses[current.name],
-            previous=current, previous_status=self.statuses[current.name],
         )
 
 

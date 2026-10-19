@@ -8,12 +8,10 @@ Shell is not a filesystem sandbox; shell work must respect the injected claims.
 from __future__ import annotations
 
 import asyncio
-import hashlib
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import InitVar, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Never
 
 from agent_comms.coordinator import Coordination
 
@@ -22,126 +20,75 @@ from .selected_claim import (
     verify_selected_wake,
 )
 from .comms import Comms
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec
 from .envelope_claim_transitions import (
     ClaimOwner,
+    FileClaimPath,
     WakeClaim,
 )
-from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
+from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_arguments import NativeArguments
-from .native_tools import NativeExecutableTool
+from .storage_room import NoRoomNeeded, RoomReservation
+from .native_tools import NativeToolDeclaration
+from .native_tool_transport import ToolTransport
 from .selected_tool_broker import (
-    OwnerToolSocket,
     consume_selected_slot,
-    record_selected_terminal,
     verify_sent_full_input,
 )
 
 
-@dataclass
-class CodingCall(NativeToolCall):
-    @abstractmethod
-    def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]: ...
-
-    def commit_terminal(
-        self, is_error: bool, directory: Path, input_id: str, round_number: int
-    ) -> None:
-        slot = self.slot(input_id, round_number)
-        record_selected_terminal(directory, slot, slot)
-
-    def claim_failed(self) -> None:
-        # A denied ordinary tool may report an error and let Pi explain it. The
-        # consumed call cannot be retried; this grants no mutation authority.
-        pass
-
-    @classmethod
-    def decode(cls, call_id: object, name: object, arguments: object) -> CodingCall:
-        if (
-            type(call_id) is not str
-            or not call_id
-            or len(call_id) > 256
-            or type(name) is not str
-        ):
-            raise SelectedToolDenied("Malformed native coding call identity")
-        try:
-            return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
-        except MalformedRecord as error:
-            return RefusedCodingCall(call_id, name, arguments, str(error))
-
-    def slot(self, input_id: str, round_number: int) -> str:
-        identity = f"{input_id}\0{round_number}\0{self.call_id}"
-        return hashlib.sha256(identity.encode()).hexdigest()[:32]
-
-
-@dataclass
-class ExecutableCodingCall(CodingCall):
-    tool: NativeExecutableTool | type[NativeExecutableTool]
-
-    @property
-    def name(self) -> str:
-        return self.tool.declared_name
-
-    def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]:
-        return self.tool
-
-
-@dataclass
-class ArgumentRefusal(UncertainClaim):
-    reason: str
-
-    async def consume(
-        self, call: NativeToolCall, action: Callable[[], Awaitable[None]],
-    ) -> None:
-        raise SelectedToolDenied(self.reason)
-
-
-@dataclass
-class RefusedCodingCall(CodingCall):
-    """Invalid arguments cannot execute, but still own real start/error events."""
-
-    tool_name: str
-    arguments: object
-    reason: InitVar[str]
-
-    def __post_init__(self, reason: str) -> None:
-        self.claim_scope = ArgumentRefusal(reason)
-
-    @property
-    def name(self) -> str:
-        return self.tool_name
-
-    def require_tool(self) -> Never:
-        raise SelectedToolDenied("Refused native coding arguments cannot execute")
-
-    def correlate(self, candidate: NativeToolCall) -> None:
-        self.reject_correlated(candidate)
-
-    def reject_correlated(self, existing: NativeToolCall) -> None:
-        # Pi may normalize arguments before its socket arrives. Whichever
-        # arrives first keeps the same lifecycle object, never permission.
-        if (self.call_id, self.name) != (existing.call_id, existing.name):
-            raise SelectedToolDenied("Refused coding call identity changed")
-        existing.claim_scope.refuse(existing, self.claim_scope)
-
-
-@dataclass
-class CoordinationCall(ExecutableCodingCall):
-    """The declaration executes through Core; raw arguments still own exact call matching."""
-
-    tool: type[NativeExecutableTool]
-    arguments: dict[str, object]
-
-
-@dataclass
-class CodingToolOwner:
+@dataclass(frozen=True, kw_only=True)
+class CodingToolOwner(ABC):
     comms: Comms
-    store: Coordination
-    claim_scope: WakeClaim
     owner_name: str
-    session_dir: Path
-    input_id: str
     claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
+
+    async def reserve_room(self, call: CodingCall) -> RoomReservation:
+        registry = self.comms.registry
+        thread = registry.require(self.owner_name)
+        effects = call.storage_effects(Path(thread.worktree))
+        await asyncio.to_thread(registry.decide_storage, thread.name, effects)
+        work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
+        if work:
+            return await registry.storage_rule.wait_for_room(
+                work, thread, self.comms.root)
+        return NoRoomNeeded()
+
+    async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
+        def check(store: Coordination) -> None:
+            self.verify(store, turn, self.comms.registry.snapshot())
+            slot = call.slot(turn.command.input_id, round_number)
+            consume_selected_slot(turn.launch.session.directory, slot, slot)
+            owner = self.comms.registry.require(self.owner_name)
+            resource = call.allowed_claim()
+            if resource is not None:
+                canonical = resource.normalized(Path(owner.worktree))
+                self.claims[canonical] = self.claim_resource(
+                    store, turn, resource, slot, self.claims.get(canonical))
+
+        reservation = await self.reserve_room(call)
+        async with reservation.checking():
+            async with self.check_lock:
+                await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
+        return reservation
+
+    @abstractmethod
+    def verify(self, store, turn, snapshot): ...
+
+    @abstractmethod
+    def claim_resource(self, store, turn, resource, slot, prior): ...
+
+    def for_original(self, assignment, operation_id):
+        raise SelectedToolDenied("An ordinary input has no selected original")
+
+
+@dataclass(frozen=True)
+class SelectedCodingToolOwner(CodingToolOwner):
+    store: Coordination
+    claim_scope: WakeClaim
+    session_dir: Path
+    input_id: str
 
     def for_original(self, assignment, operation_id) -> CodingToolOwner:
         """Project the same native grant onto an actually included original."""
@@ -162,38 +109,16 @@ class CodingToolOwner:
             operation_id=operation_id,
         ))
 
-    async def allow(self, round_number: int, call: CodingCall) -> None:
-        def check(store: Coordination) -> None:
-            verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
-            verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
-            slot = call.slot(self.input_id, round_number)
-            consume_selected_slot(self.session_dir, slot, slot)
-            owner = self.comms.registry.require(self.owner_name)
-            tool = call.require_tool()
-            try:
-                effects = tool.storage_effects(Path(owner.worktree))
-                if effects:
-                    self.comms.registry.decide_storage(self.owner_name, effects)
-            except SelectedToolDenied as error:
-                raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
-            resource = tool.claim
-            if resource is not None:
-                canonical = resource.normalized(Path(owner.worktree))
-                prior = self.claims.get(canonical)
-                claim_authority = (
-                    prior.claim_scope
-                    if prior is not None
-                    else replace(self.claim_scope, operation_id=slot)
-                )
-                claimed = publish_selected_resource_claim(
-                    self.comms, store, claim_authority, self.owner_name, resource
-                )
-                self.claims[canonical] = claimed
+    def verify(self, store, turn, snapshot):
+        if self.input_id != turn.command.input_id:
+            raise SelectedToolDenied("Native tool input changed")
+        verify_sent_full_input(store, self.claim_scope, self.owner_name, self.input_id)
+        verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
 
-        # Shared original-input views keep one claim map. Serialize its checks;
-        # the native tools themselves remain free to execute in parallel.
-        async with self.check_lock:
-            await Coordination.run_async(self.store.session.path, check)
+    def claim_resource(self, store, turn, resource, slot, prior):
+        scope = prior.claim_scope if prior is not None else replace(self.claim_scope, operation_id=slot)
+        return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
+
 
 
 @dataclass(frozen=True)
@@ -201,23 +126,22 @@ class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        declarations = NativeExecutableTool.members_with(NativeExecutableTool)
+        declarations = NativeToolDeclaration.members_with(NativeToolDeclaration)
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
-                     *NativeExecutableTool.extension_arguments(package))
+                     *NativeToolDeclaration.extension_arguments(package))
         thread = self.owner.comms.registry.require(self.owner.owner_name)
         return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
 
-    async def open_transport(self, turn, ownership) -> OwnerToolSocket:
+    async def open_transport(self, turn, ownership) -> ToolTransport:
         return await CodingToolSocket.open(turn, ownership, self.owner)
 
-class CodingToolSocket(OwnerToolSocket[CodingCall]):
+class CodingToolSocket(ToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
-
-    max_request = 1024 * 1024
 
     def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
         super().__init__(directory, token)
         self.owner = owner
+        self.completions = set()
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
         return CodingCall.decode(call_id, name, arguments)
@@ -235,7 +159,25 @@ class CodingToolSocket(OwnerToolSocket[CodingCall]):
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
-        await self.owner.allow(round_number, call)
+        # The owner rechecks authority after its unlocked room wait. The
+        # transport holds the returned reservation for this exact tool call.
+        reservation = await self.owner.allow(self.turn, round_number, call)
+        async with reservation.checking():
+            call.progress.observation.require_executing()
+            call.progress.room = reservation
+
+    def tool_finished(self, event, input_id):
+        super().tool_finished(event, input_id)
+        _, call = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
+        task = asyncio.create_task(call.progress.finish_room())
+        self.completions.add(task)
+
+    async def close(self):
+        await super().close()
+        if self.completions:
+            await asyncio.gather(*tuple(self.completions))
+        for call in self.calls.values():
+            await asyncio.to_thread(call.progress.room.abandon)
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}

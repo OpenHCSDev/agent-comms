@@ -31,7 +31,7 @@ INPUT_ID = "a" * 32
 @pytest.mark.skipif(sys.platform != "linux", reason="selected tool socket requires SO_PEERCRED")
 @pytest.mark.asyncio
 @pytest.mark.parametrize("variant", ["success", "tamper", "denied", "badproof", "forged_terminal"])
-async def test_fake_rpc_tool_event_and_terminal_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, selected_model, *, native_runtime_package) -> None:
+async def test_fake_rpc_tool_event_and_terminal_gate(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variant: str, selected_model, *, native_runtime_package, cursor_delivery) -> None:
     fake = tmp_path / "fake_selected_rpc.py"
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist/selected_claimed_write.mjs").write_bytes(
@@ -61,8 +61,8 @@ args = {'resource':'notes.txt','contents':'new contents'}
 call = {'type':'toolCall','id':'call_1','name':'selected_claimed_write','arguments':args}
 send({'type':'message_end','message':{'role':'assistant','stopReason':'toolUse','content':[call]}})
 send({'type':'tool_execution_start','toolCallId':'call_1','toolName':'selected_claimed_write','args':args})
-sock = socket.socket(socket.AF_UNIX); sock.connect(os.environ['AGENT_COMMS_SELECTED_TOOL_SOCKET'])
-wire = {'token':os.environ['AGENT_COMMS_SELECTED_TOOL_TOKEN'],
+sock = socket.socket(socket.AF_UNIX); sock.connect(command['ownerTools']['path'])
+wire = {'token':command['ownerTools']['token'],
         'request':{'call_id':'call_1','arguments':{'resource':'notes.txt',
         'contents':'new contents' if variant != 'tamper' else 'different'}}}
 sock.sendall((json.dumps(wire)+'\\n').encode()); answer = b''
@@ -112,7 +112,7 @@ send({'type':'agent_settled'})
         prompt="Selected request",
         worktree=tmp_path,
         session=SelectedSession(tmp_path / "sessions"),
-        execution=IndependentExecution(),
+        execution=IndependentExecution( cursor_delivery=cursor_delivery),
         startup=NativeStartup(tmp_path),
         selected_tool_mode=SelectedToolMode(owner_action),
         model_wait=ModelWait(15),

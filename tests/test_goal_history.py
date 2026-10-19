@@ -92,7 +92,7 @@ def test_existing_goal_seeds_only_current_observed_baseline(tmp_path):
     baseline = reopened.goals.goal_history("worker")
     assert len(baseline) == 1
     assert baseline[0].kind == "baseline"
-    assert not baseline[0].before and baseline[0].after == current
+    assert baseline[0].before == NoGoal() and baseline[0].after == current
     assert Comms(comms.root).goals.goal_history("worker") == baseline
     paused = reopened.goals.update_goal(
         "worker", PausedGoalAction(expect=GoalPrecondition(goal_id=current.id))

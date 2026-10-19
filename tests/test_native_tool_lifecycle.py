@@ -5,12 +5,12 @@ import json
 import os
 import secrets
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
 
 import pytest
 
 import agent_comms.selected_tool_broker as broker
 from agent_comms.channel_coding_tools import CodingToolSocket
+from agent_comms.storage_room import NoRoomNeeded
 from agent_comms.native_tool_call import NativeToolCall, SelectedToolDenied, ToolStartNotSeen
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
@@ -33,14 +33,20 @@ def policy(request, tmp_path):
         if selected:
             broker.record_selected_terminal(tmp_path, slot, ledger_call)
 
+    async def allow_coding(turn, round_number, call):
+        commit(call, round_number)
+        return NoRoomNeeded()
+
     socket = (
         broker.SelectedToolSocket(tmp_path, token, lambda call: commit(call, 0))
         if selected
         else CodingToolSocket(
             tmp_path, token,
-            SimpleNamespace(allow=AsyncMock(side_effect=lambda round_number, call: commit(call, round_number))),
+            SimpleNamespace(allow=allow_coding),
         )
     )
+
+    socket.turn = SimpleNamespace(command=SimpleNamespace(input_id=input_id))
 
     def raw(call_id="one", arguments=None):
         values = args if arguments is None else arguments
@@ -347,10 +353,16 @@ async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
 async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     tmp_path.chmod(0o700)
     observed = []
+
+    async def allow_coding(turn, round_number, call):
+        observed.append(call.call_id)
+        return NoRoomNeeded()
+
     socket = CodingToolSocket(
         tmp_path, secrets.token_hex(32),
-        SimpleNamespace(allow=AsyncMock(side_effect=lambda round_number, call: observed.append(call.call_id))),
+        SimpleNamespace(allow=allow_coding),
     )
+    socket.turn = SimpleNamespace(command=SimpleNamespace(input_id=secrets.token_hex(16)))
     arguments = {"path": "x"}
     socket.announce(
         tuple(ToolCallContent(id=id, name="read", arguments=arguments) for id in ("a", "b"))

@@ -18,8 +18,10 @@ from agent_comms.child_process import BoundedRun, join_retirement
 from agent_comms.coordinator import Coordination
 from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_native_backend import PersistentPiSession
+from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.owned_turn import OwnedTurn
 from agent_comms.queued_input import InitialInput
+from agent_comms.storage_rules import StorageRule
 from delivery_owner_fixture import canonical_agent
 from compaction_loopback import LoopbackProvider
 from native_proof_cases import read_proof_rows
@@ -159,6 +161,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 root=self.root, session_file=str(self.session),
                 persistent_session=self.persistent,
                 package=self.package,
+                tool_mode=NoSelectedTools(),
                 steering_queue=queue,
                 native_start=self.started,
                 **options,
@@ -186,6 +189,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 @asynccontextmanager
 async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage):
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
+    root.mkdir(mode=0o700)
     project.mkdir(mode=0o700)
     config.mkdir(mode=0o700)
     session = create_fresh_private_session(tmp_path / "sessions", worktree=project).path
@@ -239,6 +243,9 @@ async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage):
             }
         )
     )
+    (root / "storage.json").write_text(json.dumps(FieldCodec.encode(
+        StorageRule(scratch_base=project.parent),
+    )))
     Comms(root).messaging.initialize_private_initial_protocol()
     environment = {
         "AGENT_COMMS_ROOT": str(root),

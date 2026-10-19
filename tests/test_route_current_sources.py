@@ -72,7 +72,7 @@ def test_zero_birth_accepts_public_format_but_refuses_assigned_source(tmp_path):
         ordinary, = PublicWireRecord(original).delivery_messages()
         assert scope.unread(ordinary, recorded, basis.seen(source))
         with OpenedRouteCounts(c.bus.log.path, source, recorded, {viewer: scope}) as index:
-            bindings = index._request_bindings((viewer,))
+            bindings = recorded.sender_bindings
             assert json.loads(bindings['senders'])['sender'] == ['']
             assert 'sender' in json.loads(bindings['unrecorded'])
             with pytest.raises(sqlite3.OperationalError, match='user-defined function'):

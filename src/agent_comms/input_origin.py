@@ -1,4 +1,4 @@
-"""Original input provenance; never an execution, replay or permission capability."""
+"""Record where input came from without granting permission to run or replay it."""
 
 from __future__ import annotations
 
@@ -89,7 +89,7 @@ class InputProvenance(Provenance):
         return self
 
     def require_original(self, inputs):
-        """Resolve the recorded author and key in the original input document."""
+        """Look up the input by key and check its recorded author."""
         return inputs.lookup(self.key).require_original_provenance(self)
 
 

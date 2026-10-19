@@ -78,6 +78,10 @@ class _FamilyMeta(AutoRegisterMeta, ABCMeta):
         return cast(_FamilyMeta, cls)
 
 
+class UnknownFamilyMember(ValueError):
+    """The selected name is not a declared member of the requested family."""
+
+
 class DeclaredFamily(ABC, metaclass=_FamilyMeta):
     """A family root owns one registry; names and capability views derive from members.
 
@@ -120,9 +124,9 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
         try:
             member = cls.__registry__[name]
         except (KeyError, TypeError):
-            raise ValueError(f"Unknown {cls.__name__} name: {name!r}") from None
+            raise UnknownFamilyMember(f"Unknown {cls.__name__} name: {name!r}") from None
         if not issubclass(member, cls):
-            raise ValueError(f"{name!r} is not a member of {cls.__name__}")
+            raise UnknownFamilyMember(f"{name!r} is not a member of {cls.__name__}")
         return cast(type[Self], member)
 
     @classmethod

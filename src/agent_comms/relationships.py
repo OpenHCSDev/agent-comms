@@ -656,9 +656,7 @@ class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocu
     json_indent = 2
     json_suffix = "\n"
 
-    @property
-    def record_type(self) -> type[RelationshipDocument]:
-        return RelationshipDocument
+    record_type = RelationshipDocument
 
     def empty(self) -> RelationshipDocument:
         return RelationshipDocument()

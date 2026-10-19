@@ -146,14 +146,14 @@ def test_checkpoint_schema_query_stays_local_but_external_names_still_discover()
             # A real checkpoint schema can be installed and decoded with only
             # its owner's declarations, without loading ACP under a bus lock.
             tables = TypedTable.members_with(checkpoint.CheckpointTable)
-            assert checkpoint.PrefixCertificate in tables
+            assert checkpoint.CheckedPrefix in tables
             with sqlite3.connect(':memory:') as db, tempfile.TemporaryFile() as source:
                 for table in tables:
                     table.create(db)
-                certificate = checkpoint.PrefixCertificate.capture(
+                checked_prefix = checkpoint.CheckedPrefix.capture(
                     '0' * 32, os.fstat(source.fileno()), 0, bytes(32), '0' * 64)
-                certificate.insert(db)
-                assert checkpoint._saved(db) == certificate.witness()
+                checked_prefix.insert(db)
+                assert checkpoint._saved(db) == checked_prefix.witness()
             assert 'agent_comms.acp' not in sys.modules
 
             # Schema-report's external-name boundary still acquires the full

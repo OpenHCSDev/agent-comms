@@ -2,29 +2,20 @@
 
 from __future__ import annotations
 
+import json
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import ClassVar
 
 from .envelope_claim_transitions import ExistingFileClaim, FileClaimPath, WritableFileClaim
 from .field_codec import FieldCodec
-from .native_tool_call import SelectedToolDenied
+from .native_tool_call import CodingCall, SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
 
-if TYPE_CHECKING:
-    from .channel_coding_tools import CodingCall, CoordinationCall, ExecutableCodingCall
-
-
-class NativeExecutableTool(ToolDeclaration):
+class NativeToolDeclaration(ToolDeclaration):
     """A declared tool participating in the existing native owner check."""
-
-    claim: ClassVar[None] = None
-
-    @classmethod
-    def storage_effects(cls, cwd):
-        return ()
 
     @classmethod
     @abstractmethod
@@ -49,6 +40,21 @@ class NativeExecutableTool(ToolDeclaration):
         return cls.field_value(name).create_call(call_id, decoded)
 
 
+@dataclass(frozen=True)
+class NativeExecutableTool(NativeToolDeclaration, CodingCall):
+    """A decoded tool is the live call; runtime fields are not model arguments."""
+
+    call_id: str = field(metadata={"wire_context": True})
+    claim: ClassVar[None] = None
+
+    def allowed_claim(self) -> FileClaimPath | None:
+        return self.claim
+
+    @classmethod
+    def create_call(cls, call_id: str, arguments: dict[str, object]) -> NativeExecutableTool:
+        return cls.parse_arguments(arguments, call_id=call_id)
+
+
 class NativeRequestTools:
     """Core's existing CLI decodes and executes its declared request fields."""
 
@@ -58,13 +64,22 @@ class NativeRequestTools:
 
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]) -> CoordinationCall:
-        from .channel_coding_tools import CoordinationCall
-
-        return CoordinationCall(call_id, cls, arguments)
+        return CoordinationCall(call_id=call_id, declared_name=cls.declared_name, arguments=arguments)
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:
         return package / "agent-comms-extensions/global-agent-comms/index.mjs"
+
+
+@dataclass(frozen=True, kw_only=True)
+class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=None):
+    """Core's CLI owns argument decoding; this call owns identity and live events."""
+
+    declared_name: str
+    arguments: dict[str, object]
+
+    def reads(self) -> str:
+        return json.dumps(self.arguments)
 
 
 class ArgumentTool:
@@ -74,7 +89,7 @@ class ArgumentTool:
     def arguments(self) -> dict[str, object]:
         # The native argument object has no family envelope. Its contents come
         # entirely from the record codec, never a retained raw dictionary.
-        encoded = FieldCodec.encode(self)
+        encoded = FieldCodec.project(self, "arguments")
         del encoded[self.family_discriminator]
         return encoded
 
@@ -112,12 +127,6 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
 
     def replacements(self) -> tuple[ReplacementEdit, ...]:
         return ()
-
-    @classmethod
-    def create_call(cls, call_id: str, arguments: dict[str, object]) -> ExecutableCodingCall:
-        from .channel_coding_tools import ExecutableCodingCall
-
-        return ExecutableCodingCall(call_id, cls.parse_arguments(arguments))
 
     @classmethod
     def native_extension(cls, package: Path) -> Path:

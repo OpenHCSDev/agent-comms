@@ -91,7 +91,7 @@ def test_read_only_journal_parser_is_not_recovery_authority(tmp_path: Path) -> N
     assert first.session_id == "sid"
     assert first.session_entry_id == "entry"
     assert first.request_generation == 1
-    with pytest.raises(NativePiUnavailable, match="specified input"):
+    with pytest.raises(NativePiUnavailable, match="assembled-context proof"):
         NativeContextProof.read_evidence(session, "d" * 32)
 
 
@@ -181,7 +181,7 @@ def test_proof_reader_rejects_session_id_duplicate_or_untrusted_ancestor(tmp_pat
 
 
 @pytest.mark.parametrize("unsafe", ["public_directory", "public_session", "symlink_directory"])
-async def test_unprivate_session_rejected_before_pi_process_starts(tmp_path: Path, monkeypatch, unsafe: str, selected_model, *, native_runtime_package) -> None:
+async def test_unprivate_session_rejected_before_pi_process_starts(tmp_path: Path, monkeypatch, unsafe: str, selected_model, *, native_runtime_package, cursor_delivery) -> None:
     import agent_comms.native_pi as native
 
     sessions = tmp_path / "sessions"
@@ -208,7 +208,7 @@ async def test_unprivate_session_rejected_before_pi_process_starts(tmp_path: Pat
             input_id=INPUT_ID,
             prompt="Never disclose input ID",
             worktree=tmp_path,
-            execution=IndependentExecution(),
+            execution=IndependentExecution( cursor_delivery=cursor_delivery),
             startup=NativeStartup(tmp_path),
             session=(SelectedSession(selected) if existing is None else SavedSelectedSession(
                 selected, identity=NativeSessionIdentity("sid", str(existing))
@@ -287,7 +287,7 @@ def test_nested_session_directory_entries_are_synced_from_leaf_to_private_root(t
 
 
 @pytest.mark.parametrize("failed_parent", ["root", "nested"])
-async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries(tmp_path: Path, monkeypatch, failed_parent: str, selected_model, *, native_runtime_package) -> None:
+async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_entries(tmp_path: Path, monkeypatch, failed_parent: str, selected_model, *, native_runtime_package, cursor_delivery) -> None:
     import agent_comms.native_pi as native
 
     root = tmp_path / "private"
@@ -320,7 +320,7 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
     monkeypatch.setattr(native.os, "fsync", fail_once)
     monkeypatch.setattr(AttachedChild, "start", launch)
     request = dict(input_id=INPUT_ID, prompt="no provider", worktree=tmp_path,
-                   session=SelectedSession(sessions), execution=IndependentExecution(),
+                   session=SelectedSession(sessions), execution=IndependentExecution( cursor_delivery=cursor_delivery),
                    startup=NativeStartup(tmp_path), model=selected_model)
     with pytest.raises(NativePiUnavailable, match="session directory could not be committed"):
         await TrackedTurnSession.execute(native_runtime_package, **request)
@@ -332,7 +332,7 @@ async def test_failed_new_session_parent_sync_denies_spawn_and_retries_visible_e
     assert successful_target_syncs >= 1
 
 
-async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, monkeypatch, selected_model, *, native_runtime_package):
+async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, monkeypatch, selected_model, *, native_runtime_package, cursor_delivery):
     import agent_comms.native_pi as native
 
     sessions = tmp_path / "sessions"
@@ -362,12 +362,12 @@ async def test_reused_session_parent_fsync_failure_denies_spawn(tmp_path: Path, 
             worktree=tmp_path,
             session=SelectedSession(sessions),
             model=selected_model,
-            execution=IndependentExecution(),
+            execution=IndependentExecution( cursor_delivery=cursor_delivery),
             startup=NativeStartup(tmp_path),
         )
 
 
-async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: Path, monkeypatch, selected_model, *, native_runtime_package):
+async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: Path, monkeypatch, selected_model, *, native_runtime_package, cursor_delivery):
     import agent_comms.native_pi as native
 
     sessions = tmp_path / "sessions"
@@ -388,13 +388,13 @@ async def test_redirected_private_policy_directory_denies_subprocess(tmp_path: P
             worktree=tmp_path,
             session=SelectedSession(sessions),
             model=selected_model,
-            execution=IndependentExecution(),
+            execution=IndependentExecution( cursor_delivery=cursor_delivery),
             startup=NativeStartup(tmp_path),
         )
 
 
 @pytest.mark.parametrize("cancellations", [1, 2])
-async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, monkeypatch, cancellations: int, selected_model, *, native_runtime_package) -> None:
+async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, monkeypatch, cancellations: int, selected_model, *, native_runtime_package, cursor_delivery) -> None:
     import agent_comms.native_pi as native
 
     original = AttachedChild.start
@@ -423,7 +423,7 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, m
             prompt="no output",
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
-            execution=IndependentExecution(),
+            execution=IndependentExecution( cursor_delivery=cursor_delivery),
             startup=NativeStartup(tmp_path),
             model_wait=ModelWait(20),
             model=selected_model,
@@ -447,7 +447,7 @@ async def test_cancelled_native_turn_reaps_its_real_subprocess(tmp_path: Path, m
     sys.platform == "darwin", reason="copied native process group control is Linux-only"
 )
 @pytest.mark.parametrize("stop_reason", ["stop", "error", "length"])
-async def test_context_proof_alone_cannot_validate_a_failed_model_reply(tmp_path: Path, monkeypatch, stop_reason: str, selected_model, *, native_runtime_package) -> None:
+async def test_context_proof_alone_cannot_validate_a_failed_model_reply(tmp_path: Path, monkeypatch, stop_reason: str, selected_model, *, native_runtime_package, cursor_delivery) -> None:
     import agent_comms.native_pi as native
 
     fake = tmp_path / "fake_rpc.py"
@@ -498,7 +498,7 @@ send({'type':'agent_settled'})
         prompt="Decide IGNORE",
         worktree=tmp_path,
         session=SelectedSession(tmp_path / "sessions"),
-        execution=IndependentExecution(),
+        execution=IndependentExecution( cursor_delivery=cursor_delivery),
         startup=NativeStartup(tmp_path),
         model_wait=ModelWait(3),
         model=selected_model,
@@ -547,7 +547,7 @@ def test_obsolete_copied_fork_is_rejected_before_process() -> None:
 
 
 
-async def test_untracked_capability_is_rejected_before_prompt(tmp_path: Path, monkeypatch, selected_model, *, native_runtime_package):
+async def test_untracked_capability_is_rejected_before_prompt(tmp_path: Path, monkeypatch, selected_model, *, native_runtime_package, cursor_delivery):
     import agent_comms.native_pi as native
 
     start = AttachedChild.start
@@ -573,7 +573,7 @@ sys.stdin.read()
             prompt="must not send",
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
-            execution=IndependentExecution(),
+            execution=IndependentExecution( cursor_delivery=cursor_delivery),
             startup=NativeStartup(tmp_path),
             model=selected_model,
         )
@@ -666,9 +666,7 @@ def durable_attempt(tmp_path):
         "eof-large",
     ],
 )
-async def test_copied_cli_private_policy_preserves_one_input_across_local_requests(
-    tmp_path: Path, monkeypatch, outcome: str, durable_attempt
-) -> None:
+async def test_copied_cli_private_policy_preserves_one_input_across_local_requests(tmp_path: Path, monkeypatch, outcome: str, durable_attempt, *, cursor_delivery) -> None:
     """Explicit opt-in: real pinned CLI, loopback-only fake provider, no paid key."""
     selected = os.environ.get("AC_NATIVE_COPIED_PACKAGE")
     if not selected:
@@ -868,7 +866,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
 
         request = dict(
             observe_event=observe,
-            execution=IndependentExecution(pi_session=native_session),
+            execution=IndependentExecution(pi_session=native_session, cursor_delivery=cursor_delivery),
             startup=NativeStartup(tmp_path),
             input_id=INPUT_ID,
             prompt="Respond with X, fixture only",
@@ -905,7 +903,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
             with pytest.raises(NativePiPromptRejected) as failed:
                 await TrackedTurnSession.execute(VerifiedNativePackage.acquire(package), **request)
             response = failed.value.rejected_response
-            assert response.id == "native-prompt" and response.success is False
+            assert len(response.id) == 32 and response.success is False
             assert "No API key" in response.error
             assert calls == []
             assert not any(event["type"] == "input_committed" for event in rpc_events)
@@ -1027,7 +1025,7 @@ async def test_copied_cli_private_policy_preserves_one_input_across_local_reques
         worker.join(timeout=2)
 
 
-async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, monkeypatch, selected_model) -> None:
+async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, monkeypatch, selected_model, *, cursor_delivery) -> None:
     async def forbidden(*args, **kwargs):
         raise AssertionError("Stock Pi must not be started as a tracked backend")
 
@@ -1044,7 +1042,7 @@ async def test_stock_pi_is_rejected_before_any_tracked_prompt(tmp_path: Path, mo
             worktree=tmp_path,
             session=SelectedSession(tmp_path / "sessions"),
             model=selected_model,
-            execution=IndependentExecution(),
+            execution=IndependentExecution( cursor_delivery=cursor_delivery),
             startup=NativeStartup(tmp_path),
         )
     assert os.geteuid() == os.stat(tmp_path).st_uid
@@ -1116,12 +1114,13 @@ def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch, tmp_pat
         ("aborted", "provider failed"),
     ],
 )
-def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
-    from types import SimpleNamespace
-
+async def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detail):
     from agent_comms.pi_events import PiEvent
+    from agent_comms.tracked_turn import TrackedTurnSession
     from agent_comms.turn_failure import ModelRequestFailed
     from agent_comms.turn_output import TurnOutput
+    from agent_comms.turn_usage import UsageAccount
+    from agent_comms.turn_watchdog import DEFAULT_MODEL_WAIT, ProgressWatchdog
 
     event = PiEvent.from_wire({
         "type": "message_end",
@@ -1132,8 +1131,11 @@ def test_failed_stop_reason_records_failure_with_its_terminal(stop_reason, detai
             "errorMessage": detail if stop_reason != "length" else None,
         },
     })
-    output = TurnOutput()
-    event.message.tracked_end(SimpleNamespace(output=output))
+    turn = object.__new__(TrackedTurnSession)
+    output = turn.output = TurnOutput()
+    turn.usage, turn.explicit_interrupt = UsageAccount(), False
+    turn.watchdog = ProgressWatchdog(DEFAULT_MODEL_WAIT, 1, 1)
+    [update async for update in event.message.stop_reason.apply(turn, event.message)]
 
     assert output.declared_failure == ModelRequestFailed(detail)
     with pytest.raises(NativePiTerminalFailure, match=detail) as caught:

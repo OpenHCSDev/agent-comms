@@ -236,7 +236,7 @@ class CoordinationStore:
                 header = stream.read(100)
         except FileNotFoundError:
             return MissingStore()
-        except OSError as error:
+        except PermissionError as error:
             return InvalidStore(str(error))
         if len(header) < 100 or not header.startswith(CoordinationStore.header):
             return InvalidStore("Coordinator has an invalid SQLite header")

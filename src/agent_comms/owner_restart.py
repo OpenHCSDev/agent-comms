@@ -208,7 +208,7 @@ class StoppedOwnerFailure(CoordinationError):
         self.operation = operation
 
     def recover(self) -> tuple[OwnerRestartResult, ...]:
-        """The original operation alone can certify recovery while RAM survives."""
+        """Use the same restart operation to recover processes while its state is in memory."""
         return self.stopped.recover(self.operation)
 
     def abandon(self) -> None:
@@ -264,6 +264,7 @@ class FencedOwnerBatch:
                 from .attempt_recovery import RecoveryMonitorCapability
 
                 RecoveryMonitorCapability.settle_stopped_owner(self.lifecycle.root, thread)
+            self.ownership.enter_context(cutover.stopped_resources(self.lifecycle))
             wire = self.ownership.enter_context(self.lifecycle.restart_wire())
             snapshot = self.lifecycle.registry.snapshot()
             owners = progress.retired

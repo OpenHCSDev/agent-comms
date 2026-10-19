@@ -45,7 +45,7 @@ async def test_actual_saved_native_ui_receipt_and_controller_lifetime(native_bac
             permissions.append(kwargs)
             options = kwargs["options"]
             choice = (
-                "choice-1" if any(o["optionId"] == "choice-1" for o in options) else "allow-once"
+                "choice-1" if any(o.option_id == "choice-1" for o in options) else "allow-once"
             )
             return {"outcome": {"outcome": "selected", "optionId": choice}}
 

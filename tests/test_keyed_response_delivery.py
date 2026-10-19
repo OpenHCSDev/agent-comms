@@ -21,7 +21,7 @@ from test_coordination_response import _ready
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("direct", [False, True])
-async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, direct: bool):
+async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: Path, direct: bool, *, source_reads):
     case = _ready(tmp_path, direct=direct)
     try:
         # A subscriber arriving after the original is not a historical recipient.
@@ -43,7 +43,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         coverage = SourceCoverage(
             case.bus, case.store, wire_root_id=case.root_id, recipient_lookup=lookup
         )
-        assert coverage.read().blocked_seq == response.seq
+        assert coverage.read(source_reads=source_reads).blocked_seq == response.seq
         cursor = await _accept_visible_deliveries(
             case.bus, case.root_id, case.store.session.path, lookup, 0, owner_name="sender"
         )
@@ -51,8 +51,8 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         assignments = sealed_cohort_assignments(case.store, lookup)
         assert [a.wire_seq for a in assignments] == [response.seq]
         # Acceptance does not pretend the model saw the reply.
-        assert coverage.read().blocked_seq == response.seq
-        assert coverage.read().injected_source_seqs == ()
+        assert coverage.read(source_reads=source_reads).blocked_seq == response.seq
+        assert coverage.read(source_reads=source_reads).injected_source_seqs == ()
         with case.bus.log.locked():
             marker = case.bus.log.private_marker_unlocked()
             pointers = addressed_source_pointers_unlocked(case.bus.log, marker, lookup)
@@ -91,7 +91,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         ("unexpected", "not permitted"),
     ],
 )
-@pytest.mark.parametrize("reader", ["full", "certified", "uncertified"])
+@pytest.mark.parametrize("reader", ["full", "checked", "unchecked"])
 def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, value, reader):
     import json
 
@@ -113,14 +113,14 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         with pytest.raises((ValueError, TypeError)):
             WireRecord.from_wire(rows[-1], case.root_id)
         case.bus.log.path.write_text("".join(json.dumps(row) + "\n" for row in rows))
-        if reader == "certified":
-            # A real certified index refuses tampered bytes at its earlier prefix
-            # fence. Do not forge a certificate just to reach the decoder again.
+        if reader == "checked":
+            # A real checked index refuses tampered bytes at its earlier prefix
+            # fence. Do not forge a prefix record just to reach the decoder again.
             checkpoint = case.comms.root / "private_bus_checkpoint.sqlite3"
             saved_index = checkpoint.read_bytes()
             sender = case.comms.registry.require("sender")
             with pytest.raises(RelationViolationError):
-                with case.bus.log.certified_read() as source:
+                with case.bus.log.checked_read() as source:
                     source.addressed_page(case.bus.log, AddressedPage.capture(
                         lookup=RecordedThreadIncarnation("fixture", sender.created_at).lookup))
             assert checkpoint.read_bytes() == saved_index
@@ -132,7 +132,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         marker.checkpoint_seal = None
         case.bus.log.write_metadata_unlocked(marker)
         with pytest.raises((ValueError, RelationViolationError)):
-            if reader == "uncertified":
+            if reader == "unchecked":
                 list(case.bus.full_history_page().messages)
             else:
                 install_private_bus_checkpoint(case.bus.log)
@@ -140,7 +140,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         case.close()
 
 
-def test_duplicate_response_bytes_cannot_recertify_a_missing_checkpoint(tmp_path):
+def test_duplicate_response_bytes_cannot_recheck_a_missing_checkpoint(tmp_path):
     import json
     from dataclasses import replace
 
@@ -201,7 +201,7 @@ def test_delivery_requires_declaration_tag_not_field_shape(tmp_path, kind):
         case.close()
 
 
-def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path):
+def test_new_policy_declaration_uses_full_and_checked_record_readers(tmp_path):
     import json
 
     from agent_comms.bus_publication import PRIVATE_WIRE_FIELD
@@ -232,21 +232,21 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
         public = list(case.bus.full_history_page().messages)
         assert len(public) == 1
         install_private_bus_checkpoint(case.bus.log)
-        with case.bus.log.certified_read() as source:
+        with case.bus.log.checked_read() as source:
             marker = case.bus.log.private_marker_unlocked()
             full = tuple(case.bus.log.verified_records_unlocked(marker))
             assert full[0].message == public[0]
             delivery, = full[0].deliveries()
             recipient = delivery.audience.recipients[0].recipient_lookup
-            _, certified, more = source.addressed_page(
+            _, checked, more = source.addressed_page(
                 case.bus.log, AddressedPage.capture(lookup=recipient))
-            assert tuple(certified) == (delivery,)
+            assert tuple(checked) == (delivery,)
             assert not more
     finally:
         case.close()
 
 
-def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path):
+def test_duplicate_json_key_is_typed_and_never_enters_unchecked_read(tmp_path):
     import json
 
     from agent_comms.errors import StoredHistoryUnreadable

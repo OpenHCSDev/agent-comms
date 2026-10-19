@@ -32,7 +32,7 @@ tmp_path = private_root_fixture
 
 
 @pytest.mark.parametrize("direct", [False, True])
-async def test_durable_private_claim_names_each_changed_authority(tmp_path, monkeypatch, direct, *, native_runtime_package):
+async def test_durable_private_claim_names_each_changed_authority(tmp_path, monkeypatch, direct, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, _, people = _root(tmp_path, direct=direct)
     owner = people[2] if direct else people[1]
     observed = []
@@ -167,6 +167,10 @@ async def test_durable_private_claim_names_each_changed_authority(tmp_path, monk
     )
     with pytest.raises(InspectedError):
         await SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name=owner.name, native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name=owner.name,
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     assert observed == [True]

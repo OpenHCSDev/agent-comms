@@ -413,6 +413,11 @@ class ThreadRole(DeclaredFamily, affix="ThreadRole"):
     origin_label: ClassVar[str]
 
     @classmethod
+    def acp_thread[T](cls, thread: T) -> tuple[T, ...]:
+        """Only the declared ACP role contributes to project session discovery."""
+        return ()
+
+    @classmethod
     @abstractmethod
     def initial_delivery(cls, message: Message, target: str) -> tuple[Message, list[str]]: ...
 
@@ -533,6 +538,14 @@ class AgentThreadRole(ThreadRole):
     @classmethod
     def user_task_facts(cls, message: Message) -> Iterable[object]:
         return ()
+
+
+class AcpThreadRole(AgentThreadRole):
+    """An agent created by the ACP session lifecycle, independent of channel tags."""
+
+    @classmethod
+    def acp_thread[T](cls, thread: T) -> tuple[T, ...]:
+        return (thread,)
 
 
 class UserThreadRole(ThreadRole):

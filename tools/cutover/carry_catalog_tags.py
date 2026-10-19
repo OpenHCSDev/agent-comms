@@ -6,11 +6,10 @@ from agent_comms.catalog_document import CatalogDocument
 from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.field_codec import FieldCodec
 from agent_comms.registry_store import RegistryStore
-from cutover.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class CatalogTags(Carry):
-    after = "carry_todo_open_indexes"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

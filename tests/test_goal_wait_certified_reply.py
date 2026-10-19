@@ -1,4 +1,4 @@
-"""Dependency replies retain original certified identities across registry changes."""
+"""Dependency replies retain original checked identities across registry changes."""
 
 from conftest import reader
 from agent_comms.messages import NoticeRole
@@ -81,7 +81,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     )
     wait = comms.goals.goal_wait("owner")
     reply = comms.messaging.send("peer", "owner", "Original dependency reply").message
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         original = source.delivery(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
         assert original.audience.sender_lookup == RecordedThreadIncarnation("fixture", peer.created_at).lookup
@@ -91,7 +91,7 @@ def test_original_reply_is_not_reassigned_to_same_name_replacement(tmp_path):
     comms.registry.remove("peer")
     replacement = register(comms, "peer")
     assert peer.created_at != replacement.created_at
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         original = source.delivery(reply.seq)
         assert wait.matches(original, owner.incarnation.require_recorded())
         replacement_wait = replace(
@@ -118,7 +118,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     wrong = comms.messaging.send("peer", "other", "Different addressed recipient").message
     notice = comms.messaging.send("peer", "owner", "Diagnostic only", role=NoticeRole()).message
     reply = comms.messaging.send("peer", "owner", "Original addressed reply").message
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         assert not wait.matches(source.delivery(wrong.seq), owner.incarnation.require_recorded())
         assert not wait.matches(source.delivery(notice.seq), owner.incarnation.require_recorded())
         original = source.delivery(reply.seq)
@@ -134,7 +134,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     comms.registry.remove("renamed-owner")
     replacement = register(comms, "owner")
     assert owner.created_at != replacement.created_at
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         assert not replace(wait, owner=replacement.incarnation.require_recorded()).matches(
             source.delivery(reply.seq), replacement.incarnation.require_recorded()
         )
@@ -143,7 +143,7 @@ def test_original_recipient_and_direct_reply_semantics_cannot_be_replaced(tmp_pa
     )
 
 
-async def test_native(retained_native_acp_owner):
+async def test_native(retained_native_acp_owner, *, source_reads):
     """Retained native -> real tool send -> selected reply -> queued ACP input."""
     from agent_comms.acp_extension import InputDeliveryChangedUpdate, decode_updates
     from agent_comms.coordinator import Coordination
@@ -182,7 +182,7 @@ async def test_native(retained_native_acp_owner):
         "from": "peer", "to": sid, "body": "Original dependency reply",
     }, caller=NoThreadCaller())
     original, = comms.bus.log.messages_for_references((PublishedMessageToolDetails.from_wire(sent).message.source,))
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         assert wait.matches(source.delivery(original.seq), owner.incarnation.require_recorded())
         root_id = source.marker.root_id
     turn = asyncio.create_task(agent.inputs.drain_inbox(sid))
@@ -226,9 +226,13 @@ async def test_native(retained_native_acp_owner):
         assert len(replies) == 1 and replies[0].body == "NATIVE_GOAL_WAIT_HANDLED"
         with Coordination(str(comms.root / "coordination.sqlite3")) as store:
             proofs = read_historical_native_inputs(
-                store, wire_root_id=root_id,
-                recipient_lookup=RecordedThreadIncarnation("fixture", owner.created_at).lookup,
+                store,
+                wire_root_id=root_id,
+                recipient_lookup=RecordedThreadIncarnation(
+                    "fixture", owner.created_at
+                ).lookup,
                 source_seq=original.seq,
+                source_reads=source_reads,
             )
             assert len(proofs) == 1 and isinstance(proofs[0].execution, FullNativeExecution)
             assert proofs[0].expected_prompt_equality_established

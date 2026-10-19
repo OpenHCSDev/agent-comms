@@ -10,13 +10,14 @@ import pytest
 
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
+from agent_comms.field_codec import FieldCodec
 from agent_comms.comms import Comms, wire
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import OlderTraversal
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.read_basis import ChannelConversation, ChannelDisplayScope, DMConversation, ConversationCursor, NamedViewer, ReadCursor, NoDisplaySelection
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.read_ledger import NoReadNotice, PendingReadNotice, ReadDocument, ReadLedger, ReadNotice
 from agent_comms.presentation import ReadThrough
 
 
@@ -31,6 +32,43 @@ def read_message(comms, viewer, message):
     snapshot = comms.registry.snapshot()
     key = ReadLedger.conversation(message, snapshot)
     return message.seq in comms.bus.reads.cursor(viewer, snapshot).for_conversation(key)
+
+
+def test_delivery_watermark_keeps_other_peer_and_newer_messages_unread(tmp_path):
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    first = comms.messaging.send('alice', viewer, 'first').message
+    later = comms.messaging.send('alice', viewer, 'later').message
+    other = comms.messaging.send('bob', viewer, 'other peer').message
+    comms.bus.mark_delivered_through(viewer, first.seq, target=CommandTarget.named('alice'))
+    assert read_message(comms, viewer, first)
+    assert not read_message(comms, viewer, later)
+    assert not read_message(comms, viewer, other)
+    comms.bus.mark_delivered_through(viewer, later.seq, target=CommandTarget.named('alice'))
+    assert read_message(comms, viewer, later)
+    assert not read_message(comms, viewer, other)
+
+
+def test_mark_all_uses_conversation_prefixes_without_sparse_message_lists(tmp_path):
+    comms = prepared(tmp_path)
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    messages = [comms.messaging.send('alice', viewer, str(i)).message for i in range(3)]
+    comms.views.mark_user_view_read('#any', worktree=str(tmp_path))
+    assert all(read_message(comms, viewer, message) for message in messages)
+    cursor = comms.bus.reads.cursor(viewer, comms.registry.snapshot())
+    assert all(not position.exceptions for position in cursor.conversations.values())
+
+
+def test_member_activity_mark_all_does_not_read_hidden_conversation_rows(tmp_path):
+    comms = prepared(tmp_path)
+    comms.registry.declare(comms.registry.new_thread('carol', frozenset(), str(tmp_path)))
+    viewer = comms.messaging.user_identity(str(tmp_path)).name
+    hidden = comms.messaging.send('bob', 'carol', 'outside the selected activity').message
+    shown = comms.messaging.send('bob', 'carol', '@alice selected activity').message
+    comms.channels.set_channel_any_mode('#team', True)
+    comms.views.mark_user_view_read('#team', worktree=str(tmp_path))
+    assert read_message(comms, viewer, shown)
+    assert not read_message(comms, viewer, hidden)
 
 
 def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_path):
@@ -55,10 +93,6 @@ def test_read_request_requires_both_fields_and_page_reader_owns_evidence(tmp_pat
 
 
 def test_typed_read_keys_round_trip_through_the_store_codec():
-    from agent_comms.field_codec import FieldCodec
-    from agent_comms.read_basis import DMConversation
-    from agent_comms.read_ledger import ReadDocument
-
     owner = RecordedThreadIncarnation("viewer", 1.0)
     conversation = DMConversation(participants=(owner,))
     document = ReadDocument(messages={owner: ReadCursor({conversation: ConversationCursor(2)})})
@@ -71,17 +105,33 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    notice = "Read positions were reset; reopen conversations to review them."
+    notice = PendingReadNotice("Read positions were reset; reopen conversations to review them.")
     comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))
-    assert comms.bus.reads.take_notice(None) is None
+    assert NoReadNotice().take(comms.bus.reads) == NoReadNotice()
     assert comms.bus.reads.read().notice == notice
 
     first = comms.views.presentation.roster(viewer)
     assert first.read_marker_notice == notice
-    assert comms.bus.reads.read().notice is None
+    assert comms.bus.reads.read().notice == NoReadNotice()
 
     second = Comms(tmp_path).views.presentation.roster(viewer)
-    assert second.read_marker_notice is None
+    assert second.read_marker_notice == NoReadNotice()
+
+
+def test_empty_notice_never_accesses_store_and_pending_notice_keeps_a_replacement(tmp_path):
+    assert NoReadNotice().take(object()) == NoReadNotice()
+    assert FieldCodec.decode(ReadNotice, None) == NoReadNotice()
+    assert FieldCodec.decode(ReadNotice, "reset") == PendingReadNotice("reset")
+    ledger = ReadLedger(tmp_path / ReadLedger.filename)
+    newer = PendingReadNotice("newer reset")
+    ledger.replace(ReadDocument(notice=newer))
+    assert PendingReadNotice("older reset").take(ledger) == NoReadNotice()
+    assert ledger.read().notice == newer
+    shown = []
+    newer.take(ledger).notify_if_new(NoReadNotice(), shown.append)
+    ledger.read().notice.notify_if_new(newer, shown.append)
+    newer.notify_if_new(newer, shown.append)
+    assert shown == [newer.text]
 
 
 def test_bounded_page_marks_only_shown_messages(tmp_path):
@@ -266,7 +316,7 @@ def test_single_participant_dm_retains_its_scope_and_sql_identity(tmp_path):
     assert set(conversation.sql_keys(snapshot)) == {("alice", "alice")}
 
 
-def test_all_read_uses_conversation_maxima_without_sparse_sequences(tmp_path):
+def test_all_read_uses_one_watermark_without_sparse_sequences(tmp_path):
     comms = prepared(tmp_path)
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     messages = [
@@ -278,15 +328,21 @@ def test_all_read_uses_conversation_maxima_without_sparse_sequences(tmp_path):
     comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
     snapshot = comms.registry.snapshot()
     seen = comms.bus.reads.cursor(viewer, snapshot)
-    from agent_comms.read_basis import AllChannelDisplayScope
+    from agent_comms.read_basis import AllChannelDisplayScope, AllConversation
     with comms.bus.log.opened_wire_snapshot() as source:
         basis = source.query_page_index(lambda index: AllChannelDisplayScope("#any").capture_all(
-            comms.bus.reads, viewer, snapshot, source, index, document=comms.bus.reads.read()))
-    assert len(basis.conversations) == 2
-    assert len(seen.conversations) == 2
+            comms.bus.reads, viewer, snapshot, source, index, document=comms.bus.reads.read(),
+            through=source.metadata.last_seq))
+    assert tuple(item.conversation for item in basis.conversations) == (AllConversation(),)
+    assert tuple(seen.conversations) == (AllConversation(),)
     assert all(message.seq in seen.for_conversation(ReadLedger.conversation(message, snapshot))
                for message in messages)
     assert all(not cursor.exceptions for cursor in seen.conversations.values())
+    arrived = comms.messaging.send('alice', viewer, 'arrived after mark-all').message
+    assert not read_message(comms, viewer, arrived)
+    assert comms.bus.pending_count(viewer, CommandTarget.named('alice')) == 1
+    comms.views.mark_user_view_read('#any', worktree=str(tmp_path))
+    assert comms.bus.pending_count(viewer, CommandTarget.named('alice')) == 0
 
 
 def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
@@ -312,7 +368,6 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
 
 def test_recorded_bus_identity_is_one_member(tmp_path):
     from agent_comms.coordination_errors import DMScopeChanged
-    from agent_comms.field_codec import FieldCodec
     from agent_comms.private_path import FileIdentity, ObservedPath
     from agent_comms.read_ledger import ReadDocument
     from agent_comms.recorded_bus import NoRecordedBus, RecordedBus

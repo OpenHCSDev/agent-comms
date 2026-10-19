@@ -36,7 +36,7 @@ from .fresh_private_session import create_fresh_private_session
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
-from .native_session_reopen import SessionIdentityHelper
+from .native_session_reopen import NativeSessionIdentity
 from .native_transcript import NativeTranscript
 from .selected_session import SavedSelectedSession
 from .unstarted_runtime import UnstartedRuntime
@@ -81,11 +81,13 @@ class PiSessionFile(RuntimeLocation):
 
     path: str
 
-    def select_session(self, directory, execution):
+    def select_session(self, directory, execution, source_reads):
         path = Path(self.path).absolute()
         retained = execution.retained_source(path)
         identity = (retained.identity if retained is not None else
-                    SessionIdentityHelper.locate(execution.native_package, str(path)))
+                    NativeSessionIdentity.from_evidence(
+                        source_reads.for_source(path)
+                    ))
         return SavedSelectedSession(directory, identity=identity)
 
     def history_source(self, root, incarnation):
@@ -276,6 +278,7 @@ class PiNativeBackend(
             package=package,
             root=self.comms.root,
             ui_request=delivery.ui_request,
+            tool_mode=delivery.tool_mode,
         ):
             yield event
 
@@ -293,7 +296,7 @@ class PiNativeBackend(
 
         try:
             data = await self.inspect(thread, Compact(custom_instructions=instructions))
-        except (NativePiUnavailable, ValueError) as error:
+        except NativePiUnavailable as error:
             return FailedCompaction(str(error))
         if data.summary is None:
             return NothingToCompaction()

@@ -221,9 +221,7 @@ def test_acceptance_fault_before_commit_never_leaves_partial_provenance(
 
 
 @pytest.mark.parametrize("damage", ["missing", "drift"])
-async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered(
-    monkeypatch, damage: str
-) -> None:
+async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered(monkeypatch, damage: str, *, cursor_delivery) -> None:
     if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
         pytest.skip("private selected runtime requires a real /var/tmp")
     with tempfile.TemporaryDirectory(prefix="pr94-legacy-optional-", dir="/var/tmp") as temp:
@@ -250,6 +248,7 @@ async def test_legacy_or_corrupt_optional_schema_omits_but_original_is_delivered
             wire_root_id=root_id,
             owner_name="member000",
             native_package=root,
+            cursor_delivery=cursor_delivery,
         ).run()
         assert outcome is not None and outcome.publications
         assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1
@@ -485,9 +484,7 @@ def test_older_receipt_message_id_mismatch_omits_entire_context(tmp_path: Path) 
         store.close()
 
 
-async def test_real_selected_caller_after_rename_injects_only_new_generation(
-    monkeypatch,
-) -> None:
+async def test_real_selected_caller_after_rename_injects_only_new_generation(monkeypatch, *, cursor_delivery) -> None:
     if Path("/var").is_symlink() or not Path("/var/tmp").is_dir():
         pytest.skip("private selected runtime requires a real /var/tmp")
     with tempfile.TemporaryDirectory(prefix="pr94-renamed-awareness-", dir="/var/tmp") as temp:
@@ -505,7 +502,11 @@ async def test_real_selected_caller_after_rename_injects_only_new_generation(
         runner, calls = _fake_model()
         monkeypatch.setattr(TrackedTurnSession, "execute", runner)
         outcome = await runtime.SelectedExecution(
-            root=comms.root, wire_root_id=root_id, owner_name="gamma", native_package=root
+            root=comms.root,
+            wire_root_id=root_id,
+            owner_name="gamma",
+            native_package=root,
+            cursor_delivery=cursor_delivery,
         ).run()
         assert outcome is not None and outcome.publications
         assert outcome.assignment_ids[0] == assignment.assignment_id and len(calls) == 1

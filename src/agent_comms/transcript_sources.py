@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .typed_table import TypedStore
+from .typed_table import StoreWriter
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
@@ -161,7 +161,7 @@ class TranscriptTraversal(ABC):
 
     def read_records(self, reader, project, sources, initial, frontier,
                      *, max_messages, max_bytes):
-        """Consume each original source coordinate only when its record is read."""
+        """Advance each file position only after reading the record at that position."""
         consumed, records, used = initial, [], 0
         # A tool round opened by an already appended record keeps the window open
         # until its paired record is appended too; the bounded grace keeps an
@@ -280,8 +280,11 @@ class LaterTranscript(TranscriptTraversal):
 
 
 class TranscriptDraft:
-    def end_turn(self, transcript: TypedStore) -> None:
+    def end_turn(self, transcript: StoreWriter) -> None:
         """An absent draft needs no write."""
+
+    def publish(self, transcript: StoreWriter) -> None:
+        """An absent draft needs no publication."""
 
     def external_row(self):
         """The ACP draft field is null when there is no external draft."""
@@ -339,8 +342,14 @@ class TranscriptSource:
                     event for original in reversed(pending) for event in original.events))
                 pending.clear()
 
-    def current_draft(self) -> TranscriptDraft:
-        return NoDraft()
+    def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
+        from .external_transcript import DraftRow
+        with self.draft_snapshot(root, incarnation) as connection:
+            return DraftRow.one(connection, thread=incarnation.require_recorded().lookup) or NoDraft()
+
+    def draft_snapshot(self, root: Path, incarnation: ThreadIncarnation):
+        from .external_transcript import ExternalTranscript
+        return ExternalTranscript(root, incarnation).snapshot()
 
     def publication_revision(self, root, recipient):
         return PublishedReplyRevision(0, 0)
@@ -468,7 +477,7 @@ class AssignedTranscriptSource(TranscriptSource):
         )
 
     def window(self, *, limit=1, sent_limit=0) -> AssignedSourceWindow:
-        """One certified cut owns conversation, sent rows and their frontier."""
+        """Read conversation messages, sent messages and their end position together."""
         lookup = self.recipient.lookup
         conversation_request = ConversationSourceWindowRequest(limit=limit, ascending=False)
         sent_request = ConversationSourceWindowRequest(

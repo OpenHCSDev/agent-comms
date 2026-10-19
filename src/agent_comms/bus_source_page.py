@@ -1,4 +1,4 @@
-"""Declared bounded queries consume original sources without owning delivery state."""
+"""Read limited pages of stored messages without changing their delivery state."""
 
 from __future__ import annotations
 
@@ -50,7 +50,6 @@ class CandidateQuery(SourcePage):
     root_id: Annotated[str, Id128Text]
     recipient_lookup: Annotated[str, Id128Text]
     required_through_seq: int
-    delivery_only: bool = False
 
     def __post_init__(self) -> None:
         super().__post_init__()

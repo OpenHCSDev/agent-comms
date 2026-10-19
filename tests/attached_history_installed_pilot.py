@@ -1,9 +1,9 @@
 """Normal installed fresh-fork wire view against original actual saved history.
 
 No Node/provider call, source/store reset, patched transport or live write.
-The supplied original immutable certificates are checked read-only.
+The supplied original immutable prefix records are checked read-only.
 History references preserve the source inodes and seals; no archive index,
-registry guard or certificate is rebuilt.
+registry guard or prefix record is rebuilt.
 """
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import asyncio

@@ -109,7 +109,7 @@ async def test_channel_outcomes_and_receipts_are_per_recipient_and_source(tmp_pa
         assert all(row.state.detail == "" and not row.state.working for row in outcomes)
 
 
-async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_path, monkeypatch):
+async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_path, monkeypatch, *, source_reads):
     model, calls = native_model(fail_on=1)
     monkeypatch.setattr(TrackedTurnSession, "execute", model)
     async with canonical_delivery_owner(tmp_path) as (comms, owner, message, root_id):
@@ -134,8 +134,11 @@ async def test_uncertain_channel_input_keeps_notification_and_never_replays(tmp_
                 read_historical_native_inputs(
                     store,
                     wire_root_id=root_id,
-                    recipient_lookup=RecordedThreadIncarnation("fixture", comms.registry.require("alpha").created_at).lookup,
+                    recipient_lookup=RecordedThreadIncarnation(
+                        "fixture", comms.registry.require("alpha").created_at
+                    ).lookup,
                     source_seq=message.seq,
+                    source_reads=source_reads,
                 )
                 == ()
             )

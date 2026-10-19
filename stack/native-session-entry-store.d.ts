@@ -58,7 +58,8 @@ export declare abstract class EntryStore {
     commonAncestor(leftId: string | null, rightId: string | null): string | null;
     latest(leafId: string | null, type: SessionEntry['type']): SessionEntry | undefined;
     latestMetadata(leafId: string | null, type: SessionEntry['type']): EntryMetadata | undefined;
-    contextSettings(leafId?: string | null): {model: EntryMetadata['model']; thinkingLevel: string};
+    settingsMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
+    contextSettings(leafId?: string | null, settings?: {model?: EntryMetadata['model']; thinkingLevel?: string | null}): {model: EntryMetadata['model']; thinkingLevel: string | null};
     contextEntries(leafId?: string | null): IterableIterator<SessionEntry>;
     contextMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
     contextMessageCount(leafId?: string | null): number;

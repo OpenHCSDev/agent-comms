@@ -1,6 +1,9 @@
 """Released-owner recovery preserves unknown input evidence and refuses replay."""
 
 from __future__ import annotations
+from contextlib import closing
+from agent_comms.cursor_publication import CursorDelivery
+from agent_comms.native_entries import NativeEvidenceScope
 
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
@@ -33,56 +36,63 @@ from test_coordinated_runtime import _fake_model, _root, tmp_path  # noqa: F401
 
 def failed_owner(directory, output, exit_allowed):
     # Persist the historical pre-settlement failure shape for operator recovery.
-    root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
-    fake, _calls = _fake_model()
+    with closing(CursorDelivery()) as cursor_delivery:
+        root, root_id, comms, _initial, _people = _root(Path(directory), direct=True)
+        fake, _calls = _fake_model()
 
-    async def old_failure(*args, **kwargs):
-        result = await fake(*args, **kwargs)
-        proof = result.context
-        with proof.session_file.open("a") as target:
-            target.write(
-                json.dumps(
-                    {
-                        "type": "message",
-                        "id": "error-terminal",
-                        "parentId": proof.session_entry_id,
-                        "message": {
-                            "role": "assistant",
-                            "stopReason": "error",
-                            "errorMessage": "Codex error: The usage limit has been reached",
-                            "content": [],
-                        },
-                    }
+        async def old_failure(*args, **kwargs):
+            result = await fake(*args, **kwargs)
+            proof = result.context
+            with proof.session_file.open("a") as target:
+                target.write(
+                    json.dumps(
+                        {
+                            "type": "message",
+                            "id": "error-terminal",
+                            "parentId": proof.session_entry_id,
+                            "message": {
+                                "role": "assistant",
+                                "stopReason": "error",
+                                "errorMessage": "Codex error: The usage limit has been reached",
+                                "content": [],
+                            },
+                        }
+                    )
+                    + "\n"
                 )
-                + "\n"
-            )
-        # Revoke the real owner before the failure consumer can settle. This
-        # leaves the original authorized input unresolved without an obsolete
-        # failure hook or a fabricated owner-loss grant.
-        os.environ["AGENT_COMMS_THREAD"] = "beta"
-        comms.owners.release("beta")
-        raise NativePiUnavailable("released native provider failure")
+            # Revoke the real owner before the failure consumer can settle. This
+            # leaves the original authorized input unresolved without an obsolete
+            # failure hook or a fabricated owner-loss grant.
+            os.environ["AGENT_COMMS_THREAD"] = "beta"
+            comms.owners.release("beta")
+            raise NativePiUnavailable("released native provider failure")
 
-    TrackedTurnSession.execute = old_failure
-    try:
-        asyncio.run(
-            runtime.SelectedExecution(
-                root=root, wire_root_id=root_id, owner_name="beta", native_package=VerifiedNativePackage.acquire(pinned_native_package())
-            ).run()
-        )
-    except NativePiUnavailable:
-        pass
-    else:
-        raise AssertionError("failure fixture unexpectedly succeeded")
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        row = store.session._connection.execute(
-            f"SELECT * FROM {NativeRuntimeInput.declared_name}"
-        ).fetchone()
-        execution_id, input_id = row["execution_id"], row["input_id"]
-    os.environ["AGENT_COMMS_THREAD"] = "beta"
-    output.put((str(root), execution_id, input_id))
-    if not exit_allowed.wait(10):
-        raise TimeoutError("test failed to release fixture process")
+        TrackedTurnSession.execute = old_failure
+        try:
+            asyncio.run(
+                runtime.SelectedExecution(
+                    root=root,
+                    wire_root_id=root_id,
+                    owner_name="beta",
+                    native_package=VerifiedNativePackage.acquire(
+                        pinned_native_package()
+                    ),
+                    cursor_delivery=cursor_delivery,
+                ).run()
+            )
+        except NativePiUnavailable:
+            pass
+        else:
+            raise AssertionError("failure fixture unexpectedly succeeded")
+        with Coordination(str(root / "coordination.sqlite3")) as store:
+            row = store.session._connection.execute(
+                f"SELECT * FROM {NativeRuntimeInput.declared_name}"
+            ).fetchone()
+            execution_id, input_id = row["execution_id"], row["input_id"]
+        os.environ["AGENT_COMMS_THREAD"] = "beta"
+        output.put((str(root), execution_id, input_id))
+        if not exit_allowed.wait(10):
+            raise TimeoutError("test failed to release fixture process")
 
 
 @pytest.fixture
@@ -242,7 +252,6 @@ def test_recovery_refuses_live_native_session_process(released_failure):
     finally:
         child.terminate()
         child.wait(timeout=5)
-
 
 
 def replacement_release(root):
