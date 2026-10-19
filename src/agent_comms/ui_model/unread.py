@@ -14,23 +14,24 @@ if TYPE_CHECKING:
 class UnreadPresentation(ABC):
     @classmethod
     def _for_count(
-        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int]
+        cls, snapshot: CoordinationSnapshot, name: str, counts: Mapping[str, int],
+        presentation: type[ExactUnread],
     ) -> UnreadPresentation:
         if name in snapshot.unread_pending:
             return IndexingUnread()
-        return ExactUnread(counts.get(name, 0))
+        return presentation(counts.get(name, 0))
 
     @classmethod
     def for_thread(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.thread_unread)
+        return cls._for_count(snapshot, name, snapshot.thread_unread, ReplyUnread)
 
     @classmethod
     def for_bus(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.unread)
+        return cls._for_count(snapshot, name, snapshot.unread, ExactUnread)
 
     @classmethod
     def for_channel(cls, snapshot: CoordinationSnapshot, name: str) -> UnreadPresentation:
-        return cls._for_count(snapshot, name, snapshot.channel_unread)
+        return cls._for_count(snapshot, name, snapshot.channel_unread, ExactUnread)
 
     @property
     @abstractmethod
@@ -56,6 +57,15 @@ class ExactUnread(UnreadPresentation):
     @property
     def highlighted(self) -> bool:
         return bool(self.count)
+
+
+@dataclass(frozen=True)
+class ReplyUnread(ExactUnread):
+    @property
+    def label(self) -> str:
+        from agent_comms.view_unread import ReplyIndex
+        return (f"({self.count})" if self.count < ReplyIndex.limit
+                else f"({ReplyIndex.limit - 1}+)")
 
 
 @dataclass(frozen=True)
