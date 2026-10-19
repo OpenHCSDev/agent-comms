@@ -226,12 +226,15 @@ class ExplicitWatchAcknowledgment(WatchAcknowledgment):
 
 if TYPE_CHECKING:
     from .historical_views import HistoryArchive, HistorySource
+    from .catalog_document import CatalogDocument
+    from .catalog_store import ChannelCatalog
+    from .channels import Channels
     from .presentation import BusPresentation
     from .channels import Channel
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
     from .messages import Message
-    from .read_ledger import ReadLedger
+    from .read_ledger import ReadDocument, ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -688,3 +691,62 @@ class ChannelDisplayScope(MessageDisplayScope):
             or any(name in self.participant_names for name in CommandTarget.named(message.target).direct_names)
             or any(mention.thread in self.participant_names for mention in message.mentions)
         )
+
+
+@dataclass(frozen=True, slots=True)
+class CapturedSelection:
+    """One captured registry/catalog/read basis for local human presentation."""
+
+    registry: RegistrySnapshot
+    catalog: CatalogDocument
+    viewer: DisplayViewer
+    seen: ReadCursor
+    document: ReadDocument
+
+    @classmethod
+    def capture(
+        cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
+        reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
+    ) -> CapturedSelection:
+        viewer = viewer.resolve(snapshot)
+        return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
+
+    @classmethod
+    @contextmanager
+    def reading(
+        cls, registry: Registration, catalog: ChannelCatalog,
+        reads: ReadLedger, viewer: DisplayViewer,
+    ) -> Iterator[CapturedSelection]:
+        """Borrow the original identity resources and read the ledger once.
+
+        Finish reading the ledger before yielding: painted acknowledgement may
+        write that same ledger while identity and membership remain acquired.
+        """
+        with registry.store.reading() as document, catalog.reading() as channels:
+            with reads.reading() as read_document:
+                selected = cls.capture(
+                    document.snapshot(), channels, reads, read_document, viewer
+                )
+            yield selected
+
+    @property
+    def channels(self) -> Channels:
+        return self.catalog.views(self.registry.threads)
+
+    @property
+    def scopes(self) -> tuple[ChannelDisplayScope, ...]:
+        return tuple(
+            ChannelDisplayScope.capture(channel, self.registry)
+            for channel in self.channels.values()
+        )
+
+    @property
+    def viewer_names(self) -> frozenset[str]:
+        return self.viewer.names(self.registry)
+
+    def require_viewer(self) -> str:
+        return self.viewer.require_name(self.registry)
+
+    def scope(self, target: str) -> ChannelDisplayScope:
+        channel = self.catalog.require_channel(target, self.registry.threads)
+        return ChannelDisplayScope.capture(channel, self.registry)
