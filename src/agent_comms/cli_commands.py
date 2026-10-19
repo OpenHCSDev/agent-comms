@@ -391,11 +391,11 @@ class TargetBatchResult(CliResult):
         return int(not self.successful)
 
 
-@dataclass(frozen=True)
 class CommandSelectionChanged(ValueError):
     """The selected command is no longer bound to the captured target."""
 
 
+@dataclass(frozen=True)
 class TargetSelection(ABC):
     """The targets one execution runs on; each kind owns how its result comes back."""
     targets: tuple[CommandTarget, ...]
