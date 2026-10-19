@@ -232,7 +232,7 @@ class NotificationAssignment(NotificationSource):
     def for_deliveries(
         cls, originals: Iterable[CommittedDelivery], records: Iterable[NotificationAssignment],
     ) -> Iterator[tuple[CommittedDelivery, tuple[NotificationSource, ...]]]:
-        """Match one acquired window by its original source and recipient identities."""
+        """Match notification assignments to messages and their recorded recipients."""
         by_recipient = {}
         for record in records:
             key = (record.assignment.source, record.assignment.recipient_lookup)
@@ -270,7 +270,7 @@ class NotificationAssignment(NotificationSource):
         from .wire_log import WireLog
 
         originals = {original.message.reference: original for original in sources}
-        with WireLog(root / "bus.jsonl").certified_read() as source:
+        with WireLog(root / "bus.jsonl").checked_read() as source:
             # Capture under the lock; decoding runs after it is released.
             captured = source.replies(tuple({row.assignment.source for row in eligible}))
         replies: dict[MessageReference, list[CommittedDelivery]] = {}

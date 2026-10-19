@@ -15,6 +15,39 @@ from agent_comms.messages import (
 )
 
 
+def test_compiled_encoder_resolves_a_thousand_records_once(monkeypatch):
+    import agent_comms.field_codec as codec
+
+    @dataclass(frozen=True)
+    class Entry:
+        count: int
+        tags: tuple[str, ...]
+
+    annotation = list[Entry]
+    records = [Entry(i, ("alpha", "beta")) for i in range(1000)]
+    expected = [{"count": i, "tags": ["alpha", "beta"]} for i in range(1000)]
+    resolved = []
+    original = FieldCodec._representation
+
+    def counted(declared):
+        resolved.append(declared)
+        return original(declared)
+
+    monkeypatch.setattr(FieldCodec, "_representation", staticmethod(counted))
+    assert FieldCodec.encode(records, annotation) == expected
+    assert resolved.count(annotation) == 1
+    assert resolved.count(Entry) == 1
+    assert codec.compile_encoder(annotation) is codec.compile_encoder(annotation)
+
+    def unexpected(*args):
+        raise AssertionError("The value path parsed an annotation")
+
+    monkeypatch.setattr(FieldCodec, "_representation", staticmethod(unexpected))
+    monkeypatch.setattr(codec, "get_args", unexpected)
+    monkeypatch.setattr(codec, "get_origin", unexpected)
+    assert FieldCodec.encode(records, annotation) == expected
+
+
 def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
     from pydantic import JsonValue
 
@@ -492,8 +525,8 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
 
     arguments = {"from": "sender", "to": "receiver", "body": "hello"}
     event = ToolStartTranscript(
-        tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
-        tool=ToolDeclaration.record("comms_send", arguments),
+        position=0, tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
+        tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
     )
     encoded = FieldCodec.encode(event)
     assert encoded["tool"]["tool"] == "comms_send"

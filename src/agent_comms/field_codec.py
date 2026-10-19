@@ -92,6 +92,9 @@ class FieldPlan:
     def wire_keys(self) -> tuple[str, ...]:
         return (self.key,)
 
+    def encode_value(self, value: object) -> object:
+        return self.value.encode_value(value)
+
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
 
@@ -135,6 +138,11 @@ class FieldPlan:
     def decoded(self, data: object) -> dict[str, object]:
         return self.decoded_using(data, self.value.decode)
 
+    def decoded_bound(
+        self, data: dict[str, object], context: Mapping[str, object]
+    ) -> dict[str, object]:
+        return self.decoded(data)
+
     def decoded_selected(self, data, keys, selections):
         return self.decoded_using(data, lambda value: self.value.decode_keys(value, keys, selections))
 
@@ -157,6 +165,40 @@ class FieldPlan:
         if default is MISSING:
             raise MalformedRecord(f"Missing required field {self.key}")
         return default
+
+
+class ContextFieldPlan(FieldPlan):
+    """A constructor value supplied by the caller, never by wire data."""
+
+    def contribute(self, fields: list[FieldPlan]) -> tuple[str, ...]:
+        return ()
+
+    @property
+    def wire_keys(self) -> tuple[str, ...]:
+        return ()
+
+    def encoded(self, value: object, *, key: str | None = None) -> dict[str, object]:
+        return {}
+
+    def decoded(self, data: object) -> dict[str, object]:
+        raise MalformedRecord(f"Missing decode context: {self.name}")
+
+    def decoded_bound(
+        self, data: dict[str, object], context: Mapping[str, object]
+    ) -> dict[str, object]:
+        if self.name not in context:
+            raise MalformedRecord(f"Missing decode context: {self.name}")
+        return {self.name: self.value.decode(context[self.name])}
+
+
+class BoundFieldPlan(FieldPlan):
+    """A nested record receives its context from declared sibling fields."""
+
+    def decoded_bound(
+        self, data: dict[str, object], context: Mapping[str, object]
+    ) -> dict[str, object]:
+        bound = {name: data[source] for name, source in self.declared.metadata["wire_bind"].items()}
+        return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, bound))
 
 
 class InlineFieldPlan(FieldPlan):
@@ -694,37 +736,7 @@ class FieldCodec(Sealed):
 
     @classmethod
     def encode(cls, value: object, annotation: object = None) -> Any:
-        representation = cls._value_representation(value, annotation)
-        if representation is not None and value is not None:
-            return representation.encode(value)
-        # Exact JSON scalars cannot also be records, enums or family classes.
-        # Representation selection above retains custom scalar declarations.
-        kind = type(value)
-        if value is None or kind is str or kind is int or kind is bool:
-            return value
-        if kind is float and math.isfinite(value):
-            return value
-        if is_dataclass(value) and not isinstance(value, type):
-            return cls.encode_record(value)
-        if isinstance(value, type) and issubclass(value, DeclaredFamily):
-            return value.declared_name
-        if isinstance(value, Enum):
-            return cls.encode(value.value)
-        if isinstance(value, (list, tuple, frozenset)):
-            target, _ = cls._representation(annotation)
-            arguments = get_args(target)
-            items = sorted(value) if isinstance(value, frozenset) else value
-            if get_origin(target) is tuple and arguments and arguments[-1] is not Ellipsis:
-                return [cls.encode(item, expected) for item, expected in zip(items, arguments, strict=True)]
-            element = arguments[0] if arguments else None
-            return [cls.encode(item, element) for item in items]
-        if isinstance(value, dict):
-            target, _ = cls._representation(annotation)
-            key_type, value_type = get_args(target) if get_origin(target) is dict else (None, None)
-            if key_type is str or (key_type is None and all(type(key) is str for key in value)):
-                return {key: cls.encode(item, value_type) for key, item in value.items()}
-            return [[cls.encode(key, key_type), cls.encode(item, value_type)] for key, item in value.items()]
-        raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+        return compile_encoder(annotation).encode_value(value)
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
@@ -762,18 +774,11 @@ class FieldCodec(Sealed):
     def encode_fields(cls, value: object) -> dict[str, object]:
         """Encode declared fields, except ``wire_exclude`` ones, including inside a custom wire
         representation."""
-        hints = cls._types(type(value))
-        result: dict[str, object] = {}
-        plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
-        for field, _key in cls.record_fields(type(value)):
-            current = getattr(value, field.name)
-            if not field.metadata.get("wire_exclude") and not plans[field.name].omitted(current):
-                result.update(plans[field.name].encoded(cls.encode(current, hints[field.name])))
-        result.update(
-            (member.wire_name, cls.encode(getattr(value, name)))
-            for name, member in cls._projections(type(value), "wire").items()
-        )
-        return result
+        return compile_encoder(type(value)).encode_fields(value)
+
+    @classmethod
+    def decode_bound(cls, target: type[T], data: object, **context: object) -> T:
+        return cast(T, compile_decoder(target).decode_bound(data, context))
 
     @classmethod
     def decode_record(cls, target: type[T], data: object) -> T:
@@ -919,16 +924,10 @@ class FieldCodec(Sealed):
         if representation is not None:
             return cls.encode(value, annotation)
         if is_dataclass(value) and not isinstance(value, type):
-            hints = cls._types(type(value))
             result = cls._tag(value)
-            plans = {entry.name: entry for entry in cls._record_plan(type(value)).bindings}
-            for field, key in cls.record_fields(type(value)):
-                current = getattr(value, field.name)
-                if not (field.metadata.get(f"{view}_exclude") or plans[field.name].omitted(current)):
-                    encoded = cls.project(current, view, hints[field.name])
-                    result.update(plans[field.name].encoded(
-                        encoded, key=field.metadata.get(f"{view}_name", key)
-                    ))
+            result.update(cls._record_plan(type(value)).encoded(
+                value, view, lambda entry, current: cls.project(current, view, entry.annotation)
+            ))
             properties = cls._projections(type(value), view)
             result.update(
                 (member.wire_name, cls.project(getattr(value, name), view))
@@ -942,13 +941,24 @@ class FieldCodec(Sealed):
 
     @dataclass(frozen=True)
     class _RecordPlan:
-        """A record's whole decode plan, derived once from its declaration."""
+        """A record's field plan, derived once from its declaration."""
 
         fields: tuple[FieldPlan, ...]
         bindings: tuple[FieldPlan, ...]
         required_keys: tuple[str, ...]
         init_required_keys: tuple[str, ...]
         accepted_keys: frozenset[str]
+
+        def encoded(self, value, view, encode_value) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for entry in self.bindings:
+                current = getattr(value, entry.name)
+                metadata = entry.declared.metadata
+                if not metadata.get(f"{view}_exclude") and not entry.omitted(current):
+                    result.update(entry.encoded(
+                        encode_value(entry, current), key=metadata.get(f"{view}_name", entry.key)
+                    ))
+            return result
 
         def schema_fields(self, properties, required):
             for entry in self.fields:
@@ -998,6 +1008,10 @@ class FieldCodec(Sealed):
 
     @classmethod
     def _field_plan(cls, field: Field[object], annotation: object) -> type[FieldPlan]:
+        if field.metadata.get("wire_context"):
+            return ContextFieldPlan
+        if field.metadata.get("wire_bind"):
+            return BoundFieldPlan
         if not field.metadata.get("wire_inline"):
             return (cls._representation(annotation)[1] or FieldRepresentation).field_plan
         family = isinstance(annotation, type) and issubclass(annotation, DeclaredFamily)
@@ -1017,7 +1031,7 @@ class FieldCodec(Sealed):
 
 @dataclass(frozen=True, slots=True)
 class ValueDecoder[T](ABC):
-    """One annotation owns its wire decoding, draft projection and choice domain."""
+    """One annotation owns its wire conversion, draft projection and choice domain."""
 
     target: object
     _by_origin: ClassVar[dict[object, type[ValueDecoder[object]]]] = {}
@@ -1044,6 +1058,49 @@ class ValueDecoder[T](ABC):
 
     @abstractmethod
     def decode(self, data: object) -> T: ...
+
+    def encode_value(self, value: object) -> object:
+        if isinstance(value, WireValue):
+            return type(value).encode(value)
+        kind = type(value)
+        if value is None or kind is str or kind is int or kind is bool:
+            return value
+        if kind is float and math.isfinite(cast(float, value)):
+            return value
+        if is_dataclass(value) and not isinstance(value, type):
+            return FieldCodec.encode_record(value)
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, Enum):
+            return FieldCodec.encode(value.value)
+        if isinstance(value, (list, tuple, frozenset)):
+            items = sorted(value) if isinstance(value, frozenset) else value
+            return self.encode_items(items)
+        if isinstance(value, dict):
+            return self.encode_mapping(value)
+        raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
+
+    def encode_items(self, items: Iterable[object]) -> list[object]:
+        encoder = compile_encoder(None)
+        return [encoder.encode_value(item) for item in items]
+
+    def encode_mapping(self, value: dict[object, object]) -> object:
+        encoder = compile_encoder(None)
+        if all(type(key) is str for key in value):
+            return {key: encoder.encode_value(item) for key, item in value.items()}
+        return [[encoder.encode_value(key), encoder.encode_value(item)]
+                for key, item in value.items()]
+
+    def encode_fields(self, value: object) -> dict[str, object]:
+        result = FieldCodec._record_plan(type(value)).encoded(value, "wire", FieldPlan.encode_value)
+        result.update(
+            (member.wire_name, FieldCodec.encode(getattr(value, name)))
+            for name, member in FieldCodec._projections(type(value), "wire").items()
+        )
+        return result
+
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
+        return self.decode(data)
 
     field_names: ClassVar[tuple[str, ...]] = ()
 
@@ -1147,6 +1204,9 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
+    def encode_value(self, value: object) -> object:
+        return None if value is None else self.representation.encode(value)
+
     @boundary_decoder
     def decode(self, data):
         representation = self.representation
@@ -1251,11 +1311,14 @@ class UnionDecoder[T](ValueDecoder[T]):
         return self.alternatives[0].argument_options()
 
     def decode(self, data: object) -> T:
+        return self.decode_bound(data, {})
+
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         first_error = None
         try:
             for alternative in self.alternatives:
                 try:
-                    return alternative.decode(data)
+                    return alternative.decode_bound(data, context)
                 except MalformedRecord as error:
                     if first_error is None:
                         first_error = error
@@ -1282,6 +1345,11 @@ class _ArrayDecoder(ValueDecoder[Any]):
             raise MalformedRecord("Expected a JSON array.")
         return self.container(self.decode_items(data))
 
+    def encode_items(self, items: Iterable[object]) -> list[object]:
+        if not self.items:
+            return ValueDecoder.encode_items(self, items)
+        return [self.items[0].encode_value(item) for item in items]
+
     def decode_items(self, data):
         return (self.items[0].decode(value) for value in data)
 
@@ -1307,6 +1375,11 @@ class _VariadicTupleDecoder(_TupleDecoder):
     """The inherited item decoder applies to every tuple element."""
 
 class _FixedTupleDecoder(_TupleDecoder):
+    def encode_items(self, items: Iterable[object]) -> list[object]:
+        if not self.items:
+            return super().encode_items(items)
+        return [encoder.encode_value(item) for encoder, item in zip(self.items, items, strict=True)]
+
     def decode_items(self, data):
         if len(data) != len(self.items):
             raise MalformedRecord("Tuple length does not match declaration.")
@@ -1345,6 +1418,12 @@ class _DictDecoder(ValueDecoder[Any]):
     def from_annotation(cls, target, args):
         entries = _object_entries if args[0] is str else _object_or_pair_entries
         return cls(target, compile_decoder(args[0]), compile_decoder(args[1]), entries)
+
+    def encode_mapping(self, value: dict[object, object]) -> object:
+        if self.key.target is str:
+            return {key: self.value.encode_value(item) for key, item in value.items()}
+        return [[self.key.encode_value(key), self.value.encode_value(item)]
+                for key, item in value.items()]
 
     def decode(self, data):
         return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
@@ -1403,8 +1482,11 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
         }
 
     def decode(self, data):
+        return self.decode_bound(data, {})
+
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         member, payload = self.member(data)
-        return _member_decoder(member).decode(payload)
+        return _member_decoder(member).decode_bound(payload, context)
 
 @dataclass(frozen=True, slots=True)
 class _RecordDecoder(ValueDecoder[Any]):
@@ -1435,9 +1517,12 @@ class _RecordDecoder(ValueDecoder[Any]):
         return tuple(entry.name for entry in FieldCodec._record_plan(self.target).bindings)
 
     def decode(self, data):
-        return self.decode_selected(data, {}, fields=self.field_names)
+        return self.decode_bound(data, {})
 
-    def decode_selected(self, data, selections, *, fields: tuple[str, ...]):
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
+        return self.decode_selected(data, {}, fields=self.field_names, context=context)
+
+    def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={}):
         data = self.checked(data)
         target = self.target
         values = {}
@@ -1446,7 +1531,7 @@ class _RecordDecoder(ValueDecoder[Any]):
                 continue
             key = (target, entry.name)
             values.update(entry.decoded_selected(data, selections[key], selections)
-                          if key in selections else entry.decoded(data))
+                          if key in selections else entry.decoded_bound(data, context))
         return FieldCodec.construct(target, values)
 
 @dataclass(frozen=True, slots=True)
@@ -1459,6 +1544,16 @@ class _EnumDecoder(_ChoiceDecoder[Any]):
     def decode(self, data):
         with MalformedRecord.refusing(f"Invalid {self.target.__name__}"):
             return self.target(data)
+
+@lru_cache(maxsize=None)
+def compile_encoder(annotation: object) -> ValueDecoder[object]:
+    """Resolve encoding once through the existing annotation plan family.
+
+    The same plan already owns representation, fixed/variadic elements and
+    mapping keys/values; encoding does not maintain a parallel type resolver.
+    """
+    return compile_decoder(annotation)
+
 
 @overload
 def compile_decoder[T](annotation: type[T]) -> ValueDecoder[T]: ...

@@ -35,7 +35,7 @@ class GenerationState(DeclaredFamily, LifecycleState, affix="Generation"):
     def require_ready(self) -> None:
         from .goal_attempts import UnresolvedAttemptError
 
-        raise UnresolvedAttemptError("Goal attempt unresolved; inspect diagnostics before Retry.")
+        raise UnresolvedAttemptError(UnresolvedAttemptError.diagnostic_text)
 
     def require_failure(self) -> None:
         raise FailureNotObserved("missing_binding")

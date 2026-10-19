@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
-from contextlib import AsyncExitStack
+from contextlib import AsyncExitStack, ExitStack
 from dataclasses import dataclass, replace
 from functools import partial
+from itertools import islice
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
@@ -19,12 +21,12 @@ from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
+from .external_transcript import DraftRow
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
-from .native_entries import NativeEntry
 from .native_package import VerifiedNativePackage
 from .native_pi import (
     NativeContextProof,
@@ -48,6 +50,7 @@ from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
 if TYPE_CHECKING:
     from .agent_backend import TurnInbox
     from .coordinated_runtime import NativeExecution
+    from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
     from .pi_native_backend import PersistentPiSession
 
@@ -235,6 +238,7 @@ class TrackedTurnSession(TurnSession):
         observe_event: NativeObserver,
         request_observer: RequestObserver,
         pi_session: PersistentPiSession,
+        cursor_delivery: CursorDelivery,
         following: FollowingInputs,
     ):
         # The owner's Pi session child: an idle child left by its previous
@@ -249,6 +253,7 @@ class TrackedTurnSession(TurnSession):
             native_session=pi_session,
         )
         self.retainable = False
+        self.cursor_delivery = cursor_delivery
         self.following = following
         self.rejected_commands: list[InputRefused] = []
         self.model = model
@@ -258,6 +263,8 @@ class TrackedTurnSession(TurnSession):
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
+        self.draft_written_at = 0.0
+        self.draft_start = 0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
         self.finished = False
 
@@ -320,6 +327,7 @@ class TrackedTurnSession(TurnSession):
             observe_event=observe_event,
             request_observer=request_observer,
             pi_session=execution.pi_session,
+            cursor_delivery=execution.cursor_delivery,
             following=following,
         )
         return await turn.complete()
@@ -330,7 +338,11 @@ class TrackedTurnSession(TurnSession):
             # Exit this observation after every original resource callback.
             ownership.push(retirement)
             try:
-                self.ownership = ownership
+                drafts = ExitStack()
+                ownership.push_async_callback(Coordination.run_worker, drafts.close)
+                self.draft_publication = await Coordination.run_worker(partial(
+                    drafts.enter_context, DraftRow.publication(
+                        self.startup.root, self.command.input_id)))
                 # Transport resources are the turn's innermost lifetime. Stop
                 # closes them before child cleanup can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
@@ -473,10 +485,10 @@ class TrackedTurnSession(TurnSession):
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
             self.prompt_state = self.prompt_state.start(event)
-            self.evidence = self.ownership.enter_context(
-                NativeEntry.open_input_evidence(self.active_session_file)
-            )
-            await Coordination.run_worker(self.evidence.observe)
+            async with self.cursor_delivery.reading() as source_reads:
+                await Coordination.run_worker(lambda:
+                    source_reads.for_source(self.active_session_file).observe()
+                )
             await self.following.open(self)
 
     def forward_inbox(self, inbox: TurnInbox, sender: OwnedSend) -> None:
@@ -509,13 +521,24 @@ class TrackedTurnSession(TurnSession):
         if event.assistant_message_event is not None:
             await self.dispatch(event.assistant_message_event)
 
+    async def assistant_started(self) -> None:
+        self.draft_written_at = 0.0
+        self.draft_start = len(self.text_parts)
+        self.draft_publication.begin_message(time.time())
+
     @handles(TextDelta)
     async def text_delta(self, delta: TextDelta) -> None:
         self.text_parts.append(delta.delta)
+        now = time.monotonic()
+        if now - self.draft_written_at >= .1:
+            await Coordination.run_worker(partial(
+                self.draft_publication.publish,
+                islice(self.text_parts, self.draft_start, None)))
+            self.draft_written_at = now
 
     @handles(pi.MessageEnd)
     async def message_end(self, event: pi.MessageEnd) -> None:
-        event.message.tracked_end(self)
+        await event.message.tracked_end(self)
 
     def accept_tool_round(self, message):
         super().accept_tool_round(message)
@@ -534,16 +557,17 @@ class TrackedTurnSession(TurnSession):
     async def context_proof(self) -> NativeContextProof:
         if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-        # The original event consumer serializes observations. Cancellation
-        # waits for this read before closing the evidence reader.
-        return await Coordination.run_worker(partial(_verify_context,
-            self.active_session_file,
-            self.command.input_id,
-            self.native.attestation.identity.session_id,
-            self.input_commit.require(),
-            self.context_commit.require(),
-            evidence=self.evidence,
-        ))
+        # The recipient serializes this read with cursor and settlement reads.
+        # Cancellation joins the worker before its borrowed scope is released.
+        async with self.cursor_delivery.reading() as source_reads:
+            return await Coordination.run_worker(lambda: _verify_context(
+                self.active_session_file,
+                self.command.input_id,
+                self.native.attestation.identity.session_id,
+                self.input_commit.require(),
+                self.context_commit.require(),
+                evidence=source_reads.for_source(self.active_session_file),
+            ))
 
 
 

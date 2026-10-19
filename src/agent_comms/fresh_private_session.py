@@ -12,7 +12,7 @@ from .field_codec import RecordedTimestamp
 from .native_entries import SessionEntry
 from .native_pi import NativePiUnavailable, _durable_private_session_dir
 from .native_session_reopen import NativeSessionIdentity
-from .private_path import PrivateFileRole, fsync_directory
+from .private_path import NativeSessionFileRole, fsync_directory
 
 
 def create_fresh_private_session(
@@ -35,9 +35,7 @@ def create_fresh_private_session(
         descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
         try:
             info = os.fstat(descriptor)
-            PrivateFileRole.require(info)
-            if info.st_nlink != 1:
-                raise NativePiUnavailable("Fresh-session file identity is not exclusive")
+            NativeSessionFileRole.require(info)
             pending = memoryview(encoded)
             while pending:
                 written = os.write(descriptor, pending)

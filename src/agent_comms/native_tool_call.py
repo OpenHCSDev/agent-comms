@@ -8,16 +8,18 @@ These process-local transactions never reconstruct authority from saved evidence
 from __future__ import annotations
 
 import asyncio
+import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Never
 
 
 
 if TYPE_CHECKING:
     from .native_tool_transport import ToolTransport
+    from .envelope_claim_transitions import FileClaimPath
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -80,16 +82,16 @@ class CallObservation(ABC):  # noqa: B024 - shared rejection; leaves override va
 
 class AwaitingAnnouncement(CallObservation):
     def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
-        call.claim_scope = refusal
+        call.progress.claim_scope = refusal
 
     def announce(self, call: NativeToolCall) -> None:
-        call.observation = AnnouncedCall()
+        call.progress.observation = AnnouncedCall()
 
 
 class AnnouncedCall(CallObservation):
     def start(self, call: NativeToolCall) -> None:
-        call.observation = ExecutingCall()
-        call.started.set()
+        call.progress.observation = ExecutingCall()
+        call.progress.started.set()
 
 
 class ExecutingCall(CallObservation):
@@ -104,9 +106,9 @@ class ExecutingCall(CallObservation):
     ) -> None:
         # A failed terminal fsync cannot be retried or converted to a completed
         # error by a subsequent event. The live acknowledgement must succeed exactly once.
-        call.observation = UncertainCall()
-        call.claim_scope.finish(call, is_error, directory, input_id, round_number)
-        call.observation = CompletedCall()
+        call.progress.observation = UncertainCall()
+        call.progress.claim_scope.finish(call, is_error, directory, input_id, round_number)
+        call.progress.observation = CompletedCall()
 
 
 class CompletedCall(CallObservation):
@@ -139,17 +141,17 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
 
 class AwaitingClaim(CallClaim):
     def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
-        call.observation.refuse(call, refusal)
+        call.progress.observation.refuse(call, refusal)
 
     def expire(self, call: NativeToolCall) -> None:
-        call.claim_scope = UncertainClaim()
+        call.progress.claim_scope = UncertainClaim()
 
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         # No retry even when the callback is cancelled or its durable fsync fails.
-        call.claim_scope = UncertainClaim()
+        call.progress.claim_scope = UncertainClaim()
         await action()
-        call.observation.require_executing()
-        call.claim_scope = AuthorizedCall()
+        call.progress.observation.require_executing()
+        call.progress.claim_scope = AuthorizedCall()
 
 
 class AuthorizedCall(CallClaim):
@@ -175,23 +177,22 @@ class UncertainClaim(CallClaim):
 
 
 @dataclass
+class CallProgress:
+    """The changing execution state, separate from a call's frozen identity and payload."""
+
+    observation: CallObservation = field(default_factory=AwaitingAnnouncement)
+    claim_scope: CallClaim = field(default_factory=AwaitingClaim)
+    started: asyncio.Event = field(default_factory=asyncio.Event, repr=False)
+
+
+@dataclass(frozen=True)
 class NativeToolCall(ABC):
-    """One payload owner tracks live events separately from permission to run the call."""
+    """A fixed call payload with one changing execution record."""
 
     call_id: str
-    observation: CallObservation = field(
-        default_factory=AwaitingAnnouncement, init=False, compare=False
-    )
-    claim_scope: CallClaim = field(default_factory=AwaitingClaim, init=False, compare=False)
-    # Notification only, not a second authority for determining completion.
-    started: asyncio.Event = field(
-        default_factory=asyncio.Event, init=False, compare=False, repr=False
-    )
+    progress: CallProgress = field(default_factory=CallProgress, init=False, compare=False, repr=False)
     start_wait_seconds: ClassVar[int] = 10
-
-    @property
-    @abstractmethod
-    def name(self) -> str: ...
+    declared_name: ClassVar[str]
 
     def correlate(self, candidate: NativeToolCall) -> None:
         if self != candidate:
@@ -201,47 +202,47 @@ class NativeToolCall(ABC):
         raise SelectedToolDenied("Native tool request/event differs from the declared call")
 
     def announce(self) -> None:
-        self.observation.announce(self)
+        self.progress.observation.announce(self)
 
     def start(self) -> None:
-        self.observation.start(self)
+        self.progress.observation.start(self)
 
     async def _wait_started(self) -> None:
         try:
             async with asyncio.timeout(self.start_wait_seconds):
-                await self.started.wait()
+                await self.progress.started.wait()
         except TimeoutError as error:
             raise ToolStartNotSeen() from error
 
     async def authorize(self, action: Callable[[], Awaitable[None]]) -> None:
         try:
             await self._wait_started()
-            self.observation.require_executing()
-            await self.claim_scope.consume(self, action)
+            self.progress.observation.require_executing()
+            await self.progress.claim_scope.consume(self, action)
         except ToolStartNotSeen:
             # The callback never ran. Withdraw permission, but retain the actual
             # native observations: delayed announcement/start/error events
             # must still reconcile this denied call in its declared round.
-            self.claim_scope.expire(self)
-            self.started.set()
+            self.progress.claim_scope.expire(self)
+            self.progress.started.set()
             raise
         except (asyncio.CancelledError, TimeoutError):
-            self.observation = UncertainCall()
-            self.claim_scope = UncertainClaim()
-            self.started.set()  # Wake other waiters; they must fail state validation.
+            self.progress.observation = UncertainCall()
+            self.progress.claim_scope = UncertainClaim()
+            self.progress.started.set()  # Wake other waiters; they must fail state validation.
             raise
 
     def finish(
         self, name: str, is_error: bool | None, directory: Path,
         input_id: str, round_number: int,
     ) -> None:
-        if name != self.name or type(is_error) is not bool:
+        if name != self.declared_name or type(is_error) is not bool:
             raise SelectedToolDenied("Native tool terminal identity/result changed")
-        self.observation.finish(self, is_error, directory, input_id, round_number)
+        self.progress.observation.finish(self, is_error, directory, input_id, round_number)
 
     @property
     def complete(self) -> bool:
-        return self.observation.complete
+        return self.progress.observation.complete
 
     def accepts_current_request(self, candidate: NativeToolCall) -> bool:
         if self.complete:
@@ -250,7 +251,7 @@ class NativeToolCall(ABC):
         return True
 
     def assert_complete(self) -> None:
-        self.observation.assert_complete()
+        self.progress.observation.assert_complete()
 
     @abstractmethod
     def commit_terminal(
@@ -259,6 +260,91 @@ class NativeToolCall(ABC):
 
     @abstractmethod
     def claim_failed(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class CodingCall(NativeToolCall):
+    @abstractmethod
+    def allowed_claim(self) -> FileClaimPath | None: ...
+
+    @abstractmethod
+    def digest(self) -> str: ...
+
+    def decide_storage(self, registry, thread: str) -> None:
+        """A call without executable effects has nothing to decide."""
+
+    def commit_terminal(
+        self, is_error: bool, directory: Path, input_id: str, round_number: int
+    ) -> None:
+        from .selected_tool_broker import record_selected_terminal
+
+        slot = self.slot(input_id, round_number)
+        record_selected_terminal(directory, slot, slot)
+
+    def claim_failed(self) -> None:
+        # A denied ordinary tool may report an error and let Pi explain it. The
+        # consumed call cannot be retried; this grants no mutation authority.
+        pass
+
+    @classmethod
+    def decode(cls, call_id: object, name: object, arguments: object) -> CodingCall:
+        if (
+            type(call_id) is not str
+            or not call_id
+            or len(call_id) > 256
+            or type(name) is not str
+        ):
+            raise SelectedToolDenied("Malformed native coding call identity")
+        from .field_codec import MalformedRecord
+        from .native_tools import NativeToolDeclaration
+
+        try:
+            return NativeToolDeclaration.from_call(name, arguments, call_id=call_id)
+        except MalformedRecord as error:
+            return RefusedCodingCall(call_id, name, arguments, str(error))
+
+    def slot(self, input_id: str, round_number: int) -> str:
+        identity = f"{input_id}\0{round_number}\0{self.call_id}"
+        return hashlib.sha256(identity.encode()).hexdigest()[:32]
+
+
+@dataclass
+class ArgumentRefusal(UncertainClaim):
+    refusal: RefusedCodingCall
+
+    async def consume(
+        self, call: NativeToolCall, action: Callable[[], Awaitable[None]],
+    ) -> None:
+        raise SelectedToolDenied(self.refusal.reason)
+
+
+@dataclass(frozen=True)
+class RefusedCodingCall(CodingCall):
+    """Invalid arguments cannot execute, but still own real start/error events."""
+
+    declared_name: str
+    arguments: object
+    reason: str
+
+    def __post_init__(self) -> None:
+        self.progress.claim_scope = ArgumentRefusal(self)
+
+    def allowed_claim(self) -> Never:
+        raise SelectedToolDenied(self.reason)
+
+    def digest(self) -> str:
+        return f'REFUSED {self.declared_name}: {" ".join(self.reason.split())[:200]}'
+
+    def correlate(self, candidate: NativeToolCall) -> None:
+        self.reject_correlated(candidate)
+
+    def reject_correlated(self, existing: NativeToolCall) -> None:
+        # Pi may normalize arguments before its socket arrives. Whichever
+        # arrives first keeps the same lifecycle object, never permission.
+        if (self.call_id, self.declared_name) != (existing.call_id, existing.declared_name):
+            raise SelectedToolDenied("Refused coding call identity changed")
+        existing.progress.claim_scope.refuse(existing, self.progress.claim_scope)
+
 
 
 @dataclass(frozen=True)

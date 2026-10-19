@@ -19,7 +19,7 @@ from .coordinator import Coordination
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .historical_views import HistoryArchive
 from .message_page import (
-    DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
+    InboxPage, MessagePage, MessagePageRequest, PageBounds,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
@@ -110,15 +110,17 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
 
     def inbox(
         self, name: str, target: CommandTarget = ANY_CHANNEL, *,
-        after: MessageReference | None = None,
+        after: MessageReference | None = None, bounds: PageBounds = PageBounds(),
     ) -> Sequence[Message]:
-        """Read unread deliveries against a newly captured registry."""
-        return list(self.inbox_at(name, self._registry.snapshot(), target, after=after).page.messages)
+        """Read one oldest-first unread page against a newly captured registry."""
+        return list(self.inbox_at(
+            name, self._registry.snapshot(), target, after=after, bounds=bounds,
+        ).page.messages)
 
     def inbox_at(
         self, name: str, snapshot: RegistrySnapshot, target: CommandTarget = ANY_CHANNEL, *,
-        after: MessageReference | None = None,
-    ) -> DisplayedMessagePage:
+        after: MessageReference | None = None, bounds: PageBounds = PageBounds(),
+    ) -> InboxPage:
         """Read unread deliveries using the caller's captured registry.
 
         The route index lists which deliveries are unread, as it does for the
@@ -134,15 +136,21 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
             with self.projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
-                unread = index.unseen_deliveries(delivery.actor, seen, after=after.seq if after else 0)
-            listed = ListedDeliveries(
-                selection,
-                frozenset(row.seq for row in unread),
-                frozenset(row.target for row in unread),
-            )
-            return MessagePageRequest.every(listed, after=min(listed.sequences, default=1) - 1).displayed(
-                self.reads, document, delivery.actor, snapshot, snapshot, source,
-            )
+                cursor = after.seq if after else 0
+                unread = index.unseen_deliveries(
+                    delivery.actor, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
+                )
+                counts = index.unseen_counts({delivery.actor: seen}, after=cursor)[delivery.actor]
+                total = target.pending_count(counts, snapshot, self.require_channel)
+                listed = ListedDeliveries(
+                    selection,
+                    frozenset(row.seq for row in unread),
+                    frozenset(row.target for row in unread),
+                )
+                result = MessagePageRequest(
+                    listed, PageBounds(NewerTraversal(cursor), bounds.limit, bounds.max_bytes),
+                ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, source)
+                return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
     async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment], after: MessageReference | None = None) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
@@ -159,14 +167,17 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
             async for _ in changes:
                 maintenance.read().require_open()
                 snapshot = self._registry.snapshot()
-                batch = await asyncio.to_thread(
-                    self.inbox_at, name, snapshot, after=after)
-                if not reader.current(self._registry.snapshot()):
-                    raise UnregisteredThreadError("Watched thread was removed or replaced")
-                for message in batch.page.messages:
-                    yield message
-                    acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
-                    after = message.reference
+                while True:
+                    batch = await asyncio.to_thread(
+                        self.inbox_at, name, snapshot, after=after)
+                    if not reader.current(self._registry.snapshot()):
+                        raise UnregisteredThreadError("Watched thread was removed or replaced")
+                    for message in batch.page.messages:
+                        yield message
+                        acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
+                        after = message.reference
+                    if not batch.remaining:
+                        break
 
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         """Wait out a hold without replaying an admitted synchronous write.
@@ -220,7 +231,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
     def _pending_projection(
         self, source: WireSnapshot, basis: CapturedSelection, names: Sequence[str],
     ) -> Mapping[str, Mapping[str, int]]:
-        """Bulk delivery counts from one original source, namespace and ledger."""
+        """Count deliveries using the same bus, registrations and read positions."""
         actors = {name: basis.registry.canonical_name(name) for name in names}
         deliveries = {
             actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
@@ -235,7 +246,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
 
     def pending_counts_opened(self, source: WireSnapshot,
                               selection: CapturedSelection) -> Mapping[str, int]:
-        """Borrow the caller's original source, namespace and sparse reads."""
+        """Count unread messages using the caller's bus, registrations and read positions."""
         actor = selection.require_viewer()
         seen = selection.seen(source)
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
@@ -308,7 +319,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         from .peer_relevance import Prioritized
 
         try:
-            with self.log.certified_read(blocking=blocking) as source:
+            with self.log.checked_read(blocking=blocking) as source:
                 marker = source.marker
                 rows = addressed_source_pointers_unlocked(
                     self.log, marker, owner.incarnation.lookup

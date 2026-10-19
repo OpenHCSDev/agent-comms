@@ -13,7 +13,7 @@ from pathlib import Path
 
 from agent_comms.active_route import acquire_exclusive_route_lock, active_route_path, read_active_route
 
-from cutover.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 def selects(path: Path, root: Path) -> bool:
@@ -27,7 +27,7 @@ def selects(path: Path, root: Path) -> bool:
 class RoutePackage(Carry):
     """The route keeps its root and root ID and drops the package."""
 
-    after = "carry_read_ledger"
+    after = None
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

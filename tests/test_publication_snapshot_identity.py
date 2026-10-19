@@ -58,7 +58,7 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
     """A fully self-consistent acknowledgement still must match its frozen SQL intent.
 
     Type and notice are deliberately outside the old hash-derived message ID.
-    No forged certificate or partial envelope is used to reach the owned check.
+    No forged prefix record or partial envelope is used to reach the owned check.
     """
     case = _ready(tmp_path, direct=True)
     try:
@@ -88,7 +88,7 @@ def test_valid_durable_receipt_cannot_substitute_different_publication_content(t
         # The public locked read refuses changed bytes at its earlier warm barrier.
         with pytest.raises(RelationViolationError, match="checkpoint prefix tail changed"):
             case.bus.log.read_keyed_response(intent)
-        # Certify this isolated candidate through the real cold reader, not a
+        # check this isolated candidate through the real cold reader, not a
         # forged index. Frozen SQL intent still forbids content substitution.
         (case.comms.root / "private_bus_checkpoint.sqlite3").unlink()
         marker.checkpoint_version = None

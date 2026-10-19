@@ -23,7 +23,7 @@ from .private_path import FileRevision
 from .transcript_sources import TranscriptSource
 
 
-def _reverse_records(
+def reverse_records(
     path: Path, before: int, *, floor: int = 0
 ) -> Generator[tuple[int, int, bytes], None, None]:
     """Scan offsets in fixed chunks, then read each complete record exactly once.
@@ -283,7 +283,7 @@ class NativeTranscript(TranscriptSource):
             return proof.corroborate(self.path.absolute(), header, user)
 
     def inputs_for(self, records) -> tuple:
-        """Each record's original input, found in one reverse walk for the batch.
+        """Find the user input behind each record in one reverse walk for the batch.
 
         Parent IDs are followed back from the latest record; every intervening
         record is visited once for the whole batch, and the walk stops when each
@@ -321,7 +321,7 @@ class NativeTranscript(TranscriptSource):
         return tuple(found)
 
     def input_for(self, record: NativeRecord):
-        """The native record and its parent chain own the original input."""
+        """Follow the native record's parents to find the user input that started it."""
         return self.inputs_for((record,))[0]
 
     def publication_input(self, *, after: int, through: int):
@@ -349,7 +349,7 @@ class NativeTranscript(TranscriptSource):
     def tail(self, *, max_bytes: int | None = None):
         end = self.path.stat().st_size
         floor = max(0, end - max_bytes) if max_bytes is not None else 0
-        for _, _, raw in _reverse_records(self.path, end, floor=floor):
+        for _, _, raw in reverse_records(self.path, end, floor=floor):
             # Skip only the record still being appended; corrupt history raises.
             if raw.endswith(b"\n"):
                 yield NativeEntry.read(raw)
@@ -365,5 +365,5 @@ class NativeTranscript(TranscriptSource):
                 yield NativeRecord.read(start, stream.tell(), raw)
 
     def reverse(self, before: int):
-        for start, end, raw in _reverse_records(self.path, before):
+        for start, end, raw in reverse_records(self.path, before):
             yield NativeRecord.read(start, end, raw)

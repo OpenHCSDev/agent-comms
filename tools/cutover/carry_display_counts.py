@@ -1,11 +1,11 @@
 """Discard schema 5 display indexes: read positions no longer belong in them."""
 from pathlib import Path
 
-from cutover.carry import Carried, Carry
+from .carry import Carried, Carry
 
 
 class DisplayCounts(Carry):
-    after = "carry_wake_index"
+    after = "carry_external_pages"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

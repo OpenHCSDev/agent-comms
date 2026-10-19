@@ -100,7 +100,7 @@ def read_historical_native_inputs(
     wire_root_id: str,
     recipient_lookup: str,
     source_seq: int,
-    source_reads: NativeEvidenceScope | None = None,
+    source_reads: NativeEvidenceScope,
 ) -> tuple[HistoricalNativeInput, ...]:
     """Return at most triage and FULL proof for one sealed selected source.
 
@@ -112,9 +112,7 @@ def read_historical_native_inputs(
     current-owner cursor additionally verifies the canonical bus prefix and
     requires a just-settled input in the owner's current input generation.
     """
-    from .native_entries import NativeEvidenceScope
-
-    with NativeEvidenceScope.borrow(source_reads) as source_reads:
+    with source_reads.borrow():
         Id128Text.decode(wire_root_id)
         Id128Text.decode(recipient_lookup)
         FieldCodec.decode(int, source_seq)

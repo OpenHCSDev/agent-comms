@@ -58,9 +58,7 @@ class CodingProvider(LoopbackProvider):
 
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel", "exit"])
-async def test_installed_selected_long_tool_and_uncertain_cleanup(
-    tmp_path, monkeypatch, outcome, native_runtime_package
-):
+async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monkeypatch, outcome, native_runtime_package, *, cursor_delivery):
     package = native_runtime_package
     # The default acceptance crosses the removed whole-turn90 boundary. A shorter
     # environment override is for fixture development, never evidence of that gate.
@@ -142,6 +140,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
             wire_root_id=root_id,
             owner_name="beta",
             native_package=package,
+            cursor_delivery=cursor_delivery,
         ).run()
     )
     try:
@@ -198,6 +197,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
                 wire_root_id=root_id,
                 owner_name="beta",
                 native_package=package,
+                cursor_delivery=cursor_delivery,
             ).run()
             assert replay is None
         except CoordinationError:

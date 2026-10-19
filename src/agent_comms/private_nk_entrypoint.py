@@ -194,13 +194,13 @@ class PrivateNkLaunch(RootLaunch):
         return cls(root, wire_root_id, package)
 
     def validate(self) -> VerifiedNativePackage:
-        """Recheck the root, retaining this process's acquired immutable package.
+        """Recheck the bus root while keeping this process's chosen native package.
 
-        Creates no root, registry, SQLite database or provider opportunity when
-        the owner-only directory or the certified root is absent.
+        If the private directory or checked bus root is missing, create no
+        directory, registry or database and make no provider request.
         """
         _private_session_dir(self.validated_root)
-        with WireLog(self.validated_root / "bus.jsonl").certified_read() as source:
+        with WireLog(self.validated_root / "bus.jsonl").checked_read() as source:
             marker = source.marker
         if marker.root_id != self.wire_root_id:
             raise IdentityConflict("private initial wire root changed")

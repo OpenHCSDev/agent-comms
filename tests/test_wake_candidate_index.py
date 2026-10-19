@@ -206,14 +206,12 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         ).entries
         == ()
     )
-    passive = index.page(
-        root_id=root_id,
-        recipient_lookup=lookup["Bob"],
-        after_seq=0,
-        required_through_seq=message.seq,
-        delivery_only=True,
-    )
-    assert len(passive.entries) == 1 and passive.entries[0].wake_mode is None
+    # Passive deliveries stay stored but are not part of the wake page.
+    with sqlite3.connect(index.path) as db:
+        assert db.execute(
+            "SELECT count(*) FROM candidate WHERE recipient_lookup=? AND wake_mode IS NULL",
+            (lookup["Bob"],),
+        ).fetchone() == (1,)
     # Bus projection is only a candidate: coordinator has not sealed ANY wake.
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         for name in ("Alice", "Bob"):
@@ -425,7 +423,7 @@ def test_response_identity_must_match_private_bus_before_later_candidate(
 def test_duplicate_private_response_key_rejected_by_unique_constraint(
     tmp_path: Path, first_batch_rows: int
 , private_comms, participants) -> None:
-    """Exercise decoder/transaction invariants, not certify a rewritten bus."""
+    """Exercise decoder/transaction invariants, not check a rewritten bus."""
     comms = private_comms
     root_id = private_comms.bus.log.read_metadata_unlocked().wire_root_id
     lookup = participants
@@ -589,9 +587,9 @@ def test_saved_candidate_prefix_ignores_later_tail_but_rejects_replacement(tmp_p
         index.maintain(start=ResumeIndex())
     # The canonical barrier, not the disposable index, repairs an identical
     # original prefix at its new inode. Only then may explicit rebuild adopt it.
-    with comms.bus.log.certified_read() as certified:
-        certified.require_current()
-        assert certified.witness.revision == FileRevision.from_stat(source.stat())
+    with comms.bus.log.checked_read() as checked:
+        checked.require_current()
+        assert checked.witness.revision == FileRevision.from_stat(source.stat())
     assert index.maintain(start=RebuildIndex())
 
 

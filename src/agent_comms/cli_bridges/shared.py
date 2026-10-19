@@ -68,12 +68,12 @@ class CliToolArguments(WireModel):
         return None
 
     @abstractmethod
-    def record(self) -> ToolDeclaration: ...
+    def record(self, *, call_id: str) -> ToolDeclaration: ...
 
     @classmethod
-    def record_of(cls, name: str, arguments: dict[str, JsonValue]) -> ToolDeclaration | None:
+    def record_of(cls, name: str, arguments: dict[str, JsonValue], *, call_id: str) -> ToolDeclaration | None:
         try:
-            return cls.types[name].model_validate(arguments).record()
+            return cls.types[name].model_validate(arguments).record(call_id=call_id)
         except (KeyError, ValueError):  # no shape for the name, or the values are refused
             return None
 
@@ -82,8 +82,8 @@ class CliCommandArguments(CliToolArguments):
     cli_names = ('Bash', 'bash')
     command: str
 
-    def record(self) -> BashTool:
-        return BashTool(command=self.command)
+    def record(self, *, call_id: str) -> BashTool:
+        return BashTool(call_id=call_id, command=self.command)
 
 
 class CliPatternArguments(CliToolArguments):
@@ -91,14 +91,14 @@ class CliPatternArguments(CliToolArguments):
     pattern: str
     path: str | None = None
 
-    def record(self) -> ToolDeclaration:
+    def record(self, *, call_id: str) -> ToolDeclaration:
         return GrepTool(pattern=self.pattern, path=self.path)
 
 
 class CliGlobArguments(CliPatternArguments):
     cli_names = ('Glob', 'glob')
 
-    def record(self) -> GlobTool:
+    def record(self, *, call_id: str) -> GlobTool:
         return GlobTool(pattern=self.pattern, path=self.path)
 
 
@@ -109,8 +109,8 @@ class CliPathArguments(CliToolArguments):
 class CliReadArguments(CliPathArguments):
     cli_names = ('Read', 'read')
 
-    def record(self) -> ReadTool:
-        return ReadTool(path=self.path)
+    def record(self, *, call_id: str) -> ReadTool:
+        return ReadTool(call_id=call_id, path=self.path)
 
 
 class CliReplacement(WireModel):
@@ -124,8 +124,8 @@ class CliReplacingArguments(CliPathArguments):
     @abstractmethod
     def replacements(self) -> Sequence[CliReplacement]: ...
 
-    def record(self) -> EditTool:
-        return EditTool(path=self.path, edits=tuple(ReplacementEdit(
+    def record(self, *, call_id: str) -> EditTool:
+        return EditTool(call_id=call_id, path=self.path, edits=tuple(ReplacementEdit(
             old_text=edit.old_string, new_text=edit.new_string) for edit in self.replacements()))
 
     def diff(self) -> ToolDiff:
@@ -154,8 +154,8 @@ class CliWriteArguments(CliPathArguments):
     cli_names = ('Write', 'write')
     content: str
 
-    def record(self) -> WriteTool:
-        return WriteTool(path=self.path, content=self.content)
+    def record(self, *, call_id: str) -> WriteTool:
+        return WriteTool(call_id=call_id, path=self.path, content=self.content)
 
     def diff(self) -> ToolDiff | None:
         return ToolDiff.from_versions(self.path, '', self.content,
@@ -316,6 +316,7 @@ class ThreadOutput:
     """Where a CLI's output lands in Core: finished items and current activity."""
     transcript: ExternalTranscript
     agents: AgentActivity
+    thread: str
     drafts: dict[tuple[str, str], DraftAccumulator] = field(default_factory=dict)
 
     def publish_batch(self, updates: list[TranscriptUpdate]) -> None:
@@ -355,7 +356,7 @@ class ThreadOutput:
 
     def status(self, state: ActivityState, detail: str = '') -> None:
         detail = ' '.join(detail.split())
-        self.agents.set_activity(self.transcript.incarnation.name, state, detail)
+        self.agents.set_activity(self.thread, state, detail)
 
 
 @dataclass(frozen=True)
@@ -925,7 +926,8 @@ class TranscriptBridge(CliBridge[BridgeOptions]):
     async def publish_transcript(self) -> None:
         comms = self.comms
         output = ThreadOutput(
-            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents)
+            await asyncio.to_thread(comms.transcripts.external, self.binding.bus), comms.agents,
+            self.binding.bus)
         # This subscription can assemble only items whose start it receives.
         # A prefix from the previous subscription cannot stand for that stream.
         await comms.bus.when_open(output.transcript.end_turn)

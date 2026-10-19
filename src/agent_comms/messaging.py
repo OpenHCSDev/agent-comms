@@ -102,7 +102,7 @@ class Messaging:
         from .input_disposition import InputDispositions
 
         inputs = InputDispositions(self.root).in_turn(lease.turn_id)
-        with self.bus.log.certified_read() as source:
+        with self.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 
     def initialize_private_initial_protocol(self) -> str:
@@ -148,14 +148,14 @@ class Messaging:
     def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                             change: TaskChange = OriginalTaskChange()) -> Message:
-        """Pin a certified original USER message; never replay it or lease a turn."""
+        """Pin a checked message as sent by the user, without replaying it or starting a turn."""
         return self._pin_constraint(recipient, subject, HumanConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 
     def pin_input_constraint(self, recipient: str, subject, *, worktree: str,
                              scope: TaskScopeSelection = CurrentTaskScopeSelection(),
                              change: TaskChange = OriginalTaskChange()) -> Message:
-        """Pin the original input provenance, not a reconstruction of its text."""
+        """Pin the recorded input and its author, rather than a copy of its text."""
         return self._pin_constraint(recipient, subject, NativeInputConstraintPin,
                                     worktree=worktree, scope=scope, change=change)
 

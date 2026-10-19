@@ -2,16 +2,49 @@
 
 import asyncio
 import json
+import os
 import sqlite3
 import threading
 from pathlib import Path
 
 import pytest
 
-from agent_comms.native_entries import MessageEntry, NativeEntry, NativeEvidenceRead, NativeEvidenceScope
+from agent_comms.native_entries import MessageEntry, NativeEntry, NativeEvidenceRead, NativeInputEvidenceRead, NativeEvidenceScope
 from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead, CommittedInput, read_tracked_input_commitment
 from native_proof_cases import write_proof_rows
 from test_native_pi import INPUT_ID, _evidence
+
+
+@pytest.mark.parametrize("reader_type", [PrivateEvidenceRead, NativeEvidenceRead, NativeInputEvidenceRead])
+@pytest.mark.parametrize("redirect", ["hardlink", "symlink"])
+def test_every_native_reader_refuses_linked_or_redirected_session(tmp_path, reader_type, redirect):
+    session = _evidence(tmp_path)
+    before = session.read_bytes()
+    alias = tmp_path / "alias.jsonl"
+    if redirect == "hardlink":
+        os.link(session, alias)
+    else:
+        alias.symlink_to(session)
+    with pytest.raises(NativePiUnavailable):
+        with reader_type.open(alias):
+            pytest.fail("An unsafe native source was acquired")
+    assert session.read_bytes() == before
+
+
+@pytest.mark.parametrize("reader_type", [PrivateEvidenceRead, NativeEvidenceRead, NativeInputEvidenceRead])
+def test_held_native_reader_refuses_a_new_hardlink(tmp_path, reader_type):
+    session = _evidence(tmp_path)
+    with reader_type.open(session) as reader:
+        if reader_type is PrivateEvidenceRead:
+            tuple(reader.rows())
+        else:
+            reader.observe()
+        os.link(session, tmp_path / "new-link.jsonl")
+        with pytest.raises(NativePiUnavailable):
+            if reader_type is PrivateEvidenceRead:
+                tuple(reader.rows())
+            else:
+                reader.observe()
 
 
 def test_evidence_scope_switches_original_source_and_closes_previous_reader(tmp_path):
@@ -57,7 +90,8 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
             "content": [{"type": "text", "text": "restored sou"}],
         }},
     ))
-    with NativeEntry.open_input_evidence(session) as evidence:
+    with NativeEvidenceScope() as scope:
+        evidence = scope.for_source(session)
         header, entries = evidence.observe()
         assert header.id == "sid" and tuple(evidence.inputs) == (INPUT_ID,)
         if rewrite == "in_place":
@@ -110,9 +144,13 @@ def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatc
         return original(raw)
 
     monkeypatch.setattr(PrivateEvidenceRead, "_decode_row", staticmethod(counted))
-    with NativeEntry.open_input_evidence(session) as evidence:
+    with NativeEvidenceScope() as scope:
+        evidence = scope.for_source(session)
         evidence.observe()
         assert len(decoded) == 2
+        from agent_comms.native_session_reopen import NativeSessionIdentity
+
+        assert NativeSessionIdentity.from_evidence(scope.for_source(session)).session_id == "sid"
         evidence.observe()
         assert len(decoded) == 2
         with session.open("a") as output:

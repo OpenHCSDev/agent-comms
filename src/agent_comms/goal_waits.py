@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -197,40 +197,6 @@ class StandbyReview:
     messages: tuple[UnresolvedInput, ...]
     already_reviewed_inputs: tuple[UnresolvedInput, ...]
     excluded_inputs: tuple[ExcludedInput, ...]
-
-    def summary(self) -> StandbyReviewSummary:
-        return StandbyReviewSummary(counts=ReviewCounts(
-            len(self.messages), len(self.already_reviewed_inputs), len(self.excluded_inputs)))
-
-    def eligible_summary(self) -> StandbyReviewSummary:
-        """The summary with this review's complete eligible messages and exact keys inline."""
-        return replace(self.summary(), goal_id=self.goal_id, wait_for=self.wait_for,
-                       messages=self.messages, reviewed_inputs=self.reviewed_inputs,
-                       messages_complete=True)
-
-
-@dataclass(frozen=True)
-class ReviewCounts:
-    messages: int
-    already_reviewed_inputs: int
-    excluded_inputs: int
-
-
-_OMITTED = {"wire_omit_default": True}
-
-
-@dataclass(frozen=True, kw_only=True)
-class StandbyReviewSummary:
-    """An oversized standby review: its counts, and its eligible messages when they fit inline."""
-
-    complete: bool = False
-    counts: ReviewCounts
-    goal_id: str | None = field(default=None, metadata=_OMITTED)
-    wait_for: tuple[str, ...] | None = field(default=None, metadata=_OMITTED)
-    messages: tuple[UnresolvedInput, ...] | None = field(default=None, metadata=_OMITTED)
-    reviewed_inputs: tuple[str, ...] | None = field(default=None, metadata=_OMITTED)
-    messages_complete: bool | None = field(default=None, metadata=_OMITTED)
-
 
 @dataclass(frozen=True, slots=True)
 class GoalInputReview:

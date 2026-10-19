@@ -92,7 +92,7 @@ class CapturedInputDependency(InputDependency):
             return True
         if not self.current(wait):
             return False
-        with comms.bus.log.certified_read() as source:
+        with comms.bus.log.checked_read() as source:
             for origin in origins:
                 original = source.delivery(origin.seq)
                 if original.message.reference == origin.reference and wait.matches(original, owner):

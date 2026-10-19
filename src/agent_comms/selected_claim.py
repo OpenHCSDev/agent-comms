@@ -29,10 +29,11 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .errors import RelationViolationError
-from .messages import ClaimNoticeKind, Message
+from .messages import ClaimNoticeKind
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
-from .store_files import SharedLock, StoreLock, _store_lock
+from .store_files import SharedLock, _store_lock
+from .wire_log import CheckedWireStoreLock
 from .threads import Thread
 
 
@@ -45,7 +46,7 @@ def verify_selected_wake(
     with _store_lock(comms._wire_lock_path, mode=SharedLock()):
         _require_no_private_owner_rename(comms.root)
         try:
-            with comms.bus.log.certified_read() as source:
+            with comms.bus.log.checked_read() as source:
                 marker = source.marker
                 if claim_scope.source_seq <= marker.claimed_after_seq:
                     raise IdentityConflict("Selected wake precedes the current claim_scope floor")
@@ -112,11 +113,11 @@ def _verify_selected_wake_state(
 
 
 def _committed_source(
-    bus_lock: StoreLock, claim_scope: WakeClaim, absent: str
+    bus_lock: CheckedWireStoreLock, claim_scope: WakeClaim, absent: str
 ) -> CommittedDelivery:
     """The message a selected turn answers, read through the held bus lock's checkpoint."""
     try:
-        return bus_lock.certified_read().delivery(claim_scope.source_seq)
+        return bus_lock.checked_read.delivery(claim_scope.source_seq)
     except RelationViolationError as error:
         raise IdentityConflict(absent) from error
 
@@ -189,7 +190,7 @@ def publish_selected_resource_claim(
                 raise IdentityConflict("Wake claim operation was already consumed")
         committed = bus.publisher._publish_claim_envelope_unlocked(
             bus_lock, registry,
-            Message(owner.name, owner.name, "Claimed", ClaimNoticeKind),
+            ClaimNoticeKind.claimed(owner),
             worktree=Path(owner.worktree),
             incarnation=str(owner.created_at),
             claims=[resource_path],

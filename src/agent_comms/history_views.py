@@ -354,7 +354,7 @@ class HistoryViews:
     def thread_presentations(
         self, names: Iterable[str], *, sent_source_limit: int = 5,
     ) -> ThreadPresentations:
-        """Read status once for only the requested rows, before their original sources."""
+        """Read the requested threads' status once, before loading their messages."""
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
             snapshot, self.agents, GoalWaits.at(self.root),
@@ -381,7 +381,7 @@ class HistoryViews:
             )
         # Native file IO never holds the display/bus snapshot locks.
         unread = self.transcript_reads.counts(captured_viewer, document=basis.document, visibility=visibility)
-        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
+        return replace(snapshot, thread_unread=unread.counts)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""

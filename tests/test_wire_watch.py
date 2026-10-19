@@ -17,7 +17,7 @@ from agent_comms.threads import Thread
 from agent_comms.wire_watch import WatchSource, WireChangeWatch, open_wire_watcher
 
 
-def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
+async def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
     config = tmp_path / "native-config"
     config.mkdir()
     monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(config))
@@ -43,6 +43,7 @@ def test_tick_revision_paths_watch_final_bus_publication(tmp_path, monkeypatch):
     }
     assert modified == {*paths.coordination, *paths.goal_attempts}
     assert paths.bus[0] not in watched and paths.checkpoint not in watched
+    await agent.shutdown()
 
 
 @pytest.mark.asyncio
@@ -153,22 +154,22 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
     agent = CommsAgent(comms, runtime_enabled=False)
     agent.sessions.bindings["owner"] = "owner"
     calls = 0
+    observed = asyncio.Queue()
 
     async def drain(_session_id):
         nonlocal calls
         calls += 1
+        observed.put_nowait(calls)
         return 0
 
     async def require_calls(expected):
-        async with asyncio.timeout(1):
-            while calls < expected:
-                await asyncio.sleep(0.01)
+        assert await asyncio.wait_for(observed.get(), 1) == expected
 
     async def noop(_session_id=None):
         return None
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
-    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.sessions.config, "apply_stored_settings", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
     monkeypatch.setattr(
         agent.inputs.effects.cursors, "delivery",
@@ -177,7 +178,9 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
     agent.inputs.ensure_live_drain("owner")
     task = agent.inputs.state("owner").drain_task
     try:
-        await asyncio.sleep(1.2)
+        await require_calls(1)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(observed.get(), 1.2)
         assert calls == 1  # Healthy native notification has no speculative tick.
         (config / "auth.json").write_text("{}")
         await require_calls(2)
@@ -185,7 +188,8 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
             output.write(b"{}")
         with (tmp_path / ".registry.json.lock").open("ab"):
             pass
-        await asyncio.sleep(0.1)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(observed.get(), 0.1)
         assert calls == 2  # Viewer and lock files are not tick dependencies.
         with (tmp_path / "coordination.sqlite3").open("ab"):
             pass
@@ -194,7 +198,8 @@ async def test_idle_owner_wakes_on_declared_sources_without_polling(tmp_path, mo
             pass
         with (tmp_path / "bus.jsonl").open("ab"):
             pass
-        await asyncio.sleep(0.1)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(observed.get(), 0.1)
         assert calls == 3  # Intermediate bus files publish through the marker.
         comms.messaging.send("sender", "owner", "wake on final marker").message
         await require_calls(4)
@@ -229,12 +234,13 @@ async def test_recoverable_drain_failure_waits_for_dependency_change(
         return None
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
-    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.sessions.config, "apply_stored_settings", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
     agent.inputs.ensure_live_drain("owner")
     task = agent.inputs.state("owner").drain_task
     try:
-        await asyncio.sleep(0.15)
+        with pytest.raises(TimeoutError):
+            await asyncio.wait_for(retried.wait(), 0.15)
         assert attempts == 1
         (config / "auth.json").write_text("{}")
         await asyncio.wait_for(retried.wait(), 1)
@@ -264,7 +270,7 @@ async def test_failed_cursor_publish_retries_without_a_wake_task(tmp_path, monke
         return None
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
-    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.sessions.config, "apply_stored_settings", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
     monkeypatch.setattr(
         agent.inputs.effects.cursors, "delivery",
@@ -334,11 +340,10 @@ async def test_shutdown_cancels_idle_file_wait(tmp_path, monkeypatch):
         return None
 
     monkeypatch.setattr(agent.inputs, "drain_inbox", drain)
-    monkeypatch.setattr(agent.sessions.config, "sync_thread", noop)
+    monkeypatch.setattr(agent.sessions.config, "apply_stored_settings", noop)
     monkeypatch.setattr(agent.turns.goals, "schedule_goal", AsyncMock(return_value=None))
     agent.inputs.ensure_live_drain("owner")
     await asyncio.wait_for(entered.wait(), timeout=1)
-    await asyncio.sleep(0)
     await asyncio.wait_for(agent.shutdown(), timeout=1)
 
 

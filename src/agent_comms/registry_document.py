@@ -196,7 +196,7 @@ class RegistryDocument(RegistryPresence):
         self.threads[thread.name] = thread
 
     def advance_claim(self, name: str) -> int:
-        """Revoke phase publication together with the original input permission."""
+        """Remove the thread's permission to publish and advance its input claim."""
         thread = self.threads.get(name)
         if thread is not None:
             thread.turn_record.without_claim()

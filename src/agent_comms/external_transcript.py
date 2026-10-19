@@ -10,20 +10,22 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import Annotated, TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec
+from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
-from .typed_table import Column, TypedRow, TypedStore, TypedTable
+from .typed_table import Column, ForeignKey, Index, RealStorage, StoreWriter, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
@@ -155,8 +157,15 @@ class ExternalPageRow(TypedRow):
 class ExternalItemRow(ExternalPageRow, TypedTable):
     """A stable item position; older pages prepend without moving saved cursors."""
 
-    events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
+    indexes = (Index(("thread", "turn_id", "seq")),)
+
+    def events_in(self, connection) -> tuple[TranscriptEvent, ...]:
+        return tuple(row.event for row in ExternalEventRow.select(
+            connection, thread=self.thread, seq=self.seq, order_by=("ordinal",)))
+
+    def record(self, connection) -> ExternalRecord:
+        return ExternalRecord(self.seq, self.events_in(connection))
 
     @classmethod
     def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[str]:
@@ -171,8 +180,59 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
 
 
 @dataclass(frozen=True)
-class ExternalDraftRow(TypedTable, TranscriptDraft):
-    """The current CLI item, replaced as it grows and retired at completion."""
+class ExternalEventRow(TypedTable):
+    """Each saved event exists once; SQL derives its query keys from that event."""
+
+    thread: str = field(metadata={"sql": Column(primary_key=True)})
+    seq: int = field(metadata={"sql": Column(primary_key=True)})
+    ordinal: int = field(metadata={"sql": Column(primary_key=True)})
+    event: TranscriptEvent
+    timestamp: Annotated[EventTime, GeneratedTimestamp] = field(metadata={"sql": Column(
+        storage=RealStorage, nullable=True, generated="json_extract({event}, '$.timestamp')")})
+    kind: str = field(metadata={"sql": Column(generated="json_extract({event}, '$.kind')")})
+    tool: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool.tool')")})
+    call_id: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool_call_id')")})
+
+    foreign_keys = (ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),)
+    indexes = (Index(("thread", "kind", "tool", "timestamp", "call_id")),)
+
+    @classmethod
+    def append(cls, connection, thread, seq, events) -> None:
+        for ordinal, event in enumerate(events):
+            cls(thread, seq, ordinal, event, UnrecordedEventTime(), "", None, None).insert(connection)
+
+    @classmethod
+    def unjudged_query(cls, thread, todo):
+        from .native_tools import MutatingPathTool
+        from .tool_declaration import ToolDeclaration
+        from .transcript_events import ToolStartTranscript
+
+        tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
+        judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
+        placeholders = lambda values: ",".join("?" for _ in values)
+        since = todo.order.at.recorded_at("An order")
+        # SQL NULL is the original undated fact, decoded through FieldCodec
+        # as UnrecordedEventTime when a row is read. No time is substituted.
+        table = cls.declared_name
+        selected = f'u.thread=? AND u.kind=? AND u.tool IN ({placeholders(tools)})'
+        # Two ranges keep timestamp in the index search, rather than scanning
+        # every historical edit to evaluate an OR for each row.
+        where = (
+            f'e.rowid IN (SELECT u.rowid FROM "{table}" u WHERE {selected} AND u.timestamp>=? '
+            f'UNION ALL SELECT u.rowid FROM "{table}" u WHERE {selected} '
+            'AND u.timestamp IS NULL)'
+        )
+        scope = (thread, ToolStartTranscript.declared_name, *tools)
+        parameters = (*scope, since, *scope)
+        if judged:
+            where += f' AND e.call_id NOT IN ({placeholders(judged)})'
+            parameters += judged
+        return where, parameters
+
+
+@dataclass(frozen=True)
+class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
+    """The assigned transcript's current message, shared by native and CLI writers."""
 
     thread: str = field(metadata={"sql": Column(primary_key=True)})
     turn_id: str
@@ -182,7 +242,29 @@ class ExternalDraftRow(TypedTable, TranscriptDraft):
     def external_row(self):
         return self
 
-    def end_turn(self, transcript: TypedStore) -> None:
+    @classmethod
+    @contextmanager
+    def publication(cls, root: Path, input_id: str):
+        from .native_runtime_input import NativeRuntimeInput
+        from .transcripts import TranscriptRead
+        with TranscriptRead.publication_source(root) as connection:
+            original = NativeRuntimeInput.one(connection, input_id=input_id) if connection is not None else None
+        if original is None:
+            yield DraftPublication()
+            return
+        transcript = ExternalTranscript(root, original.owner_lookup)
+        with transcript.writer_connection(check_same_thread=False) as connection:
+            publication = TurnDraftPublication(original.owner_lookup, connection, input_id)
+            try:
+                yield publication
+            finally:
+                publication.retire_message()
+
+    def publish(self, transcript: StoreWriter) -> None:
+        with transcript.writing() as connection:
+            self.upsert(connection)
+
+    def end_turn(self, transcript: StoreWriter) -> None:
         with transcript.writing() as connection:
             self.delete(connection, thread=self.thread, turn_id=self.turn_id, item_id=self.item_id)
 
@@ -260,11 +342,12 @@ class StoreRead(TranscriptSource):
     def frames(self) -> tuple:
         return self.transcript.oldest(self.connection).frames()
 
-    def current_draft(self) -> TranscriptDraft:
-        return ExternalDraftRow.one(self.connection, thread=self.transcript.lookup) or NoDraft()
-
     def cut(self) -> ExternalCut:
         return self.transcript._cut(self.connection)
+
+    @contextmanager
+    def draft_snapshot(self, root: Path, thread: str):
+        yield self.connection
 
     def _records(self, where: str, parameters: tuple, *,
                  descending: bool) -> Iterator[ExternalRecord]:
@@ -272,7 +355,7 @@ class StoreRead(TranscriptSource):
             self.connection, where=where, parameters=parameters, order_by=("seq",),
             descending=descending, thread=self.transcript.lookup)) as rows:
             for row in rows:
-                yield ExternalRecord(row.seq, row.events)
+                yield row.record(self.connection)
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         with closing(ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup)) as ids:
@@ -282,17 +365,35 @@ class StoreRead(TranscriptSource):
                     for row in ExternalItemRow.select(
                         self.connection, thread=self.transcript.lookup, turn_id=turn_id,
                         order_by=("seq",))
-                    for event in row.events))
+                    for event in row.events_in(self.connection)))
                 for turn_id in ids)
+
+    def unjudged(self, todo):
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
+        with closing(self.connection.execute(
+            'SELECT event FROM (SELECT e.event, e.seq, e.ordinal, '
+            'row_number() OVER (PARTITION BY e.call_id ORDER BY e.seq DESC,e.ordinal DESC) AS latest '
+            f'FROM "{ExternalEventRow.declared_name}" e WHERE {where}) '
+            'WHERE latest=1 ORDER BY seq DESC,ordinal DESC', parameters)) as rows:
+            for encoded, in rows:
+                event = FieldCodec.decode(TranscriptEvent, FieldCodec.parse(encoded))
+                yield from event.edit_calls(todo.held().owner, todo.id,
+                                            todo.order.at.recorded_at("An order"))
+
+    def unjudged_count(self, todo) -> int:
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
+        return self.connection.execute(
+            f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
+            parameters).fetchone()[0]
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
-    incarnation: ThreadIncarnation
+    lookup: str
     filename: ClassVar[str] = "external_transcripts.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalDraftRow)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, DraftRow)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
@@ -301,23 +402,20 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         database = cls.path_in(root)
         return database, database.with_name(database.name + "-wal")
 
-    @property
-    def lookup(self) -> str:
-        return self.incarnation.lookup
-
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:
         """Append a finished item once; an item with no presentation adds nothing."""
         with self.writing() as connection:
             if events:
                 self._insert_once(connection, turn_id, item_id, events, self._cut(connection).offset + 1)
-            ExternalDraftRow.delete(connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
+            DraftRow.delete(connection, thread=self.lookup, turn_id=turn_id, item_id=item_id)
 
     def _insert_once(self, connection, turn_id, item_id, events, seq) -> bool:
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         if ExternalItemRow.count(connection, **key):
             return False
-        ExternalItemRow(seq=seq, events=events, **key).insert(connection)
+        ExternalItemRow(seq=seq, **key).insert(connection)
+        ExternalEventRow.append(connection, self.lookup, seq, events)
         return True
 
     def oldest(self, connection) -> ExternalPageRow | NoItems:
@@ -360,11 +458,11 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def draft(self, *, turn_id: str, item_id: str,
               events: tuple[TranscriptEvent, ...]) -> None:
         with self.writing() as connection:
-            ExternalDraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
+            DraftRow(self.lookup, turn_id, item_id, events).upsert(connection)
 
     def end_turn(self) -> None:
         with self.reading() as records:
-            draft = records.current_draft()
+            draft = records.current_draft(self.root, self.lookup)
         draft.end_turn(self)
 
     @contextmanager
@@ -375,4 +473,45 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def _cut(self, connection) -> ExternalCut:
         return ExternalItemRow.select(connection, row_type=ExternalCut, thread=self.lookup)[0]
+
+
+class DraftPublication:
+    """Unassigned native turns have no assigned draft to publish."""
+
+    def begin_message(self, timestamp: float) -> None:
+        pass
+
+    def publish(self, parts: Iterable[str]) -> None:
+        pass
+
+    def retire_message(self) -> None:
+        pass
+
+
+class TurnDraftPublication(DraftPublication, StoreWriter):
+    """A native turn owns one connection; each message owns one draft identity."""
+
+    def __init__(self, lookup: str, connection: Connection, turn_id: str):
+        self.lookup = lookup
+        self.connection = connection
+        self.turn_id = turn_id
+
+    @contextmanager
+    def writing(self):
+        with self.transaction(self.connection):
+            yield self.connection
+
+    def begin_message(self, timestamp: float) -> None:
+        self.item_id = uuid4().hex
+        self.timestamp = timestamp
+
+    def publish(self, parts: Iterable[str]) -> None:
+        from .transcript_events import AssistantTranscript
+        DraftRow(self.lookup, self.turn_id, self.item_id,
+                 (AssistantTranscript(''.join(parts), position=self.item_id,
+                                      timestamp=self.timestamp),)).publish(self)
+
+    def retire_message(self) -> None:
+        with self.writing() as connection:
+            DraftRow.delete(connection, thread=self.lookup, turn_id=self.turn_id)
 

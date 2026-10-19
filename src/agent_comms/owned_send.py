@@ -6,9 +6,11 @@ import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_coding_tools import CodingToolOwner
+from .messages import ClaimNoticeKind
 
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
@@ -185,20 +187,22 @@ class OwnedSend(CodingToolOwner):
             raise SelectedToolDenied(str(error)) from error
 
     def claim_resource(self, store, turn, resource, slot, prior):
-        from pathlib import Path
-        from .messages import ClaimNoticeKind
         from .store_files import _store_lock
 
         with _store_lock(self.comms._wire_lock_path):
-            self.verify(store, turn, self.comms.registry.snapshot())
+            snapshot = self.comms.registry.snapshot()
+            self.verify(store, turn, snapshot)
+            owner = snapshot.require(self.owner_name)
             canonical = resource.normalized(Path(self.thread.worktree))
-            with self.comms.bus.log.certified_read() as source:
+            with self.comms.bus.log.checked_read() as source:
                 if prior is not None and source.claim(canonical) == prior:
                     return prior
-            committed = self.comms.messaging.send(
-                self.owner_name, self.owner_name, "Claimed", ClaimNoticeKind,
+            committed = self.comms.bus.publisher.publish_claim_envelope(
+                ClaimNoticeKind.claimed(owner),
+                worktree=Path(self.thread.worktree),
+                incarnation=str(owner.created_at),
                 claims=(resource,),
-            ).message
+            )
             return committed.require_claim_transition().claimed(canonical)
 
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
