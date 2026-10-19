@@ -42,12 +42,13 @@ class HostService(DeclaredFamily, affix="Service", discovery_package=__name__):
         """The interpreter this instance runs."""
 
     @classmethod
-    def restart_running(cls, installed: Path) -> tuple[str, ...]:
-        """Restart every declared service running on this host onto ``installed``."""
+    def restart_running(cls, installed: Path, installation: Path) -> tuple[str, ...]:
+        """Restart this installation's services, never another root's runtime family."""
         return tuple(
             instance.restart_onto(installed)
             for member in cls.members_with(cls)
             for instance in member.running()
+            if instance.runtime().parent.resolve().parent.parent == installation.resolve()
         )
 
     def restart_onto(self, installed: Path) -> str:

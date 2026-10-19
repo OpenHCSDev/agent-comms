@@ -11,6 +11,7 @@ from agent_comms.host_services import HostService, ServiceNotServingError
 from agent_comms.host_services.connector import ConnectorService
 
 INSTALLED = Path('/stack/.venv/bin/python')
+INSTALLATION = INSTALLED.parents[2]
 
 
 @pytest.fixture
@@ -42,19 +43,19 @@ def host(monkeypatch):
 
 def test_only_running_services_restart_and_each_must_serve_the_installed_runtime(host):
     assert ConnectorService.running() == ()
-    assert HostService.restart_running(INSTALLED) == ()
+    assert HostService.restart_running(INSTALLED, INSTALLATION) == ()
 
     host.instances = [host(0)]
-    (report,) = HostService.restart_running(INSTALLED)
+    (report,) = HostService.restart_running(INSTALLED, INSTALLATION)
     assert host.instances == [host(1)] and str(INSTALLED) in report
 
     host.instances, host.restarted_runtime = [host(0)], Path('/old/bin/python')
     with pytest.raises(ServiceNotServingError, match='not the installed'):
-        HostService.restart_running(INSTALLED)
+        HostService.restart_running(INSTALLED, INSTALLATION)
 
     host.instances, host.comes_back = [host(0)], False
     with pytest.raises(ServiceNotServingError, match='did not serve again'):
-        HostService.restart_running(INSTALLED)
+        HostService.restart_running(INSTALLED, INSTALLATION)
 
 
 def test_the_connector_is_a_declared_service():
