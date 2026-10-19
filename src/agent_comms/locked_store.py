@@ -173,6 +173,7 @@ class LockedStore(JsonDocument[T]):
 
     path: Path
     lock_rank: ClassVar[int]
+    lock_type: ClassVar[type[StoreLock]] = StoreLock
 
     def __init_subclass__(cls, **kwargs):
         super(LockedStore, cls).__init_subclass__(**kwargs)
@@ -183,7 +184,7 @@ class LockedStore(JsonDocument[T]):
     @contextmanager
     def locked(self, *, mode: LockMode = ExclusiveLock(), blocking: bool = True) -> Iterator[int]:
         """Canonical lock, including a descriptor for scoped child authority."""
-        with _store_lock(self.path, mode=mode, blocking=blocking) as lock:
+        with _store_lock(self.path, mode=mode, blocking=blocking, lock_type=self.lock_type) as lock:
             yield lock.descriptor
 
     @contextmanager

@@ -22,7 +22,7 @@ from .field_codec import MalformedRecord
 from .private_path import FileRevision, ObservedPath
 from .recorded_bus import RecordedBus
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedStore, TypedTable
+from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -105,6 +105,8 @@ class BusPageIndex(TypedStore):
         with ExitStack() as resources:
             db = resources.enter_context(self._attached(
                 lambda: closing(CoordinationStore.read_snapshot(self.path))))
+            if actual := self._schema(db):
+                self.require_schema(actual)
             db.execute("ROLLBACK")
             self._resources.enter_context(resources.pop_all())
             return db
@@ -138,8 +140,6 @@ class BusPageIndex(TypedStore):
             return
         with self.snapshot():
             actual = self._schema(self.connection)
-            if actual:
-                self.require_schema(actual)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
             yield saved is not None and saved.covers(opened)
 
@@ -172,8 +172,6 @@ class BusPageIndex(TypedStore):
         if source.shows_no_bus() or not self.path.exists():
             return False
         with self.snapshot():
-            if SQLiteSchemaObject.differences(self._schema(self.connection), self.declared_schema()):
-                return False  # A writer handles old schemas; this check only recognizes replacement.
             saved = BusPageSource.one(self.connection, singleton=1)
             return saved is not None and not RecordedBus(saved.revision.identity).matches(source)
 
