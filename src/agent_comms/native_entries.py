@@ -181,7 +181,7 @@ class ImportedSessionWriter:
     def import_events(self, events: Iterable[TranscriptEvent]) -> None:
         """The source already normalized records; preserve its conversation and clock."""
         for event in events:
-            event.import_to(lambda message: self.append_recorded(event, message))
+            event.import_to(lambda message, event=event: self.append_recorded(event, message))
 
     def append_recorded(self, event: TranscriptEvent, message: ImportedMessage) -> None:
         at = GeneratedTimestamp.decode(event.timestamp).recorded_at("Copied conversation")
