@@ -18,7 +18,7 @@ def test_snapshot_is_built_once_and_changes_only_with_the_revision(tmp_path):
         assert capture.call_count == 0
         with registry.store.editing() as edit:
             edit.document.last_seen["worker"] += 1
-            assert registry.snapshot() is first
+            assert edit.original.snapshot is first
             assert first.last_seen["worker"] != edit.document.last_seen["worker"]
             edit.commit()
         second = registry.snapshot()

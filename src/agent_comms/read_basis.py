@@ -646,8 +646,7 @@ class DMDisplayBasis:
         that the corresponding inbound tail was contiguous and visibly painted.
         """
         peer = CommandTarget.named(peer).require_dm_peer()
-        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading() as registry_document:
-            snapshot = registry_document.snapshot()
+        with _store_lock(root / "wire", mode=SharedLock()), registry.store.reading_snapshot() as snapshot:
             viewer_name = snapshot.canonical_name(viewer)
             peer_name = snapshot.canonical_name(peer)
             scope = DMDisplayScope.capture_human(viewer_name, peer_name, snapshot)
@@ -724,7 +723,7 @@ class DMDisplayBasis:
         if type(through) is not int:
             raise ValueError("Painted DM read requires a typed page basis and integer bound.")
         with _store_lock(root / "wire", mode=SharedLock()), _store_lock(registry.store.path):
-            snapshot = registry.store._read_unlocked().snapshot()
+            snapshot = registry.store.read_snapshot_unlocked()
             self.validate_for(
                 root,
                 worktree,
@@ -1058,10 +1057,10 @@ class CapturedSelection:
         Finish reading the ledger before yielding: painted acknowledgement may
         write that same ledger while identity and membership remain acquired.
         """
-        with registry.store.reading() as document, catalog.reading() as channels:
+        with registry.store.reading_snapshot() as snapshot, catalog.reading() as channels:
             with reads.reading() as read_document:
                 selected = cls.capture(
-                    document.snapshot(), channels, reads, read_document, viewer, activity
+                    snapshot, channels, reads, read_document, viewer, activity
                 )
             yield selected
 
