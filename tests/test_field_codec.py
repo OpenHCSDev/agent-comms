@@ -15,6 +15,48 @@ from agent_comms.messages import (
 )
 
 
+def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
+    from agent_comms.field_codec import DeclaredFieldPlan
+
+    class ProbePlan(DeclaredFieldPlan):
+        metadata_flag = "wire_registry_probe"
+
+        def omitted(self, value):
+            return value == "omit" or super().omitted(value)
+
+    @dataclass
+    class Record:
+        value: str = field(metadata={"wire_registry_probe": True})
+
+    assert isinstance(FieldCodec.field_plan(Record, "value"), ProbePlan)
+    assert FieldCodec.encode(Record("omit")) == {}
+    assert FieldCodec.encode(Record("kept")) == {"value": "kept"}
+    assert FieldCodec.decode(Record, {"value": "kept"}) == Record("kept")
+
+
+def test_field_plan_refuses_an_unclaimed_representation():
+    from agent_comms.field_codec import FieldPlan
+
+    class UnclaimedPath(PathText):
+        field_plan = FieldPlan  # The abstract base is not a registered concrete plan.
+
+    @dataclass
+    class Record:
+        value: Annotated[Path, UnclaimedPath]
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
+
+
+def test_field_plan_refuses_unrelated_claims_instead_of_ordering_flags():
+    @dataclass
+    class Record:
+        value: str | None = field(metadata={"wire_context": True, "wire_absent_none": True})
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
+
+
 def test_wire_absence_is_none_without_running_the_constructor_factory():
     created = []
 
