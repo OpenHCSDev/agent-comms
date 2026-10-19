@@ -223,8 +223,9 @@ class NativeTurnOutcome(ABC):
     def raise_if_failed(self) -> None: ...
 
     def raise_fault(self, cause: Exception) -> NoReturn:
-        """Without a completed failure, preserve the original fault."""
-        raise cause
+        """Report a transport fault without rewriting the completed native outcome."""
+        failure = ACPFailure.from_detail(-32603, f"{type(cause).__name__}: {cause}")
+        raise NativeTurnError(RequestFailure(failure, False)) from cause
 
 
 @dataclass(frozen=True)
