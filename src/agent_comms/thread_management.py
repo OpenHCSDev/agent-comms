@@ -49,6 +49,7 @@ from .rule_reviews import RuleReviews
 from .store_files import _atomic_write_text, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread, current_thread
+from .thread_identity import AgentThreadRole, ThreadRole
 from .agent_backend import RuntimeLocation
 
 @dataclass(frozen=True, slots=True, kw_only=True)
@@ -244,6 +245,7 @@ class ThreadManagement:
         model: str | None = None,
         thinking_level: type[ThinkingChoice] = NoThinkingOverride,
         auto_title_pending: bool = False,
+        role: type[ThreadRole] = AgentThreadRole,
     ) -> Thread:
         """Atomically register a unique thread; its inbox starts at its creation."""
         with _store_lock(self._wire_lock_path):
@@ -255,6 +257,7 @@ class ThreadManagement:
                 model=model,
                 thinking_level=thinking_level,
                 auto_title_pending=auto_title_pending,
+                role=role,
             )
             return self.registry._claim_unlocked(thread)
 
@@ -284,7 +287,7 @@ class ThreadManagement:
                 raise ValueError(f"Cannot open project directory: {target}") from error
             if not target.is_dir():
                 raise ValueError(f"Project path is not a directory: {target}")
-            previous = str(Path(thread.worktree).expanduser().resolve())
+            previous = str(thread.project_path)
             current = str(target)
             if current == previous:
                 return ProjectChangeResult(thread.name, previous, current, False)
