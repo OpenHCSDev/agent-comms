@@ -9,11 +9,12 @@ import os
 import stat
 import tempfile
 import time
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, update_abstractmethods
 from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, asynccontextmanager, contextmanager, suppress
 from contextvars import Context, ContextVar
 from dataclasses import dataclass, field
+from inspect import isabstract
 from pathlib import Path
 from typing import BinaryIO, ClassVar, TYPE_CHECKING
 
@@ -260,6 +261,14 @@ class StoreLockOwner:
     path: Path
     lock_rank: ClassVar[int]
     lock_type: ClassVar[type[StoreLock]] = StoreLock
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # slots dataclasses rebuild the class before ABCMeta refreshes its flags.
+        update_abstractmethods(cls)
+        rank = vars(cls).get("lock_rank")
+        if not isabstract(cls) and rank is None:
+            raise TypeError(f"{cls.__name__} must declare its own lock_rank")
 
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
                mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
