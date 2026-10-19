@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+from abc import ABC, abstractmethod
 from collections.abc import Callable
-from concurrent.futures import Future
+from concurrent.futures import ThreadPoolExecutor
 from contextlib import ExitStack, asynccontextmanager
 from contextvars import ContextVar
 from functools import partial
 from pathlib import Path
-from queue import SimpleQueue
-from threading import Thread
 from typing import Self, TypeVar
 
 from .assignment_store import AssignmentStore
@@ -32,9 +31,35 @@ from .working_memory_annotations import WorkingMemoryAnnotations
 Result = TypeVar("Result")
 
 
+class CoordinationRoute(ABC):
+    """The async store lifetime selected by the caller's context."""
+
+    @abstractmethod
+    async def run(self, store_type, path, operation, clock_ms, contention): ...
+
+    @abstractmethod
+    async def run_read(self, store_type, path, operation, clock_ms, contention): ...
+
+
+class StandaloneRoute(CoordinationRoute):
+    """Callers outside a worker own their stores for one joined operation."""
+
+    async def run(self, store_type, path, operation, clock_ms, contention):
+        return await store_type.run_worker(
+            partial(store_type._run_owned, path, operation, clock_ms, contention)
+        )
+
+    async def run_read(self, store_type, path, operation, clock_ms, contention):
+        return await store_type.run_worker(
+            partial(store_type._run_read_owned, path, operation, clock_ms, contention)
+        )
+
+
 class Coordination:
     session_type = NativeCoordinationSession
-    _worker: ContextVar[CoordinationWorker | None] = ContextVar("coordination_worker", default=None)
+    _worker: ContextVar[CoordinationRoute] = ContextVar(
+        "coordination_worker", default=StandaloneRoute(),
+    )
 
     @classmethod
     @asynccontextmanager
@@ -71,12 +96,7 @@ class Coordination:
         A resident worker owns the connection; other callers own it for this
         operation. Neither may export the connection or its borrowed resources.
         """
-        if worker := cls._worker.get():
-            worker.require(cls, path, clock_ms, contention)
-            return await worker.run(operation)
-        return await cls.run_worker(
-            partial(cls._run_owned, path, operation, clock_ms, contention)
-        )
+        return await cls._worker.get().run(cls, path, operation, clock_ms, contention)
 
     @classmethod
     def _run_owned(
@@ -93,12 +113,7 @@ class Coordination:
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> Result:
         """Run a typed coordination read; the callback bounds its snapshot."""
-        if worker := cls._worker.get():
-            worker.require(cls, path, clock_ms, contention)
-            return await worker.run_read(operation)
-        return await cls.run_worker(
-            partial(cls._run_read_owned, path, operation, clock_ms, contention)
-        )
+        return await cls._worker.get().run_read(cls, path, operation, clock_ms, contention)
 
     @classmethod
     def _run_read_owned(
@@ -156,89 +171,74 @@ class StandaloneCoordination(Coordination):
     session_type = CoordinationSession
 
 
-class CoordinationWorker:
-    """One resident thread owns one writer and one reader, not a connection pool.
+class CoordinationWorker(CoordinationRoute):
+    """One executor thread owns the worker's writer, reader and their retirement.
 
-    The context binding routes existing async consumers to their worker. It is
-    not keyed by path and never stores a connection outside its owning thread.
-    Registry-only work still runs independently through Coordination.run_worker.
+    The context binding is not keyed by path. Registry-only work still runs
+    independently through Coordination.run_worker. The executor carries callback
+    errors and owns admission/shutdown; join_retirement preserves cancellation.
     """
 
     def __init__(self, store_type: type[Coordination], path: str | Path):
         self.store_type, self.path = store_type, Path(path).absolute()
-        self._operations = SimpleQueue()
-        self._ready: Future = Future()
-        self._retired: Future = Future()
-        self._closed = False
-        self._thread = Thread(target=self._serve, name="coordination-store")
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, initializer=self._open, thread_name_prefix="coordination-store",
+        )
 
     def require(self, store_type, path, clock_ms, contention) -> None:
-        # A worker has exactly one store identity and policy. Never silently
-        # borrow it for another root, session capability, clock or busy policy.
-        if (store_type is not self.store_type or Path(path).absolute() != self.path
-                or clock_ms is not None or contention != DEFAULT_STORE_CONTENTION):
+        # Match the resident factory, including its default clock/busy policy.
+        # Another store identity or policy must never silently borrow it.
+        if (store_type, Path(path).absolute(), clock_ms, contention) != (
+            self.store_type, self.path, None, DEFAULT_STORE_CONTENTION,
+        ):
             raise ValueError("operation differs from the resident coordination owner")
 
-    def _serve(self) -> None:
+    def _open(self) -> None:
+        # A failed initializer closes partial construction on this same thread.
+        with ExitStack() as resources:
+            self._writer = resources.enter_context(self.store_type(str(self.path)))
+            self._reader = resources.enter_context(self.store_type(
+                str(self.path), session_type=ReadNativeCoordinationSession,
+            ))
+            self._resources = resources.pop_all()
+
+    @staticmethod
+    def _apply(operation, store):
         try:
-            with ExitStack() as resources:
-                writer = resources.enter_context(self.store_type(str(self.path)))
-                reader = resources.enter_context(self.store_type(
-                    str(self.path), session_type=ReadNativeCoordinationSession,
-                ))
-                self._ready.set_result(None)
-                while (work := self._operations.get()) is not None:
-                    future, context, operation, read = work
-                    store = reader if read else writer
-                    try:
-                        # The old close rolled back any unfinished transaction,
-                        # even if a callback returned normally. Keep that promise
-                        # without discarding the configured connection.
-                        try:
-                            result = context.run(operation, store)
-                        finally:
-                            db = store.session._connection
-                            if db.in_transaction:
-                                db.execute("ROLLBACK")
-                    except BaseException as error:
-                        future.set_exception(error)
-                    else:
-                        future.set_result(result)
-        except BaseException as error:
-            if not self._ready.done():
-                self._ready.set_exception(error)
-            self._retired.set_exception(error)
-        else:
-            self._retired.set_result(None)
+            return operation(store)
+        finally:
+            # Closing the old per-operation connection rolled back unfinished
+            # transactions even on normal return. Retain that callback boundary.
+            db = store.session._connection
+            if db.in_transaction:
+                db.execute("ROLLBACK")
 
-    async def _run(self, operation, *, read):
-        if self._closed:
-            raise RuntimeError("coordination worker has retired")
-        future: Future = Future()
-        self._operations.put((future, StoreLock.worker_context(), operation, read))
-        return await join_retirement(asyncio.wrap_future(future))
+    def _write(self, operation):
+        return self._apply(operation, self._writer)
 
-    async def run(self, operation):
-        return await self._run(operation, read=False)
+    def _read(self, operation):
+        return self._apply(operation, self._reader)
 
-    async def run_read(self, operation):
-        return await self._run(operation, read=True)
+    async def _submit(self, operation):
+        pending = self._executor.submit(StoreLock.worker_context().run, operation)
+        return await join_retirement(asyncio.wrap_future(pending))
+
+    async def run(self, store_type, path, operation, clock_ms, contention):
+        self.require(store_type, path, clock_ms, contention)
+        return await self._submit(partial(self._write, operation))
+
+    async def run_read(self, store_type, path, operation, clock_ms, contention):
+        self.require(store_type, path, clock_ms, contention)
+        return await self._submit(partial(self._read, operation))
+
+    def _close(self) -> None:
+        self._resources.close()
 
     async def __aenter__(self):
-        self._thread.start()
-        try:
-            await join_retirement(asyncio.wrap_future(self._ready))
-        except BaseException:
-            await self.__aexit__()
-            raise
         return self
 
     async def __aexit__(self, *_exc):
-        self._closed = True
-        self._operations.put(None)
         try:
-            await join_retirement(asyncio.wrap_future(self._retired))
+            await self._submit(self._close)
         finally:
-            # SQLite and all queued operations have retired before the thread
-            # exits; joining cannot leave connection cleanup behind its owner.
-            self._thread.join()
+            self._executor.shutdown(wait=True)

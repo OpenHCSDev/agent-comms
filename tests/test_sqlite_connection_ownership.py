@@ -175,3 +175,50 @@ async def test_resident_cancellation_joins_operation_before_retirement(tmp_path)
             await pending
         assert finished.is_set()
         assert await Coordination.run_read_async(path, lambda store: store.participants.get("joined").owner_thread) == "joined"
+
+
+@pytest.mark.asyncio
+async def test_resident_initializer_failure_closes_partial_store(tmp_path, monkeypatch):
+    from concurrent.futures.thread import BrokenThreadPool
+    from agent_comms.coordination_session import CoordinationSession, ReadNativeCoordinationSession
+
+    closed = []
+    close = CoordinationSession.close
+
+    def closing(session):
+        closed.append(threading.get_ident())
+        return close(session)
+
+    def fail_reader(*args, **kwargs):
+        raise OSError("reader initialization failed")
+
+    monkeypatch.setattr(CoordinationSession, "close", closing)
+    monkeypatch.setattr(ReadNativeCoordinationSession, "__init__", fail_reader)
+    with pytest.raises(BrokenThreadPool):
+        async with Coordination.worker(tmp_path / "coordination.sqlite3"):
+            await Coordination.run_async(tmp_path / "coordination.sqlite3", lambda store: None)
+    assert len(closed) == 1
+    assert closed[0] != threading.get_ident()
+
+
+@pytest.mark.asyncio
+async def test_nested_resident_scopes_restore_outer_and_standalone_routes(tmp_path):
+    outer, inner = tmp_path / "outer.sqlite3", tmp_path / "inner.sqlite3"
+
+    async def register(path, name):
+        await Coordination.run_async(path, lambda store: store.participants.register(name, name, name))
+
+    async def owner(path, name):
+        return await Coordination.run_read_async(path, lambda store: store.participants.get(name).owner_thread)
+
+    async with Coordination.worker(outer):
+        await register(outer, "outer")
+        async with Coordination.worker(inner):
+            await register(inner, "inner")
+            assert await owner(inner, "inner") == "inner"
+            with pytest.raises(ValueError, match="resident coordination owner"):
+                await owner(outer, "outer")
+        assert await owner(outer, "outer") == "outer"
+    # Outside both scopes, either root uses a fresh per-operation store again.
+    assert await owner(inner, "inner") == "inner"
+    assert await owner(outer, "outer") == "outer"
