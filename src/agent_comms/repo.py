@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING, Annotated
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, InstanceOf, PlainSerializer, PlainValidator
+
+from .repository_name import RepositoryName
+
+if TYPE_CHECKING:
+    from .todos import Todo
 
 
 class Repo(BaseModel):
@@ -14,8 +20,15 @@ class Repo(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     checkout: Path
-    github: str
+    github: InstanceOf[Annotated[
+        RepositoryName,
+        PlainValidator(RepositoryName.from_wire, json_schema_input_type=str),
+        PlainSerializer(RepositoryName.to_wire),
+    ]]
     source: str = "src"
+
+    def holds(self, todo: Todo) -> bool:
+        return self.github == todo.repo
 
     def contains(self, sha: str) -> bool:
         """Only a successful ancestry proof in this installed checkout permits closure."""
@@ -43,4 +56,4 @@ class Repo(BaseModel):
         """Its GitHub name comes from the checkout's own origin remote."""
         url = cls.git(checkout, "remote", "get-url", "origin").strip()
         github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
-        return cls(checkout=checkout.resolve(), github="/".join(github))
+        return cls(checkout=checkout.resolve(), github=RepositoryName.from_wire("/".join(github)))

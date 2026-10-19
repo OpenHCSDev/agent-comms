@@ -39,7 +39,8 @@ from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
-from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
+from .typed_table import Column, Index, JsonStorage, TextStorage, TypedStore, TypedTable
+from .repository_name import RepositoryName
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
@@ -371,21 +372,21 @@ class PullRequests:
     """Pull requests queried by immutable order identity, cached within one board read."""
 
     def __init__(self, todos: Sequence[Todo] = ()) -> None:
-        self._read: dict[tuple[str, str, str], tuple[PullRequest, ...]] = {}
-        self._orders: dict[str, dict[str, CheckedProblemOrder]] = {}
+        self._read: dict[tuple[RepositoryName, str, str], tuple[PullRequest, ...]] = {}
+        self._orders: dict[RepositoryName, dict[str, CheckedProblemOrder]] = {}
         for todo in todos:
             if todo.holder:
                 order = todo.order.checked()
                 self._orders.setdefault(todo.repo, {})[order.id] = order
 
-    def listed(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+    def listed(self, repo: RepositoryName, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
         checked = order.checked()
         key = (repo, state, checked.id)
         if key not in self._read:
             self._read[key] = self.read(repo, state, checked)
         return tuple(request for request in self._read[key] if checked.id in request.orders)
 
-    def read(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+    def read(self, repo: RepositoryName, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
         checked = order.checked()
         orders = self._orders.setdefault(repo, {})
         orders[checked.id] = checked
@@ -1341,6 +1342,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def accepted(self) -> bool:
         return False
 
+    def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
+                        pulls: PullRequests) -> tuple[Todo, ...]:
+        return ()
+
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
 
@@ -1474,6 +1479,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         return kind(**{item.name: getattr(self, item.name) for item in fields(kind)
                        if item.name not in evidence}, **evidence)
 
+    def closed_by_merge(self, todo: Todo, repos: Sequence[Repo], storage: StorageRule,
+                        pulls: PullRequests) -> tuple[Todo, ...]:
+        return tuple(DoneTodoState.closed(todo, self.merged(merged.sha))
+                     for repo in repos
+                     for merged in MergedProgress.found(ProgressSource.of(todo, storage, pulls))
+                     if repo.contains(merged.sha))
+
     def merged(self, sha: str) -> ProblemOrder:
         return self.copy_as(MergedProblemOrder, sha=sha)
 
@@ -1492,7 +1504,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str) -> str:
         """The order creates its PR with the immutable identity every progress reader uses."""
         created = subprocess.run(
-            ("gh", "pr", "create", "-R", todo.repo, "--title", title, "--body-file", "-"),
+            ("gh", "pr", "create", "-R", todo.repo.to_wire(), "--title", title, "--body-file", "-"),
             input=self.pull_request_body(body), cwd=checkout,
             capture_output=True, text=True, timeout=60)
         if created.returncode:
@@ -2347,7 +2359,7 @@ class Todo(TypedTable):
     indexes = (Index(("creator", "creator_created", "state")), Index(("state",)))
 
     id: str = field(metadata={"sql": Column(primary_key=True)})
-    repo: str
+    repo: RepositoryName = field(metadata={"sql": Column(storage=TextStorage)})
     text: str
     creator: str
     creator_created: float
@@ -2523,17 +2535,6 @@ def _participant(thread: Thread) -> ThreadIncarnation:
     return thread.incarnation
 
 
-def _repo(value: str) -> str:
-    _text(value, "Repo ID", 200)
-    pieces = value.split("/")
-    if len(pieces) != 2 or any(
-        piece in {"", ".", ".."} or not all(char.isalnum() or char in "-_." for char in piece)
-        for piece in pieces
-    ):
-        raise TodoError("Repo ID must have the exact owner/repo form.")
-    return value.lower()
-
-
 @dataclass(frozen=True, slots=True)
 class TodoStore(TypedStore):
     """One SQLite row owns both todo state and its exclusive assignment.
@@ -2642,8 +2643,8 @@ class TodoStore(TypedStore):
         _text(todo_id, "Todo ID", 128)
         return self._one(self._select("id=?", (todo_id,)), todo_id)
 
-    def list(self, repo: str) -> tuple[Todo, ...]:
-        return self._select("repo=?", (_repo(repo),))
+    def list(self, repo: RepositoryName) -> tuple[Todo, ...]:
+        return self._select("repo=?", (repo.to_wire(),))
 
     def for_goal(self, owner: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
         return self._select(
@@ -2662,15 +2663,11 @@ class TodoStore(TypedStore):
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:
         """Read before locking; close only orders whose observed revision still holds."""
-        checked = tuple((todo, order) for todo in self.held_for_commander(commander)
-                        if isinstance(order := todo.order, CheckedProblemOrder))
-        pulls = PullRequests(tuple(todo for todo, _ in checked))
-        completed = tuple(DoneTodoState.closed(todo, order.merged(merged.sha))
-                          for todo, order in checked
-                          for repo in repos if repo.github.lower() == todo.repo
-                          for merged in MergedProgress.found(
-                              ProgressSource.of(todo, storage, pulls))
-                          if repo.contains(merged.sha))
+        held = self.held_for_commander(commander)
+        pulls = PullRequests(held)
+        completed = tuple(closed for todo in held
+                          for closed in todo.order.closed_by_merge(
+                              todo, tuple(repo for repo in repos if repo.holds(todo)), storage, pulls))
         if not completed:
             return
         with self.writing() as db:
@@ -2735,7 +2732,7 @@ class TodoStore(TypedStore):
     def create(
         self,
         todo_id: str,
-        repo: str,
+        repo: RepositoryName,
         text: str,
         *,
         creator: Thread,
@@ -2747,14 +2744,13 @@ class TodoStore(TypedStore):
     ) -> Todo:
         _text(todo_id, "Todo ID", 128)
         _text(text, "Todo text", 2000)
-        repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
         deadline.require_deadline()
         goal.require_reference()
         order.require_writable()
         proposed = Todo(
             id=todo_id,
-            repo=repo_id,
+            repo=repo,
             text=text,
             creator=identity.name,
             creator_created=identity.created_at,

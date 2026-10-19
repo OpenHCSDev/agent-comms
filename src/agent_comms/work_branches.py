@@ -186,8 +186,8 @@ query($owner: String!, $name: String!, $after: String) {
 
     @property
     def repository(self) -> tuple[str, str]:
-        owner, name = Repo.of(self.checkout).github.split("/")
-        return owner, name
+        repository = Repo.of(self.checkout).github
+        return repository.owner, repository.name
 
     def _pages(self, query: str, answer: type[ForgeQuery], **variables: str):
         pages: list[tuple[str, ...]] = [()]

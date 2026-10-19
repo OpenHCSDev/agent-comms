@@ -13,6 +13,7 @@ from ..comms import Comms
 from ..goal_actions import OrderGoalAction
 from ..goals import Goal
 from ..repo import Repo
+from ..repository_name import RepositoryName
 from ..standing_rules import (
     DatedStandingRule,
     ReasonedStandingRule,
@@ -211,7 +212,7 @@ class MergeGrowth(DatedStandingRule):
 
     limit: ClassVar[int] = 40
     window: ClassVar[str] = "12 hours ago"
-    repo: str
+    repo: RepositoryName
     sha: str
     subject: str
     merged: float
