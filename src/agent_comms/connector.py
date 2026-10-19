@@ -284,7 +284,9 @@ class ToolCall:
 
     @classmethod
     def of(cls, tool: type[ToolRequest]) -> ToolCall:
-        return cls(tool.declared_name)
+        """A call of a tool the connector exposes, by the name it exposes it under."""
+        (name,) = (name for name, exposed in Connector.exposed().items() if exposed is tool)
+        return cls(name)
 
 
 @dataclass(frozen=True, kw_only=True)
