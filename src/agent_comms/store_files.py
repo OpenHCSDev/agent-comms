@@ -184,12 +184,11 @@ class StoreLock:
 
     @classmethod
     @contextmanager
-    def ordered(cls, requests, *, blocking=True, contention=None):
+    def ordered(cls, requests: Mapping[StoreLockOwner, LockMode], *, blocking=True, contention=None):
         """Acquire store owners by their declared rank, never their filenames."""
         with ExitStack() as resources:
-            yield {owner: resources.enter_context(_store_lock(owner.path,
-                mode=requests[owner], blocking=blocking, contention=contention,
-                lock_type=owner.lock_type))
+            yield {owner: resources.enter_context(owner.locked(
+                mode=requests[owner], blocking=blocking, contention=contention))
                 for owner in sorted(requests, key=lambda owner: (owner.lock_rank, str(owner.path)))}
 
     @classmethod
@@ -252,6 +251,20 @@ class StoreLock:
                 raise RelationViolationError("Store has no certified original wire source.")
             refreshed.require_marker(metadata)
             yield refreshed
+
+
+class StoreLockOwner:
+    """A ranked file owner opens its declared physical lock and source together."""
+
+    __slots__ = ()
+    path: Path
+    lock_rank: ClassVar[int]
+    lock_type: ClassVar[type[StoreLock]] = StoreLock
+
+    def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
+               mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
+        return _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
+                           mode=mode, contention=contention, lock_type=self.lock_type)
 
 
 def store_lock_path(store_path: Path) -> Path:

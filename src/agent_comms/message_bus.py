@@ -33,7 +33,7 @@ from .read_basis import (
     CapturedSelection,
 )
 from .routing import DeliveryScope
-from .store_files import SharedLock, StoreLock, _store_lock
+from .store_files import SharedLock, StoreLockOwner
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -46,9 +46,8 @@ from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
-class MessageBus[Writes: Publisher]:
+class MessageBus[Writes: Publisher](StoreLockOwner):
     lock_rank = 0
-    lock_type = StoreLock
 
     @property
     def path(self) -> Path:
@@ -100,7 +99,7 @@ class MessageBus[Writes: Publisher]:
         of reconstructing it from independently sampled path revisions.
         """
         with ExitStack() as stack:
-            with _store_lock(self.log.path.parent / "wire", mode=SharedLock()):
+            with self.locked(mode=SharedLock()):
                 source = stack.enter_context(self.log.opened_wire_snapshot())
                 with CapturedSelection.reading(
                     self._registry, self._channels, self.reads, viewer,
