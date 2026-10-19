@@ -1,15 +1,16 @@
 --- a/dist/core/agent-session.js
 +++ b/dist/core/agent-session.js
-@@ -13,6 +13,8 @@
+@@ -13,6 +13,9 @@
   * Modes use this class and add their own I/O layer on top.
   */
  import { readFileSync } from "node:fs";
 +import { NativeProofJournal } from "./native-proof-journal.js";
 +import { createHash } from "node:crypto";
++import { inspect } from "node:util";
  import { basename, dirname } from "node:path";
  import { contentText } from "@earendil-works/pi-ai";
  import { clampThinkingLevel, cleanupSessionResources, getSupportedThinkingLevels, isContextOverflow, isRecoverableLength, isRetryableAssistantError, modelsAreEqual, resetApiProviders, streamSimple, } from "@earendil-works/pi-ai/compat";
-@@ -89,6 +91,10 @@
+@@ -89,6 +92,10 @@
      _steeringMessages = [];
      /** Tracks pending follow-up messages for UI display. Removed when delivered. */
      _followUpMessages = [];
@@ -20,7 +21,7 @@
      /** Messages queued to be included with the next user prompt as context ("asides"). */
      _pendingNextTurnMessages = [];
      /** Context-only custom messages queued during a run, flushed once the current turn's tool results are in. */
-@@ -153,6 +159,8 @@
+@@ -153,6 +160,8 @@
          // Always subscribe to agent events for internal handling
          // (session persistence, extensions, auto-compaction, retry logic)
          this._unsubscribeAgent = this.agent.subscribe(this._handleAgentEvent);
@@ -29,7 +30,7 @@
          this._installAgentToolHooks();
          this._installAgentNextTurnRefresh();
          this._buildRuntime({
-@@ -160,6 +168,99 @@
+@@ -160,6 +169,99 @@
              includeAllExtensionTools: true,
          });
      }
@@ -129,7 +130,7 @@
      get modelRuntime() {
          return this._modelRuntime;
      }
-@@ -315,12 +416,22 @@
+@@ -315,12 +417,22 @@
              l(event);
          }
      }
@@ -157,7 +158,7 @@
      }
      async _emitSessionCompactFailed(event) {
          if (this._extensionRunner.hasHandlers("session_compact_failed")) {
-@@ -361,21 +472,28 @@
+@@ -361,21 +473,28 @@
          // When a user message starts, check if it's from either queue and remove it BEFORE emitting
          // This ensures the UI sees the updated queue state
          if (event.type === "message_start" && event.message.role === "user") {
@@ -190,7 +191,7 @@
                      }
                  }
              }
-@@ -383,7 +501,13 @@
+@@ -383,7 +502,13 @@
          // Emit to extensions first
          await this._emitExtensionEvent(event);
          // Notify all listeners
@@ -205,7 +206,7 @@
          // Handle session persistence
          if (event.type === "message_end") {
              // Check if this is a custom message from extensions
-@@ -395,7 +519,23 @@
+@@ -395,7 +520,23 @@
                  event.message.role === "assistant" ||
                  event.message.role === "toolResult") {
                  // Regular LLM message - persist as SessionMessageEntry
@@ -230,7 +231,7 @@
              }
              // Other message types (bashExecution, compactionSummary, branchSummary) are persisted elsewhere
              // Track assistant message for auto-compaction (checked on agent_end)
-@@ -427,6 +567,7 @@
+@@ -427,6 +568,7 @@
          }
      };
      _willRetryAfterAgentEnd(event) {
@@ -238,7 +239,7 @@
          const settings = this.settingsManager.getRetrySettings();
          if (!settings.enabled || this._retryAttempt >= settings.maxRetries) {
              return false;
-@@ -522,6 +663,10 @@
+@@ -522,6 +664,10 @@
                      replacement.content == null
                      ? { ...replacement, content: [] }
                      : replacement;
@@ -249,7 +250,7 @@
                  this._replaceMessageInPlace(event.message, normalized);
              }
          }
-@@ -770,6 +915,21 @@
+@@ -770,6 +916,21 @@
      // Prompting
      // =========================================================================
      async _runAgentPrompt(messages) {
@@ -271,11 +272,11 @@
          this._isAgentRunActive = true;
          try {
              await this.agent.prompt(messages);
-@@ -778,6 +938,15 @@
+@@ -778,6 +939,15 @@
              }
          }
 +        catch (error) {
-+            this._emit({ type: "native_operation_error", error: error instanceof Error ? error.message : String(error) });
++            this._emit({ type: "native_operation_error", error: inspect(error) });
 +            throw error;
 +        }
          finally {
@@ -287,7 +288,7 @@
              this._systemPromptOverride = undefined;
              this._flushPendingBashMessages();
              this._flushPendingCustomMessages();
-@@ -790,6 +955,19 @@
+@@ -790,6 +956,19 @@
          if (!msg) {
              return false;
          }
@@ -307,7 +308,7 @@
          if (this._isRetryableError(msg) && (await this._prepareRetry(msg))) {
              return true;
          }
-@@ -822,13 +1000,37 @@
+@@ -822,13 +1001,37 @@
          const expandPromptTemplates = options?.expandPromptTemplates ?? true;
          const preflightResult = options?.preflightResult;
          let messages;
@@ -345,7 +346,7 @@
                      preflightResult?.(true);
                      return;
                  }
-@@ -842,6 +1044,10 @@
+@@ -842,6 +1045,10 @@
              if (this._extensionRunner.hasHandlers("input")) {
                  const inputResult = await this._extensionRunner.emitInput(currentText, currentImages, options?.source ?? "interactive", this.isStreaming ? options?.streamingBehavior : undefined);
                  if (inputResult.action === "handled") {
@@ -356,7 +357,7 @@
                      preflightResult?.(true);
                      return;
                  }
-@@ -862,11 +1068,12 @@
+@@ -862,11 +1069,12 @@
                      throw new Error("Agent is already processing. Specify streamingBehavior ('steer' or 'followUp') to queue the message.");
                  }
                  if (options.streamingBehavior === "followUp") {
@@ -371,7 +372,7 @@
                  preflightResult?.(true);
                  return;
              }
-@@ -905,6 +1112,8 @@
+@@ -905,6 +1113,8 @@
                  role: "user",
                  content: userContent,
                  timestamp: Date.now(),
@@ -380,7 +381,7 @@
              });
              // Inject any pending "nextTurn" messages as context alongside the user message
              for (const msg of this._pendingNextTurnMessages) {
-@@ -939,14 +1148,24 @@
+@@ -939,14 +1149,24 @@
              }
          }
          catch (error) {
@@ -408,7 +409,7 @@
      }
      /**
       * Try to execute an extension command. Returns true if command was found and executed.
-@@ -1013,15 +1232,25 @@
+@@ -1013,15 +1233,25 @@
       * @param images Optional image attachments to include with the message
       * @throws Error if text is an extension command
       */
@@ -440,7 +441,7 @@
      }
      /**
       * Queue a follow-up message to be processed after the agent finishes.
-@@ -1030,47 +1259,66 @@
+@@ -1030,47 +1260,66 @@
       * @param images Optional image attachments to include with the message
       * @throws Error if text is an extension command
       */
@@ -529,7 +530,7 @@
      }
      /**
       * Throw an error if the text is an extension command.
-@@ -1193,11 +1441,19 @@
+@@ -1193,11 +1442,19 @@
       * @returns Object with steering and followUp arrays
       */
      clearQueue() {
@@ -552,7 +553,7 @@
          this._emitQueueUpdate();
          return { steering, followUp };
      }
-@@ -1207,11 +1463,11 @@
+@@ -1207,11 +1464,11 @@
      }
      /** Get pending steering messages (read-only) */
      getSteeringMessages() {

@@ -1,8 +1,8 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-566be910b0649bb7899ddbabeaf9e74f81d9a0286659d466a5d038c4b7d08089  dist/core/agent-session.js
+bdeee553bb719ed132cf2314552ca2c2e6dee4141d9989078cb8bdecab390743  dist/core/agent-session.js
 84430c2d0604cf86a53003ba2d68ec2ee27bd7acbd782fe32cb703de97681ac8  dist/core/compaction/compaction.js
 117da12529fbbd66a5f8c19aae82a19db24b3aff58fccbe740427040ae6202b3  dist/core/compaction/compaction.d.ts
-e348422692cee2ee4b066851ad5cd903f10524ce19f98c0f0b13ad3bff8ef788  dist/core/session-manager.js
+e4141426987ca37357f977024f06f08d679e280a741ed21facc770a900022ad0  dist/core/session-manager.js
 db49d9d9cc1ca0ab3f162cba3d34a77991d023231364f1100c2085674f7c5df6  dist/modes/rpc/rpc-mode.js
 9f2d495244de9170fb412cd9ae38fadf5824abc42c51b613ac5a9017386e7d0b  dist/core/agent-session.d.ts
 79af9473674c3206bea1b3f4d710d57de8010871a3d82462884721a17a5b24e0  dist/core/session-manager.d.ts
@@ -56,5 +56,5 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 03c0bc782fb360081ebcf3260362e5ed0618a3dc5433f81dd1e9aebe7c19d792
-# agent-comms-native-inputs-v1 4bb38701ee93350265b1d858dd9db27d16b51fdf04e2aa4d7dfda463ebb45975
+# agent-comms-native-tree-v1 1c76e2bdac15085296c4e01d6ca4f0948fffbf0f4410298248a62e06c90a08ff
+# agent-comms-native-inputs-v1 5fae8742246eac29404c2ac718ea79fd998bf29601324f1d2752dcd584aa262f
