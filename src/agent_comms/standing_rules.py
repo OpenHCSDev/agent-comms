@@ -6,6 +6,7 @@ files are declared in ``agent_comms.commander.standing`` until those files move 
 
 from __future__ import annotations
 
+import math
 import time
 from abc import abstractmethod
 from dataclasses import dataclass
@@ -29,12 +30,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
     @abstractmethod
     def line(self) -> str: ...
 
-    def began(self) -> float | None:
-        """When this violation began, or None when its rule cannot say: it shows on every read."""
-        return None
+    def began(self) -> float:
+        """When this violation began; one whose rule cannot say began after every read."""
+        return math.inf
 
     def broke_after(self, after: float) -> bool:
-        return (began := self.began()) is None or began >= after
+        return self.began() >= after
 
     def enforce(self, comms: Comms, commander: str) -> None:
         """What Core does itself when this rule breaks; a rule that only reports does nothing."""
@@ -55,7 +56,7 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
     why: str
-    since: float | None = None
+    since: float = math.inf
     text: ClassVar[str]
 
     @classmethod
@@ -63,15 +64,15 @@ class ReasonedStandingRule(StandingRule, declared_name=None):
     def reason(cls, comms: Comms, commander: str) -> str | None: ...
 
     @classmethod
-    def broken_at(cls, comms: Comms, commander: str) -> float | None:
-        return None
+    def broken_at(cls, comms: Comms, commander: str) -> float:
+        return math.inf
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
         return (cls(why, cls.broken_at(comms, commander)),) if why else ()
 
-    def began(self) -> float | None:
+    def began(self) -> float:
         return self.since
 
     def line(self) -> str:
@@ -100,7 +101,7 @@ class HuntDue(ReasonedStandingRule):
         return f"last hunt {int(age // 60)} min ago" if age > cls.seconds else None
 
     @classmethod
-    def broken_at(cls, comms: Comms, commander: str) -> float | None:
+    def broken_at(cls, comms: Comms, commander: str) -> float:
         return cls.hunted(comms, commander) + cls.seconds
 
 
@@ -136,6 +137,30 @@ class BridgeDown(ReasonedStandingRule):
     def reason(cls, comms: Comms, commander: str) -> str | None:
         receiving = comms.registry.snapshot().statuses[commander].receiving
         return None if receiving else f"{commander} is not receiving"
+
+
+@dataclass(frozen=True)
+class BoardDisagrees(StandingRule):
+    """An open order reads as no commit despite its linked pull request having merged."""
+
+    problem: str
+    order: str
+    merge: str
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(
+            cls(todo.id, todo.order.id, merged.sha)
+            for todo, merged in comms.goals.todos.board_disagreements(
+                comms.registry.require(commander).incarnation, comms.registry.storage_rule
+            )
+        )
+
+    def line(self) -> str:
+        return (
+            f"BOARD DISAGREES: {self.problem} order {self.order} reads no commit, "
+            f"but its linked PR merged as {self.merge} -> repair the progress read this wake"
+        )
 
 
 @dataclass(frozen=True)

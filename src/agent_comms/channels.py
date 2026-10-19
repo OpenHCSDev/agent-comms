@@ -8,25 +8,26 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
-from .channel_targets import BuiltinChannel, ChannelTarget, Tag
+from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import MembershipChange
+from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
-from .threads import Thread
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .registry_document import RosterVisibility
     from .registry_provenance import RegistryProvenance
+    from .threads import Thread
 
 
-class ChannelMemberIndex(dict[str, tuple[Thread, ...]]):
+class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
     """Executable threads indexed once for one roster, including empty tags."""
 
     __slots__ = ("threads",)
@@ -57,6 +58,7 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     parent: str | None = None
     archived: bool = False
     any_mode: bool = False
+    history_result_type: ClassVar[type[HistoryPageResult]] = ChannelHistoryPageResult
 
     def __post_init__(self) -> None:
         name = ChannelTarget.normalize_name(self.name)
@@ -69,7 +71,6 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
             raise ValueError("Channel presentation flags must be boolean.")
         if self.any_mode and not self.exact:
             raise ValueError("Only exact tag channels can include member activity.")
-        ChannelTarget(name).validate()
         if self.parent is not None:
             ChannelTarget(self.parent).validate()
         if self.parent == name:
@@ -91,17 +92,18 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
 
     @property
     @abstractmethod
-    def aggregate(self) -> bool: ...
-
-    @property
-    @abstractmethod
     def read_only(self) -> bool: ...
 
     @abstractmethod
     def can_set_archived(self, archived: bool) -> bool: ...
 
-    @abstractmethod
-    def require_routable(self) -> None: ...
+    @classmethod
+    def require_routable(cls) -> None:
+        pass
+
+    @classmethod
+    def exact_stored_target(cls) -> bool:
+        return True
 
     @abstractmethod
     def history_scope(self) -> ChannelDisplayScope: ...
@@ -121,8 +123,8 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     @abstractmethod
     def sort_key(self, ordering, view) -> tuple: ...
 
-    @abstractmethod
-    def delete_view_bindings(self, command) -> tuple: ...
+    def delete_view_bindings(self, command) -> tuple:
+        return ()
 
     @abstractmethod
     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
@@ -175,11 +177,7 @@ class GroupedChannel:
         return True
 
     def sort_key(self, ordering, view) -> tuple:
-        return not self.pinned, len(BuiltinChannel), *ordering.sort_fields(view)
-
-    @property
-    def aggregate(self) -> bool:
-        return False
+        return not self.pinned, len(BuiltinChannelView.names()), *ordering.sort_fields(view)
 
 
 class MembershipChannel:
@@ -191,9 +189,6 @@ class MembershipChannel:
     def read_only(self) -> bool:
         return False
 
-    def delete_view_bindings(self, command) -> tuple:
-        return ()
-
     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
         previous, current = self.matches(before), self.matches(after)
         if previous == current:
@@ -201,40 +196,27 @@ class MembershipChannel:
         return (MembershipChange.JOINED if current else MembershipChange.LEFT,)
 
 
-@dataclass(frozen=True, slots=True, kw_only=True)
-class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel):
-    builtin: BuiltinChannel
-
+class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_name=None):
     def validate_declaration(self) -> None:
-        if self.name != self.builtin.value:
+        if self.name != self.declared_name:
             raise ValueError("Built-in channel must retain its declaration identity.")
         if self.tags:
             raise ValueError("Built-in channels cannot have tag filters.")
         if self.parent is not None or self.archived:
             raise ValueError("Built-in channels cannot be grouped or archived.")
 
-    def matches(self, tags: frozenset[str]) -> bool:
-        return self.builtin.matches(tags)
+    exact = False
 
-    @property
-    def exact(self) -> bool:
-        return False
-
-    @property
-    def aggregate(self) -> bool:
-        return self.builtin.aggregate
+    @classmethod
+    def matches(cls, tags: frozenset[str]) -> bool:
+        return True
 
     def can_set_archived(self, archived: bool) -> bool:
         return False
 
-    def require_routable(self) -> None:
-        if self.aggregate:
-            raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
-
-    def history_scope(self) -> ChannelDisplayScope:
-        if self.aggregate:
-            return AllChannelDisplayScope(self.name)
-        return ChannelDisplayScope(self.name, frozenset((self.name,)))
+    @classmethod
+    def history_scope(cls) -> ChannelDisplayScope:
+        return ChannelDisplayScope(cls.declared_name, frozenset((cls.declared_name,)))
 
     def require_metadata(self) -> None:
         raise ValueError("Built-in channels cannot be grouped or archived.")
@@ -246,11 +228,56 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel):
         return not existing
 
     def sort_key(self, ordering, view) -> tuple:
-        return not self.pinned, tuple(BuiltinChannel).index(self.builtin), 0, 0, self.name
+        return not self.pinned, BuiltinChannelView.names().index(self.name), 0, 0, self.name
+
+
+class NonRoutableChannel:
+    """Views refuse sends and never identify an immutable addressed target."""
+
+    @classmethod
+    def require_routable(cls) -> None:
+        raise RelationViolationError("The selected view is a projection, not a routable target.")
+
+    @classmethod
+    def exact_stored_target(cls) -> bool:
+        return False
+
+
+class AnyChannel(NonRoutableChannel, BuiltinChannelView, declared_name="#any"):
+    history_result_type = EverythingHistoryPageResult
+
+    @classmethod
+    def history_scope(cls) -> ChannelDisplayScope:
+        return AllChannelDisplayScope(cls.declared_name)
+
+
+class NoneChannel(BuiltinChannelView, declared_name="#none"):
+    @classmethod
+    def matches(cls, tags: frozenset[str]) -> bool:
+        return not tags
+
+
+class AllChannel(BuiltinChannelView, declared_name="#all"):
+    pass
+
+
+ANY_CHANNEL = ChannelTarget(AnyChannel.declared_name)
+"""Every channel a reader receives: the target of an unscoped inbox or count."""
+
+
+class ReadOnlyChannel(NonRoutableChannel):
+    """History projections never acquire routing or membership authority."""
+
+    @property
+    def read_only(self) -> bool:
+        return True
+
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
+        return ()
 
 
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
+class SavedViewChannel(ReadOnlyChannel, PredicateChannel, GroupedChannel, Channel):
     view: SavedView
 
     def validate_declaration(self) -> None:
@@ -265,25 +292,33 @@ class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
         return False
 
     @property
-    def read_only(self) -> bool:
-        return True
-
-    def require_routable(self) -> None:
-        raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
-
-    @property
     def history_targets(self) -> frozenset[str]:
         return self.view.history_targets
 
     def delete_view_bindings(self, command) -> tuple:
         return (command(name=self.view.name),)
 
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
-        return ()
+
+@dataclass(frozen=True, slots=True)
+class TagChannelIdentity(GroupedChannel, Channel):
+    """A tag's original address remains its history identity after retirement."""
+
+    def validate_declaration(self) -> None:
+        Tag.validate(self.name.removeprefix("#"))
+        if self.tags != frozenset({self.name.removeprefix("#")}):
+            raise ValueError("A routable channel must be its exact tag.")
+
+    @property
+    def exact(self) -> bool:
+        return True
+
+    @property
+    def history_targets(self) -> frozenset[str]:
+        return frozenset({self.name})
 
 
 @dataclass(frozen=True, slots=True)
-class TagChannel(GroupedChannel, MembershipChannel, Channel):
+class TagChannel(MembershipChannel, TagChannelIdentity):
     def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         if self.any_mode:
             return MemberActivityDisplayScope.capture(self, snapshot)
@@ -292,24 +327,22 @@ class TagChannel(GroupedChannel, MembershipChannel, Channel):
     def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
         return index[self.name.removeprefix("#")]
 
-    def validate_declaration(self) -> None:
-        Tag.validate(self.name.removeprefix("#"))
-        if self.tags != frozenset({self.name.removeprefix("#")}):
-            raise ValueError("A routable channel must be its exact tag.")
-
     def matches(self, tags: frozenset[str]) -> bool:
         return bool(self.tags & tags)
 
-    @property
-    def exact(self) -> bool:
-        return True
 
-    def require_routable(self) -> None:
-        pass
+@dataclass(frozen=True, slots=True)
+class RetiredTagChannel(ReadOnlyChannel, TagChannelIdentity):
+    def validate_declaration(self) -> None:
+        super(RetiredTagChannel, self).validate_declaration()
+        if self.any_mode:
+            raise ValueError("Retired channels cannot include member activity.")
 
-    @property
-    def history_targets(self) -> frozenset[str]:
-        return frozenset({self.name})
+    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
+        return ()
+
+    def matches(self, tags: frozenset[str]) -> bool:
+        return False
 
 
 class ViewKind(StrEnum):

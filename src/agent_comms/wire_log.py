@@ -744,7 +744,7 @@ class WireLog:
         # The append owns derived offsets too: readers never advance them.
         with ExitStack() as resources, BusPageIndex(self.path) as index:
             opened = self._open_snapshot_unlocked(resources, metadata, metadata.last_seq)
-            index.prepare(opened)
+            index.sync(opened)
         StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:
@@ -864,10 +864,6 @@ class WireLog:
         return self.read_metadata_unlocked().last_seq
 
     def _claim_marker_unlocked(self) -> WireMetadata | None:
-        # _store_lock is also used for registry, channels, and marker files.
-        # Only the canonical bus may enter this read/durability barrier.
-        if self.path.name != "bus.jsonl":
-            return None
         metadata = self.read_metadata_unlocked()
         from .private_bus_checkpoint import certificate_enabled
 
@@ -884,8 +880,13 @@ class WireLog:
         Recovery and uncertified sources still flush before accepting visible
         bytes left by an interrupted append.
         """
+        # Generic store locks also reach this hook; only the bus owns these repairs.
+        if self.path.name != "bus.jsonl":
+            yield None
+            return
         private_marker = self._claim_marker_unlocked()
         if private_marker is None:
+            self._sync_replaced_page_index_unlocked(mode)
             yield None
             return
         marker = self.metadata_path
@@ -900,7 +901,16 @@ class WireLog:
         from .private_bus_checkpoint import opened_private_checkpoint_unlocked
 
         with opened_private_checkpoint_unlocked(self, private_marker, mode=mode) as source:
+            self._sync_replaced_page_index_unlocked(mode)
             yield source
+
+    def _sync_replaced_page_index_unlocked(self, mode: LockMode) -> None:
+        with BusPageIndex(self.path) as index:
+            if index.replaced_by(ObservedPath.at(self.path)):
+                mode.require_writer()
+                with ExitStack() as resources:
+                    opened = self._open_snapshot_unlocked(resources, self.private_marker_unlocked(), 0)
+                    index.sync(opened)
 
     @property
     def metadata_path(self) -> Path:

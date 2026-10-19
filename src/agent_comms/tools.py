@@ -23,8 +23,8 @@ from .thread_execution import (
     StartOwnerControl, ThreadCommandAvailability,
 )
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
-from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
-from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .channel_targets import ChannelTarget, CommandTarget
+from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -45,7 +45,6 @@ from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
-from .goal_states import ActiveGoal
 from .goals import Goal, GoalDeclaration, OrderCheck
 from .rule_reviews import RuleReviewEntry, RuleReviews
 from .standing_rules import RulesDue, StandingRule
@@ -61,7 +60,7 @@ from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
-                    TodoOperation)
+                    TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -667,7 +666,7 @@ class CommsGoalTool(ThreadToolRequest):
         name = caller.name
         command = replace(
             self.status(progress=self.progress),
-            expect=GoalPrecondition(goal_id=self.goal_id, expected_state=ActiveGoal()),
+            expect=self.status.model_precondition(self.goal_id),
             **{key: value for key, value in (
                 ("wait_for", self.wait_for), ("reviewed_inputs", self.reviewed_inputs),
             ) if value},
@@ -1056,6 +1055,9 @@ class CommsSendTool(ToolRequest):
     sender: str = tool_field("Sender thread name", wire_name="from")
     target: str = tool_field("Target thread name or channel", wire_name="to")
     body: str = tool_field("Message text")
+    audience: tuple[str, ...] = tool_field(
+        "Threads a channel message is for; no other member is woken", default=()
+    )
     type: Type[MessageKind] = tool_field(
         "Message kind", default=InfoKind, choices=MessageKind.sendable_names
     )
@@ -1064,9 +1066,8 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        result = comms.messaging.send(
-            self.sender, self.target, self.body, self.type, report=self.report
-        )
+        body = VerdictAudience(self.audience).addressed(self.target, self.body)
+        result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         return MessagePublished.from_send(result)
 
 
@@ -1173,7 +1174,7 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
-    target: str = tool_field("Channel or peer conversation", default=BuiltinChannel.ANY.value)
+    target: str = tool_field("Channel or peer conversation", default=ANY_CHANNEL.name)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 

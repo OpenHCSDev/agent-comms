@@ -8,6 +8,7 @@ from agent_comms.activity import ActivityState
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
 from agent_comms.presentation import MessageNotification, WireRevision
+from agent_comms.revision_views import NotificationsView
 from agent_comms.private_path import FileRevision
 from agent_comms.ui_model.observation import (
     NotificationsObserved, ObserveNotifications, ObserveThreads, ReadNotifications, ThreadPresented,
@@ -112,7 +113,7 @@ def test_global_notification_sources_still_refresh_all_views(tmp_path, monkeypat
         marker = tmp_path / 'changed-source'
         marker.write_text('A different captured revision')
         current = replace(revision, **{source: (FileRevision.capture(marker),)})
-    assert current.notifications_changed_since(revision)
+    assert current.changed_since(NotificationsView(), revision)
     changed = current.changed_threads(reading.observed, comms, reading.observed.activity)
     if source == 'registry':
         assert changed == reading.observed.results.keys()

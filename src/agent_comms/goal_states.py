@@ -225,7 +225,7 @@ class BlockedState(GoalState, FromOpenGoal):
         return self.transition_refusal()
 
     def transition_refusal(self) -> str:
-        return "Blocked goal requires an explicit retry through its owner."
+        return "Blocked goal requires an explicit retry."
 
 
 @dataclass(frozen=True)

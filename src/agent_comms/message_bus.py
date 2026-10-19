@@ -12,13 +12,14 @@ from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import ANY_CHANNEL, BuiltinChannel, ChannelTarget, CommandTarget
+from .channel_targets import CommandTarget
+from .channels import ANY_CHANNEL
 from .errors import UnregisteredThreadError
 from .coordinator import Coordination
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .historical_views import HistoryArchive
 from .message_page import (
-    NEWEST_PAGE, DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
+    DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
@@ -26,8 +27,6 @@ from .messages import Message
 from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
-    AllChannelDisplayScope, ChannelDisplayScope,
-    DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
     WatchAcknowledgment,
@@ -72,7 +71,7 @@ class MessageBus[Writes: Publisher]:
         self._registry = registry
         self._channels = ChannelCatalog.at(bus_path.parent)
         self.activity_index = self.log.register_append_index(BusActivityIndex(bus_path))
-        self.publisher = publisher(self.log, registry, self._channels)
+        self.publisher = publisher(self.log, registry, self._channels, self.opened_activity)
 
     @contextmanager
     def opened_activity(self) -> Iterator[ActivityClocks]:
@@ -81,6 +80,15 @@ class MessageBus[Writes: Publisher]:
             opening=CurrentSnapshotOpening(), prepared_indexes=self.log.prepare_append_indexes(),
         ) as source:
             yield self.activity_index.snapshot(source)
+
+    def require_channel(self, target: str):
+        """Resolve one declaration against the bus-owned activity cut."""
+        with self.opened_activity() as activity:
+            return self._channels.read().require_channel(target, activity)
+
+    def channel_declarations(self):
+        with self.opened_activity() as activity:
+            return self._channels.read().views(activity)
 
     @contextmanager
     def snapshot(
@@ -99,7 +107,8 @@ class MessageBus[Writes: Publisher]:
                     prepared_indexes=prepared,
                 ))
                 with CapturedSelection.reading(
-                    self._registry, self._channels, self.reads, viewer
+                    self._registry, self._channels, self.reads, viewer,
+                    self.activity_index.snapshot(source),
                 ) as basis:
                     pass
             yield basis, source
@@ -122,7 +131,7 @@ class MessageBus[Writes: Publisher]:
         """
         catalog = self._channels.read()
         delivery = DeliveryScope.capture(name, snapshot, catalog)
-        selection = delivery.selection(target, snapshot, catalog)
+        selection = delivery.selection(target, snapshot, self.require_channel)
         document = self.reads.read()
         seen = self.reads.cursor(delivery.actor, snapshot, document=document)
         with self.log.opened_wire_snapshot() as source:
@@ -199,7 +208,10 @@ class MessageBus[Writes: Publisher]:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
-            return target.pending_count(counts, basis.registry, basis.catalog)
+            return target.pending_count(
+                counts, basis.registry,
+                lambda name: basis.catalog.require_channel(name, basis.activity),
+            )
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
         if not names:
@@ -318,26 +330,5 @@ class MessageBus[Writes: Publisher]:
         delivery = DeliveryScope.capture(name, snapshot, self._channels.read())
         return self.log.read_page(MessagePageRequest(delivery, PageBounds(NewerTraversal(after))))
 
-    def dm_history_page(self, a: str, b: str, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Return one bounded page between two threads, either possibly deleted."""
-        snapshot = self._registry.snapshot()
-        scope = DMDisplayScope.capture(
-            snapshot.participant(a).name, snapshot.participant(b).name, snapshot
-        )
-        return self.log.read_page(MessagePageRequest(scope, bounds))
-
-    def channel_history_page(
-        self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
-    ) -> MessagePage:
-        """Return one bounded page from a channel in ascending order."""
-        channel = self._channels.read().require_channel(target.name)
-        scope = channel.history_scope()
-        return self.log.read_page(MessagePageRequest(scope, bounds))
-
-    def full_history_page(self, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
-        """Bounded combined view of explicit channel and direct wire messages."""
-        scope = AllChannelDisplayScope(BuiltinChannel.ANY.value)
-        return self.log.read_page(MessagePageRequest(scope, bounds))
-
     def channels(self) -> Sequence[str]:
-        return list(self._channels.read().views())
+        return list(self.channel_declarations())

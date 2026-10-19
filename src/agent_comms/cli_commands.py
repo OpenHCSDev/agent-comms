@@ -18,7 +18,6 @@ from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
-from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, cast, get_type_hints
 
@@ -31,6 +30,7 @@ from .catalog_document import CatalogDocument
 from .change_report import ChangeReport
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import CommandTarget, ResolvedChannel
+from .channels import ANY_CHANNEL
 from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
@@ -89,7 +89,6 @@ from .thread_execution import (
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_status import ThreadStatus
 from .threads import Thread
-from .tool_caller import ToolCaller
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,
@@ -141,7 +140,7 @@ def _shell_words(value: str | None) -> list[str] | None:
 
 
 def _message_reference(value: str) -> dict[str, object]:
-    """CLI spelling decodes once into the original wire reference."""
+    """CLI spelling decodes once into a wire reference."""
     sequence, message_id = value.split(":", 1)
     if int(sequence) <= 0 or not message_id:
         raise ValueError("Source must be a committed sequence:message_id reference")
@@ -150,7 +149,7 @@ def _message_reference(value: str) -> dict[str, object]:
 
 @dataclass(frozen=True)
 class TargetField:
-    """The original command field owns parsing, editor hints and requiredness."""
+    """The declared field owns parsing, editor hints and requiredness."""
     declaration: Field
     annotation: object
     value: object
@@ -290,7 +289,7 @@ def option(
 
 @dataclass(frozen=True)
 class TargetAction:
-    """A selection projects original bound commands, never a permission copy."""
+    """A selection keeps the bound commands, not a separate permission list."""
     bound: tuple[CliCommand, ...]
     targets: tuple[str, ...]
 
@@ -405,7 +404,7 @@ class OneTarget(TargetSelection):
 
     def run(self, declaration, comms, arguments, *, confirmed, channel, project, snapshot, catalog):
         name, = self.targets
-        resolved = name.resolve(snapshot, catalog)
+        resolved = name.resolve(snapshot, comms.bus.require_channel)
         bindings = tuple(bound for context in name.contexts(declaration, channel)
                          for bound in declaration.bindings(comms, name, context, snapshot=snapshot,
                                                            catalog=catalog, resolved=resolved))
@@ -433,7 +432,7 @@ class TargetBatch(TargetSelection):
         planned: dict[CliCommand, tuple[int, CommandTarget, str | None]] = {}
         for name in self.targets:
             try:
-                resolved = name.resolve(snapshot, catalog)
+                resolved = name.resolve(snapshot, comms.bus.require_channel)
             except ValueError as error:
                 outcomes.append((len(planned) + len(outcomes),
                                  TargetFailed(name.name, type(error).__name__, str(error))))
@@ -455,16 +454,16 @@ class TargetBatch(TargetSelection):
         # Parameters and every existing warning are authorized before any write.
         edited = tuple(command.for_editor(comms, name.name, project).edited(arguments).with_confirmation(confirmed)
                        for command, (_, name, _) in planned.items())
-        for (original, (position, name, context)), command in zip(planned.items(), edited, strict=True):
+        for (bound_command, (position, name, context)), command in zip(planned.items(), edited, strict=True):
             try:
                 current = comms.registry.snapshot()
                 current_catalog = (comms.channels.catalog.read()
-                                   if context or name.needs_catalog else None)
-                if original not in type(original).bindings(
+                                   if context or name.needs_channel_state else None)
+                if bound_command not in type(bound_command).bindings(
                         comms, name, context, snapshot=current, catalog=current_catalog,
-                        resolved=name.resolve(current, current_catalog)):
+                        resolved=name.resolve(current, comms.bus.require_channel)):
                     scope = f' in {context}' if context is not None else ''
-                    raise ValueError(f'The original binding for {name}{scope} changed; refresh the selection')
+                    raise ValueError(f'The bound command for {name}{scope} changed; refresh the selection')
                 result = TargetCompleted(name.name, command, command.apply(comms))
             except ValueError as error:
                 result = TargetFailed(name.name, type(error).__name__, str(error))
@@ -474,7 +473,7 @@ class TargetBatch(TargetSelection):
 
 @dataclass(frozen=True)
 class TargetEdit(Command):
-    """Accepted editor values use the original declaration and fresh binding."""
+    """Accepted editor values use the declared field and current bound command."""
     declaration: type[CliCommand]
     target: CommandTarget | str | tuple[CommandTarget | str, ...]
     arguments: dict[str, str | None]
@@ -612,37 +611,6 @@ class ThreadActivityRow:
 @dataclass(frozen=True)
 class ActiveStatusResult(CliResult):
     status: tuple[ThreadActivityRow, ...]
-
-
-@dataclass(frozen=True)
-class HistoryPageResult(CliResult):
-    messages_key: ClassVar[str] = "messages"
-    messages: tuple[Message, ...]
-    has_older: bool
-
-    @property
-    def before(self) -> PageCursor | None:
-        return self.messages[-1].view_cursor if self.messages else None
-
-    def encoded(self) -> dict[str, object]:
-        return {self.messages_key: [{**m.to_wire(), **m.display_metadata} for m in self.messages],
-                "before": FieldCodec.encode(self.before), "has_older": self.has_older}
-
-
-class DmHistoryPageResult(HistoryPageResult):
-    messages_key = "dm"
-
-
-class EverythingHistoryPageResult(HistoryPageResult):
-    messages_key = "everything"
-
-
-@dataclass(frozen=True)
-class ChannelHistoryPageResult(HistoryPageResult):
-    channel: str
-
-    def encoded(self) -> dict[str, object]:
-        return {**super().encoded(), "channel": self.channel}
 
 
 @dataclass(frozen=True)
@@ -885,8 +853,8 @@ class CliCommand(
         # the acquired namespace rather than reserving a special actor spelling.
         available_targets = tuple(item for item in selected if item.available(snapshot))
         catalog = (comms.channels.catalog.read()
-                   if channel or any(item.needs_catalog for item in selected) else None)
-        resolved_targets = tuple((name, name.resolve(snapshot, catalog)) for name in available_targets)
+                   if channel or any(item.needs_channel_state for item in selected) else None)
+        resolved_targets = tuple((name, name.resolve(snapshot, comms.bus.require_channel)) for name in available_targets)
         grouped: dict[type[CliCommand], dict[CliCommand, None]] = {}
         for member in cls.members_with(cls):
             if len(selected) > 1 and not member.multiple_targets:
@@ -974,7 +942,7 @@ class CliCommand(
         selection = cls.selected_targets(target)
         snapshot = comms.registry.snapshot()
         catalog = (comms.channels.catalog.read()
-                   if channel or any(item.needs_catalog for item in selection.targets) else None)
+                   if channel or any(item.needs_channel_state for item in selection.targets) else None)
         return selection.run(cls, comms, arguments, confirmed=confirmed, channel=channel,
                              project=os.getcwd() if project is None else project,
                              snapshot=snapshot, catalog=catalog)
@@ -1316,29 +1284,18 @@ class StatusCliCommand(CliCommand):
 
 @dataclass(frozen=True, kw_only=True)
 class HistoryCliCommand(CliCommand):
-    help = "Newest-first bounded history of a DM, channel, or everything"
-    with_thread: str | None = option("--with", help="DM with this thread", default=None)
-    channel: str | None = option("--channel", help="Channel (#all, #tag)", default=None)
-    everything: bool = option("--everything", help="Every message scope (the default)", default=False)
-    me: str | None = option("--as", help="DM participant; required with --with", default=None)
+    help = "Newest-first bounded history of a named target"
+    target: str = option("--target", help="#channel or @peer", default=ANY_CHANNEL.name)
+    me: str | None = option("--as", help="Participant, required only for DM history", default=None)
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
     before: PageCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
-        if sum(bool(x) for x in (self.with_thread, self.channel, self.everything)) > 1:
-            raise ValueError("history takes at most one of --with, --channel, --everything")
+        target = CommandTarget.named(self.target)
         traversal = self.before.older() if self.before is not None else OlderTraversal()
         bounds = PageBounds(traversal, self.limit)
-        if self.with_thread:
-            page = ctx.views.dm_history_page(ToolCaller.from_actor(self.me).subject(""), self.with_thread, bounds)
-            result: Callable[[tuple[Message, ...], bool], HistoryPageResult] = DmHistoryPageResult
-        elif self.channel:
-            page = ctx.views.channel_history_page(self.channel, bounds)
-            result = partial(ChannelHistoryPageResult, channel=self.channel)
-        else:
-            page = ctx.views.full_history_page(bounds)
-            result = EverythingHistoryPageResult
-        return result(tuple(reversed(page.messages)), page.has_older)
+        page = ctx.views.history_page(target, bounds, viewer=self.me)
+        return target.history_result(ctx.bus.require_channel, tuple(reversed(page.messages)), page.has_older)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -2134,11 +2091,12 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
         return channel.get(target, (None,)) if isinstance(channel, dict) else (channel,)
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog: CatalogDocument):
         if channel is None:
             return ()
-        if not catalog.require_channel(channel).matches(thread.tags):
-            return ()
+        with comms.bus.opened_activity() as activity:
+            if not catalog.require_channel(channel, activity).matches(thread.tags):
+                return ()
         return (cls(name=thread.name, channel=channel,
                     pinned=thread.name not in catalog.pinned_threads(channel)),)
 
