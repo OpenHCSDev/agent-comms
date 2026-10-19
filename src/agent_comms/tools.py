@@ -39,7 +39,7 @@ from .goal_actions import (
     GoalPrecondition,
     ModelInvocable,
     OrderGoalAction,
-    SetGoalAction,
+    SetGoalAction, TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
 from .goal_waits import StandbyReview, StandbyReviewSummary
@@ -652,7 +652,7 @@ class CommsGoalTool(ThreadToolRequest):
         "your decision to wait for a later reply without replaying uncertain inputs."
     )
     goal_id: str = tool_field("Goal identity provided in the turn context")
-    status: type[GoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
+    status: type[TransitionGoalAction] = tool_field("Goal state", choices=GoalAction.model_choices)
     progress: str = tool_field("Progress summary; blocked requires a nonempty explicit reason")
     wait_for: tuple[str, ...] | None = tool_field(
         "Explicit thread names or @names; required for standby", default=None

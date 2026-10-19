@@ -164,17 +164,8 @@ class GoalAction[Result: GoalDeclaration](DeclaredFamily, Command, affix="GoalAc
 
 
 @dataclass(frozen=True, kw_only=True)
-class ReportsProgress:
-    """The progress a goal action reports; an action that names none keeps the goal's."""
-
+class TransitionGoalAction(GoalAction[Goal]):
     progress: str | None = None
-
-    def reported_progress(self, goal: Goal) -> str:
-        return goal.progress if self.progress is None else self.progress
-
-
-@dataclass(frozen=True, kw_only=True)
-class TransitionGoalAction(ReportsProgress, GoalAction[Goal]):
 
     @abstractmethod
     def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState: ...
@@ -182,17 +173,21 @@ class TransitionGoalAction(ReportsProgress, GoalAction[Goal]):
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
         goal.order.require_order(goal, ctx.goals, ctx.thread.incarnation)
         state = self.next_state(goal, ctx)
-        goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
+        self.admit(goal, state, ctx)
         self.before_transition(goal, ctx)
         changed = replace(
             goal,
             state=state,
             revision=goal.revision + 1,
-            progress=self.reported_progress(goal),
+            progress=goal.progress if self.progress is None else self.progress,
             reported_turn=ctx.report_turn if ctx.model_report else goal.reported_turn,
         )
         self.before_goal_publish(changed, ctx)
         return changed
+
+    def admit(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+        """The goal's own state machine admits this transition."""
+        goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
 
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
         pass
@@ -579,7 +574,7 @@ def required_block_reason(reason: str | None) -> str:
 
 
 @dataclass(frozen=True, kw_only=True)
-class RetryGoalAction(ReportsProgress, GoalAction[Goal], ModelInvocable, OwnerInvocable, RuntimeInvocable):
+class RetryGoalAction(TransitionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     """Retry a blocked goal: the unit itself, its commander or the owner; authorize_retry fences
     every attempt against the unresolved one."""
 
@@ -597,11 +592,13 @@ class RetryGoalAction(ReportsProgress, GoalAction[Goal], ModelInvocable, OwnerIn
             goal_id=goal.id, expected_revision=goal.revision,
         )
 
-    def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
+    def next_state(self, goal: Goal, ctx: GoalActionContext) -> GoalState:
+        return ActiveGoal()
+
+    def admit(self, goal: Goal, state: GoalState, ctx: GoalActionContext) -> None:
+        """A blocked goal leaves its state machine only through the attempt ledger's retry."""
         if not isinstance(goal.state, BlockedState):
             raise ValueError("The blocked goal changed; refresh its state.")
         store = ctx.goals.open_goal_store()
         generation = store.require_generation(goal.id)
         generation.lifecycle.authorize_retry(store, generation, uuid4().hex)
-        return replace(goal, state=ActiveGoal(), revision=goal.revision + 1,
-                       progress=self.reported_progress(goal))
