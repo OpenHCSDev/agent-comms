@@ -41,7 +41,7 @@ from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .goal_actions import DirectiveGoalAction
-from .locked_store import LockedStore, RootFile
+from .connector_store import ConnectorStore
 from .messages import Message
 from .standing_rules import RulesDue
 from .todos import DirectiveText
@@ -149,25 +149,6 @@ class ConnectorGrants:
     def holds(self, token: str) -> bool:
         held = self.access.get(digest(token))
         return held is not None and held.expires_at > time.time()
-
-
-@dataclass(frozen=True, slots=True)
-class ConnectorStore(RootFile, LockedStore[ConnectorGrants]):
-    lock_rank = 11
-    filename: ClassVar[str] = "grants.json"
-
-    @classmethod
-    def owned(cls) -> ConnectorStore:
-        directory = Path.home() / ".local/state/agent-comms/connector"
-        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
-        return cls(cls.path_in(directory))
-
-    @property
-    def record_type(self) -> type[ConnectorGrants]:
-        return ConnectorGrants
-
-    def empty(self) -> ConnectorGrants:
-        return ConnectorGrants()
 
 
 class OAuthError(Exception):
