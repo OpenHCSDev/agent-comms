@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Self
+from typing import TYPE_CHECKING, ClassVar
 
 from .activity import ObservedActivity
 from .errors import RelationViolationError
@@ -15,7 +15,7 @@ from .field_codec import NullMember, RecordMember, SubclassUnion
 from .locked_store import JsonDocument
 from .routing import TurnRouting
 from .store_files import _store_lock
-from .thread_identity import ThreadIncarnation, TurnId, TurnIdentity
+from .thread_identity import ThreadIncarnation, TurnFence, TurnId, TurnIdentity
 from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
@@ -229,34 +229,7 @@ class TurnState:
         return turn_id is None or self.active.observed_id(self.finished_turn_id) == turn_id
 
 
-@dataclass(frozen=True, slots=True)
-class TurnFence:
-    """One exact turn identity and its recorded input generation."""
-
-    identity: TurnIdentity
-    turn_id: str
-    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
-
-    def renamed(self, name: str) -> Self:
-        """Registry alias resolution changes the name, never incarnation or epochs."""
-        return replace(self, identity=replace(
-            self.identity, incarnation=replace(self.identity.incarnation, name=name)
-        ))
-
-    def can_attest(self, claim_scope: int) -> bool:
-        return (self.identity.generation > 0 and self.claimed_generation > 0
-                and self.claimed_generation == claim_scope)
-
-    def matches(self, other: TurnFence) -> bool:
-        """Lease and finished observations may describe the same exact turn."""
-        return (
-            self.identity == other.identity
-            and self.turn_id == other.turn_id
-            and self.claimed_generation == other.claimed_generation
-        )
-
-
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True, slots=True, eq=False)
 class TurnLeaseFence(TurnFence):
     """Exact local begin-turn lease and its original record."""
 

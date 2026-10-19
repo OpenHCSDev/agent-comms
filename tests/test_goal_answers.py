@@ -57,8 +57,5 @@ def test_clear_during_original_or_origin_turn_does_not_block_missing_goal(
         comms.agents.finish_turn(lease)
 
 
-def test_absent_goal_projection_does_not_run_present_work():
-    def forbidden(_goal):
-        raise AssertionError("NoGoal ran goal work")
-
-    assert NoGoal().project(forbidden, tuple) == ()
+def test_absent_goal_contains_no_actual_goals():
+    assert tuple(NoGoal()) == ()

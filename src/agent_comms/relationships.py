@@ -722,9 +722,8 @@ class ThreadRelationships:
             for thread in registry.threads.values()
             for executor in thread.role.executor(thread)
         ):
-            owner.goal.active().project(lambda goal: ThreadRelationships._project_goal_contacts(
-                goal, owner, registry, contacts, diagnostics,
-            ), lambda: None)
+            for goal in owner.goal.active():
+                ThreadRelationships._project_goal_contacts(goal, owner, registry, contacts, diagnostics)
         return tuple(contacts), tuple(diagnostics)
 
     @staticmethod
