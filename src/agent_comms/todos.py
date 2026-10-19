@@ -746,12 +746,10 @@ class DefectText(OrderWords):
     a text naming no defect needs no label."""
 
     SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
-    REFUSED = BluntText.REFUSED
-    refusal = BluntText.refusal
+    REFUSED, refusal = BluntText.REFUSED, BluntText.refusal  # the label is BluntText's own
 
     @classmethod
     def found(cls, text: str) -> list[str]:
-        """The Slop: lines left unlabeled: nothing when no line names a defect or a label is given."""
         return [] if BluntText.found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
