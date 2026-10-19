@@ -204,8 +204,9 @@ class OwnedSend(CodingToolOwner):
                 worktree=Path(self.thread.worktree),
                 incarnation=str(owner.created_at),
                 claims=(resource,),
-                claim=OwnedAttemptClaim(turn_id=self.turn.value,
-                                        owner_claimed_generation=self.claim_scope, operation_id=slot),
+                claim=OwnedAttemptClaim(
+                    turn_id=self.turn.value, owner_claimed_generation=self.claim_scope,
+                    operation_id=slot),
             )
             return committed.require_claim_transition().claimed(canonical)
 
