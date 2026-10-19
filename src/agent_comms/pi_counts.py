@@ -79,6 +79,13 @@ class PiCount(WireValue):
     def otherwise(self, other: PiCount) -> PiCount:
         return other
 
+    def plus(self, other: PiCount) -> PiCount:
+        """The sum of two counts; an unreported count adds nothing."""
+        return other
+
+    def added(self, count: int) -> PiCount:
+        return ReportedCount(count)
+
     def provisional(self, session: TurnSession) -> Iterator[AgentEvent]:
         return iter(())
 
@@ -120,6 +127,12 @@ class ReportedCount(PiCount):
 
     def otherwise(self, other: PiCount) -> PiCount:
         return self
+
+    def plus(self, other: PiCount) -> PiCount:
+        return other.added(self.count)
+
+    def added(self, count: int) -> PiCount:
+        return ReportedCount(self.count + count)
 
     def confirm(self, account: UsageAccount) -> None:
         account.confirm(self)

@@ -15,6 +15,7 @@ from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
 from agent_comms.threads import Thread
 from agent_comms.message_page import PageBounds
 from agent_comms.page_traversal import OlderTraversal
+from agent_comms.store_files import _store_lock
 from test_private_human_ingress import _root
 
 
@@ -61,22 +62,25 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
         for i, target in enumerate(("#engineering", "#api", "#ui", "#engineering"), 1)
     ]
     before = "".join(json.dumps(row.to_wire()) + "\n" for row in rows)
-    comms.bus.log.path.write_text(before)
-    comms.bus.log.path.chmod(0o600)
-    marker = comms.bus.log.read_metadata_unlocked(required=True)
-    marker.last_seq = marker.claimed_after_seq = 4
-    marker.checkpoint_version = marker.checkpoint_seal = None
-    comms.bus.log.write_metadata_unlocked(marker)
-    (tmp_path / "private_bus_checkpoint.sqlite3").unlink()
-    install_private_bus_checkpoint(comms.bus.log)
+    with _store_lock(tmp_path / "wire"), comms.bus.log.locked():
+        comms.bus.log.path.write_text(before)
+        comms.bus.log.path.chmod(0o600)
+        marker = comms.bus.log.read_metadata_unlocked(required=True)
+        marker.last_seq = marker.claimed_after_seq = 4
+        marker.checkpoint_version = marker.checkpoint_seal = None
+        comms.bus.log.write_metadata_unlocked(marker)
+        (tmp_path / "private_bus_checkpoint.sqlite3").unlink()
+        install_private_bus_checkpoint(comms.bus.log, _bus_locked=True)
     catalog = comms.channels.catalog
     imported = catalog.read()
     assert json.loads(catalog.path.read_text()) == original  # read is not activation
-    projection = imported.resolve("#engineering")
+    with comms.bus.opened_activity() as activity:
+        pass
+    projection = imported.require_channel("#engineering", activity)
     assert projection.view.original_targets == {"#engineering"}
     assert projection.pinned and projection.parent == "#ui"
     assert projection.created_at == 17 and imported.pinned_threads("#engineering") == {"a"}
-    assert imported.resolve("#api").exact and imported.resolve("#api").any_mode
+    assert imported.require_channel("#api", activity).exact and imported.require_channel("#api", activity).any_mode
     assert "#engineering" not in imported.targets_for(frozenset({"api"}))
     assert set(
         next(v.members for v in comms.views.channel_views() if v.channel.name == "#engineering")
@@ -105,7 +109,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     with pytest.raises(ValueError, match="reserved"):
         comms.channels.create_tag("engineering")
     comms.channels.set_channel_metadata("engineering", parent="#ui", archived=True)
-    assert catalog.read().require_channel("#engineering").archived
+    assert comms.bus.require_channel("#engineering").archived
     comms.channels.set_saved_view(
         replace(imported.saved_views["engineering"], original_targets=frozenset())
     )
@@ -144,8 +148,8 @@ def test_restoring_same_named_view_keeps_current_predicate_and_original_target_h
         created_at=19,
     )
     comms.channels.set_saved_view(current)
-    with comms.channels.catalog.editing() as document:
-        document.restore_missing(source, existing=True)
+    with comms.bus.opened_activity() as activity, comms.channels.catalog.editing() as document:
+        document.restore_missing(source, activity, existing=True)
     restored = comms.channels.catalog.read().saved_views["engineering"]
     assert restored.predicate == current.predicate
     assert restored.created_at == 19

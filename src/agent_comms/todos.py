@@ -28,6 +28,7 @@ from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
     boundary_decoder,
 )
+from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
@@ -273,6 +274,10 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The held order this progress leaves waiting on the fleet's install."""
         return ()
 
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        """Linked merges this progress incorrectly reports as no commit."""
+        return ()
+
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -309,6 +314,9 @@ class Moving(Stalling):
 
 @dataclass(frozen=True)
 class NoCommitProgress(Stalling, OrderProgress):
+    def missing_merges(self, source: ProgressSource) -> tuple[MergedProgress, ...]:
+        return tuple(MergedProgress.found(source))
+
     @property
     def line(self) -> str:
         return "no commit since the order"
@@ -1159,11 +1167,18 @@ class StrikeTodo(TodoOperation):
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
+@dataclass(frozen=True)
 class VerdictAudience:
-    """The order's unit and its goal's thread; no verdict kind today concerns every unit."""
-    @staticmethod
-    def targets(todo: Todo) -> tuple[str, ...]:
-        return tuple(dict.fromkeys((todo.held().owner, *todo.goal.threads())))
+    """The threads a send is for; a send reaching many threads wakes no thread outside it."""
+    threads: tuple[str, ...]
+
+    @classmethod
+    def of(cls, unit: str, goal: GoalReference) -> VerdictAudience:
+        """An order's unit and its goal's thread; no verdict kind today concerns every unit."""
+        return cls(tuple(dict.fromkeys((unit, *goal.threads()))))
+
+    def addressed(self, target: str, body: str) -> str:
+        return CommandTarget.named(target).addressed(self.threads, body)
 
 
 @dataclass(frozen=True)
@@ -1619,6 +1634,18 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def board_disagreements(
+        self, commander: ThreadIncarnation, storage: StorageRule,
+    ) -> Iterator[tuple[Todo, MergedProgress]]:
+        """Open orders whose progress misses a linked merge, sharing one PR read cache."""
+        todos = self.held_for_commander(commander)
+        pulls = PullRequests(todos)
+        for todo in todos:
+            progress = OrderProgress.read(todo, storage, pulls)
+            source = ProgressSource(todo, storage.order_checkout(todo.held().owner, todo.id), pulls)
+            for merged in progress.missing_merges(source):
+                yield todo, merged
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""

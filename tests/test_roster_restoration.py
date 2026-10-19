@@ -12,16 +12,17 @@ from agent_comms.display_order import LastActivityThreadSort
 from agent_comms.errors import RelationViolationError
 from agent_comms.thread_status import ArchivedThreadStatus, StoppedThreadStatus
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import ActiveTurn, NoTurn
+from agent_comms.turn_lease import NoTurnRecord
 
 
 def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity(tmp_path):
     old = Comms(tmp_path / "old")
     current = Comms(tmp_path / "current")
     live = old.registry.new_thread('live', frozenset({'comms'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(tmp_path / 'saved.jsonl'), title='Preserved title', task='Original task', active_turn=ActiveTurn('old-turn', os.getpid()))
+    missing = old.registry.new_thread('missing', frozenset({'nra', 'openhcs'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), session_file=str(tmp_path / 'saved.jsonl'), title='Preserved title', task='Original task')
     old.registry.declare(live)
     old.registry.declare(missing)
+    missing = old.agents.begin_turn("missing", "old-turn").thread
     old.messaging.send("live", "missing", "Old pending work must not be replayed").message.message_id
     current.registry.declare(replace(live, title="Current live title"))
     current.messaging.initialize_private_initial_protocol()
@@ -36,7 +37,7 @@ def test_restore_keeps_live_owner_and_bus_while_importing_saved_stopped_identity
     assert after.threads["live"] == before.threads["live"]
     assert after.owner_generations["live"] == before.owner_generations["live"]
     assert after.claimed_generations["live"] == before.claimed_generations["live"]
-    assert after.threads["missing"] == replace(missing, process_identity=NoProcess(), active_turn=NoTurn())
+    assert after.threads["missing"] == replace(missing, process_identity=NoProcess(), turn_record=NoTurnRecord())
     assert after.statuses["missing"] == StoppedThreadStatus()
     assert after.aliases["former-name"] == "missing"
     assert current.bus.log.path.read_bytes() == bus
@@ -92,26 +93,26 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     old.channels.set_channel_pinned("#nra", True)
     old.channels.set_channel_pinned("#all", True)
     new.channels.set_channel_sort("#comms", LastActivityThreadSort)
-    before = new.channels.catalog.read().require_channel("#comms")
+    before = new.bus.require_channel("#comms")
     old_files = {p: p.read_bytes() for p in old.root.glob("*.json")}
 
-    with new.channels.catalog.editing() as document:
+    with new.bus.opened_activity() as activity, new.channels.catalog.editing() as document:
         document.restore_missing(
-            old.channels.catalog.read(), existing=True
+            old.channels.catalog.read(), activity, existing=True
         )
-    assert new.channels.catalog.read().require_channel("#comms") == before
-    assert not new.channels.catalog.read().require_channel("#all").pinned
+    assert new.bus.require_channel("#comms") == before
+    assert not new.bus.require_channel("#all").pinned
     for name in ("#nra", "#openhcs"):
-        assert new.channels.catalog.read().require_channel(name) == old.channels.catalog.read().require_channel(
+        assert new.bus.require_channel(name) == old.bus.require_channel(
             name
         )
     assert old_files == {p: p.read_bytes() for p in old.root.glob("*.json")}
-    with new.channels.catalog.editing() as document:
+    with new.bus.opened_activity() as activity, new.channels.catalog.editing() as document:
         document.restore_missing(
-            old.channels.catalog.read(), existing=True
+            old.channels.catalog.read(), activity, existing=True
         )
-    assert new.channels.catalog.read().require_channel("#comms") == before
-    assert new.channels.catalog.read().require_channel("#nra").any_mode
+    assert new.bus.require_channel("#comms") == before
+    assert new.bus.require_channel("#nra").any_mode
 
 
 @pytest.mark.parametrize("repair_existing", [False, True])

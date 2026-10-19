@@ -15,11 +15,12 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
-from agent_comms.standing_rules import BridgeDown, DiskLow, HuntDue, PlanIdle, RulesDue, StandingRule
+from agent_comms.standing_rules import BoardDisagrees, BridgeDown, DiskLow, HuntDue, PlanIdle, RulesDue, StandingRule
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import CleanHunt, RecordHuntTodo, Todo
+from agent_comms.todos import (CleanHunt, MergedProgress, NoCommitProgress, OpenPrProgress,
+    OrderProgress, PullRequest, PullRequests, RecordHuntTodo, Todo, UnreadProgress)
 from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
@@ -39,6 +40,45 @@ def standing(commander, commander_script):
 
 def lines(comms, member, commander="lead"):
     return [found.line() for found in member.violations(comms, commander)]
+
+
+@pytest.mark.parametrize("reported,alarms", [
+    (NoCommitProgress(), True),
+    (MergedProgress("d" * 9), False),
+    (OpenPrProgress(1581, "b" * 9, at=500), False),
+    (UnreadProgress("forge unavailable"), False),
+])
+def test_board_self_check_uses_order_progress_and_its_linked_merge(
+        commander, standing, monkeypatch, reported, alarms):
+    comms, caller = commander
+    owned, pending, foreign = (create(commander, pid) for pid in ("P77", "P109", "P117"))
+    stamp = "1970-01-01T00:08:20Z"
+    merged = PullRequest.listed(1581, "docs/module-layers", "b" * 40, "d" * 40,
+        stamp, stamp, owned.order.pull_request_body("Module layer map"))
+    opened = PullRequest.listed(1624, "ratchet/none-absence", "c" * 40, "", "",
+        stamp, pending.order.pull_request_body("Declared measure"))
+    other = PullRequest.listed(1629, "ratchet/decoder-marker", "e" * 40, "f" * 40,
+        stamp, stamp, "Agent-Comms-Order: another-order\n")
+
+    def forge(self, repo, state, order):
+        return (merged, other) if state == "merged" else (opened,)
+
+    monkeypatch.setattr(PullRequests, "read", forge)
+    assert BoardDisagrees.violations(comms, "lead") == ()
+    reads = []
+
+    def broken_board(cls, todo, storage, pulls):
+        reads.append(todo.id)
+        return reported
+
+    monkeypatch.setattr(OrderProgress, "read", classmethod(broken_board))
+    expected = [f"BOARD DISAGREES: P77 order {owned.order.id} reads no commit, "
+                "but its linked PR merged as ddddddddd -> repair the progress read this wake"] if alarms else []
+    assert lines(comms, BoardDisagrees) == expected
+    assert set(reads) == {owned.id, pending.id, foreign.id}
+    # Rotation calls this tool each wake. A still-broken board must survive its after cursor.
+    read = CommsStandingRulesTool(after=time.time() + 100).apply(comms, caller)
+    assert [line for line in read.broken if line.startswith("BOARD DISAGREES:")] == expected
 
 
 def test_plan_idle_names_a_ready_phase_until_an_order_serving_it_is_open(commander):
