@@ -454,7 +454,7 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
     script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed')
     assert [script.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
     why = 'P1 rereads the counter per event; this read of the P2 path found it clean'
-    script.hunt(f'{__file__}:1', why)
+    script.hunt(f'{__file__}:1', why, '')
     assert comms.goals.todos.hunts_for_commander(comms.registry.require('lead').incarnation)[0].why == why
     done = replace(comms.goals.todos.get('P2'), state=DoneTodoState)
     with pytest.raises(TodoError, match='P2 is done'):

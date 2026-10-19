@@ -27,9 +27,9 @@ DOCUMENTED = [
     ("order", "fire worker --why 'late twice'", {"unit": "worker", "why": "late twice"}),
     ("order", "close P1 --works seen --artifact seen.png", {"pid": "P1", "works": "seen", "artifact": "seen.png"}),
     ("order", "hunt a.py:1 --why why --sent abc",
-     {"where": "a.py:1", "why": "why", "sent": "abc", "clean": False}),
-    ("order", "hunt a.py:1 --why why --clean",
-     {"where": "a.py:1", "why": "why", "sent": "", "clean": True}),
+     {"where": "a.py:1", "why": "why", "sent": "abc"}),
+    ("order", "hunt a.py:1 --why why",
+     {"where": "a.py:1", "why": "why", "sent": ""}),
     ("order", "next-hunt", {}),
     ("order", "board", {}),
     ("order", "overdue", {}),
@@ -67,9 +67,8 @@ def test_the_hunt_prompt_prints_a_command_line_the_hunt_parser_accepts(commander
     printed = order.HuntVerb.due("a.py").split("then ", 1)[1]
     tool, verb, *usage = re.sub(r"\[[^]]*\]", "", printed).split()
     assert (tool, verb) == ("order", "hunt")
-    required = " ".join(usage)
-    for outcome in re.search(r"\((.*?)\)", required).group(1).split(" | "):
-        line = re.sub(r"\(.*?\)", outcome, required)
-        argv = [verb, *(re.sub(r"^[A-Z:]+$", "x", token) for token in line.split())]
-        parsed = order.OrderVerb.parse(argv, "")
-        assert type(parsed) is order.HuntVerb and getattr(parsed, outcome.split()[0].removeprefix("--"))
+    argv = [verb, *(re.sub(r"^[A-Z:]+$", "x", token) for token in usage)]
+    parsed = order.OrderVerb.parse(argv, "")
+    assert type(parsed) is order.HuntVerb and parsed.sent == ""
+    ordered = order.OrderVerb.parse([*argv, "--sent", "existing-order"], "")
+    assert type(ordered) is order.HuntVerb and ordered.sent == "existing-order"
