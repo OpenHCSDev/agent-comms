@@ -12,11 +12,12 @@ def native_reader(path):
 def completed_counts(state, viewer):
     for _ in range(50):
         result = state.counts(viewer, document=state.reads.read(), visibility=DEFAULT_ROSTER)
-        if not result.pending and state.preparation is state._idle:
+        if state.preparation is state._idle:
             return result
-        preparation = state.preparation
-        assert preparation is not state._idle, "Native counts are pending without authorized preparation"
-        preparation.future.result(timeout=10)
+        futures = state.watch(frozenset(), lambda _: None)
+        assert futures, "Native counts are pending without authorized preparation"
+        for future in futures:
+            future.result(timeout=10)
     raise AssertionError("Native preparation did not cover the fixture")
 
 
@@ -25,7 +26,8 @@ def completed_snapshot(comms, worktree, **options):
         snapshot = comms.views.viewer_snapshot(worktree, **options)
         if not snapshot.unread_pending and comms.views.transcript_reads.preparation is comms.views.transcript_reads._idle:
             return snapshot
-        preparation = comms.views.transcript_reads.preparation
-        assert preparation is not comms.views.transcript_reads._idle, "Snapshot is pending without native preparation"
-        preparation.future.result(timeout=10)
+        futures = comms.views.transcript_reads.watch(frozenset(), lambda _: None)
+        assert futures, "Snapshot is pending without native preparation"
+        for future in futures:
+            future.result(timeout=10)
     raise AssertionError("Native preparation did not cover the fixture")

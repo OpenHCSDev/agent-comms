@@ -338,7 +338,10 @@ def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause()
     with pytest.raises(ValueError) as failure:
         FieldCodec.decode(str | int, None)
     assert isinstance(failure.value.__cause__, ValueError)
-    assert str(failure.value.__cause__) == "Expected <class 'str'>, received NoneType"
+    from agent_comms.field_codec import compile_decoder
+
+    first = compile_decoder(str | int).alternatives[0]
+    assert str(failure.value.__cause__) == f"Expected {first.target}, received NoneType"
 
 
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
