@@ -14,6 +14,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .goal_management import Goals
 from .history_views import HistoryViews
+from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
@@ -85,4 +86,7 @@ def client_wire(root: Path | None) -> Iterator[Comms]:
     """
     route = resolve_comms_route(root)
     with route.hold_client_route():
+        # Refuse before opening stores that maintenance may hold locked. This
+        # observation grants nothing: writes still check under their own locks.
+        MaintenanceBarrier(route.root / "registry.json").assert_open_unlocked()
         yield Comms(route, projection=CompletingRouteCounts)
