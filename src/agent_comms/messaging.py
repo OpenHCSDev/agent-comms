@@ -12,13 +12,13 @@ from .registration import Registration
 if TYPE_CHECKING:
     from .turn_lease import FailedTurn
 from .bus_publication import AgentOrigin, HumanOrigin
+from .change_report import ChangeReport
 from .envelope_claim_transitions import FileClaimPath
 from .errors import RelationViolationError, UnregisteredThreadError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .messages import AlertKind, InfoKind, Message, MessageKind, MessageRole, ConversationRole, NoticeRole
 from .publisher import InitialWrites, OwnerPublisher
-from .change_report import ChangeReport
 from .store_files import SharedLock, _store_lock
 from .thread_identity import UserThreadRole
 from .threads import Thread

@@ -16,8 +16,8 @@ from .notification_progress import AcknowledgedProgress
 if TYPE_CHECKING:
     from .agent_backend import AgentBackend
     from .agent_events import RuntimeInfoObservation
-    from .messaging import Messaging
     from .bus_publication import CommittedDelivery
+    from .messaging import Messaging
     from .notification_progress import AssignmentProgress
     from .presentation import MessageNotification
     from .registration import Registration
@@ -40,7 +40,12 @@ from .store_files import SharedLock, _store_lock
 from .thread_identity import OwnerIdentity, ThreadIncarnation
 from .threads import Thread
 from .turn_lease import (
-    FINISHED_ENDING, NoFinishedTurn, TurnCompletion, TurnEnding, TurnLeaseFence, TurnState,
+    FINISHED_ENDING,
+    NoFinishedTurn,
+    TurnCompletion,
+    TurnEnding,
+    TurnLeaseFence,
+    TurnState,
 )
 from .turn_phase import PreparingPhase, TurnPhase
 
@@ -295,8 +300,8 @@ class AgentActivity:
         self, lease: TurnLeaseFence, ending: TurnEnding = FINISHED_ENDING,
     ) -> TurnCompletion:
         """End the original record before any registry-dependent cleanup or notice."""
-        effect = lease.record.end(lease, ending)
-        effect.notify(self.messaging, lease.identity.incarnation.name)
+        for terminal in lease.record.end(lease, ending):
+            terminal.notify_failure(self.messaging, lease.identity.incarnation.name)
         with _store_lock(self._wire_lock_path):
             released, fence = self.registry.release_turn(lease)
             if not released:

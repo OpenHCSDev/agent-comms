@@ -55,7 +55,9 @@ class Coordination:
         """Join entry before cancellation, and pass the real exit back to its worker."""
         def enter() -> Result:
             value = context.__enter__()
-            resources.push_async_exit(partial(Coordination.run_worker, context.__exit__))
+            resources.push_async_exit(
+                lambda *exit_info: Coordination.run_worker(context.__exit__, *exit_info)
+            )
             return value
 
         return await Coordination.run_worker(enter)

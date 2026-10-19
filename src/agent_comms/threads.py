@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Iterator
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -287,8 +288,8 @@ class Thread(ThreadProvenance):
         self.turn_record.read().require_current(claim_scope, self.turn_generation)
 
     def require_turn(self, turn_id: TurnId, claim_scope: int) -> None:
-        lease = self.turn_lease
-        if lease is None or not lease.can_attest(claim_scope) or TurnId(lease.turn_id) != turn_id:
+        lease = self.require_turn_lease()
+        if not lease.can_attest(claim_scope) or TurnId(lease.turn_id) != turn_id:
             raise RelationViolationError("live owner does not hold the requested turn")
 
     @property
@@ -365,27 +366,24 @@ class Thread(ThreadProvenance):
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
 
-    @property
-    def turn_identity(self) -> TurnIdentity | None:
-        lease = self.turn_lease
-        return lease.identity if lease is not None else None
+    def turn_leases(self) -> Iterator[TurnLeaseFence]:
+        return self.turn_record.leases(
+            self.incarnation, self.process_identity, self.turn_generation,
+        )
 
     @property
     def turn_lease(self) -> TurnLeaseFence | None:
-        """Read this record's exact turn once; no phase is cached on the thread."""
-        return next(self.turn_record.leases(
-            self.incarnation, self.process_identity, self.turn_generation,
-        ), None)
+        """Read the record's public optional projection, without deciding its state."""
+        return self.turn_record.lease(self.incarnation, self.process_identity, self.turn_generation)
 
     def require_turn_lease(self) -> TurnLeaseFence:
-        lease = self.turn_lease
-        if lease is None:
-            raise RelationViolationError("An authorized original turn is required")
-        return lease
+        return self.turn_record.require_lease(
+            self.incarnation, self.process_identity, self.turn_generation,
+        )
 
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
-        lease = self.turn_lease
-        return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
+        return any((lease.identity, lease.turn_id) == (identity, turn.value)
+                   for lease in self.turn_leases())
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.
@@ -397,10 +395,7 @@ class Thread(ThreadProvenance):
         """
         if identity.incarnation != self.incarnation:
             return False
-        lease = self.turn_lease
-        if lease is not None:
-            return self.has_authored_turn(identity, turn) or identity.generation == lease.identity.generation - 1
-        return identity.generation == self.turn_generation and self.last_finished_turn_id == turn.value
+        return self.turn_record.read().observed_task_turn(identity, turn, self)
 
     def observed_turn(self, claim_scope: int) -> TurnFence | None:
         """Passive current/last-completed witness; never a begin-turn grant."""
