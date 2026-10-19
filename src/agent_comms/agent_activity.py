@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .native_input_owner import RegistryOwner
-from .native_tool_activity import NativeToolActivity
 from .notification_progress import AcknowledgedProgress
 
 if TYPE_CHECKING:
@@ -116,12 +115,6 @@ class AgentActivity:
         self._wire_lock_path = root / "wire"
         self.activity = ActivityLog(ActivityLog.path_in(root))
         self.runtime_info = RuntimeInfoStore.at(root)
-
-    def record_native_tool_call(self, thread: Thread, call_id: str) -> None:
-        """Index the original native record when the runtime announces its call."""
-        NativeToolActivity(
-            self._wire_lock_path.parent, thread.incarnation, Path(thread.runtime.path)
-        ).record(call_id)
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:
         """Declare a thread's current activity (thinking/working/idle)."""

@@ -37,11 +37,8 @@ from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import NativeSessionIdentity
-from .native_tool_activity import NativeToolActivity
 from .native_transcript import NativeTranscript
-from .recorded_time import EventTime
 from .selected_session import SavedSelectedSession
-from .thread_identity import ThreadIncarnation
 from .unstarted_runtime import UnstartedRuntime
 
 if TYPE_CHECKING:
@@ -98,9 +95,6 @@ class PiSessionFile(RuntimeLocation):
 
     def imported_sources(self):
         return NativeTranscript(Path(self.path)).imported_sources()
-
-    def last_tool_call(self, root: Path, incarnation: ThreadIncarnation) -> EventTime:
-        return NativeToolActivity(root, incarnation, Path(self.path)).last_tool_call()
 
     def storage_files(self):
         return (NativeSessionFiles(Path(self.path)),)
@@ -288,7 +282,6 @@ class PiNativeBackend(
             ui_request=delivery.ui_request,
             tool_mode=delivery.tool_mode,
         ):
-            event.record_native_activity(self.comms.agents, thread)
             yield event
 
     async def abort(self, owner: asyncio.Task[Any]) -> None:

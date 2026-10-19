@@ -383,7 +383,7 @@ def close(pid, works, artifact=''):
 
 def last_activity(unit):
     thread = COMMS.registry.require(unit)
-    return thread.runtime.last_tool_call(COMMS.root, thread.incarnation)
+    return thread.runtime.history_source(COMMS.root, thread.incarnation).last_tool_call()
 
 
 def board():

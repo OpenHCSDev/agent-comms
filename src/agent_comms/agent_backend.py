@@ -32,14 +32,10 @@ from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
     from .launch_runtime import LaunchRuntime
     from .native_tool_call import NativeToolMode
-    from .recorded_time import EventTime
-    from .thread_identity import ThreadIncarnation
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
 
@@ -86,10 +82,6 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
 
     def select_session(self, directory, execution, source_reads):
         raise BackendDeclarationError('Runtime cannot select native sessions')
-
-    @abstractmethod
-    def last_tool_call(self, root: Path, incarnation: ThreadIncarnation) -> EventTime:
-        """Read the newest original tool call through this runtime's own storage."""
 
     @abstractmethod
     def history_source(self, root, incarnation): ...

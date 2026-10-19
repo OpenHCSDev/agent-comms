@@ -13,7 +13,6 @@ from pydantic import JsonValue
 
 from .agent_backend import (
     AgentBackend,
-    BackendDeclarationError,
     CompactionOutcome,
     Compacts,
     ConfiguresModel,
@@ -37,8 +36,6 @@ from .pi_commands import (
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
-from .recorded_time import EventTime
-from .thread_identity import ThreadIncarnation
 from .transcript_sources import TranscriptSource
 from .unstarted_runtime import UnstartedRuntime
 
@@ -53,9 +50,6 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     def require_forkable(self):
         raise ValueError('Durable database forking is not implemented')
-
-    def last_tool_call(self, root: Path, incarnation: ThreadIncarnation) -> EventTime:
-        raise BackendDeclarationError("Pi Durable does not serve thread turns or tool activity")
 
     def history_source(self, root, incarnation):
         return DurableTranscript(self)

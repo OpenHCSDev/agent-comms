@@ -25,6 +25,7 @@ from .declared_family import DeclaredFamily
 from .typed_table import StoreWriter
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
+from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .routing import MessageRoute, TurnRouting
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .transcript_events import AssistantTranscript, IncomingTranscript, SentTranscript, TurnDigest, UserTranscript
@@ -341,6 +342,18 @@ class TranscriptSource:
                 yield TurnDigest(record.entry.require_entry_id(), tuple(
                     event for original in reversed(pending) for event in original.events))
                 pending.clear()
+
+    def last_tool_call(self) -> EventTime:
+        """Read the newest tool start from this unit's original transcript records."""
+        from .transcript_events import ToolStartTranscript
+
+        with self.reading() as reader:
+            with closing(reader.reverse(reader.cut().offset)) as records:
+                for record in records:
+                    for event in reversed(record.events):
+                        if isinstance(event, ToolStartTranscript):
+                            return GeneratedTimestamp.decode(event.timestamp)
+        return UnrecordedEventTime()
 
     def current_draft(self, root: Path, incarnation: ThreadIncarnation) -> TranscriptDraft:
         from .external_transcript import DraftRow

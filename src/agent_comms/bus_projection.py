@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, ClassVar, Never, Self, TypeVar, TYPE_CHECKING
+from typing import BinaryIO, ClassVar, TypeVar, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
 from .field_codec import FieldCodec, MalformedRecord
@@ -54,9 +54,6 @@ class CompleteWirePrefix(WirePrefix):
 class NoCheckpoint:
     """No valid saved prefix; consumers obtain their initial projection."""
 
-    def require(self) -> Never:
-        raise ValueError("A valid source checkpoint is required")
-
     def current_at(self, revision):
         return False
 
@@ -99,9 +96,6 @@ class AppendCheckpoint:
     source: FileRevision
     offset: int
     tail: str
-
-    def require(self) -> Self:
-        return self
 
     def current_at(self, revision):
         return self.source == revision
@@ -157,6 +151,7 @@ class AppendProjectionStore(RuntimeFile, JsonDocument[Checkpoint | NoCheckpoint]
     projection is disposable, so no carry writes it.
     """
 
+    record_type: type[Checkpoint]
     fsync_parent: ClassVar[bool] = False
 
     def __init__(self, source_path: Path, path: Path):

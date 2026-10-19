@@ -1,4 +1,7 @@
-"""Newest tool-call times are indexed facts; missing times remain unrecorded."""
+"""Tool-call times come from original per-unit transcript records."""
+import json
+
+from agent_comms.native_transcript import NativeTranscript
 from agent_comms.external_transcript import ExternalTranscript, ExternalEventRow
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.thread_identity import RecordedThreadIncarnation
@@ -28,6 +31,25 @@ def test_newest_tool_call_is_one_indexed_read_and_time_comparisons_cross_midnigh
     transcript.finish(turn_id="turn", item_id="undated", events=(
         ToolStartTranscript(position=0, tool_call_id="undated", tool_name="bash"),))
     assert transcript.last_tool_call() == UnrecordedEventTime()
+
+
+def test_native_tool_time_comes_from_saved_journal_without_an_offset_store(tmp_path):
+    path = tmp_path / 'native.jsonl'
+    def append(value):
+        with path.open('a') as stream:
+            stream.write(json.dumps(value) + '\n')
+    append({'type': 'message', 'id': 'call', 'parentId': None,
+            'timestamp': '2026-10-19T17:20:00Z', 'message': {
+                'role': 'assistant', 'content': [{'type': 'toolCall', 'id': 'bash-1',
+                    'name': 'bash', 'arguments': {'command': 'pwd'}}]}})
+    source = NativeTranscript(path)
+    expected = RecordedEventTime(1792430400.0)
+    assert source.last_tool_call() == expected
+    append({'type': 'message', 'id': 'reply', 'parentId': 'call',
+            'timestamp': '2026-10-19T17:21:00Z', 'message': {
+                'role': 'assistant', 'content': [{'type': 'text', 'text': 'finished'}]}})
+    assert source.last_tool_call() == expected
+    assert tuple(tmp_path.iterdir()) == (path,)
 
 
 def test_tool_index_conversion_preserves_events_and_runs_once(tmp_path):
