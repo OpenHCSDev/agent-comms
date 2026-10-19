@@ -90,6 +90,9 @@ class TestCliSuccess:
         code, out = cli(tmp_path, "threads")
         assert code == 0 and out["threads"][0]["name"] == "a"
         assert out["threads"][0]["tags"] == ["x", "y"]
+        assert isinstance(out["threads"][0]["activity"], str)
+        assert "activity_state" not in out["threads"][0]
+        assert "activity_detail" in out["threads"][0]
 
     def test_send_and_inbox_and_ack(self, cli, tmp_path):
         cli(tmp_path, "register", "--name", "a", "--worktree", "/wt")

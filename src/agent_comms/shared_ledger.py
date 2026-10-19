@@ -16,13 +16,10 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class LedgerDocument(CliResult, SingleFieldValue):
+class LedgerDocument(SingleFieldValue, CliResult):
     """The ledger's one free-form JSON document as read; its keys are its authors'."""
 
     entries: dict[str, object]
-
-    def encoded(self) -> object:
-        return self.to_wire()
 
 @dataclass(frozen=True, slots=True)
 class SharedLedger(RootFile, ThreadOwnedState, LockedStore[LedgerDocument]):

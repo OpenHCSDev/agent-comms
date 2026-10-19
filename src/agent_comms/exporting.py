@@ -328,9 +328,6 @@ class WireExportProvenance(CliResult):
     first_timestamp: float | None
     last_timestamp: float | None
 
-    def encoded(self) -> object:
-        return self.to_wire()
-
     def to_wire(self) -> dict[str, object]:
         return {
             **asdict(self),
