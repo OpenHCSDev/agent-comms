@@ -2267,7 +2267,15 @@
                  return success(id, "new_session", result);
              }
              // =================================================================
-@@ -472,5 +481,4 @@
+@@ -369,7 +378,6 @@
+                     followUpMode: session.followUpMode,
+                     sessionFile: session.sessionFile,
+                     sessionId: session.sessionId,
+-                    sessionName: session.sessionName,
+                     autoCompactionEnabled: session.autoCompactionEnabled,
+                     messageCount: session.messages.length,
+                     pendingMessageCount: session.pendingMessageCount,
+@@ -472,5 +480,4 @@
              case "get_session_stats": {
 -                const stats = session.getSessionStats();
 -                return success(id, "get_session_stats", stats);
@@ -2366,7 +2374,15 @@
          }
 --- a/dist/modes/rpc/rpc-types.d.ts
 +++ b/dist/modes/rpc/rpc-types.d.ts
-@@ -321,3 +321,3 @@
+@@ -175,7 +175,6 @@
+     sessionFile?: string;
+     sessionId: string;
+     nativeInputProofCapability?: "pi-native-input-v1-live-only" | null;
+-    sessionName?: string;
+     autoCompactionEnabled: boolean;
+     messageCount: number;
+     pendingMessageCount: number;
+@@ -321,3 +320,3 @@
      success: true;
 -    data: SessionStats;
 +    data: Pick<SessionStats, "contextUsage">;

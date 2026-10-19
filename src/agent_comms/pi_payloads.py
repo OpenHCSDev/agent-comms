@@ -1025,7 +1025,6 @@ class NativeSessionSnapshot(PiPayload):
 
 @dataclass(frozen=True)
 class StateData(NativeSessionSnapshot, PiResponseData):
-    session_name: str | None = wire_field("sessionName")
     native_input_proof_capability: str | None = wire_field("nativeInputProofCapability")
     # Native omission and null both mean no model observation. Omit the named
     # default on output; its internal family tag is not a native model object.
@@ -1049,7 +1048,6 @@ class StateData(NativeSessionSnapshot, PiResponseData):
         return AgentInfo(
             model=self.model.display_name,
             thinking_level=self.thinking_level,
-            session_name=self.session_name,
             session_file=session.active_session_file,
             context_size=self.model.context_window,
         )

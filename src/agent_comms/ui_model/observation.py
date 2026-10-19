@@ -414,36 +414,25 @@ class CancelRead(ObservationRequest):
 
 @dataclass(frozen=True)
 class TranscriptRequest[ResultT](ReadRequest):
-    """One bounded transcript page and the witness it was read under.
-
-    Without ``read_identity`` the source is captured now; with it, the page is
-    read under that published witness and is stale if the source moved on.
-    """
+    """Capture one bounded read; its owner keeps the page and witness together."""
 
     thread: str
     before: TranscriptCursor | None = None
     after: TranscriptCursor | None = None
     through: TranscriptCursor | None = None
-    read_identity: TranscriptReadIdentity | None = None
     historical_source: str | None = None
 
     def read(self, comms: Comms) -> ResultT:
         return UnreadableHistory.outcome(lambda: self.result(self.page_read(comms))).raised()
 
     def page_read(self, comms: Comms) -> TranscriptRead:
-        transcripts = comms.transcripts
-        window = dict(before=self.before, after=self.after, through=self.through)
-        if self.read_identity is None:
-            read = transcripts.capture_page_read(
-                self.thread, historical_source=self.historical_source, **window
-            )
-        else:
-            if (self.historical_source is not None
-                    and self.historical_source != self.read_identity.historical_source):
-                raise StaleRevision("Published transcript belongs to another recorded source")
-            read = transcripts.bind_page_read(self.thread, self.read_identity, **window)
-        # The read checks its witness before and after preparing the page.
-        return read
+        return comms.transcripts.capture_page_read(
+            self.thread,
+            before=self.before,
+            after=self.after,
+            through=self.through,
+            historical_source=self.historical_source,
+        )
 
     @abstractmethod
     def result(self, read: TranscriptRead) -> ResultT: ...

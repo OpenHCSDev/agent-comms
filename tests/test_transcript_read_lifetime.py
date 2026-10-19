@@ -14,6 +14,7 @@ from agent_comms.view_unread import transcript_read_state
 from agent_comms.comms import wire
 from native_unread_fixture import native_reader
 from agent_comms.registry_document import DEFAULT_ROSTER
+from agent_comms.ui_model.unread import IndexingUnread
 
 
 def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_path):
@@ -23,7 +24,7 @@ def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_pa
     }}) + "\n")
     state = native_reader(tmp_path / 'read_ledger.json')
     state.registry.declare(state.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(source)))
-    assert state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER).pending == {"worker"}
+    assert state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER).counts == {"worker": IndexingUnread()}
     state.preparation.future.result(timeout=10)
     workers = tuple(state._pool._processes.values())
     database, cancelled = state._connection, state._cancelled

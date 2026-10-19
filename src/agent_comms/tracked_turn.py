@@ -340,15 +340,15 @@ class TrackedTurnSession(TurnSession):
             try:
                 drafts = ExitStack()
                 ownership.push_async_callback(Coordination.run_worker, drafts.close)
-                self.draft_publication = await Coordination.run_worker(partial(
-                    drafts.enter_context, DraftRow.publication(
-                        self.startup.root, self.command.input_id)))
                 # Transport resources are the turn's innermost lifetime. Stop
                 # closes them before child cleanup can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
                 async with AsyncExitStack() as transport:
                     self.native = await self.acquire_native(transport, reuse=True)
                     ownership.push_async_callback(self.retain_or_close)
+                    self.draft_publication = await Coordination.run_worker(partial(
+                        drafts.enter_context, DraftRow.publication(
+                            self.startup.root, self.command.input_id)))
                     await ownership.enter_async_context(self.native.failures())
                     self.watchdog.reading()
                     try:

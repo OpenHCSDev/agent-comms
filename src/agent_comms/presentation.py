@@ -673,10 +673,6 @@ class ThreadView(ThreadRecord):
         return self.activity.timestamp
 
     @projected(view="presence")
-    def session_name(self) -> str | None:
-        return self.runtime.session_name
-
-    @projected(view="presence")
     def context_used(self) -> PiCount:
         return self.runtime.context_used
 

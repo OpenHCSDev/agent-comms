@@ -31,8 +31,12 @@ class RegistrationChange(ABC):
     def prior_goal(self) -> GoalDeclaration: ...
 
     @property
+    def claims_owner(self) -> bool:
+        return self.thread.process_identity.claims_owner(self.status) and self.takes_over_owner
+
+    @property
     @abstractmethod
-    def claims_owner(self) -> bool: ...
+    def takes_over_owner(self) -> bool: ...
 
     @property
     @abstractmethod
@@ -59,10 +63,7 @@ class RegistrationChange(ABC):
 class InitialRegistration(RegistrationChange):
     prior_goal = NoGoal()
     changes_owner = True
-
-    @property
-    def claims_owner(self) -> bool:
-        return self.thread.process_identity.claims_owner(self.status)
+    takes_over_owner = True
 
     def restarted(self) -> RegistrationChange:
         return InitialOwnerRegistration(thread=self.thread, status=self.status)
@@ -99,7 +100,7 @@ class UpdatedRegistration(RegistrationChange):
         return self.previous.goal
 
     @property
-    def claims_owner(self) -> bool:
+    def takes_over_owner(self) -> bool:
         return (
             self.previous.process_identity != self.thread.process_identity
             or self.previous_status.starts_owner(self.status)
