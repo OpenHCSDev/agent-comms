@@ -19,7 +19,9 @@ def test_json_shape_schema_uses_the_same_member_annotations_as_decode():
     class SchemaShape(DeclaredFamily, JsonShapeFamily, affix="SchemaShape"):
         pass
 
-    assert FieldCodec.value_schema(SchemaShape) == {"anyOf": []}
+    assert FieldCodec.value_schema(SchemaShape) == {"not": {}}
+    with pytest.raises(MalformedRecord, match="Expected one SchemaShape owner"):
+        FieldCodec.decode(SchemaShape, None)
 
     @dataclass(frozen=True)
     class NullSchemaShape(SchemaShape, JsonShapeMember):
