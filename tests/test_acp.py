@@ -1249,10 +1249,10 @@ class TestAgentTurn:
         finally:
             await agent.shutdown()
 
-    async def test_reopened_claimed_goal_attempt_has_no_wake_or_replay(self, monkeypatch):
+    async def test_reopened_claimed_goal_attempt_has_no_wake_or_replay(self, monkeypatch, tmp_path):
         from agent_comms.goal_attempts import GoalAttemptStore
 
-        with tempfile.TemporaryDirectory(prefix="ac-goal-reopen-", dir="/var/tmp") as base:
+        with tempfile.TemporaryDirectory(prefix="ac-goal-reopen-", dir=tmp_path) as base:
             root = Path(base) / "wire"
             wired = wire(root)
             agent = canonical_agent(wired, agent_bin="pi", runtime_enabled=True)
