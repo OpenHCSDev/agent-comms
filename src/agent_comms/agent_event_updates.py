@@ -14,6 +14,7 @@ from acp.schema import (
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
+    UsageUpdate,
 )
 
 from . import agent_events as events
@@ -24,6 +25,7 @@ from .acp_extension import (
     PromptCancelledUpdate,
     encode_updates,
 )
+from .context_reading import ContextUsage
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
@@ -145,8 +147,14 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.ContextInfo)
     async def on_context_info(self, event: events.ContextInfo) -> None:
-        await event.context_size.reading(event.context_used).publish_usage(
-            self.client, self.session_id)
+        await self.dispatch(event.context_size.reading(event.context_used))
+
+    @handles(ContextUsage)
+    async def on_context_usage(self, usage: ContextUsage) -> None:
+        await self.client.session_update(
+            session_id=self.session_id,
+            update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),
+        )
 
     @handles(events.CompactionEvent)
     async def on_compaction(
