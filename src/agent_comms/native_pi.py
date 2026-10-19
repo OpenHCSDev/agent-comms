@@ -538,10 +538,13 @@ class NativePiRpcLaunch:
         from .native_session_reopen import NativeSessionIdentity
 
         saved = Path(session_file).absolute() if session_file is not None else None
-        directory = saved.parent if saved is not None else cwd
-        session = (SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(str(saved)))
-            if saved is not None else SelectedSession(directory))
+        if saved is None:
+            session = SelectedSession(cwd)
+        else:
+            identity = NativeSessionIdentity.locate(str(saved))
+            directory = root / "native-sessions" / identity.session_id
+            _durable_private_session_dir(directory)
+            session = SavedSelectedSession(directory, identity=identity)
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 
     @classmethod
