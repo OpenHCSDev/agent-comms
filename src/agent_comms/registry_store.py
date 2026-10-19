@@ -204,7 +204,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
             if converted is raw:
                 return False
             if apply:
-                self.save_unlocked(document)
+                self._save_validated_unlocked(document, converted)
             return True
 
     def read_revision_unlocked(self) -> RegistryRevision:
@@ -296,7 +296,9 @@ class RegistryStore(LockedStore[RegistryDocument]):
             yield RegistryEdit(self, original.document.copy(), original)
 
     def save_unlocked(self, document: RegistryDocument) -> None:
-        raw = self._encode(document)
+        self._save_validated_unlocked(document, self._encode(document))
+
+    def _save_validated_unlocked(self, document: RegistryDocument, raw: dict) -> None:
         self._write_unlocked(json.dumps(raw, indent=2))
         # Still under the exclusive lock: the written file is this document.
         if (revision := FileRevision.capture(self.path)) is not None:

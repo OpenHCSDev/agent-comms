@@ -84,7 +84,7 @@ def require_formats(documents: dict[str, type[LockedStore]], manifest: dict, pre
         )
 
 
-def test_stored_format_fingerprints():
+def test_stored_format_fingerprints(commander_script):
     require_formats(stored_documents(), json.loads(MANIFEST.read_text()), previous_manifest())
 
 
