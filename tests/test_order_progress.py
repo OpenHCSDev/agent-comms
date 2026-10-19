@@ -90,7 +90,7 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
     assert 'distance 0' not in alarm and 'projected done' not in alarm
     missing = NoIntegerPrinted()
     assert missing.distance(1) is missing and missing.plus(3) is missing
-    assert DistanceReadings((DistanceReading(1, missing),), 'printf missing').trend == UncountedTrend('printf missing')
+    assert DistanceReadings((DistanceReading(1, missing, 'printf missing'),)).trend == UncountedTrend('printf missing')
     assert DistanceReadings((DistanceReading(1, missing), DistanceReading(2, CountPrinted(2)))).trend.projection == ''
 
 

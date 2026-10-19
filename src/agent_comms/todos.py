@@ -262,6 +262,7 @@ def _clock(at: float) -> str:
 class DistanceReading:
     at: float
     distance: CheckPrinted
+    command: str = ""
 
 
 @dataclass(frozen=True)
@@ -269,7 +270,6 @@ class DistanceReadings:
     """The order's last two distance readings, oldest first: its base at the order, then its
     newest commit. Fewer than two read, or a last reading at done, project nothing."""
     readings: tuple[DistanceReading, ...] = ()
-    command: str = ""
 
     @property
     def trend(self) -> DistanceTrend:
@@ -277,7 +277,7 @@ class DistanceReadings:
         if not self.readings:
             return UnreadTrend()
         return self.readings[-1].distance.project(
-            self.counted_trend, lambda: UncountedTrend(self.command))
+            self.counted_trend, lambda: UncountedTrend(self.readings[-1].command))
 
     def counted_trend(self, final: int) -> DistanceTrend:
         last = self.readings[-2:]
@@ -389,8 +389,7 @@ class PresentCheckout(ProgressCheckout):
             "--not", base).splitlines()))]
         points = [(base, source.since), *commits][-2:]
         return DistanceReadings(
-            tuple(DistanceReading(at, source.distance(self, base, sha)) for sha, at in points),
-            source.todo.order.check.command)
+            tuple(source.reading(self, base, sha, at) for sha, at in points))
 
 
 @dataclass(frozen=True)
@@ -421,12 +420,13 @@ class ProgressSource:
     def readings(self) -> DistanceReadings:
         return self.checkout.readings(self)
 
-    def distance(self, checkout: PresentCheckout, base: str, sha: str) -> CheckPrinted:
-        """Run the order's check and preserve its count state beside untouched edits."""
+    def reading(self, checkout: PresentCheckout, base: str, sha: str, at: float) -> DistanceReading:
+        """Keep the check command with its measured or missing distance."""
         check = self.todo.order.check
         touched = checkout.git("diff", "--name-only", base, sha).split()
         run = check.at(sha, str(checkout.path))
-        return check.result.distance(run).plus(self.todo.order.untouched(touched))
+        return DistanceReading(at, check.result.distance(run).plus(
+            self.todo.order.untouched(touched)), check.command)
 
 
 @dataclass(frozen=True)
