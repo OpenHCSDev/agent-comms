@@ -73,6 +73,7 @@ from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .send_result import CorrectionResult, SendResult
+from .send_refusal import SendRefusal
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -1036,6 +1037,25 @@ class CommsRenameSelfTool(ThreadToolRequest):
         return comms.threads.rename_self(self.new_name, caller=caller)
 
 
+@dataclass(frozen=True)
+class SendRefusalsRead(ToolResult):
+    refusals: tuple[SendRefusal, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSendRefusalsTool(ReadTool, ToolRequest):
+    label = "Comms Send Refusals"
+    description = "Read original refused-send outcomes; reading records no new outcome."
+    sender: str = tool_field("Sender to filter; empty reads all senders", default="")
+    target: str = tool_field("Target to filter; empty reads all targets", default="")
+    limit: int = tool_field("Maximum recent refusals, between 1 and 200", default=50)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> SendRefusalsRead:
+        return SendRefusalsRead(SendRefusal.recent(
+            comms.root, sender=self.sender, target=self.target, limit=self.limit
+        ))
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsSendTool(ToolRequest):
     label = "Comms Send"
@@ -1058,9 +1078,13 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        caller.require_directive(comms, self.body)
-        body = VerdictAudience(self.audience).addressed(self.target, self.body)
-        result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        try:
+            caller.require_directive(comms, self.body)
+            body = VerdictAudience(self.audience).addressed(self.target, self.body)
+            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        except ToolRefusedError as error:
+            SendRefusal.record(comms.root, self.sender, self.target, error)
+            raise
         caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 

@@ -179,6 +179,19 @@ def main():
                             assert float(seconds) < 1
                         else:
                             assert "Jargon" in response and "candidate" in response
+                        readback = subprocess.run([
+                            shutil.which("agent-comms"), "--root", str(root), "tool",
+                            "--tool", "comms_send_refusals", "--arguments",
+                            json.dumps({"sender": "claude-ai", "target": "worker"}),
+                        ], env=environment, capture_output=True, text=True)
+                        assert readback.returncode == 0, readback.stdout + readback.stderr
+                        rows = json.loads(readback.stdout)["refusals"]
+                        expected = 2 if age else 1
+                        assert len(rows) == expected, "each refused send must record exactly once"
+                        assert rows[0]["sender"] == "claude-ai" and rows[0]["target"] == "worker"
+                        assert rows[0]["reason"] == json.loads(result["content"][0]["text"])["error"]
+                        assert rows[0]["refused_at_ms"] > 0
+                        print("agent-comms readback: " + json.dumps(rows[0], sort_keys=True))
                 assert comms.bus.log.latest_sequence() == before, "a refused send committed bytes"
                 if not args.baseline:
                     output = curl_call(port, token, "", arguments={"unexpected": True})
