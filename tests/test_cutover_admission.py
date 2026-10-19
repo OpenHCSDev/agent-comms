@@ -7,6 +7,7 @@ import pytest
 from agent_comms.cohort_foreground import _accept_visible_deliveries
 from agent_comms.cohort_schema import install_private_cohort_schema
 from agent_comms.comms import Comms
+from agent_comms.channels import ANY_CHANNEL
 from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordination_cohort import accept_delivery_cohort, sealed_cohort_assignments
 from agent_comms.coordination_errors import IdentityConflict
@@ -16,6 +17,7 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.field_codec import FieldCodec
 from agent_comms.wire_metadata import WireMetadata
 from agent_comms.proven_source_coverage import SourceCoverage
+from agent_comms.cursor_owner import ActivationFloorCursor
 from agent_comms.wake_candidate_index import (
     WakeCandidateIndex, RebuildIndex,
 )
@@ -59,8 +61,8 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
                 store,
                 wire_root_id=root_id,
                 recipient_lookup=lookups["bob"],
-            ).prefix(source_reads=source_reads)
-            assert coverage.covered_seq == 0
+            ).since(ActivationFloorCursor(old.seq), source_reads=source_reads)
+            assert coverage.covered_seq == old.seq
             assert coverage.injected_source_seqs == ()
 
         fresh = reopened.messaging.send_user_message("bob", "fresh input", worktree=str(tmp_path))
@@ -75,11 +77,11 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         assert [assignment.wire_seq for assignment in assignments] == [fresh.seq]
         coverage = SourceCoverage(
             reopened.bus, store, wire_root_id=root_id, recipient_lookup=lookups["bob"]
-        ).prefix(source_reads=source_reads)
-        assert coverage.covered_seq == 0
+        ).since(ActivationFloorCursor(old.seq), source_reads=source_reads)
+        assert coverage.covered_seq == old.seq
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == fresh.seq  # Selection is not native proof.
-        assert list(reopened.bus.full_history_page().messages) == [old, fresh]
+        assert list(reopened.views.history_page(ANY_CHANNEL).messages) == [old, fresh]
 
 
 def test_persisted_marker_cannot_omit_claim_authority(tmp_path):
@@ -101,7 +103,7 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
     before = snapshot.bus.log.path.read_bytes()
-    assert [message.message_id for message in list(snapshot.bus.full_history_page().messages)] == [sent]
+    assert [message.message_id for message in list(snapshot.views.history_page(ANY_CHANNEL).messages)] == [sent]
     with pytest.raises(RelationViolationError, match="read-only"):
         snapshot.messaging.send("alice", "bob", "must never append").message.message_id
     assert snapshot.bus.log.path.read_bytes() == before

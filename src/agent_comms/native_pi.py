@@ -6,7 +6,6 @@ publication. Verified package and send authority remain required for every turn.
 
 from __future__ import annotations
 
-import hashlib
 import os
 import re
 import shutil
@@ -16,7 +15,7 @@ from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import TYPE_CHECKING, Any, Literal
 
 from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments, SelectedModel
@@ -367,13 +366,13 @@ class NativeContextProof(NativeContextRecord):
         from .native_entries import NativeInputEvidenceRead
 
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            header, _entries = evidence.observe()
-            entry = evidence.tracked(input_id)
             with NativeContextJournal.open_evidence(session_file) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
-                if row is None:
-                    raise NativePiUnavailable("The input has no assembled-context proof")
-                return row.corroborate(session_file, header, entry)
+            if row is None:
+                raise NativePiUnavailable("The input has no assembled-context proof")
+            header, _entries = evidence.observe_input(input_id, row.session_entry_id)
+            entry = evidence.tracked(input_id)
+            return row.corroborate(session_file, header, entry)
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -654,94 +653,44 @@ class NativeEvidenceRemoved(NativePiUnavailable):
     """The recorded recipient session no longer exists at its owned path."""
 
 
-class NativeEvidenceDigest(Protocol):
-    def copy(self) -> NativeEvidenceDigest: ...
-
-    def update(self, value: bytes) -> None: ...
-
-    def digest(self) -> bytes: ...
-
-
 class UnverifiedNativeEvidencePrefix:
-    """Named start state: no byte from the currently opened inode is trusted."""
+    """No captured cut yet; the private writer owns append-only content."""
 
     size = 0
-
-    @staticmethod
-    def copy_digest():
-        return hashlib.sha256()
 
     @staticmethod
     def prepare(source: PrivateEvidenceRead, revision: FileRevision) -> FileRevision:
         return revision
 
     @staticmethod
-    def commit(
-        source: PrivateEvidenceRead,
-        size: int,
-        digest: NativeEvidenceDigest,
-        revision: FileRevision,
-    ) -> FileRevision:
-        observed = source._observe_revision_after(revision)
-        return (
-            observed
-            if observed == revision
-            else source.verify_snapshot(size, digest.digest())
-        )
+    def commit(source: PrivateEvidenceRead, size: int, revision: FileRevision) -> FileRevision:
+        return source.verify_snapshot(size, revision)
 
 
 @dataclass(frozen=True, slots=True)
-class VerifiedNativeEvidencePrefix:
-    """The sole retained position, hash, and observed revision for one source."""
+class VerifiedNativeEvidencePrefix(UnverifiedNativeEvidencePrefix):
+    """The retained cut and revision of one acquired private inode."""
 
-    size: int
-    digest: NativeEvidenceDigest
+    size: int = field()
     revision: FileRevision
 
-    def copy_digest(self):
-        return self.digest.copy()
-
-    def prepare(
-        self, source: PrivateEvidenceRead, revision: FileRevision
-    ) -> FileRevision:
-        if revision == self.revision:
-            return revision
-        if revision.size < self.revision.size:
-            raise NativeEvidencePrefixChanged(
-                "Native Pi evidence observed revision was truncated"
-            )
-        if revision.size > self.revision.size:
-            # A private Pi session has append-only growth. The full-prefix hash
-            # additionally detected a same-inode rewrite combined with growth,
-            # but only by rereading every old byte. Pinned identity/revision
-            # still reject replacement, truncation, and non-growth mutation;
-            # the running digest extends across the bytes added here.
-            return revision
-        return source.verify_snapshot(self.size, self.digest.digest())
-
-    @staticmethod
-    def commit(
-        source: PrivateEvidenceRead,
-        size: int,
-        digest: NativeEvidenceDigest,
-        revision: FileRevision,
-    ) -> FileRevision:
-        return source._observe_revision_after(revision)
+    def prepare(self, source: PrivateEvidenceRead, revision: FileRevision) -> FileRevision:
+        return source.verify_snapshot(self.size, self.revision)
 
 
 class PrivateEvidenceRead:
     """Pinned private source with one owned verified-prefix state.
 
-    This reader holds its descriptor until close. The first read verifies the full
-    prefix. Later observations trust an unchanged pinned revision and extend
-    its running digest only across appended bytes; non-growth revision changes
-    reverify the retained prefix before it can be reused.
+    This reader holds its descriptor until close. The private writer owns its
+    append-only bytes. Reads check the inode, captured size and complete final
+    record, then decode only beyond their consumed position. No history is hashed.
     """
 
     def __init__(self, path, stream):
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
         self.prefix = UnverifiedNativeEvidencePrefix()
+        self.decoded_through = 0
 
     @property
     def size(self) -> int:
@@ -783,9 +732,10 @@ class PrivateEvidenceRead:
         self.stream = self._open_stream(self.path)
         self.identity = FileIdentity.from_stat(os.fstat(self.stream.fileno()))
         self.prefix = UnverifiedNativeEvidencePrefix()
+        self.decoded_through = 0
 
     def _capture_append(self):
-        """Verify and hash original bytes without retaining the complete prefix."""
+        """Capture a complete private cut without reading its prior bytes."""
         try:
             info = os.fstat(self.stream.fileno())
             revision = self._observe_revision_after(FileRevision.from_stat(info))
@@ -796,33 +746,20 @@ class PrivateEvidenceRead:
                     "Native Pi evidence verified prefix was truncated"
                 )
             revision = self.prefix.prepare(self, revision)
-            digest = self.prefix.copy_digest()
-            last = b""
-            for raw in self._pread_chunks(self.size, info.st_size):
-                digest.update(raw)
-                last = raw[-1:]
-            if info.st_size > self.size and last != b"\n":
-                raise NativePiUnavailable("Native Pi evidence file is incomplete")
+            if info.st_size > self.size:
+                last = os.pread(self.stream.fileno(), 1, info.st_size - 1)
+                if last != b"\n":
+                    raise NativePiUnavailable("Native Pi evidence file is incomplete")
             observed = self._observe_revision_after(revision)
             if not revision.holds_cut(observed, info.st_size):
                 raise NativeEvidencePrefixChanged(
                     "Native Pi evidence source changed during observation"
                 )
-            return info.st_size, digest, revision
+            return info.st_size, revision
         except (OSError, ValueError) as error:
             raise NativePiUnavailable(
                 "Native Pi evidence file is unavailable or not private"
             ) from error
-
-    def _pread_chunks(self, start, stop):
-        """Read a pinned byte range without touching buffered decode state."""
-        descriptor = self.stream.fileno()
-        while start < stop:
-            raw = os.pread(descriptor, min(stop - start, 128 * 1024), start)
-            if not raw:
-                raise NativePiUnavailable("Native Pi evidence prefix is incomplete")
-            start += len(raw)
-            yield raw
 
     def _decode_captured(self, size):
         """Decode through a fresh buffer over the pinned descriptor each time."""
@@ -839,12 +776,12 @@ class PrivateEvidenceRead:
             raise
         try:
             try:
-                decoder.seek(self.size)
+                decoder.seek(self.decoded_through)
             except (OSError, ValueError) as error:
                 raise NativePiUnavailable(
                     "Native Pi evidence file is unavailable or not private"
                 ) from error
-            remaining = size - self.size
+            remaining = size - self.decoded_through
             while remaining:
                 try:
                     raw = decoder.readline(remaining)
@@ -872,71 +809,81 @@ class PrivateEvidenceRead:
     def header(self):
         """Return row one after verifying the complete captured byte prefix."""
         try:
-            size, digest, revision = self._capture_append()
+            size, revision = self._capture_append()
             self.stream.seek(0)
             raw = self.stream.readline(size)
             if not raw or not raw.endswith(b"\n"):
                 raise NativePiUnavailable("Native Pi evidence header is incomplete")
             header = self._decode_row(raw)
-            self._commit_snapshot(size, digest, revision)
+            self._commit_snapshot(size, revision)
             return header
         except BaseException:
             self.close()
             raise
 
-    def _commit_snapshot(self, size, digest, revision) -> None:
+    def consume_header(self):
+        """Consume only record one; verification and decode positions are distinct."""
+        header = self.header()
+        self.decoded_through = max(self.decoded_through, self.stream.tell())
+        return header
+
+    def verify(self) -> None:
+        """Validate this acquired source without decoding or moving its input position."""
+        size, revision = self._capture_append()
+        self._commit_snapshot(size, revision)
+
+    def start_at_entry(self, session_entry_id: str) -> dict:
+        """Locate a recorded native identity backwards within the pinned verified cut.
+
+        The durable native acknowledgement supplies identity, never a byte offset.
+        Only the needed suffix is decoded and indexed by the input reader.
+        """
+        from .native_transcript import reverse_records
+
+        size, revision = self._capture_append()
+        for _start, end, raw in reverse_records(self.path, size, stream=self.stream):
+            row = self._decode_row(raw)
+            if row.get('id') == session_entry_id:
+                self._commit_snapshot(size, revision)
+                self.decoded_through = end
+                return row
+        raise NativePiUnavailable('Recorded native input entry is absent from its source')
+
+    def _commit_snapshot(self, size, revision) -> None:
         try:
-            observed = self.prefix.commit(self, size, digest, revision)
+            observed = self.prefix.commit(self, size, revision)
         except (OSError, ValueError) as error:
             raise NativePiUnavailable(
                 "Native Pi evidence file is unavailable or not private"
             ) from error
-        self.prefix = VerifiedNativeEvidencePrefix(size, digest, observed)
+        self.prefix = VerifiedNativeEvidencePrefix(size, observed)
 
     def rows(self):
         try:
-            previous_size = self.size
-            size, digest, revision = self._capture_append()
+            previous_size = self.decoded_through
+            size, revision = self._capture_append()
             if size == previous_size:
-                # The pinned revision is unchanged, or a suspicious non-growth
-                # change just passed full verification. No row needs decoding.
-                self.prefix = VerifiedNativeEvidencePrefix(size, digest, revision)
+                self.prefix = VerifiedNativeEvidencePrefix(size, revision)
                 return
-            # Decode only the captured append. Initial acquisition rehashes its
-            # complete prefix once before trust; retained prefixes extend their
-            # digest after a final pinned-revision check.
             yield from self._decode_captured(size)
-            self._commit_snapshot(size, digest, revision)
+            self._commit_snapshot(size, revision)
+            self.decoded_through = size
         except BaseException:
             self.close()
             raise
 
-    def verify_snapshot(self, size, expected_digest):
-        """Validate the captured prefix after decoding, allowing later appends.
-
-        Rehash the captured range once from the pinned descriptor without
-        disturbing buffered decoding. Later appends do not change those bytes;
-        a later observation rechecks them again before exposing more rows.
-        """
-        before = os.fstat(self.stream.fileno())
-        NativeSessionFileRole.require(before)
-        revision = self._observe_revision_after(FileRevision.from_stat(before))
-        if revision.identity != self.identity or revision.size < size:
+    def verify_snapshot(self, size, revision):
+        """Keep the acquired inode and captured cut; trust our append-only writer."""
+        observed = self._observe_revision_after(revision)
+        if observed.identity != self.identity or observed.size < size:
             raise NativeEvidencePrefixChanged("Native Pi evidence snapshot source changed")
-        digest = hashlib.sha256()
-        for raw in self._pread_chunks(0, size):
-            digest.update(raw)
-        revision = self._observe_revision_after(revision)
-        if digest.digest() != expected_digest:
-            raise NativeEvidencePrefixChanged("Native Pi evidence original prefix changed")
-        return revision
+        return observed
 
     def _observe_revision_after(self, revision):
         """Check original private inode and monotonic growth, not byte integrity.
 
-        Return the last observation so hashing cannot accept a digest from an
-        earlier revision. Each observation also fences the next: growth seen on
-        the descriptor cannot be hidden by shrinking the named file back.
+        Each observation fences the next: growth seen on the descriptor cannot
+        be hidden by shrinking the named file back.
         """
         try:
             TrustedAncestorRole.require_path(self.path.parent)

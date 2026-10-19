@@ -73,7 +73,7 @@ class NativeSessionIdentity:
 
         file = evidence.source.path
         try:
-            header, _entries = evidence.observe()
+            header = evidence.header()
             header.require_reopen()
         except (MalformedRecord, NativePiUnavailable) as error:
             raise NativeReopenError("Saved native session identity cannot be read") from error

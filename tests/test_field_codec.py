@@ -6,13 +6,41 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
-    FieldCodec, InlineRecord, MalformedRecord, NullMember, PathText, SubclassUnion,
+    FieldCodec, InlineRecord, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember, PathText, SubclassUnion,
     RecordedTimestamp, TimestampText, TextRepresentation, WireValue,
 )
 from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
     MembershipNoticeRole, Message, MessageRole, NoticeRole,
 )
+
+
+def test_json_shape_schema_uses_the_same_member_annotations_as_decode():
+    class SchemaShape(DeclaredFamily, JsonShapeFamily, affix="SchemaShape"):
+        pass
+
+    assert FieldCodec.value_schema(SchemaShape) == {"not": {}}
+    with pytest.raises(MalformedRecord, match="Expected one SchemaShape owner"):
+        FieldCodec.decode(SchemaShape, None)
+
+    @dataclass(frozen=True)
+    class NullSchemaShape(SchemaShape, JsonShapeMember):
+        value: None = None
+
+    @dataclass(frozen=True)
+    class TextSchemaShape(SchemaShape, JsonShapeMember):
+        value: str
+
+    @dataclass(frozen=True)
+    class ArraySchemaShape(SchemaShape, JsonShapeMember):
+        value: tuple[int, ...]
+
+    assert FieldCodec.value_schema(SchemaShape) == {"anyOf": [
+        {"type": "null"}, {"type": "string"},
+        {"type": "array", "items": {"type": "integer"}},
+    ]}
+    for value in (NullSchemaShape(), TextSchemaShape("text"), ArraySchemaShape((1, 2))):
+        assert FieldCodec.decode(SchemaShape, FieldCodec.encode(value)) == value
 
 
 def test_compiled_plan_resolves_a_thousand_records_once(monkeypatch):
