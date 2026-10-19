@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,8 @@ from typing import ClassVar
 
 from ..comms import Comms
 from ..standing_rules import ReasonedStandingRule, StandingRule
+from ..goals import Goal
+from ..turn_digests import TurnDigestRead, TurnsSince
 from . import capacity, judge
 from .config import CommanderConfig, Repo
 
@@ -17,18 +20,58 @@ CONFIG = CommanderConfig.installed()
 
 
 @dataclass(frozen=True)
-class IdleUnits(ReasonedStandingRule):
-    """Units active in the recent log holding no order; parked threads and the commander are not."""
+class Detached(StandingRule):
+    unit: str
+    unread: int
+    orders: tuple[str, ...]
 
-    recent: ClassVar[int] = 6000
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Detached, ...]:
+        owed: dict[str, list[str]] = {}
+        for todo in comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation):
+            owed.setdefault(todo.held().owner, []).append(todo.id)
+        statuses = comms.registry.snapshot().statuses
+        away = [unit for unit in sorted(owed) if unit not in statuses or not statuses[unit].receiving]
+        unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in statuses))
+        return tuple(cls(unit, unread.get(unit, 0), tuple(owed[unit])) for unit in away)
+
+    def line(self) -> str:
+        return (f"DETACHED {self.unit}: {self.unread} unread, orders {', '.join(self.orders)}"
+                " -> wake it or reassign")
+
+
+@dataclass(frozen=True)
+class RequestStalled(StandingRule):
+    goal: Goal
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
+        thread = comms.registry.require(commander)
+        return tuple(cls(request) for goal in thread.goal.active()
+                     for request, served in goal.order.open_requests(goal, comms.goals, thread.incarnation)
+                     if not served)
+
+    def line(self) -> str:
+        return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
+                " -> order its next step or mark it done")
+
+
+@dataclass(frozen=True)
+class IdleUnits(ReasonedStandingRule):
+    """Units with a native turn in the last ten minutes and no order; excludes parked threads."""
+
+    recent: ClassVar[int] = 10 * 60
     text = "IDLE UNITS with no order: {why} -> give each the top unowned row now"
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        with open(CONFIG.state / "activity.log", errors="replace") as log:
-            seen = {line[9:].split(" ", 1)[0] for line in log.readlines()[-cls.recent :]}
-        held = {todo.holder for todo in cls.todos(comms, commander)}
-        idle = sorted(seen - held - CONFIG.parked - {commander, ""})
+        held = {todo.holder for todo in comms.goals.todos.held_for_commander(
+            comms.registry.require(commander).incarnation)}
+        excluded = held | CONFIG.parked | {commander, ""}
+        bound = TurnsSince(time.time() - cls.recent)
+        idle = sorted(thread.name for thread in comms.registry.all_threads.values()
+                      if thread.name not in excluded
+                      and TurnDigestRead(comms.root, thread, bound).native())
         return ", ".join(idle) or None
 
 
