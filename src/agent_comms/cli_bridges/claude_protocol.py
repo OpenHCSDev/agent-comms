@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import TYPE_CHECKING, ClassVar, Iterator, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 from xml.etree import ElementTree
 
 if TYPE_CHECKING:
