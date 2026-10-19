@@ -196,8 +196,9 @@ class SourceCoverage:
     def recorded_witness(self, state: CursorState) -> PrefixWitness:
         """The stored prefix is proved; reading it does not prove later sources."""
         with self.bus.log.checked_read(blocking=False, contention=self.contention) as source:
-            self.start(state, source.marker.claimed_after_seq, source.witness)
-            return source.witness
+            witness: PrefixWitness = source.witness
+            self.start(state, source.marker.claimed_after_seq, witness)
+            return witness
 
     def start(self, state: CursorState, floor: int, witness: PrefixWitness) -> int:
         if witness.root_id != self.wire_root_id:
