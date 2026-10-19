@@ -10,6 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager, suppress
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,7 +25,7 @@ from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
-from .private_nk_entrypoint import PrivateNkLaunch
+from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
 from .restart_refusals import (
@@ -223,7 +224,6 @@ class OwnerLifecycle:
         self._wire_lock_path = root / "wire"
         self.maintenance = MaintenanceBarrier(registry.store.path)
         self.releases = OwnerReleaseStore(root)
-        self._private_nk_launch: PrivateNkLaunch | None = None
 
     @contextmanager
     def restart_wire(self) -> Iterator[int]:
@@ -294,33 +294,25 @@ class OwnerLifecycle:
             )
             return OwnerStartResult(owner.name, owner.require_process().pid, True)
 
-    @property
-    def launch_authority(self) -> PrivateNkLaunch | None:
-        """The private launch for this root, or None for an ordinary root.
+    @cached_property
+    def launch_authority(self) -> RootLaunch:
+        """This root's launch, derived once per process (RootLaunch.derive).
 
-        Derived once per process (PrivateNkLaunch.derive); the root is the one
-        this lifecycle serves and is never guessed. Acquisition verifies the
-        immutable package once; validate() still refuses a replaced root.
+        The root is the one this lifecycle serves and is never guessed.
+        Acquisition verifies the immutable package once; check() still
+        refuses a replaced root.
         """
-        if self._private_nk_launch is None:
-            self._private_nk_launch = PrivateNkLaunch.derive(self.root)
-        return self._private_nk_launch
+        return RootLaunch.derive(self.root)
 
     def restart_entrypoint(self, source_binary: str, runtime: LaunchRuntime) -> str:
         """Choose this runtime's reviewed native entrypoint for a private handoff."""
-        launch = self.launch_authority
-        if launch is None:
-            return source_binary
-        launch.validate()
-        return runtime.native_entrypoint
+        return self.launch_authority.restart_entrypoint(source_binary, runtime)
 
     def restart_environment(self, environment: Mapping[str, str], runtime: LaunchRuntime) -> dict[str, str]:
         """Project the launch authority into the target runtime policy."""
         result = runtime.environment(environment)
-        launch = self.launch_authority
-        if launch is not None:
-            # The source owner's root is this launch's; the target derives the rest.
-            launch.validate()
+        # The source owner's root is this launch's; the target derives the rest.
+        self.launch_authority.check()
         return result
 
     def restart_owners(
@@ -397,21 +389,16 @@ class OwnerLifecycle:
 
     def require_private_launch(self) -> PrivateNkLaunch:
         """The launch authority of a root that must be private."""
-        launch = self.launch_authority
-        if launch is None:
-            raise PublicationActivationBlocked("requires a private bus root")
-        return launch
+        return self.launch_authority.require_private()
 
-    def require_launch_authority(self) -> PrivateNkLaunch | None:
+    def require_launch_authority(self) -> RootLaunch:
         """Check this lifecycle's launch authority without reserving a process.
 
         Callers hold the wire lock. A preserving restart can check before
         fencing; every actual launch rechecks the same owner after cutover.
         """
-        private_launch = self.launch_authority
-        if private_launch is not None:
-            private_launch.validate()
-        return private_launch
+        self.launch_authority.check()
+        return self.launch_authority
 
     def _launch_owner_unlocked(
         self,
@@ -428,36 +415,10 @@ class OwnerLifecycle:
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
         env = launch_runtime.environment(env)
-        private_launch = self.require_launch_authority()
-        if private_launch is not None:
-            if agent_bin == "pi":
-                # The default stock binary cannot attest native input IDs.
-                # Keep the owner on this installation's pinned Pi entrypoint.
-                agent_bin = launch_runtime.native_entrypoint
-            else:
-                # The owner process keeps the launcher selected at its start.
-                # A later PATH or installed-runtime symlink change cannot retarget
-                # drains already owned by this process.
-                agent_bin = str(Path(shutil.which(agent_bin) or agent_bin).resolve(strict=True))
-            # Explicit launch installs the current runtime before registering
-            # this owner. Readers never create or repair runtime schemas.
-            from .coordinator import Coordination
-
-            with Coordination(str(self.root / "coordination.sqlite3")) as store:
-                store.install_private_runtime()
-                store.participants.register(
-                    thread.incarnation.lookup,
-                    thread.name,
-                    thread.name,
-                    committed=True,
-                )
+        agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin
-        # A private child derives the same launch from its validated root; ordinary
-        # roots keep their canonical child path across symlink changes.
-        env["AGENT_COMMS_ROOT"] = str(
-            self.root.resolve() if private_launch is None else private_launch.validated_root
-        )
+        env["AGENT_COMMS_ROOT"] = str(self.launch_authority.child_root)
         if agent_args is not None:
             env[NativeArguments.arguments_key] = shlex.join(agent_args)
         owned: Thread | None = None
