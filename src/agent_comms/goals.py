@@ -351,9 +351,20 @@ class UnorderedGoalOrder(GoalOrder):
 
 
 @dataclass(frozen=True)
+class RequestDirective:
+    """One claude-ai message to the commander that the request answers, due by its deadline."""
+
+    seq: int
+    deadline: float
+
+
+@dataclass(frozen=True)
 class RequestGoalOrder(GoalOrder):
     """An owner request on the commander's own Goal: each order names the one it serves, and the
-    request stays open until no order serving it is open."""
+    request stays open until no order serving it is open. Each claude-ai directive the commander
+    receives is recorded on it when it arrives."""
+
+    directives: tuple[RequestDirective, ...] = ()
 
     def require_order(self, goal: Goal, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
