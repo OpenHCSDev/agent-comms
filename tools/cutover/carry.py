@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
+from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo, TodoStore
 
 STEPS = Path("tools/cutover")
@@ -89,6 +90,39 @@ class CarryLedger:
             os.fsync(directory)
         finally:
             os.close(directory)
+
+
+@dataclass(frozen=True)
+class RetainedBus:
+    """One running bus and the exact carry names its ledger records."""
+
+    name: str
+    root: str
+    applied: tuple[str, ...]
+    filename: ClassVar[str] = "retained_buses.json"
+
+    @classmethod
+    def at(cls, repo: Path, revision: str) -> tuple[RetainedBus, ...]:
+        files = git(repo, "ls-tree", "--name-only", f"{revision}:{STEPS}").decode().split()
+        if cls.filename not in files:
+            return ()
+        return FieldCodec.decode(tuple[cls, ...], FieldCodec.parse(
+            git(repo, "show", f"{revision}:{STEPS}/{cls.filename}")))
+
+    def require_applied(self, retired: frozenset[str]) -> None:
+        missing = retired - set(self.applied)
+        if missing:
+            raise ValueError(f"Retained bus {self.name} still needs retired steps: {sorted(missing)}")
+
+    @classmethod
+    def record(cls, checkout: Path, root: Path) -> None:
+        """Publish this bus's committed ledger after an upgrade applies a step."""
+        path = checkout / STEPS / cls.filename
+        buses = FieldCodec.decode(tuple[cls, ...], FieldCodec.parse(path.read_bytes()))
+        updated = tuple(replace(bus, applied=CarryLedger(root).applied())
+                        if Path(bus.root).expanduser().resolve() == root.resolve() else bus
+                        for bus in buses)
+        path.write_text(json.dumps(FieldCodec.encode(updated), indent=2) + "\n")
 
 
 class Carry(ABC):
@@ -269,6 +303,9 @@ class CarryChain:
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
+        retired_steps = frozenset(name for name in retired if cls.deleted(repo, revision, name))
+        for bus in RetainedBus.at(repo, revision):
+            bus.require_applied(retired_steps)
         retired_columns = frozenset(
             column for name in retired
             for column in Step.declared_columns(cls.source(repo, revision, name)[1]))
