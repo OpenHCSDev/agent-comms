@@ -349,6 +349,18 @@ class ShellSource(shlex.shlex):
         self.whitespace = ' \t\r'
         self.whitespace_split = True
 
+    def document_marker(self) -> str:
+        """Non-POSIX shlex retains quotes but splits adjacent quoted word parts."""
+        marker = self.get_token()
+        source = self.source_stream.getvalue()
+        cursor = self.source_stream.tell()
+        while (cursor and source[cursor - 1] in self.quotes
+               and source[cursor:cursor + 1]
+               and source[cursor] not in self.whitespace + self.newline):
+            marker += self.get_token()
+            cursor = self.source_stream.tell()
+        return marker
+
     @classmethod
     def without_bodies(cls, command: str) -> str:
         body = []
@@ -359,7 +371,7 @@ class ShellSource(shlex.shlex):
                 if word == cls.here_document:
                     after_operator = lex.source_stream.tell()
                     strip_tabs = command[after_operator - 1:after_operator] == cls.tab_marker
-                    marker = lex.get_token()
+                    marker = lex.document_marker()
                     if not marker or marker == cls.newline:
                         raise ValueError('Missing here-document delimiter')
                     marker = marker.removeprefix(cls.tab_marker) if strip_tabs else marker

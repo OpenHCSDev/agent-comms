@@ -113,6 +113,13 @@ def test_forbidden_shell_operations_use_declared_rule(tmp_path, command):
             effect.check(rule, thread)
 
 
+@pytest.mark.parametrize('command', ["printf 'unclosed", 'echo &&', 'printf trailing\\'])
+def test_malformed_shell_is_a_named_storage_refusal(tmp_path, command):
+    with pytest.raises(SelectedToolDenied) as refused:
+        shell_storage_effects(command, tmp_path)
+    assert repr(command) in str(refused.value)
+
+
 def test_programs_do_not_claim_to_be_effect_values():
     from agent_comms.storage_rules import ShellProgram, StorageEffect
     assert all(not issubclass(program, StorageEffect)
@@ -167,6 +174,8 @@ def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch)
     ("cat <<'EOF'\n'unclosed literal data\nEOF\nmkdir target", 'WriteStorageEffect'),
     ("cat <<-'EOF'\n\t'unclosed data\n\tEOF\nmkdir target", 'WriteStorageEffect'),
     ("cat << -EOF\n'unclosed data\n-EOF\nmkdir target", 'WriteStorageEffect'),
+    ("cat <<'P'Y\n'unclosed data\nPY\nmkdir target", 'WriteStorageEffect'),
+    ('cat <<\'P\'"Y"\n\'unclosed data\nPY\nmkdir target', 'WriteStorageEffect'),
 ])
 def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
     effects = shell_storage_effects(command, tmp_path)
