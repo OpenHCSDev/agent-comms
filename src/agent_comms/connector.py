@@ -43,6 +43,8 @@ from .field_codec import FieldCodec, MalformedRecord, PathText
 from .goal_actions import DirectiveGoalAction
 from .locked_store import LockedStore, RootFile
 from .messages import Message
+from .standing_rules import RulesDue
+from .todos import DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import ReadTool, ToolRequest
 
@@ -54,6 +56,13 @@ PORT = 18766
 class DirectorCaller(ThreadCaller):
     """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
     request when that thread holds owner requests."""
+
+    def require_directive(self, comms: Comms, body: str) -> None:
+        """A directive passes DirectiveText and needs this caller's rules review, drawn,
+        answered and under 20 minutes old."""
+        due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
+        if refused := (*DirectiveText.refused(body), *due):
+            raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
 
     def sent(self, comms: Comms, message: Message) -> None:
         if message.target in comms.registry:  # a channel holds no requests

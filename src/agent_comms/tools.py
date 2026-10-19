@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
 
 from pydantic import JsonValue
 
+from .progress_claims import ProgressClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
 from .cli_commands import (
     ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand,
@@ -661,9 +662,12 @@ class CommsGoalTool(ThreadToolRequest):
         "Exact unresolved inputId keys inspected and handled for this goal; standby only",
         default=None,
     )
+    claims: tuple[ProgressClaim, ...] = tool_field(
+        "Merged, installed or working claims, each with the artifact Core verifies", default=())
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalProgress:
         name = caller.name
+        ProgressClaim.require_all(self.claims, comms, Path(comms.registry.require(name).worktree))
         command = replace(
             self.status(progress=self.progress),
             expect=self.status.model_precondition(self.goal_id),
@@ -878,8 +882,12 @@ class CommsOrderDoneTool(ThreadToolRequest):
     description = "Verify the order's check on its clean delivered commit before completing its Goal."
     problem: str = tool_field("Problem ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
+    claims: tuple[ProgressClaim, ...] = tool_field(
+        "Merged, installed or working claims, each with the artifact Core verifies", default=())
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
+        ProgressClaim.require_all(
+            self.claims, comms, Path(comms.registry.require(caller.name).worktree))
         todo = comms.goals.todos.get(self.problem)
         todo.require_commander(comms.registry.require(caller.name).incarnation)
         assignment = todo.assignment
@@ -1063,6 +1071,7 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        caller.require_directive(comms, self.body)
         body = VerdictAudience(self.audience).addressed(self.target, self.body)
         result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         caller.sent(comms, result.message)

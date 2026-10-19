@@ -805,9 +805,14 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
     from agent_comms.connector import CALLER
     from agent_comms.goal_actions import CompletedGoalAction
     from agent_comms.goals import RequestDirective
+    from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
     from agent_comms.tools import CommsSendTool
     comms, caller = commander
     comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
+    def reviewed():
+        RuleReviews(comms.root).write('claude-ai', DrawnRuleReviewEntry(('Declare each fact once',), 1))
+        RuleReviews(comms.root).write('claude-ai', AnsweredRuleReviewEntry(
+            1, 'This tick moves rules.py:47 into one typed Core record that Core owns.'))
     def direct(target, body):
         CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
         return comms.bus.log.latest_sequence()
@@ -815,6 +820,7 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
         monkeypatch.setattr(standing_rules.time, 'time', lambda: after)
         return [rule.line() for rule in standing_rules.DirectiveUnacted.violations(comms, 'lead')]
     worker = comms.registry.require('worker').goal
+    reviewed()
     seq = direct('lead', 'Make the slowdowns impossible by mechanism.')
     assert direct('worker', 'A note to a unit, not a request.') and comms.registry.require('worker').goal == worker
     goal = comms.registry.require('lead').goal
@@ -829,6 +835,7 @@ def test_a_claude_ai_directive_request_alarms_past_its_deadline_until_an_order_s
     assert unacted(directive.deadline + 1) == []
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
     comms.goals.update_goal('lead', CompletedGoalAction(progress='Served by P1.'))
+    reviewed()  # the clock now stands past the first deadline
     seq = direct('lead', 'A second directive after the first request is done.')
     goal = comms.registry.require('lead').goal
     assert goal.id != 'request' and goal.state.active and goal.text == 'A second directive after the first request is done.'
@@ -1318,3 +1325,48 @@ def test_a_send_quoted_in_a_message_body_is_not_a_raw_send(commander, commander_
         monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'tool_input': {'command': command}})))
         send_guard.main([])
         assert capsys.readouterr().out == ''
+
+
+def test_each_claim_without_artifact_is_refused_and_accepted_with_it(commander, tmp_path):
+    """A goal report claiming merged, installed or working is refused, naming the artifact, until
+    the commit is on origin, P1's delivery recorded its check result and the screenshot exists;
+    the order delivery tool refuses the same claims the same way."""
+    from agent_comms.goal_actions import ActiveGoalAction
+    from agent_comms.progress_claims import InstalledClaim, MergedClaim, WorkingClaim
+    from agent_comms.tools import CommsGoalTool
+    comms, caller = commander
+    create(commander, 'P1')
+
+    def git(*args):
+        return subprocess.run(['git', '-C', str(tmp_path), *args], check=True,
+                              capture_output=True, text=True).stdout.strip()
+
+    subprocess.run(['git', 'init', '-q', '--bare', str(tmp_path / 'origin.git')], check=True)
+    git('init', '-q')
+    git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'work')
+    git('remote', 'add', 'origin', str(tmp_path / 'origin.git'))
+    screenshot = tmp_path / 'working.png'
+
+    def push():
+        git('push', '-q', 'origin', 'HEAD:refs/heads/work')
+        git('fetch', '-q', 'origin')
+
+    def deliver():
+        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+
+    claims = []
+    for claim, missing, provide in (
+        (MergedClaim(git('rev-parse', 'HEAD')), 'a commit sha that resolves on origin', push),
+        (InstalledClaim('P1'), 'the recorded check result of P1', deliver),
+        (WorkingClaim(str(screenshot)), 'a screenshot path that exists',
+         lambda: screenshot.write_bytes(b'png')),
+    ):
+        with pytest.raises(ValueError, match=re.escape(missing)):
+            CommsGoalTool(goal_id='request', status=ActiveGoalAction, progress='claimed',
+                          claims=(claim,)).apply(comms, caller)
+        with pytest.raises(ValueError, match=re.escape(missing)):
+            CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=(claim,)).apply(comms, caller)
+        provide()
+        claims.append(claim)
+    report = CommsGoalTool(goal_id='request', status=ActiveGoalAction, progress='claimed', claims=tuple(claims))
+    assert report.apply(comms, caller).goal.progress == 'claimed'
