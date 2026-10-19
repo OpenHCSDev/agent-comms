@@ -496,6 +496,7 @@ class NoConversion(PreparedCarries):
         from agent_comms.launch_runtime import LaunchRuntime
         from agent_comms.restart_queue import enqueue
         from agent_comms.errors import RelationViolationError
+        from agent_comms.owner_lifecycle import OwnerRestartSelection
 
         with resources:
             with publication.selected_route(comms.root):
@@ -503,15 +504,12 @@ class NoConversion(PreparedCarries):
                     publication.publish_links()
             publication.release_if_safe(self, comms.owners.maintenance, hold)
             # Existing exact-incarnation queue owns idle admission and settlement.
-            for original in intent.owners:
-                if not original.process.alive():
-                    continue
+            for original in OwnerRestartSelection.live(intent.owners, comms.registry.snapshot()):
                 try:
-                    enqueue(comms, original.name,
-                            launch_runtime=LaunchRuntime(publication.runtime / 'bin/python'),
-                            expected=original)
+                    enqueue(comms, original,
+                            launch_runtime=LaunchRuntime(publication.runtime / 'bin/python'))
                 except RelationViolationError:
-                    if original.process.alive():
+                    if OwnerRestartSelection.live((original,), comms.registry.snapshot()):
                         raise
                     # A selected process stopped while its queue request arrived.
 
@@ -545,15 +543,14 @@ class PendingConversion(PreparedCarries):
     def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
         import time
         from agent_comms.restart_refusals import OwnerBusyRefusal
+        from agent_comms.owner_lifecycle import OwnerRestartSelection
 
         deadline = time.monotonic() + timeout
         previous_busy = ()
         while True:
             snapshot = comms.registry.snapshot()
             busy = []
-            for original in intent.owners:
-                if not original.process.alive():
-                    continue
+            for original in OwnerRestartSelection.live(intent.owners, snapshot):
                 thread = original.require_current(snapshot)
                 try:
                     comms.owners.require_restart_idle(thread)

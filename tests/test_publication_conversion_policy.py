@@ -15,7 +15,8 @@ def test_no_conversion_switches_before_releasing_its_hold(tmp_path):
         publish_links=lambda: events.append('pointer'),
         release_if_safe=lambda *args: events.append('release'),
     )
-    comms = SimpleNamespace(root=tmp_path, owners=SimpleNamespace(maintenance=object()))
+    comms = SimpleNamespace(root=tmp_path, owners=SimpleNamespace(maintenance=object()),
+                            registry=SimpleNamespace(snapshot=lambda: object()))
     NoConversion(tmp_path).publish(publication, comms, SimpleNamespace(owners=()),
                                     object(), nullcontext(), 0)
     assert events == ['pointer', 'release']

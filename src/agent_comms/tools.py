@@ -55,6 +55,7 @@ from .messages import Message
 from .owner_lifecycle import OwnerStartResult
 from .presentation import ChannelView
 from .relationships import Collaboration, GoalDerivedContact, GoalMentionDiagnostic
+from .owner_lifecycle import OwnerRestartSelection
 from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as enqueue_restart
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
@@ -1252,7 +1253,8 @@ class CommsQueueRestartTool(LiveOwnerTool, NativeOwnerCommand, OwnerLifecycleCon
 
     def apply(self, comms: Comms, caller: ToolCaller) -> RestartQueued:
         return RestartQueued(
-            enqueue_restart(comms, self.name, launch_runtime=LaunchRuntime.running()))
+            enqueue_restart(comms, OwnerRestartSelection.capture(comms.registry.snapshot(), self.name),
+                            launch_runtime=LaunchRuntime.running()))
 
 
 @dataclass(frozen=True, kw_only=True)
