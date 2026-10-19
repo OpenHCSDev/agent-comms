@@ -49,10 +49,11 @@ from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
+from agent_comms.connector import PORT
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
 
@@ -87,6 +88,7 @@ class Stack:
 
     checkout: Path
     home: Path = Path.home()
+    connector_port: int = PORT
 
     @property
     def python(self) -> Path:
@@ -130,11 +132,11 @@ class Stack:
     def cli(self, root: Path, *arguments: str) -> dict:
         """One JSON CLI result for this bus alone, never the route's, waiting while the
         route index is still being built."""
-        environment = {**self.environment(), "AGENT_COMMS_ROOT": str(root)}
         for _ in range(240):
             completed = subprocess.run(
                 [str(self.python), "-c", "from agent_comms.cli import main; main()", "--root", str(root),
-                 *arguments], cwd=self.checkout, env=environment, capture_output=True, text=True)
+                 *arguments], cwd=self.checkout, env=self.environment(), capture_output=True,
+                text=True)
             if "Route index covers" not in completed.stdout:
                 break
             time.sleep(5)
@@ -152,11 +154,10 @@ class Stack:
                 "history": len(history[EverythingHistoryPageResult.messages_key])}
 
     def round_trip(self, root: Path) -> str:
-        """The connector Core declares for this bus sends one message and reads it back; it
-        needs open maintenance, so it runs last."""
-        environment = {**self.environment(), "AGENT_COMMS_ROOT": str(root)}
-        output = run(self.python, "-c", CONNECTOR, "round_trip", root, cwd=self.checkout,
-                     env=environment)
+        """The running connector service, on this stack's Python, reads this bus as the bus
+        reads itself; it needs open maintenance, so it runs last."""
+        output = run(self.python, "-c", CONNECTOR, "round_trip", root, self.python,
+                     "--port", str(self.connector_port), cwd=self.checkout, env=self.environment())
         return output.strip().splitlines()[-1]
 
 
@@ -417,9 +418,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
-        if maintenance.read().phase is ReadyPhase:  # the round trip failed on the opened bus
-            maintenance.begin(MaintenanceOperator("upgrade-bus"))  # restore brings back ``held``
-            route_readers()
+        maintenance.read().phase.hold_restore(maintenance, MaintenanceOperator("upgrade-bus"),
+                                              route_readers)
         # The failed bus keeps its hold until restore has swapped it out.
         backup.restore()
         transcripts.close()
