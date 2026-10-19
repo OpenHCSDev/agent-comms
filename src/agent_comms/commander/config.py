@@ -43,9 +43,12 @@ class Repo(BaseModel):
 
     def contains(self, sha: str) -> bool:
         """Only a successful ancestry proof in this installed checkout permits closure."""
-        return subprocess.run(
+        result = subprocess.run(
             ('git', '-C', str(self.checkout), 'merge-base', '--is-ancestor', sha, 'HEAD'),
-            capture_output=True, timeout=60).returncode == 0
+            capture_output=True, timeout=60)
+        if result.returncode not in (0, 1):
+            result.check_returncode()
+        return result.returncode == 0
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:
@@ -109,21 +112,17 @@ class CommanderConfig(CommanderRole, BaseModel):
 class Commander:
     """This machine's commander thread and the bus whose Todo store owns its problems and orders."""
 
-    config: CommanderConfig
+    name: str
     comms: Comms
-
-    @property
-    def name(self) -> str:
-        return self.config.commander
 
     @classmethod
     def of(cls, config: CommanderConfig) -> Commander:
-        return cls(config, Comms(config.root))
+        return cls(config.commander, Comms(config.root))
 
-    def orders(self) -> tuple[Todo, ...]:
+    def orders(self, repos: tuple[Repo, ...]) -> tuple[Todo, ...]:
         actor = self.comms.registry.require(self.name).incarnation
         store = self.comms.goals.todos
-        store.reconcile_merges(actor, self.config.repos, self.comms.registry.storage_rule)
+        store.reconcile_merges(actor, repos, self.comms.registry.storage_rule)
         return store.for_commander(actor)
 
     def units(self) -> frozenset[str]:

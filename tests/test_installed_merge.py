@@ -1,12 +1,13 @@
 """Merge observation closes the real stored order, without a completion request."""
 from dataclasses import replace
+import subprocess
 
 import pytest
 
 from agent_comms.commander.config import Repo
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import (DoneTodoState, MergedProblemOrder, OperationDelivery,
-                               PullRequest, PullRequests)
+                               PullRequest, PullRequests, UnorderedProblemOrder)
 from agent_comms.tools import CommsOrderDoneTool
 from test_commander_problem_orders import working
 from test_order_progress import checkout, commit, deadline_lines, git
@@ -38,21 +39,20 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     repo = Repo(checkout=installed, github=todo.repo)
     config = script.CONFIG.model_copy(update={'repos': (repo,)})
     monkeypatch.setattr(script, 'CONFIG', config)
-    monkeypatch.setattr(script, 'COMMANDER', replace(script.COMMANDER, config=config))
     merge = PullRequest(1, 'fix/p1', sha, sha, 500, 500, (original.id,))
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order:
                         (merge,) if state == 'merged' else ())
 
     # The object being available locally is not installation: HEAD must contain it.
     assert not repo.contains(sha)
-    assert script.COMMANDER.orders() == (todo,)
+    assert script.COMMANDER.orders(script.CONFIG.repos) == (todo,)
     assert comms.goals.todos.get(todo.id) == todo
     if not delivered:
         assert 'waiting on install' in deadline_lines(script)[0]
 
     git(installed, 'checkout', '-q', '-B', 'main', sha)
     assert repo.contains(sha)
-    assert script.COMMANDER.orders() == ()
+    assert script.COMMANDER.orders(script.CONFIG.repos) == ()
     assert script.held_orders() == ()
     closed = comms.goals.todos.get(todo.id)
     assert closed.state is DoneTodoState and closed.assignment is None
@@ -62,6 +62,14 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
     assert closed.order.id == original.id
     assert closed.strikes == todo.strikes
     assert FieldCodec.decode(type(closed), FieldCodec.encode(closed)) == closed
+
+    def no_child(*args, **kwargs):
+        pytest.fail('A repeated closed-order read launched a subprocess')
+
+    with monkeypatch.context() as repeat:
+        repeat.setattr(subprocess, 'run', no_child)
+        assert script.COMMANDER.orders(script.CONFIG.repos) == ()
+        assert comms.goals.todos.get(todo.id) == closed
     script.board()
     assert f'| {todo.id}:' not in (tmp_path / 'board.md').read_text()
     assert deadline_lines(script) == []
@@ -99,3 +107,19 @@ def test_new_revision_is_not_closed_from_an_old_merge_observation(
     comms.goals.todos.reconcile_merges(comms.registry.require('lead').incarnation,
                                       (repo,), comms.registry.storage_rule)
     assert comms.goals.todos.get(todo.id) == newer
+
+
+def test_only_checked_orders_are_selected_for_merge_reconciliation(commander, checkout):
+    comms, _ = commander
+    todo, _ = checkout
+    unordered = replace(todo, order=UnorderedProblemOrder())
+    with comms.goals.todos.writing() as db:
+        unordered.upsert(db)
+    comms.goals.todos.reconcile_merges(comms.registry.require('lead').incarnation,
+                                      (), comms.registry.storage_rule)
+    assert comms.goals.todos.get(todo.id) == unordered
+
+
+def test_failed_git_is_not_a_negative_ancestry_result(tmp_path):
+    with pytest.raises(subprocess.CalledProcessError):
+        Repo(checkout=tmp_path / 'missing', github='test/repo').contains('a' * 40)

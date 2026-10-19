@@ -604,9 +604,6 @@ class MergedProgress(FoundProgress):
     def state(self) -> str:
         return f"merged as {self.sha[:9]}, waiting on install"
 
-    def close(self, todo: Todo) -> Todo:
-        return DoneTodoState.closed(todo, todo.order.merged(self.sha))
-
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
 
@@ -1137,9 +1134,6 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
-
-    def merged(self, sha: str) -> ProblemOrder:
-        raise ValueError("Only a recorded order can close from its installed merge.")
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return ()
@@ -2331,9 +2325,11 @@ class TodoStore(TypedStore):
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:
         """Read before locking; close only orders whose observed revision still holds."""
-        todos = self.held_for_commander(commander)
-        pulls = PullRequests(todos)
-        completed = tuple(merged.close(todo) for todo in todos
+        checked = tuple((todo, order) for todo in self.held_for_commander(commander)
+                        if isinstance(order := todo.order, CheckedProblemOrder))
+        pulls = PullRequests(tuple(todo for todo, _ in checked))
+        completed = tuple(DoneTodoState.closed(todo, order.merged(merged.sha))
+                          for todo, order in checked
                           for repo in repos if repo.github.lower() == todo.repo
                           for merged in MergedProgress.found(
                               ProgressSource.of(todo, storage, pulls))
