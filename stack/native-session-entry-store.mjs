@@ -419,12 +419,17 @@ export class DiskEntryStore extends EntryStore {
         if (size) yield {raw: Buffer.concat(parts, size), offset: this.#headerEnd};
     }
     #readPrevious() {
-        const next = this.#lines.next();
-        if (next.done) return undefined;
-        const {raw, offset} = next.value;
-        const meta = this.#index(this.#decode(raw), offset, raw.length);
-        this.#last ??= meta.id;
-        return meta;
+        try {
+            const next = this.#lines.next();
+            if (next.done) return undefined;
+            const {raw, offset} = next.value;
+            const meta = this.#index(this.#decode(raw), offset, raw.length);
+            this.#last ??= meta.id;
+            return meta;
+        } catch (error) {
+            this.invalidate(error);
+            throw error;
+        }
     }
     refresh() {
         const before = fstatSync(this.#fd, { bigint: true });
