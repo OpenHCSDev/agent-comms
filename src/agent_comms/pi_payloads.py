@@ -640,6 +640,9 @@ class AssistantMessage(PiMessage):
     provider_thinking_level: str | None = wire_field("providerThinkingLevel")
     assistant = True
 
+    async def tracked_start(self, session, event) -> None:
+        await session.assistant_started()
+
     def tracked_end(self, session) -> None:
         self.stop_reason.tracked(session, self)
 

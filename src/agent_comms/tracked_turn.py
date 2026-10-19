@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack
@@ -19,6 +20,9 @@ from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
+from .external_transcript import DraftRow
+from .transcript_sources import NoDraft
+from .transcript_events import AssistantTranscript
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
@@ -260,6 +264,10 @@ class TrackedTurnSession(TurnSession):
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
+        self.draft = NoDraft()
+        self.draft_start = 0
+        self.draft_written_at = 0.0
+        self.draft_timestamp = 0.0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
         self.finished = False
 
@@ -365,6 +373,7 @@ class TrackedTurnSession(TurnSession):
                 # LIFO starts the measurement immediately before cleanup. No
                 # await or manual close may separate this from stack retirement.
                 ownership.callback(retirement.__enter__)
+                await Coordination.run_worker(partial(self.draft.end_turn, self.startup.root))
 
     async def retain_or_close(self) -> None:
         """Let the session keep a verified idle child; close any other child."""
@@ -512,13 +521,28 @@ class TrackedTurnSession(TurnSession):
         if event.assistant_message_event is not None:
             await self.dispatch(event.assistant_message_event)
 
+    async def assistant_started(self) -> None:
+        self.draft = await Coordination.run_worker(partial(
+            DraftRow.for_input, self.startup.root, self.command.input_id))
+        self.draft_start = len(self.text_parts)
+        self.draft_written_at = 0.0
+        self.draft_timestamp = time.time()
+
     @handles(TextDelta)
     async def text_delta(self, delta: TextDelta) -> None:
         self.text_parts.append(delta.delta)
+        now = time.monotonic()
+        if now - self.draft_written_at >= .1:
+            events = (AssistantTranscript(''.join(self.text_parts[self.draft_start:]),
+                                         timestamp=self.draft_timestamp),)
+            await Coordination.run_worker(partial(self.draft.publish, self.startup.root, events))
+            self.draft_written_at = now
 
     @handles(pi.MessageEnd)
     async def message_end(self, event: pi.MessageEnd) -> None:
         event.message.tracked_end(self)
+        await Coordination.run_worker(partial(self.draft.end_turn, self.startup.root))
+        self.draft = NoDraft()
 
     def accept_tool_round(self, message):
         super().accept_tool_round(message)

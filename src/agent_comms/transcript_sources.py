@@ -280,8 +280,11 @@ class LaterTranscript(TranscriptTraversal):
 
 
 class TranscriptDraft:
-    def end_turn(self, transcript: TypedStore) -> None:
+    def end_turn(self, root: Path) -> None:
         """An absent draft needs no write."""
+
+    def publish(self, root: Path, events: tuple[TranscriptEvent, ...]) -> None:
+        """Unassigned transcripts cannot publish an assigned draft."""
 
     def external_row(self):
         """The ACP draft field is null when there is no external draft."""
@@ -339,8 +342,9 @@ class TranscriptSource:
                     event for original in reversed(pending) for event in original.events))
                 pending.clear()
 
-    def current_draft(self) -> TranscriptDraft:
-        return NoDraft()
+    def current_draft(self, root: Path, thread: str) -> TranscriptDraft:
+        from .external_transcript import DraftRow
+        return DraftRow.current(root, thread)
 
     def publication_revision(self, root, recipient):
         return PublishedReplyRevision(0, 0)
