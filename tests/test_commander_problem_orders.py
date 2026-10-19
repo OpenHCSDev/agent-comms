@@ -351,6 +351,35 @@ def test_each_delivery_declares_the_strikes_it_carries(commander):
     assert strikes(OperationDelivery(), 9000) == ()
 
 
+def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander):
+    """Core strikes a late delivered commit in the revision that records it; no script is needed."""
+    comms, caller = commander
+
+    def git(*args, at=1000):
+        return subprocess.check_output(
+            ('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t', *args),
+            env={**os.environ, 'GIT_COMMITTER_DATE': f'@{at} +0000'},
+            stderr=subprocess.DEVNULL).decode().strip()
+    git('init', '-q', '-b', 'main')
+    git('commit', '-q', '--allow-empty', '-m', 'on time', at=1990)
+    on_time = git('rev-parse', 'HEAD')
+    git('commit', '-q', '--allow-empty', '-m', 'late', at=2035)
+    late = git('rev-parse', 'HEAD')
+    git('update-ref', 'refs/remotes/origin/main', late)
+
+    def done(problem, commit):
+        create(commander, problem, deadline=2000)
+        CommsOrderDoneTool(problem=problem, delivery=CommitDelivery(commit=commit, delivered_commit=commit),
+                           claims=working(comms)).apply(comms, caller)
+        return comms.goals.todos.get(problem)
+
+    assert done('P1', on_time).strikes == ()
+    delivered = done('P2', late)
+    (strike,) = delivered.strikes
+    assert not delivered.pending and strike.previous.owner == 'worker'
+    assert strike.reason.startswith('P2 order order-P2 late by 35 s') and late in strike.reason
+
+
 def test_a_main_merge_is_never_the_delivered_commit(commander):
     """P44 recorded the commander's main merge as the delivery, 72 minutes after the unit's own push."""
     comms, caller = commander

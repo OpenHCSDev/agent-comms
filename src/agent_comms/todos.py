@@ -1604,7 +1604,9 @@ class DeliverTodo(TodoOperation):
     def apply(self, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
+        return replace(current, order=current.order.delivered(self.delivery),
+                       strikes=(*current.strikes, *self.delivery.strikes(current, self.actor)),
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)

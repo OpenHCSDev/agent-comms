@@ -509,7 +509,12 @@ def recorded(unit: str, todo: Todo, strike: StrikeTodo) -> None:
     refuse(strike.reason, *OUTGOING)  # posted to #comms, so refused before Core records the strike
     if call(CommsTodoTool(id=todo.id, operation=strike)).todo.revision == todo.revision:
         return
-    n = struck(COMMS.goals.todos.get(todo.id), unit)
+    posted(unit, COMMS.goals.todos.get(todo.id), strike)
+
+
+def posted(unit: str, todo: Todo, strike: StrikeTodo) -> None:
+    """A strike Core recorded on the task's Todo goes to the narrative file and #comms."""
+    n = struck(todo, unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {todo.id}'
             f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
     on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
@@ -517,7 +522,8 @@ def recorded(unit: str, todo: Todo, strike: StrikeTodo) -> None:
 
 
 def done(pid, sha, delivered=None, screenshot=''):
-    """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
+    """Core runs the delivery's check at its checked commit and strikes a late delivered commit
+    in the same revision; this posts the strikes Core recorded."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
@@ -540,8 +546,8 @@ def done(pid, sha, delivered=None, screenshot=''):
     claim = WorkingClaim(screenshot) if operation else MergedClaim(delivered)
     call(CommsOrderDoneTool(problem=pid, delivery=delivery, claims=(claim,)))
     delivered_todo = COMMS.goals.todos.get(pid)
-    for late in delivered_todo.order.delivery.strikes(delivered_todo, COMMS.registry.require(ME).incarnation):
-        recorded(unit, delivered_todo, late)
+    for late in delivered_todo.strikes[len(todo.strikes):]:
+        posted(unit, delivered_todo, late)
     print(f'{unit}: order {todo.order.id} delivered as {delivered or sha}')
 
 
