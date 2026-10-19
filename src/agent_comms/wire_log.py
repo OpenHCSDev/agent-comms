@@ -864,10 +864,6 @@ class WireLog:
         return self.read_metadata_unlocked().last_seq
 
     def _claim_marker_unlocked(self) -> WireMetadata | None:
-        # _store_lock is also used for registry, channels, and marker files.
-        # Only the canonical bus may enter this read/durability barrier.
-        if self.path.name != "bus.jsonl":
-            return None
         metadata = self.read_metadata_unlocked()
         from .private_bus_checkpoint import certificate_enabled
 
@@ -884,6 +880,10 @@ class WireLog:
         Recovery and uncertified sources still flush before accepting visible
         bytes left by an interrupted append.
         """
+        # Generic store locks also reach this hook; only the bus owns these repairs.
+        if self.path.name != "bus.jsonl":
+            yield None
+            return
         private_marker = self._claim_marker_unlocked()
         if private_marker is None:
             self._sync_replaced_page_index_unlocked(mode)
@@ -905,8 +905,6 @@ class WireLog:
             yield source
 
     def _sync_replaced_page_index_unlocked(self, mode: LockMode) -> None:
-        if self.path.name != "bus.jsonl":
-            return
         with BusPageIndex(self.path) as index:
             if index.replaced_by(ObservedPath.at(self.path)):
                 mode.require_writer()
