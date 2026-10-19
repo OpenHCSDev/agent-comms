@@ -160,7 +160,7 @@ async def test_correlation_handles_out_of_order_ids_and_anonymous_commands():
     assert channel.correlate(response("b")) is second
     assert channel.correlate(response("a")) is first
     assert channel.correlate(response("a")) is None
-    one, two = commands.InterruptSteering(), commands.InterruptSteering()
+    one, two = commands.InterruptSteering(id=None), commands.InterruptSteering(id=None)
     channel.encode(one)
     channel.encode(two)
     reply = PiRpcChannel.decode_record(b'{"type":"response","command":"interrupt_steering"}')

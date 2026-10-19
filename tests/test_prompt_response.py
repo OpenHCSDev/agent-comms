@@ -16,7 +16,7 @@ from agent_comms.prompt_state import UnacknowledgedPrompt
 
 
 def prompt(**options):
-    return Prompt(message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64), **options).identified()
+    return Prompt(message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64), **options)
 
 
 async def test_only_the_matching_prompt_response_yields_the_accepted_result():
@@ -58,11 +58,22 @@ def test_images_use_the_declared_pi_tag_for_encoding_and_decoding():
         PiCommand.from_wire(missing)
 
 
+@pytest.mark.parametrize("identity", [None, "opaque-id"])
+def test_unknown_command_reads_its_id_through_the_declared_field(identity):
+    raw = {"type": "future_command", "id": identity, "payload": "kept"}
+    command = PiCommand.from_wire(raw)
+    assert command.id == identity and command.to_rpc() == raw
+    raw.pop("id")
+    assert PiCommand.from_wire(raw).id is None
+    assert PiCommand.from_wire(raw).to_rpc() == raw
+    with pytest.raises(ValueError):
+        PiCommand.from_wire({**raw, "id": 3})
+
+
 def test_anonymous_wire_command_keeps_its_anonymous_id():
     raw = prompt().to_rpc()
     raw.pop("id")
     decoded = PiCommand.from_wire(raw)
     assert decoded.id is None
     assert decoded.to_rpc() == raw
-    identified = decoded.identified()
-    assert identified.id and identified.identified() is identified
+    assert prompt().id and prompt().id != prompt().id

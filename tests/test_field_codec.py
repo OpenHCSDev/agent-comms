@@ -15,6 +15,37 @@ from agent_comms.messages import (
 )
 
 
+def test_wire_absence_is_none_without_running_the_constructor_factory():
+    created = []
+
+    def fresh():
+        created.append("created")
+        return "constructed-id"
+
+    @dataclass
+    class Record:
+        id: str | None = field(default_factory=fresh, metadata={"wire_absent_none": True})
+
+    record = Record()
+    assert created == ["created"]
+    assert FieldCodec.encode(record) == {"id": "constructed-id"}
+    plan = FieldCodec.field_plan(Record, "id")
+    for raw in ({}, {"id": None}):
+        for decoded in (
+            FieldCodec.decode(Record, raw),
+            FieldCodec.decode_bound(Record, raw),
+            FieldCodec.decode_selected(Record, raw, {}, fields=("id",)),
+        ):
+            assert decoded.id is None
+            assert FieldCodec.encode(decoded) == {}
+            assert FieldCodec.project(decoded, "status") == {}
+        assert plan.read(raw) is None
+    assert created == ["created"]
+    with pytest.raises(ValueError):
+        FieldCodec.decode(Record, {"id": 3})
+    assert created == ["created"]
+
+
 def test_json_shape_schema_uses_the_same_member_annotations_as_decode():
     class SchemaShape(DeclaredFamily, JsonShapeFamily, affix="SchemaShape"):
         pass
