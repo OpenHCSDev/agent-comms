@@ -20,7 +20,7 @@ from dataclasses import dataclass, field, fields, replace
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Final, Self, cast
+from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
 from . import skills
@@ -1112,6 +1112,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
                                    metadata={"wire_omit_default": True})
 
+    def verify_evidence(self, evidence: tuple[Evidence, ...], goals: Goals) -> None:
+        raise ValueError("This problem has no checked order to cite evidence against.")
+
     @classmethod
     def pull_request_ids(cls, body: str) -> tuple[str, ...]:
         return tuple(line.removeprefix(cls.pull_request_label).strip()
@@ -1193,6 +1196,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     deletes: OrderDeletion = field(
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
+
+    def verify_evidence(self, evidence: tuple[Evidence, ...], goals: Goals) -> None:
+        for cited in evidence:
+            cited.verify(goals, self)
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -1674,9 +1681,7 @@ class Evidence(DeclaredFamily, affix="Evidence"):
             raise ValueError("Cite the state the strike stands on: "
                              + ", ".join(member.form for member in cls.members_with(cls))
                              + "; a board row, goal text or another agent's account is not state.")
-        order = cast(CheckedProblemOrder, current.order)
-        for cited in evidence:
-            cited.verify(goals, order)
+        current.order.verify_evidence(evidence, goals)
 
     @abstractmethod
     def verify(self, goals: Goals, order: CheckedProblemOrder) -> None: ...
