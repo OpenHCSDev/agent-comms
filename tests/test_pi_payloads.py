@@ -3,9 +3,11 @@
 import json
 from collections.abc import Mapping
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from agent_comms.agent_event_updates import AcpEventConsumer
 from agent_comms.agent_events import ContextInfo
 from agent_comms.context_reading import ContextUsage, UnmeasuredContext
 from agent_comms.field_codec import FieldCodec
@@ -90,7 +92,7 @@ def test_known_nested_payload_has_one_typed_authority():
 
 
 @pytest.mark.parametrize("observation", ["reported", "omitted", "null", "zero"])
-def test_pi_counts_share_reported_members_and_reader_outputs(observation):
+async def test_pi_counts_share_reported_members_and_reader_outputs(observation):
     model = {"provider": "p", "id": "m"}
     wire = {"model": model}
     if observation != "omitted":
@@ -128,6 +130,15 @@ def test_pi_counts_share_reported_members_and_reader_outputs(observation):
     emitted, = GetSessionStats.on_response(stats, session)
     assert emitted.context_used == PiCount.from_wire(7)
     assert emitted.context_size == (PiCount.from_wire(2000) if observation == "reported" else PiCount.from_wire(4096))
+    client = AsyncMock()
+    consumer = AcpEventConsumer(SimpleNamespace(), "unit", client)
+    await consumer.on_context_info(ContextInfo(context_used=PiCount.from_wire(7), context_size=expected))
+    assert client.session_update.await_count == (1 if observation == "reported" else 0)
+    client.reset_mock()
+    await consumer.on_context_info(emitted)
+    assert client.session_update.await_args.kwargs["update"].used == 7
+    assert client.session_update.await_args.kwargs["update"].size == (
+        2000 if observation == "reported" else 4096)
     context = stats.data.context_usage
     assert context.context_window.reading(context.token_total) == (
         ContextUsage(7, 2000) if observation == "reported" else UnmeasuredContext())
