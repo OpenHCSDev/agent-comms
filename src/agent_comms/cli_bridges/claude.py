@@ -16,13 +16,12 @@ from typing import AsyncIterator, BinaryIO, Self
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import DeliveredOutcome, Outcome, WireModel, raise_child_exit
 from agent_comms.messages import Message
-from agent_comms.registration import Registration
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
 from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame, ClaudeInputFrame
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import Binding, CliBridge, LineMonitorBridge, Operation, Options, run_bridge
+from .shared import Binding, CliBridge, LineMonitorBridge, Operation, Options, TranscriptBridge, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 
 
@@ -89,16 +88,10 @@ class RunningClaude(ClaudeJsonLines, ClaudeHistory, OnlineHistory):
         return cls(thread)
 
 
-class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
-    """Follow this Claude session's file without submitting an input."""
+class ClaudeFileBridge(RunningClaude, declared_name=None):
+    """Both live input transports read Claude's one canonical transcript."""
 
-    incoming_frame = ClaudeMonitorFrame
-    window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
     RECENT_BYTES = 4 * 1024 * 1024
-
-    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
-        LineMonitorBridge.__init__(self, options, binding, db)
-        RunningClaude.__init__(self, binding.thread)
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         """On restart only the last 4 MiB is published again; Core's finish is idempotent, so
@@ -130,16 +123,31 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
                         yield update
 
 
-class ClaudeInputBridge(ClaudeBridge, declared_name=None):
+class ClaudeBridge(ClaudeFileBridge, LineMonitorBridge, declared_name=None):
+    """Follow an interactive session, submitting inputs through its Monitor."""
+
+    incoming_frame = ClaudeMonitorFrame
+    window_bytes = ClaudeMonitorFrame.BATCH_CHARS * 2
+
+    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+        LineMonitorBridge.__init__(self, options, binding, db)
+        RunningClaude.__init__(self, binding.thread)
+
+
+class ClaudeInputBridge(ClaudeFileBridge, TranscriptBridge[Options], declared_name=None):
     """Own Claude's actual stdin; Monitor remains for externally started interactive sessions."""
 
     def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
-        super().__init__(options, binding, db)
+        TranscriptBridge.__init__(self, options, binding, db)
+        RunningClaude.__init__(self, binding.thread)
         self.pending: dict[str, asyncio.Future[None]] = {}
         self.transcript_ready = asyncio.Event()
 
-    async def prepare_delivery(self) -> None:
-        """The registered child owns this input pipe; no Monitor attachment is needed."""
+    async def show_sent(self, result) -> None:
+        print(self.sent_text(result), file=sys.stderr, flush=True)
+
+    async def report_failure(self, text: str) -> None:
+        print(text, file=sys.stderr, flush=True)
 
     async def send_input(self, identity: str, payload: bytes) -> None:
         receipt = asyncio.get_running_loop().create_future()
@@ -196,6 +204,7 @@ class Run(Operation[ClaudeBridge]):
         session = ClaudeInputBridge(bridge.options, bridge.binding, bridge.db)
         session.child = await AttachedChild.start(
             ClaudeInputFrame.command(self.claude, bridge.binding.thread, self.arguments),
+            cwd=session.comms.registry.require(session.binding.bus).worktree,
             stdio=StreamingChildStdio(limit=8 * 1024 * 1024, stderr=sys.stderr))
         try:
             registry = session.comms.registry

@@ -4,6 +4,33 @@ Claude Code's Monitor injects stdout lines into its conversation. The adapter
 is `agent_comms.cli_bridges.claude` (command `agent-comms-claude-bridge`); all Core delivery behavior comes from
 `agent_comms.cli_bridges.shared`, shared with Codex. No Claude settings hook is needed.
 
+## Start a session that can wake from its first bus message
+
+Monitor needs a tool call first, so it cannot wake a never-prompted session.
+Instead, explicitly launch a fresh Claude session with its stdin owned by the bridge:
+
+```sh
+agent-comms-claude-bridge run \
+  --root /path/to/private-bus --bus-thread claude-code \
+  --session NEW_UUID --state /path/to/private-bridge-state
+```
+
+Declare the external bus thread first. Run launches the real `claude` executable
+in that thread's worktree, with stream-JSON input/output and the supplied session
+UUID. It sends no bootstrap prompt. The first incoming conversation message is
+its first user input; subsequent bus messages use the same process and session.
+Registration retains the `IncomingFrame` family's turn-start behavior with that
+live input endpoint. Delivery is acknowledged only when Claude replays that
+input's UUID, not when the pipe flushes. Child exit stops the bus watch and leaves
+uncertain attempts in the existing journal without replay.
+
+`--claude PATH` selects the executable; repeat `--claude-arg=ARG` to pass Claude
+options. The bridge does not override the configured model, tools or permission
+policy. Raw Claude stream-JSON output goes to stdout; progress goes to stderr.
+The existing transcript reader publishes Claude's actual saved history to Core.
+This is opt-in and starts a new managed session; it does not take over an
+already-running interactive Claude session or replace its Monitor transport.
+
 ## Start the monitor
 
 Stop the previous Monitor before starting its replacement. On first use, bind
