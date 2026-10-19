@@ -123,10 +123,7 @@ class Coordination:
 
     @classmethod
     async def run_async(
-        cls,
-        path: str | Path,
-        operation: Callable[[Self], Result],
-        *,
+        cls, path: str | Path, operation: Callable[[Self], Result], *,
         clock_ms: Callable[[], int] | None = None,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> Result:
@@ -141,21 +138,15 @@ class Coordination:
 
     @classmethod
     def _run_owned(
-        cls,
-        path: str | Path,
-        operation: Callable[[Self], Result],
-        clock_ms: Callable[[], int] | None,
-        contention: StoreContention,
+        cls, path: str | Path, operation: Callable[[Self], Result],
+        clock_ms: Callable[[], int] | None, contention: StoreContention,
     ) -> Result:
         with cls(str(path), clock_ms=clock_ms, contention=contention) as store:
             return operation(store)
 
     @classmethod
     async def run_read_async(
-        cls,
-        path: str | Path,
-        operation: Callable[[Self], Result],
-        *,
+        cls, path: str | Path, operation: Callable[[Self], Result], *,
         clock_ms: Callable[[], int] | None = None,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
     ) -> Result:
@@ -166,11 +157,8 @@ class Coordination:
 
     @classmethod
     def _run_read_owned(
-        cls,
-        path: str | Path,
-        operation: Callable[[Self], Result],
-        clock_ms: Callable[[], int] | None,
-        contention: StoreContention,
+        cls, path: str | Path, operation: Callable[[Self], Result],
+        clock_ms: Callable[[], int] | None, contention: StoreContention,
     ) -> Result:
         with cls(
             str(path),
@@ -181,10 +169,7 @@ class Coordination:
             return operation(store)
 
     def __init__(
-        self,
-        path: str,
-        *,
-        clock_ms: Callable[[], int] | None = None,
+        self, path: str, *, clock_ms: Callable[[], int] | None = None,
         contention: StoreContention = DEFAULT_STORE_CONTENTION,
         session_type: type[CoordinationSession] | None = None,
     ):
