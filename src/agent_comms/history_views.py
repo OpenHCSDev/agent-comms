@@ -200,7 +200,7 @@ class HistoryViews:
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
-        self.transcript_reads = transcript_read_state(bus.reads.path, registry)
+        self.transcript_reads = transcript_read_state(bus.reads.path)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
@@ -380,7 +380,9 @@ class HistoryViews:
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
-        unread = self.transcript_reads.counts(captured_viewer, document=basis.document, visibility=visibility)
+        unread = self.transcript_reads.counts(
+            captured_viewer, registry=basis.registry, document=basis.document, visibility=visibility,
+        )
         return replace(snapshot, thread_unread=unread.counts)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
