@@ -15,11 +15,11 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.coordination_errors import CoordinationReadUnavailable
 from agent_comms.private_path import FileRevision
-from agent_comms.registry_document import DEFAULT_ROSTER
+from agent_comms.registry_document import DEFAULT_ROSTER, RosterVisibility, RegistrySnapshot
 from agent_comms.ui_model.unread import CappedReplyUnread, EmptyCappedReplyUnread, ReplyUnread
 from agent_comms.view_unread import (
     CappedCount, Counted, Indexing, NativeReplyPreparation, ReplyIndex,
-    ReplyIndexUpdate, ReplyRead, ReplyReading, RevisionMoved, TranscriptReply,
+    ReplyIndexUpdate, ReplyRead, ReplyReading, RevisionMoved, TranscriptReply, TranscriptReadKeys,
 )
 from native_unread_fixture import completed_counts, completed_snapshot, native_reader
 
@@ -127,6 +127,31 @@ def test_idle_reads_use_the_index_and_changed_source_recounts_only_the_cap(tmp_p
             assert fresh.preparation is fresh._idle
     finally:
         fresh.close()
+
+
+def test_registry_revision_refreshes_keys_on_register_delete_and_visibility(tmp_path):
+    comms, source = setup_thread(tmp_path)
+    append(source)
+    state = comms.views.transcript_reads
+    assert completed_counts(state, 'viewer').counts == {'worker': ReplyUnread(1)}
+    # No registry or source change: do not enumerate, compare or capture threads.
+    with patch.object(RegistrySnapshot, 'visible_threads', side_effect=AssertionError('idle roster walk')), \
+         patch.object(TranscriptReadKeys, 'matches', side_effect=AssertionError('idle thread comparison')), \
+         patch.object(TranscriptReadKeys, 'capture', side_effect=AssertionError('idle key capture')):
+        assert state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER).counts == {'worker': ReplyUnread(1)}
+    second = tmp_path / 'second.jsonl'
+    session(second, 'second')
+    append(second)
+    comms.registry.declare(comms.registry.new_thread('new-worker', frozenset({'ci'}),
+        str(tmp_path), session_file=str(second)))
+    assert completed_counts(state, 'viewer').counts == {'worker': ReplyUnread(1), 'new-worker': ReplyUnread(1)}
+    comms.registry.archive('new-worker')
+    assert completed_counts(state, 'viewer').counts == {'worker': ReplyUnread(1)}
+    shown = state.counts('viewer', document=state.reads.read(), visibility=RosterVisibility(archived=True))
+    assert shown.counts == {'worker': ReplyUnread(1), 'new-worker': ReplyUnread(1)}
+    comms.registry.remove('new-worker')
+    assert completed_counts(state, 'viewer').counts == {'worker': ReplyUnread(1)}
+    assert tuple(state._thread_keys) == ('worker',)
 
 
 def test_read_uses_the_captured_read_document(tmp_path):
