@@ -16,7 +16,7 @@ from agent_comms.page_traversal import OlderTraversal
 from agent_comms.threads import Thread
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.read_basis import ChannelConversation, ChannelDisplayScope, DMConversation, ConversationCursor, NamedViewer, ReadCursor, NoDisplaySelection
-from agent_comms.read_ledger import ReadLedger
+from agent_comms.read_ledger import NoReadNotice, PendingReadNotice, ReadDocument, ReadLedger, ReadNotice
 from agent_comms.presentation import ReadThrough
 
 
@@ -108,17 +108,35 @@ def test_sidebar_presents_pending_read_reset_notice_once(tmp_path):
     comms = Comms(tmp_path)
     comms.messaging.initialize_private_initial_protocol()
     viewer = comms.messaging.user_identity(str(tmp_path)).name
-    notice = "Read positions were reset; reopen conversations to review them."
+    notice = PendingReadNotice("Read positions were reset; reopen conversations to review them.")
     comms.bus.reads.replace(replace(comms.bus.reads.read(), notice=notice))
-    assert comms.bus.reads.take_notice(None) is None
+    assert NoReadNotice().take(comms.bus.reads) == NoReadNotice()
     assert comms.bus.reads.read().notice == notice
 
     first = comms.views.presentation.roster(viewer)
     assert first.read_marker_notice == notice
-    assert comms.bus.reads.read().notice is None
+    assert comms.bus.reads.read().notice == NoReadNotice()
 
     second = Comms(tmp_path).views.presentation.roster(viewer)
-    assert second.read_marker_notice is None
+    assert second.read_marker_notice == NoReadNotice()
+
+
+def test_empty_notice_never_accesses_store_and_pending_notice_keeps_a_replacement(tmp_path):
+    from agent_comms.field_codec import FieldCodec
+
+    assert NoReadNotice().take(object()) == NoReadNotice()
+    assert FieldCodec.decode(ReadNotice, None) == NoReadNotice()
+    assert FieldCodec.decode(ReadNotice, "reset") == PendingReadNotice("reset")
+    ledger = ReadLedger(tmp_path / ReadLedger.filename)
+    newer = PendingReadNotice("newer reset")
+    ledger.replace(ReadDocument(notice=newer))
+    assert PendingReadNotice("older reset").take(ledger) == NoReadNotice()
+    assert ledger.read().notice == newer
+    shown = []
+    newer.take(ledger).notify_if_new(NoReadNotice(), shown.append)
+    ledger.read().notice.notify_if_new(newer, shown.append)
+    newer.notify_if_new(newer, shown.append)
+    assert shown == [newer.text]
 
 
 def test_bounded_page_marks_only_shown_messages(tmp_path):
