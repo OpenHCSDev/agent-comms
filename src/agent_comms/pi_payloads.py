@@ -11,20 +11,25 @@ import types
 from abc import abstractmethod
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
-from collections.abc import Iterator
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
-from .native_session_reopen import NativeSessionIdentity
 from .native_file_artifact import NativeFileArtifact
+from .native_session_reopen import NativeSessionIdentity
+from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
+from .pi_vocabulary import (
+    NoThinkingOverride,
+    PiStopReason,
+    ThinkingLevel,
+    ThinkingLevelField,
+    UnreportedStopReason,
+)
 from .tool_declaration import ToolDeclaration
-from .pi_vocabulary import NoThinkingOverride, PiStopReason, ThinkingLevel, ThinkingLevelField, UnreportedStopReason
 from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent, ProviderUsage
-    from .backend import TurnSession
+    from .agent_events import ProviderUsage
     from .turn_usage import UsageAccount
 
 
@@ -219,53 +224,6 @@ class PiCost(PiPayload):
     total: float | None = wire_field("total")
 
 
-class TokenTotal:
-    """Whether Pi reported a positive token total, decided once where its usage is decoded."""
-
-    @staticmethod
-    def reported(total: int | None) -> TokenTotal:
-        return ReportedTokens(total) if total is not None and total > 0 else UnreportedTokens()
-
-    def otherwise(self, other: TokenTotal) -> TokenTotal:
-        return other
-
-    def provisional(self, session: TurnSession) -> Iterator[AgentEvent]:
-        return iter(())
-
-    def confirm(self, account: UsageAccount) -> None:
-        """Only a reported total confirms the context usage."""
-
-    def settle(self, session: TurnSession) -> Iterator[AgentEvent]:
-        if session.usage.provisional:
-            session.usage.rollback()
-            yield session.context_info()
-
-
-@dataclass(frozen=True)
-class UnreportedTokens(TokenTotal):
-    pass
-
-
-@dataclass(frozen=True)
-class ReportedTokens(TokenTotal):
-    count: int
-
-    def otherwise(self, other: TokenTotal) -> TokenTotal:
-        return self
-
-    def confirm(self, account: UsageAccount) -> None:
-        account.confirm(self.count)
-
-    def provisional(self, session: TurnSession) -> Iterator[AgentEvent]:
-        session.usage.observe(self.count)
-        yield session.context_info()
-
-    def settle(self, session: TurnSession) -> Iterator[AgentEvent]:
-        if not session.accepts_output:
-            yield from super().settle(session)
-            return
-        session.usage.confirm(self.count)
-        yield session.context_info()
 
 
 @dataclass(frozen=True)
@@ -276,18 +234,18 @@ class PiUsage(PiPayload):
             return None
         return super().normalize_field(target, key, value, record)
 
-    input: int | None = wire_field("input")
-    output: int | None = wire_field("output")
-    cache_read: int | None = wire_field("cacheRead")
-    cache_write: int | None = wire_field("cacheWrite")
-    total_tokens: int | None = wire_field("totalTokens")
+    input: NonnegativePiCount = wire_field("input", UnreportedCount())
+    output: NonnegativePiCount = wire_field("output", UnreportedCount())
+    cache_read: NonnegativePiCount = wire_field("cacheRead", UnreportedCount())
+    cache_write: NonnegativePiCount = wire_field("cacheWrite", UnreportedCount())
+    total_tokens: PiCount = wire_field("totalTokens", UnreportedCount())
     cost: PiCost | None = wire_field("cost")
-    reasoning: int | None = wire_field("reasoning")
-    cache_write_1h: int | None = wire_field("cacheWrite1h")
+    reasoning: NonnegativePiCount = wire_field("reasoning", UnreportedCount())
+    cache_write_1h: NonnegativePiCount = wire_field("cacheWrite1h", UnreportedCount())
 
     @property
-    def token_total(self) -> TokenTotal:
-        return TokenTotal.reported(self.total_tokens)
+    def token_total(self) -> PiCount:
+        return self.total_tokens
 
     def charges(self, account: UsageAccount) -> tuple[ProviderUsage, ...]:
         return (account.charge(self),)
@@ -608,7 +566,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         return super().normalize_field(target, key, value, record)
 
     @property
-    def measured_tokens(self) -> TokenTotal:
+    def measured_tokens(self) -> PiCount:
         return self.usage.token_total
 
     def require_failed_terminal(self):
@@ -912,7 +870,7 @@ class PiModel(PiPayload, DeclaredFamily, affix="Model"):
     wire_tag = None
     opaque: ClassVar[bool] = False
     display_name: ClassVar[str | None] = None
-    context_window: ClassVar[int | None] = None
+    context_window: ClassVar[PiCount] = UnreportedCount()
 
     @classmethod
     def wire_member(cls, value):
@@ -937,8 +895,8 @@ class ReportedModel(PiModel):
     provider: str | None = None
     id: str | None = None
     name: str | None = None
-    context_window: int | None = wire_field("contextWindow")
-    max_tokens: int | None = wire_field("maxTokens")
+    context_window: PiCount = wire_field("contextWindow", UnreportedCount())
+    max_tokens: PiCount = wire_field("maxTokens", UnreportedCount())
 
     @property
     def identity(self):
@@ -966,12 +924,12 @@ class PiContextUsage(PiPayload):
             return None
         return super().normalize_field(target, key, value, record)
 
-    tokens: int | None = None
-    context_window: int | None = wire_field("contextWindow")
+    tokens: PiCount = wire_field("tokens", UnreportedCount())
+    context_window: PiCount = wire_field("contextWindow", UnreportedCount())
 
     @property
-    def token_total(self) -> TokenTotal:
-        return TokenTotal.reported(self.tokens)
+    def token_total(self) -> PiCount:
+        return self.tokens
 
 
 @dataclass(frozen=True)
@@ -1066,8 +1024,8 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     # default on output; its internal family tag is not a native model object.
     model: PiModel = field(default_factory=UnreportedModel, metadata={"wire_omit_default": True})
     thinking_level: ThinkingLevelField = wire_field("thinkingLevel", default=NoThinkingOverride)
-    message_count: int | None = wire_field("messageCount")
-    pending_message_count: int | None = wire_field("pendingMessageCount")
+    message_count: NonnegativePiCount = wire_field("messageCount", UnreportedCount())
+    pending_message_count: NonnegativePiCount = wire_field("pendingMessageCount", UnreportedCount())
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
 
@@ -1117,8 +1075,8 @@ class CompactionData(PiResponseData):
     summary: str | None = None
     usage: PiUsage = wire_field("usage", UnreportedUsage())
     first_kept_entry_id: str | None = wire_field("firstKeptEntryId")
-    tokens_before: int | None = wire_field("tokensBefore")
-    estimated_tokens_after: int | None = wire_field("estimatedTokensAfter")
+    tokens_before: PiCount = wire_field("tokensBefore", UnreportedCount())
+    estimated_tokens_after: PiCount = wire_field("estimatedTokensAfter", UnreportedCount())
 
     @property
     def display_summary(self):

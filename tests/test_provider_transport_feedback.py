@@ -10,6 +10,7 @@ from acp import RequestError
 from agent_comms.acp_extension import RequestFailedUpdate, decode_updates, encode_updates
 from agent_comms.acp_failure import ACPFailure, ProviderConnectionFailure, RequestACPFailure
 from agent_comms.input_attempt import StartedInput
+from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
 from agent_comms.pi_payloads import AfterMessageStreamStartStage, UnrecognizedTransportStage
 from agent_comms.pi_rpc import PiRpcChannel
@@ -27,7 +28,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert isinstance(event, MessageEnd)
     assert event.message.content == ()
     assert event.message.stop_reason is ErrorStopReason
-    assert event.message.usage.total_tokens == 0
+    assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics
     assert diagnostic.error.name == "WebSocketCloseError"
     assert diagnostic.error.code == 1011
