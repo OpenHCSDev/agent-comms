@@ -182,6 +182,34 @@ class CommanderContext(CommanderConfig):
         listed: TodoList = self.call(CommsTodoListTool())
         return listed.progress
 
+    def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
+        """The other configured repos whose `from agent_comms` imports name a module, unless the
+        check reads them."""
+        pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
+        return [str(repo.checkout) for repo in self.repos
+                if repo.checkout != Path(check.directory).resolve()
+                and str(repo.checkout) not in check.command
+                and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
+                                    str(repo.checkout / repo.source)]).returncode == 0]
+
+    def last_activity(self, unit):
+        return ExternalTranscript(self.comms.root,
+            self.comms.registry.require(unit).incarnation).last_tool_call()
+
+    def hunts(self):
+        return self.comms.goals.todos.hunts_for_commander(self.incarnation)
+
+    def reply(self, unit: str, since: float) -> str:
+        """The newest reply suffix for this command's overdue alarm."""
+        with self.comms.bus.log.opened_wire_snapshot() as source:
+            for message in source.newest_messages():
+                if (message.sender == unit and message.timestamp > since
+                        and message.target in (self.commander, '#comms')):
+                    at = time.strftime('%H:%M', time.localtime(message.timestamp))
+                    return (f'; REPLIED {at} [{message.message_id}]: '
+                            f'{" ".join(message.body.split())[:160]} -- read it before pushing')
+        return '; no reply since the order'
+
 
 class Commander(CommanderContext):
     @boundary_decoder
@@ -321,16 +349,6 @@ class Commander(CommanderContext):
             verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
             self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
 
-    def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
-        """The other configured repos whose `from agent_comms` imports name a module, unless the
-        check reads them."""
-        pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
-        return [str(repo.checkout) for repo in self.repos
-                if repo.checkout != Path(check.directory).resolve()
-                and str(repo.checkout) not in check.command
-                and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
-                                    str(repo.checkout / repo.source)]).returncode == 0]
-
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Core replaces a wrong check of an open order. The new check must already pass on main, so a
         correction fixes the commander's check and never passes undelivered work: done still runs it on
@@ -389,10 +407,6 @@ class Commander(CommanderContext):
             works=works, artifact=evidence), self.comms)
         self.write_board()
         print(f'{pid} closed')
-
-    def last_activity(self, unit):
-        return ExternalTranscript(self.comms.root,
-            self.comms.registry.require(unit).incarnation).last_tool_call()
 
     def write_board(self):
         lines = ['# Fleet board', '',
@@ -539,9 +553,6 @@ class Commander(CommanderContext):
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
         print(f'hunt recorded: {where} -> {sent or "clean"}')
 
-    def hunts(self):
-        return self.comms.goals.todos.hunts_for_commander(self.incarnation)
-
     def next_hunt(self):
         """Least-recently hunted file among the most-churned production files on origin/main."""
         hunted = {}
@@ -560,19 +571,8 @@ class Commander(CommanderContext):
             candidates += sorted(churn, key=churn.get, reverse=True)[:15]
         return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
 
-    def reply(self, unit: str, since: float) -> str:
-        """The newest reply suffix for this command's overdue alarm."""
-        with self.comms.bus.log.opened_wire_snapshot() as source:
-            for message in source.newest_messages():
-                if (message.sender == unit and message.timestamp > since
-                        and message.target in (self.commander, '#comms')):
-                    at = time.strftime('%H:%M', time.localtime(message.timestamp))
-                    return (f'; REPLIED {at} [{message.message_id}]: '
-                            f'{" ".join(message.body.split())[:160]} -- read it before pushing')
-        return '; no reply since the order'
-
-    def deadline_lines(self, pending: list[Todo], read: dict[str,
-        OrderProgress], since: float = 0.0) -> list[str]:
+    def deadline_lines(self, pending: list[Todo], read: dict[str, OrderProgress],
+                       since: float = 0.0) -> list[str]:
         """Every past-due unrecorded order alarms with its state until recorded.
         Stall crossings remain separate from deadline alarms."""
         now = time.time()
