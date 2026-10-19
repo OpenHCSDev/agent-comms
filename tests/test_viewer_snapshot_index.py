@@ -612,7 +612,7 @@ async def test_reopened_human_pending_routes_keep_sparse_reads_aliases_and_recov
         comms.views.transcript_reads.close()
 
 
-def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_path):
+def test_checked_display_retains_original_cut_and_persists_changed_scope(tmp_path):
     from test_private_bus_checkpoint import _root
     from test_turn_context_wire import manifest
 
@@ -645,7 +645,7 @@ def test_certified_display_retains_original_cut_and_persists_changed_scope(tmp_p
                 if scope['channel'] == '#team') == FieldCodec.encode(expected_scope)
 
 
-def test_uncertified_opened_cut_still_rejects_unknown_observation(tmp_path, *, thread_registration):
+def test_unchecked_opened_cut_still_rejects_unknown_observation(tmp_path, *, thread_registration):
     from agent_comms.turn_context import RecordedContextManifest
     from agent_comms.wire_log import OpenedWireSnapshot, WireLog
     from agent_comms.wire_record import (
@@ -690,5 +690,5 @@ def test_reserved_sequence_preserves_committed_read_cut_without_claim(tmp_path):
         assert source.through == first.seq < source.metadata.last_seq
         assert comms.bus.pending_counts_opened(source, basis) == {'#team': 1}
     with pytest.raises(RelationViolationError, match='differs from its durable marker'):
-        with comms.bus.log.certified_read() as source:
+        with comms.bus.log.checked_read() as source:
             source.require_current()

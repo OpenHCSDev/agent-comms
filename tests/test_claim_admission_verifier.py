@@ -177,9 +177,9 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             external = outside / "module.py"
             external.write_bytes(b"outside untouched\n")
             displaced = worktree / "displaced-pkg"
-            from agent_comms.private_bus_checkpoint import CertifiedSourceRead
+            from agent_comms.private_bus_checkpoint import CheckedRead
 
-            actual_claim = CertifiedSourceRead.claim
+            actual_claim = CheckedRead.claim
 
             def swap_after_claim(source, resource):
                 current = actual_claim(source, resource)
@@ -191,7 +191,7 @@ def test_selected_wake_verifier_refuses_no_wake_and_stale_authority(
             # old absolute stat/open followed the parent symlink despite
             # final-component O_NOFOLLOW.
             with monkeypatch.context() as patch:
-                patch.setattr(CertifiedSourceRead, "claim", swap_after_claim)
+                patch.setattr(CheckedRead, "claim", swap_after_claim)
                 with pytest.raises(IdentityConflict, match="directory or file changed"):
                     write_selected_claimed_file(
                         comms, store, claim_scope, "Alice", selected_owner, b"escaped\n"

@@ -189,7 +189,7 @@ async def test_fragmented_cancelled_line_remains_intact_in_the_only_reader():
 @pytest.mark.parametrize(
     "row", [b'{"type":"response","type":"agent_settled"}\n', b"[]\n", b"{}", b"\xff\n"]
 )
-def test_strict_native_decoding_cannot_certify_malformed_rows(row):
+def test_strict_native_decoding_cannot_check_malformed_rows(row):
     with pytest.raises((ValueError, UnicodeError)):
         PiRpcChannel.decode_record(row, strict=True)
 

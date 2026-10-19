@@ -230,7 +230,7 @@ class ToolTransport(Generic[Call]):
     @property
     def active_tools(self) -> set[str]:
         return {
-            call.call_id for call in self.calls.values() if call.observation.executing
+            call.call_id for call in self.calls.values() if call.progress.observation.executing
         }
 
     async def handle_request(self, raw: bytes) -> dict[str, object]:

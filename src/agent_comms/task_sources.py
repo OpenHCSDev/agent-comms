@@ -26,7 +26,7 @@ if TYPE_CHECKING:
     from .messages import Message
     from .registry_document import RegistrySnapshot
     from .threads import Thread
-    from .private_bus_checkpoint import CertifiedSourceRead
+    from .private_bus_checkpoint import CheckedRead
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -139,7 +139,7 @@ class ExplicitTaskScopeSelection(TaskScopeSelection, declared_name="explicit"):
 class TaskChange(DeclaredFamily, affix="TaskChange"):
     @abstractmethod
     def require_publication(self, declaration: ScopedTaskDeclaration, registry: RegistrySnapshot,
-                            original_source: CertifiedSourceRead | None) -> None: ...
+                            original_source: CheckedRead | None) -> None: ...
 
     @abstractmethod
     def root_source(self, message: Message,
@@ -159,7 +159,7 @@ class OriginalTaskChange(TaskChange, declared_name="original"):
 class CorrectionTaskChange(TaskChange, declared_name="correction"):
     original: MessageReference
 
-    def require_original(self, original_source: CertifiedSourceRead | None) -> Message:
+    def require_original(self, original_source: CheckedRead | None) -> Message:
         if original_source is None:
             raise RelationViolationError("Decision correction requires the original publication read")
 
@@ -514,7 +514,7 @@ class HumanConstraintPin(ScopedTaskDeclaration):
         )
         self.require_user_revision(sender, registry)
         if original_source is None:
-            raise RelationViolationError("USER pin requires the certified original message")
+            raise RelationViolationError("USER pin requires the checked original message")
         self.require_wording_publication(registry, original_source)
         if not self.recipient.current(registry):
             raise RelationViolationError("USER pin recipient was replaced")

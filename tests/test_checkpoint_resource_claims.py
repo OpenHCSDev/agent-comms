@@ -48,7 +48,7 @@ def authorized(comms, claim_scope, paths):
 def test_multi_resource_claim_consumes_one_operation_even_after_release(tmp_path):
     comms, paths, claim_scope = authored(tmp_path)
     claimed = authorized(comms, claim_scope, paths[:2])
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         commits = ClaimCommits.select(source.connection)
         assert len(commits) == 1 and commits[0].operation_id == claim_scope.operation_id
         assert source.claim_operation_used(claim_scope.operation_id)
@@ -60,7 +60,7 @@ def test_multi_resource_claim_consumes_one_operation_even_after_release(tmp_path
         authorized(comms, claim_scope, paths[2:])
     assert comms.bus.log.path.read_bytes() == before
     reopened = Comms(comms.root)
-    with reopened.bus.log.certified_read() as source:
+    with reopened.bus.log.checked_read() as source:
         assert source.claim_operation_used(claim_scope.operation_id)
         assert source.claim(str(paths[0])) is None
     again = authorized(reopened, replace(claim_scope, operation_id='a' * 32), paths[:2])
@@ -87,7 +87,7 @@ def test_claim_decisions_never_scan_or_decode_bus_history(tmp_path, monkeypatch)
 def test_resource_and_operation_queries_use_their_unique_indexes(tmp_path):
     comms, paths, claim_scope = authored(tmp_path)
     authorized(comms, claim_scope, paths[:1])
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         statements = []
         source.connection.set_trace_callback(statements.append)
         assert source.claim(str(paths[0])) is not None

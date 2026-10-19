@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 from .field_codec import MalformedRecord
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
-from .typed_table import TypedStore
+from .typed_table import StoreWriter
 from .coordination_errors import StaleRevision, TranscriptChanged
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .routing import MessageRoute, TurnRouting
@@ -280,8 +280,14 @@ class LaterTranscript(TranscriptTraversal):
 
 
 class TranscriptDraft:
-    def end_turn(self, transcript: TypedStore) -> None:
+    def end_turn(self, transcript: StoreWriter) -> None:
         """An absent draft needs no write."""
+
+    def append_text(self, text: str):
+        return self
+
+    def publish(self, transcript: StoreWriter) -> None:
+        """An absent draft needs no publication."""
 
     def external_row(self):
         """The ACP draft field is null when there is no external draft."""
@@ -339,8 +345,14 @@ class TranscriptSource:
                     event for original in reversed(pending) for event in original.events))
                 pending.clear()
 
-    def current_draft(self) -> TranscriptDraft:
-        return NoDraft()
+    def current_draft(self, root: Path, thread: str) -> TranscriptDraft:
+        from .external_transcript import DraftRow
+        with self.draft_snapshot(root, thread) as connection:
+            return DraftRow.one(connection, thread=thread) or NoDraft()
+
+    def draft_snapshot(self, root: Path, thread: str):
+        from .external_transcript import ExternalTranscript
+        return ExternalTranscript(root, thread).snapshot()
 
     def publication_revision(self, root, recipient):
         return PublishedReplyRevision(0, 0)

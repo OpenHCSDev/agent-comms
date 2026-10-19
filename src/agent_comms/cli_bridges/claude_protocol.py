@@ -338,7 +338,7 @@ class ToolUse(AssistantBlock):
         if arguments_type is not None:
             try:
                 arguments = arguments_type.model_validate(self.input)
-                tool = arguments.record()
+                tool = arguments.record(call_id=self.id)
             except ValueError:  # pydantic's ValidationError, or a Core record refusing the values
                 pass
             else:

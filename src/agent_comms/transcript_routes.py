@@ -227,7 +227,7 @@ class TranscriptRoutes(RootFile):
         ids = routing.annotation_ids(reader, checkpoint, thread.runtime, final.end)
         inputs = InputDispositions(log.path.parent)
         lookup = incarnation.lookup
-        with log.certified_read() as source, registry.store.reading() as document:
+        with log.checked_read() as source, registry.store.reading() as document:
             snapshot = document.snapshot()
             incarnation = lease.identity.incarnation.resolved(snapshot)
             current = RegistryOwner.capture_local(snapshot, incarnation.name).thread

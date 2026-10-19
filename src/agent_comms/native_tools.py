@@ -40,20 +40,16 @@ class NativeToolDeclaration(ToolDeclaration):
         return cls.field_value(name).create_call(call_id, decoded)
 
 
-@dataclass
+@dataclass(frozen=True)
 class NativeExecutableTool(NativeToolDeclaration, CodingCall):
     """A decoded tool is the live call; runtime fields are not model arguments."""
 
-    call_id: str = field(default="", kw_only=True, metadata={"wire_transient": True})
+    call_id: str = field(metadata={"wire_context": True})
     claim: ClassVar[None] = None
 
     @classmethod
     def storage_effects(cls, cwd):
         return ()
-
-    @property
-    def name(self) -> str:
-        return self.declared_name
 
     def allowed_claim(self) -> FileClaimPath | None:
         return self.claim
@@ -64,9 +60,7 @@ class NativeExecutableTool(NativeToolDeclaration, CodingCall):
 
     @classmethod
     def create_call(cls, call_id: str, arguments: dict[str, object]) -> NativeExecutableTool:
-        call = cls.parse_arguments(arguments)
-        call.call_id = call_id
-        return call
+        return cls.parse_arguments(arguments, call_id=call_id)
 
 
 class NativeRequestTools:
@@ -85,7 +79,7 @@ class NativeRequestTools:
         return package / "agent-comms-extensions/global-agent-comms/index.mjs"
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class CoordinationCall(NativeRequestTools, NativeExecutableTool, declared_name=None):
     """Core's CLI owns argument decoding; this call owns identity and live events."""
 
@@ -103,12 +97,12 @@ class ArgumentTool:
     def arguments(self) -> dict[str, object]:
         # The native argument object has no family envelope. Its contents come
         # entirely from the record codec, never a retained raw dictionary.
-        encoded = FieldCodec.encode(self)
+        encoded = FieldCodec.project(self, "arguments")
         del encoded[self.family_discriminator]
         return encoded
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class PathTool:
     path: str
 
@@ -127,7 +121,7 @@ class PatternSearchTool:
         return self.pattern
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class CodingTool(ArgumentTool, NativeExecutableTool):
     """Typed Pi fields own mutation paths; the existing SDK executes the tools."""
 
@@ -147,7 +141,7 @@ class CodingTool(ArgumentTool, NativeExecutableTool):
         return package / "dist/channel_coding_tools.mjs"
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class ReadTool(PathTool, CodingTool):
     acp_kind = "read"
     label = "Read"
@@ -158,7 +152,7 @@ class ReadTool(PathTool, CodingTool):
         return None
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class BashTool(CodingTool):
     acp_kind = "execute"
     label = "Run"
@@ -189,7 +183,7 @@ class MutatingPathTool(PathTool):
         return (EditCall(call_id, at, thread, self.path, self.replacements(), problem),)
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class EditTool(MutatingPathTool, CodingTool):
     label = "Edit"
     edits: tuple[ReplacementEdit, ...]
@@ -213,7 +207,7 @@ class EditTool(MutatingPathTool, CodingTool):
     claim_type = ExistingFileClaim
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class WriteTool(MutatingPathTool, CodingTool):
     label = "Write"
     content: str
@@ -227,7 +221,7 @@ class WriteTool(MutatingPathTool, CodingTool):
     claim_type = WritableFileClaim
 
 
-@dataclass(kw_only=True)
+@dataclass(frozen=True, kw_only=True)
 class FilePatchTool(PathTool, ToolDeclaration):
     """A file change known by its path and diff alone (Codex's patch), without replacement text."""
     acp_kind = "edit"

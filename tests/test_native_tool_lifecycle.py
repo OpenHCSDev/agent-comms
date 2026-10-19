@@ -38,9 +38,11 @@ def policy(request, tmp_path):
         if selected
         else CodingToolSocket(
             tmp_path, token,
-            SimpleNamespace(allow=AsyncMock(side_effect=lambda round_number, call: commit(call, round_number))),
+            SimpleNamespace(allow=AsyncMock(side_effect=lambda turn, round_number, call: commit(call, round_number))),
         )
     )
+
+    socket.turn = SimpleNamespace(command=SimpleNamespace(input_id=input_id))
 
     def raw(call_id="one", arguments=None):
         values = args if arguments is None else arguments
@@ -349,8 +351,9 @@ async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     observed = []
     socket = CodingToolSocket(
         tmp_path, secrets.token_hex(32),
-        SimpleNamespace(allow=AsyncMock(side_effect=lambda round_number, call: observed.append(call.call_id))),
+        SimpleNamespace(allow=AsyncMock(side_effect=lambda turn, round_number, call: observed.append(call.call_id))),
     )
+    socket.turn = SimpleNamespace(command=SimpleNamespace(input_id=secrets.token_hex(16)))
     arguments = {"path": "x"}
     socket.announce(
         tuple(ToolCallContent(id=id, name="read", arguments=arguments) for id in ("a", "b"))

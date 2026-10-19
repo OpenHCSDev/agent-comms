@@ -52,7 +52,7 @@ class UnstartedRuntime(RuntimeLocation):
         return SelectedSession(directory)
 
     def history_source(self, root, incarnation):
-        return ExternalTranscript(root, incarnation)
+        return ExternalTranscript(root, incarnation.lookup)
 
     def storage_files(self):
         return ()
