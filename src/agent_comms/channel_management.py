@@ -16,6 +16,7 @@ from .channels import Channel, SavedView
 from .cli_result import CliResult
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
+from .message_page import PageBounds
 from .messages import InfoKind, Message, MembershipConversationRole
 from .registration import Registration
 from .store_files import _store_lock
@@ -283,6 +284,8 @@ class ChannelManagement:
 
     def _change_tag_unlocked(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
+        self.catalog.read().require_channel(name).require_routable()
+        history = self.bus.channel_history_page(ChannelTarget(f"#{name}"), PageBounds(limit=1))
         self.registry.change_tag(cohort, name, replacement)
         with self.catalog.editing() as document:
-            document.change_tag(name, replacement)
+            document.change_tag(name, replacement, has_history=bool(history.messages))

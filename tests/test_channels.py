@@ -10,7 +10,7 @@ from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import ActivityState
 from agent_comms.channel_targets import BuiltinChannel
-from agent_comms.channels import AllOfMatch, AnyOfMatch, TagChannel, SavedView, ViewKind, ViewPredicate
+from agent_comms.channels import AllOfMatch, AnyOfMatch, ChannelMemberIndex, RetiredTagChannel, TagChannel, SavedView, ViewKind, ViewPredicate
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
@@ -278,8 +278,13 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     )
     restarted = wire(tmp_path)
     assert restarted.channels.catalog.read().require_channel("#child").parent is None
+    retired = restarted.channels.catalog.read().require_channel("#api")
+    assert isinstance(retired, RetiredTagChannel)
+    assert retired.read_only and not retired.members(ChannelMemberIndex(restarted.registry.snapshot().threads.values()))
+    with pytest.raises(ValueError, match="not a routable target"):
+        restarted.messaging.send("other", "#api", "must not route")
     with pytest.raises(ValueError, match="Unknown channel"):
-        restarted.channels.catalog.read().require_channel("#api")
+        restarted.views.channel_history_page("#tpyo")
     assert [message.body for message in list(restarted.views.channel_history_page("#api").messages)] == [
         "target-owned historical row"
     ]

@@ -249,8 +249,22 @@ class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel):
         return not self.pinned, tuple(BuiltinChannel).index(self.builtin), 0, 0, self.name
 
 
+class ReadOnlyChannel:
+    """History projections never acquire routing or membership authority."""
+
+    @property
+    def read_only(self) -> bool:
+        return True
+
+    def require_routable(self) -> None:
+        raise RelationViolationError(f"Channel {self.name!r} is not a routable target.")
+
+    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
+        return ()
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
-class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
+class SavedViewChannel(ReadOnlyChannel, PredicateChannel, GroupedChannel, Channel):
     view: SavedView
 
     def validate_declaration(self) -> None:
@@ -265,25 +279,33 @@ class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
         return False
 
     @property
-    def read_only(self) -> bool:
-        return True
-
-    def require_routable(self) -> None:
-        raise RelationViolationError(f"View {self.name!r} is a projection, not a routable target.")
-
-    @property
     def history_targets(self) -> frozenset[str]:
         return self.view.history_targets
 
     def delete_view_bindings(self, command) -> tuple:
         return (command(name=self.view.name),)
 
-    def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
-        return ()
+
+@dataclass(frozen=True, slots=True)
+class TagChannelIdentity(GroupedChannel, Channel):
+    """A tag's original address remains its history identity after retirement."""
+
+    def validate_declaration(self) -> None:
+        Tag.validate(self.name.removeprefix("#"))
+        if self.tags != frozenset({self.name.removeprefix("#")}):
+            raise ValueError("A routable channel must be its exact tag.")
+
+    @property
+    def exact(self) -> bool:
+        return True
+
+    @property
+    def history_targets(self) -> frozenset[str]:
+        return frozenset({self.name})
 
 
 @dataclass(frozen=True, slots=True)
-class TagChannel(GroupedChannel, MembershipChannel, Channel):
+class TagChannel(MembershipChannel, TagChannelIdentity):
     def display_scope(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         if self.any_mode:
             return MemberActivityDisplayScope.capture(self, snapshot)
@@ -292,24 +314,20 @@ class TagChannel(GroupedChannel, MembershipChannel, Channel):
     def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
         return index[self.name.removeprefix("#")]
 
-    def validate_declaration(self) -> None:
-        Tag.validate(self.name.removeprefix("#"))
-        if self.tags != frozenset({self.name.removeprefix("#")}):
-            raise ValueError("A routable channel must be its exact tag.")
-
     def matches(self, tags: frozenset[str]) -> bool:
         return bool(self.tags & tags)
-
-    @property
-    def exact(self) -> bool:
-        return True
 
     def require_routable(self) -> None:
         pass
 
-    @property
-    def history_targets(self) -> frozenset[str]:
-        return frozenset({self.name})
+
+@dataclass(frozen=True, slots=True)
+class RetiredTagChannel(ReadOnlyChannel, TagChannelIdentity):
+    def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
+        return ()
+
+    def matches(self, tags: frozenset[str]) -> bool:
+        return False
 
 
 class ViewKind(StrEnum):

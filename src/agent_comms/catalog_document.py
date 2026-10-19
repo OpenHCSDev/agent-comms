@@ -12,6 +12,7 @@ from .channels import (
     Channels,
     SavedView,
     SavedViewChannel,
+    RetiredTagChannel,
     TagChannel,
     ViewPredicate,
 )
@@ -46,6 +47,7 @@ class ChannelPreferences:
 @dataclass(slots=True)
 class CatalogDocument:
     tags: frozenset[str] = frozenset()
+    retired_tags: frozenset[str] = frozenset()
     preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
     saved_views: dict[str, SavedView] = field(default_factory=dict)
     list_order: type[ChannelSort] = NameChannelSort
@@ -54,7 +56,9 @@ class CatalogDocument:
         self.validate()
 
     def validate(self) -> None:
-        for tag in self.tags:
+        if self.tags & self.retired_tags:
+            raise ValueError("A tag cannot be current and retired at the same time.")
+        for tag in self.tags | self.retired_tags:
             Tag.validate(tag)
             if f"#{tag}" not in self.preferences or self.preferences[f"#{tag}"].created_at <= 0:
                 raise ValueError(f"Channel #{tag} has no recorded creation time; carry its catalog first.")
@@ -88,9 +92,11 @@ class CatalogDocument:
         if (view := self.saved_views.get(tag)) is not None:
             preference = self.preferences.get(target, ChannelPreferences(created_at=view.created_at))
             return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
-        if tag not in self.tags:
-            raise UnknownChannelError(f"Unknown channel: {target!r}")
-        return self.preferences[target].channel(TagChannel, target, frozenset({tag}))
+        if tag in self.tags:
+            return self.preferences[target].channel(TagChannel, target, frozenset({tag}))
+        if tag in self.retired_tags:
+            return self.preferences[target].channel(RetiredTagChannel, target, frozenset({tag}))
+        raise UnknownChannelError(f"Unknown channel: {target!r}")
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
         return frozenset(kind.value for kind in BuiltinChannel if kind.matches(tags)) | frozenset(
@@ -124,6 +130,7 @@ class CatalogDocument:
             Tag.validate(tag)
             self.preferences[f"#{tag}"] = ChannelPreferences(created_at=created_at)
         self.tags |= tags
+        self.retired_tags -= tags
 
     def create_tag(self, tag: str) -> None:
         self.require_available_name(tag)
@@ -215,11 +222,12 @@ class CatalogDocument:
             for child, p in self.preferences.items()
         }
 
-    def change_tag(self, previous: str, current: str | None) -> None:
+    def change_tag(self, previous: str, current: str | None, *, has_history: bool) -> None:
         def changed(tags):
             return (tags - {previous}) | ({current} if previous in tags and current else set())
 
         old_target, new_target = f"#{previous}", f"#{current}" if current else None
+        original = self.preferences[old_target]
         if new_target:
             preference = self.preferences.pop(old_target, None)
             if preference is not None:
@@ -238,11 +246,21 @@ class CatalogDocument:
         else:
             self.remove_channel(old_target)
         self.tags = changed(self.tags)
+        if has_history:
+            self.retired_tags |= {previous}
+            self.preferences[old_target] = replace(
+                original, pinned=False, parent=None, archived=True, any_mode=False,
+                pinned_threads=frozenset(),
+            )
+        if current:
+            self.retired_tags -= {current}
 
     def restore_missing(self, source: CatalogDocument, *, existing: bool) -> tuple[str, ...]:
+        declarations = source.views()
+        declarations.update((f"#{tag}", source.require_channel(f"#{tag}")) for tag in source.retired_tags)
         missing = {
             name: channel
-            for name, channel in source.views().items()
+            for name, channel in declarations.items()
             if name not in self.preferences and channel.can_restore_preferences(existing)
         }
         for name, channel in missing.items():
@@ -250,6 +268,7 @@ class CatalogDocument:
                 name, ChannelPreferences(order=channel.order, created_at=channel.created_at)
             )
         self.tags |= source.tags
+        self.retired_tags = (self.retired_tags | source.retired_tags) - self.tags
         self.saved_views = source.saved_views | {
             name: replace(
                 view,
