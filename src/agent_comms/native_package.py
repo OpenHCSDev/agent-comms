@@ -406,6 +406,21 @@ class VerifiedNativePackage:
     def cli(self) -> Path:
         return self.path / "dist/cli.js"
 
+    def node(self, *imports: str) -> tuple[str, ...]:
+        """Node running this CLI behind the import fence, then the named dist modules."""
+        fenced = ("agent-comms-import-fence.mjs", *imports)
+        return ("node", "--no-global-search-paths",
+                *(part for name in fenced for part in ("--import", str(self.cli.with_name(name)))),
+                str(self.cli))
+
+    @staticmethod
+    def node_environment(environment: dict[str, str]) -> dict[str, str]:
+        """Node reads no ambient options, module paths or compile cache."""
+        env = {name: value for name, value in environment.items()
+               if name not in ("NODE_OPTIONS", "NODE_PATH", "NODE_COMPILE_CACHE")}
+        env["NODE_DISABLE_COMPILE_CACHE"] = "1"
+        return env
+
     @classmethod
     def from_environment(cls, cache: Path) -> VerifiedNativePackage:
         """Acquire this checkout's declared test environment once, not the live install."""
