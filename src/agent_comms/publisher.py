@@ -112,7 +112,9 @@ class Publisher:
         def resolve_mention(name: str) -> str | None:
             canonical = snapshot.canonical_name(name)
             thread = snapshot.threads.get(canonical)
-            if thread is None or not snapshot.status(canonical).visible:
+            if thread is None:
+                return None
+            if not snapshot.status(canonical).visible:
                 return None
             return next(iter(thread.role.executor(canonical)), None)
 
@@ -364,8 +366,9 @@ class InitialWrites(PrivateWrites):
             sender, target, require_channel = self._validate_publish_request(
                 message, registry_snapshot=snapshot, catalog=catalog, activity=activity)
             sender_thread = snapshot.threads.get(sender)
-            if sender_thread is None or not snapshot.status(sender).visible:
+            if sender_thread is None:
                 raise RelationViolationError("Initial sender must be visible and registered.")
+            snapshot.status(sender).require_visible()
             # The kind owns its own validation; one publication check, before
             # any sequence reservation, refusing with what is missing.
             message.type.require_publishable(message, Path(sender_thread.worktree))

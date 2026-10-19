@@ -33,7 +33,7 @@ class Detached(UndatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[Detached, ...]:
         owed: dict[str, list[str]] = {}
         for todo in cls.todos(comms, commander):
-            owed.setdefault(todo.holder, []).append(todo.id)
+            owed.setdefault(todo.held().owner, []).append(todo.id)
         registry = comms.registry.snapshot()
         away = [unit for unit in sorted(owed)
                 if unit not in registry.threads or not registry.status(unit).receiving]
