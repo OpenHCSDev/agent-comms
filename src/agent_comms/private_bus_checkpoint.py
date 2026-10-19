@@ -89,7 +89,7 @@ class PrefixWitness(PrefixSeal):
 
     def require_marker(self, marker: WireMetadata) -> None:
         if self.root_id != marker.root_id or self.through_seq != marker.last_seq:
-            raise RelationViolationError("Original prefix record differs from its durable marker.")
+            raise RelationViolationError("Checked bus prefix differs from its stored marker.")
 
     def require_source(self, marker: WireMetadata, info: os.stat_result, stream: BinaryIO) -> None:
         """Reject changed bytes; a copied file needs rebuilding under the write lock."""
@@ -119,7 +119,7 @@ class PrefixWitness(PrefixSeal):
 
 @dataclass(frozen=True)
 class CheckedRead:
-    """Opened resources borrowed from one canonical durability barrier."""
+    """Bus bytes and their index, opened and checked under the same lock."""
 
     path: Path
     marker: WireMetadata
@@ -149,7 +149,7 @@ class CheckedRead:
             FileRevision.from_stat(os.fstat(self.stream.fileno())) != self.witness.revision
             or FileRevision.from_stat(self.path.stat()) != self.witness.revision
         ):
-            raise RelationViolationError("Conversation source needs a current prefix record.")
+            raise RelationViolationError("Bus bytes changed after this read was checked.")
 
     def install_at(self, bus: WireLog) -> PrefixWitness:
         """Install checked replacement history while holding the destination's bus lock.

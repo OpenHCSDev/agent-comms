@@ -168,7 +168,7 @@ class StoreLockRelease:
 
 @dataclass(frozen=True)
 class StoreLock:
-    """One physical lock's descriptor and opened durability resource."""
+    """A held store lock's file descriptor."""
 
     descriptor: int
     _releases: ClassVar[ContextVar[StoreLockRelease]] = ContextVar(
@@ -224,6 +224,7 @@ class StoreLock:
             yield scope
         finally:
             scope.close()
+
 
 class StoreOwner(DeclaredFamily):
     """Shared declaration membership for composable store capabilities."""
