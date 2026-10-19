@@ -445,6 +445,11 @@ class JsonShapeFamily(WireValue):
             raise TypeError("A JSON shape factory must return its own family")
         return result
 
+    @classmethod
+    def schema(cls) -> dict[str, Any]:
+        return {"anyOf": [FieldCodec.value_schema(annotation)
+                          for _, annotation in cls._json_owners.values()]}
+
     def to_wire(self):
         return self.value
 
