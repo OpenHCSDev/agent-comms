@@ -5,6 +5,7 @@ from agent_comms.launch_runtime import LaunchRuntime, RestartEnvironment
 from agent_comms.selected_session import SelectedSession
 import os
 import tempfile
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,7 @@ import pytest
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.comms import Comms
 from agent_comms.message_bus import MessageBus
+from agent_comms.native_tool_transport import ToolListener
 from agent_comms.publisher import Publisher, ResponseWrites
 from agent_comms.registration import Registration
 from agent_comms.messages import ConversationRole, InfoKind, Message
@@ -58,6 +60,17 @@ def pytest_addoption(parser):
 
     parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
                      help="Root of the native test environments stack/bin/pi-native-test-env builds")
+
+
+@pytest.fixture
+async def tool_listener():
+    """Every private test endpoint has one joined retirement owner."""
+    async with AsyncExitStack() as resources:
+        def create(directory, token):
+            listener = ToolListener(directory, token)
+            resources.push_async_callback(listener.close)
+            return listener
+        yield create
 
 
 @pytest.fixture

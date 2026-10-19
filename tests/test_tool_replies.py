@@ -90,7 +90,8 @@ def scenario(comms: Comms, project, monkeypatch):
     yield CommsRuleReviewTool, {"entry": FieldCodec.encode(DrawnRuleReviewEntry(("Declare each fact once",), 0))}, lead
     yield CommsOrderTool, {"owner": "worker", "order": FieldCodec.encode(OrderGoalAction(
         problem="P1", order=order, request="request", deadline=RecordedEventTime(3000),
-        commander="lead", expected_revision=comms.goals.todos.get("P1").revision))}, lead
+        commander="lead", assigner=actor,
+        expected_revision=comms.goals.todos.get("P1").revision))}, lead
     yield CommsOrderCheckTool, {"problem": "P1", "check": FieldCodec.encode(
         OrderCheck(str(comms.root), "printf 1", CountCheckResult(1))),
         "why": "The recorded check counted the wrong file"}, lead

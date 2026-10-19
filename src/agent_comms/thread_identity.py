@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from .read_ledger import ReadDocument, ReadLedger
     from .registry_provenance import RegistryProvenance
     from .threads import Thread
+    from .todos import Todo
 
 T = TypeVar("T")
 
@@ -90,6 +91,9 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
         self, make: Callable[[RecordedThreadIncarnation], T], otherwise: Callable[[], T]
     ) -> T:
         return otherwise()
+
+    def require_may_change(self, todo: Todo) -> None:
+        todo.require_commander(self)
 
     def selects_lookup(self, lookup: str) -> bool:
         return False
@@ -220,6 +224,9 @@ class StallWatcherIncarnation(BirthlessIncarnation):
     """Core's own stall watcher: it strikes and releases stalled orders, and is never a thread."""
 
     WIRE_BIRTH: ClassVar[float] = -2.0
+
+    def require_may_change(self, todo: Todo) -> None:
+        """The Core watcher may advance stalled orders without a commander turn."""
 
     @classmethod
     def watcher(cls) -> StallWatcherIncarnation:

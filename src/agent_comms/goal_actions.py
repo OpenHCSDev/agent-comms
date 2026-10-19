@@ -38,14 +38,12 @@ from .goals import (
 )
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
-from .thread_identity import StallWatcherIncarnation, ThreadIncarnation
+from .thread_identity import ThreadIncarnation
 from .threads import Thread
 from .todos import (
-    AssignTodo,
     GoalRef,
     PendingProblemOrder,
     SendBackVerdict,
-    StallAssignTodo,
     Todo,
     TodoOperation,
 )
@@ -517,6 +515,9 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
     commander: str
 
     @abstractmethod
+    def bound_to(self, actor: ThreadIncarnation) -> ProblemOrderGoalAction: ...
+
+    @abstractmethod
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo: ...
 
     def change(self, goal: Goal, ctx: GoalActionContext) -> Goal:
@@ -554,31 +555,25 @@ class OrderGoalAction(ProblemOrderGoalAction):
     """The order's commander gives the problem to this thread."""
     expected_revision: int
     traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
-    assignment: ClassVar[type[AssignTodo]] = AssignTodo
+    assigner: ThreadIncarnation
 
-    def assigner(self, ctx: GoalActionContext) -> ThreadIncarnation:
-        return ctx.goals.registry.require(self.commander).incarnation
+    def bound_to(self, actor: ThreadIncarnation) -> OrderGoalAction:
+        return replace(self, commander=actor.name, assigner=actor)
 
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
-            owner=ctx.thread, assigner=self.assigner(ctx), operation=self.assignment,
+            owner=ctx.thread, assigner=self.assigner,
             generation=generation, goal=goal, deadline=self.deadline, order=self.order,
             traced=self.traced)
-
-
-@dataclass(frozen=True, kw_only=True)
-class StallOrderGoalAction(OrderGoalAction):
-    """Core's stall watcher gives a released order of ``commander`` to this thread."""
-    assignment: ClassVar[type[AssignTodo]] = StallAssignTodo
-
-    def assigner(self, ctx: GoalActionContext) -> ThreadIncarnation:
-        return StallWatcherIncarnation.watcher()
 
 
 @dataclass(frozen=True, kw_only=True)
 class CreateProblemGoalAction(ProblemOrderGoalAction):
     repo: str
     text: str
+
+    def bound_to(self, actor: ThreadIncarnation) -> CreateProblemGoalAction:
+        return replace(self, commander=actor.name)
 
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.create(self.problem, self.repo, self.text,

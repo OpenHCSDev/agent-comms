@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
@@ -852,7 +853,8 @@ class CommsOrderTool(ThreadToolRequest):
     owner: str = tool_field("Assignee thread")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
-        goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
+        goal = comms.goals.update_goal(self.owner, self.order.bound_to(
+            comms.registry.require(caller.name).incarnation))
         return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
 
 
@@ -1083,7 +1085,9 @@ class CommsSendTool(ToolRequest):
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
             result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         except ToolRefusedError as error:
-            SendRefusal.record(comms.root, self.sender, self.target, error)
+            # The caller hears the refusal now; the record waits for the wire lock on its own.
+            threading.Thread(target=SendRefusal.record,
+                             args=(comms.root, self.sender, self.target, error)).start()
             raise
         caller.sent(comms, result.message)
         return MessagePublished.from_send(result)

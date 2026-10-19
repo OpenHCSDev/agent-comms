@@ -77,9 +77,9 @@ class ImportedReply(ImportedMessage):
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     category: ClassVar[type[MessageCategory]]
     position: int | str
+    timestamp: float
     routing = None
     source = None
-    timestamp = None
 
     def as_context(self) -> TranscriptEvent:
         """Non-text native evidence retains its own presentation declaration."""
@@ -107,13 +107,8 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         return ()
 
-    @property
-    def dated(self) -> tuple[float, ...]:
-        return () if self.timestamp is None else (self.timestamp,)
-
     def before(self, at: float) -> bool:
-        """Recorded before ``at``; an undated event is never before anything."""
-        return any(time < at for time in self.dated)
+        return self.timestamp < at
 
 
 @dataclass(frozen=True)
@@ -136,7 +131,6 @@ class TranscriptCoverage:
 class RecordedTranscript(TranscriptEvent):
     routing: TurnRouting | None = None
     source: MessageReference | None = None
-    timestamp: float | None = None
 
 
 class TextTranscript(TranscriptEvent):
@@ -207,6 +201,7 @@ class IncomingTranscript(TextTranscript):
     message: Message
     reader: str
     position: ClassVar[int]
+    timestamp: ClassVar[float]
 
     @property
     def position(self) -> int:
@@ -365,7 +360,7 @@ class ToolStartTranscript(ToolTranscript):
         return tool_declaration.ToolDeclaration.caption(self.tool_name, self.tool)
 
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
-        """A call recorded before ``since`` is not work since then; an undated one is its turn's."""
+        """A call recorded before ``since`` is not work since then."""
         if not self.before(since):
             digest = tool_declaration.ToolDeclaration.call_digest(
                 self.tool_name, self.tool, self.raw_input)
@@ -441,6 +436,5 @@ class TurnDigest:
     events: tuple[TranscriptEvent, ...]
 
     def before(self, at: float) -> bool:
-        """The turn's last dated event precedes ``at``; an undated turn is never before."""
-        dated = [event for event in self.events if event.dated]
-        return bool(dated) and dated[-1].before(at)
+        """The turn's last recorded event precedes ``at``; an empty turn is never before."""
+        return bool(self.events) and self.events[-1].before(at)

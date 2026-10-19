@@ -12,6 +12,7 @@ import json
 import re
 import subprocess
 import sqlite3
+import sys
 import time
 import asyncio
 from abc import abstractmethod
@@ -562,8 +563,8 @@ class Stalling:
         owner, actor = todo.held(), StallWatcherIncarnation.watcher()
         reason = StrikeReason(f"{owner.owner} stalled on {todo.id}: {self.stall_reason()}")
         at = RecordedEventTime(now)
-        struck = StallStrikeTodo(todo.revision, actor, owner, reason.text, at).apply(todo)
-        return StallReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
+        struck = StrikeTodo(todo.revision, actor, owner, reason.text, at).apply(todo)
+        return ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
 
     def stalled_between(self, ordered: float, since: float, now: float) -> bool:
         return since < self.stall_at(ordered) <= now
@@ -835,7 +836,8 @@ class OrderWords(WireValue):
     # for long ordinary words with no slash or filename suffix.
     CITED: ClassVar[re.Pattern] = re.compile(
         r'(?m)^ {4}.*$|`[^`\n]*`|"[^"\n]*"|“[^”\n]*”|'
-        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)')
+        r'(?:(?<!\S)|(?<=[`"”]))(?:\S*/\S*|\S+\.(?:py|md|jsonl?|txt|png|toml|ts|log|patch)\b)|'
+        r'\b\w+_\w+\b|\b[A-Z][a-z0-9]+[A-Z]\w*\b')  # identifiers are code, not prose
     REFUSED: ClassVar[re.Pattern]
     refusal: ClassVar[str]
     least_words: ClassVar[int] = 1
@@ -880,6 +882,13 @@ class PlainText(OrderWords):
 
     REFUSED = re.compile(r'\b(custody|admission|admit\w*|receipt\w*|checkpoint\w*|provenance|authority|authorities|witness\w*|lattice|surface|disposition\w*|invariant\w*|semantic\w*|ownership|lifecycle|acceptance|canonical|retained|borrow(?:ed|er|ers)?|bounded|certif\w*|recertif\w*|candidate|fence\w*|sidecar\w*|substrate|installed-path|source[- ]paired|exact[- ]head|integration owner|separately owned|follow-?up|remaining scope|not claimed|remains held|load[- ]bearing|cutover|carr(?:y|ies) across|declared dependency|qualifying)\b', re.I)
     refusal = "Jargon {1} hides what happened; say it plainly."
+
+    @staticmethod
+    def refuses(found: list[str]) -> bool:
+        """Flags, never blocks: a wording slip costs a note, not a resend."""
+        if found:
+            print(f"Flag: jargon {', '.join(found)} hides what happened; say it plainly.", file=sys.stderr)
+        return False
 
 
 class StrikeReason(PlainText):
@@ -1729,24 +1738,8 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def apply(self, current: Todo) -> Todo: ...
 
 
-class CommanderPermission:
-    """Assignments, strikes and releases are the order's commander's to make."""
-    actor: ThreadIncarnation
-
-    def require_permitted(self, current: Todo) -> None:
-        current.require_commander(self.actor)
-
-
-class StallWatcherPermission(CommanderPermission):
-    """Core's stall watcher makes these on its own declared identity, never the commander's."""
-
-    def require_permitted(self, current: Todo) -> None:
-        if self.actor != StallWatcherIncarnation.watcher():
-            raise TodoConflict(current)
-
-
 @dataclass(frozen=True)
-class AssignTodo(CommanderPermission, TodoOperation):
+class AssignTodo(TodoOperation):
     """The order's commander gives the problem to a unit."""
     proposed: Assignment
     deadline: EventTime
@@ -1761,7 +1754,7 @@ class AssignTodo(CommanderPermission, TodoOperation):
                 proposed, self.deadline, self.order, self.goal):
             return current
         current.require_revision(self.expected_revision)
-        self.require_permitted(current)
+        self.actor.require_may_change(current)
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
         return replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
@@ -1773,12 +1766,7 @@ class AssignTodo(CommanderPermission, TodoOperation):
 
 
 @dataclass(frozen=True)
-class StallAssignTodo(StallWatcherPermission, AssignTodo):
-    """Core's stall watcher gives a released order to an idle unit."""
-
-
-@dataclass(frozen=True)
-class StrikeTodo(CommanderPermission, TodoOperation):
+class StrikeTodo(TodoOperation):
     actor: ThreadIncarnation
     previous: Assignment
     reason: str
@@ -1786,7 +1774,7 @@ class StrikeTodo(CommanderPermission, TodoOperation):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        self.require_permitted(current)
+        self.actor.require_may_change(current)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
@@ -1950,7 +1938,7 @@ class VoidStrikeTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class ReleaseTodo(CommanderPermission, TodoOperation):
+class ReleaseTodo(TodoOperation):
     """The commander takes an open problem off its unit; the order and its strikes stay."""
     actor: ThreadIncarnation
     previous: Assignment
@@ -1959,20 +1947,10 @@ class ReleaseTodo(CommanderPermission, TodoOperation):
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        self.require_permitted(current)
+        self.actor.require_may_change(current)
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
-
-
-@dataclass(frozen=True)
-class StallStrikeTodo(StallWatcherPermission, StrikeTodo):
-    """A strike Core's stall watcher records when an order shows no movement."""
-
-
-@dataclass(frozen=True)
-class StallReleaseTodo(StallWatcherPermission, ReleaseTodo):
-    """Core's stall watcher takes the stalled order off its unit."""
 
 
 @dataclass(frozen=True)
@@ -2597,7 +2575,6 @@ class TodoStore(TypedStore):
         expected_revision: int,
         owner: Thread,
         assigner: ThreadIncarnation,
-        operation: type[AssignTodo],
         generation: str,
         goal: GoalRef,
         deadline: EventTime,
@@ -2608,5 +2585,5 @@ class TodoStore(TypedStore):
         proposed = Assignment(
             identity.name, identity.created_at, assigner.name, assigner.wire_birth, generation)
         return self.apply(
-            todo_id, operation(expected_revision, proposed, deadline, order, goal, traced))
+            todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))
 

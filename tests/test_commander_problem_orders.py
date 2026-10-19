@@ -124,7 +124,7 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
     replacement = order(comms.root, 'replacement', 'printf 7', 7)
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P1', order=replacement,
         request='request', deadline=RecordedEventTime(3000), commander='lead',
-        expected_revision=todo.revision)).apply(comms, caller)
+        expected_revision=todo.revision, assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
     assert comms.registry.require('worker').goal.text == ProblemGoalOrder.text
     worker = comms.registry.require('worker').incarnation
     rows, rendered = comms.goals.todos.for_goal(worker, goal.id), '\n'.join(goal.instructions_for(comms.goals, worker))
@@ -563,6 +563,61 @@ def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
     assert accepted.returncode == 0, accepted.stderr
     assert comms.goals.todos.get('P1').order.id != current.order.id
     print(f'Accepted --replaces {replacement}: {accepted.stdout.strip()}')
+
+
+@pytest.mark.parametrize('spelling', ['agent-comms', '.', 'absolute'])
+def test_check_repo_resolves_once_for_send_and_correction(
+        commander, commander_script, monkeypatch, tmp_path, spelling):
+    comms, _ = commander
+    script, repo = commander_script
+    monkeypatch.setattr(script, 'CONFIG', script.CONFIG.model_copy(update={
+        'repos': (script.Repo.of(repo),)}))
+    monkeypatch.chdir(repo)
+    # A same-named directory must not override the configured repository.
+    (repo / 'agent-comms').mkdir()
+    (repo / 'count.txt').write_text('0\n')
+    marker = tmp_path / 'check-cwd'
+    command = f'pwd > {shlex.quote(str(marker))}; cat count.txt'
+    git = lambda *args: subprocess.run(
+        ['git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@t', *args],
+        check=True, capture_output=True, text=True).stdout.strip()
+    git('add', 'count.txt')
+    git('commit', '-qm', 'base')
+    git('update-ref', 'refs/remotes/origin/main', 'HEAD')
+    directory = str(repo) if spelling == 'absolute' else spelling
+    body = order_body(repo, f'{command} -> 1')
+    Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {directory}'))
+    problem(script, body)
+    sent = comms.goals.todos.get('P1')
+    assert sent.order.check.directory == str(repo.resolve())
+    assert marker.read_text().strip() == str(repo.resolve())
+    script.correct_check('P1', f'{directory} :: {command} -> 0',
+                         'The recorded expected count was wrong; the unchanged file contains zero.')
+    corrected = comms.goals.todos.get('P1')
+    assert corrected.order.id == sent.order.id
+    assert corrected.order.check.directory == str(repo.resolve())
+    assert marker.read_text().strip() == str(repo.resolve())
+
+
+@pytest.mark.parametrize('entrypoint', ['send', 'correct'])
+def test_missing_check_repo_refuses_before_recording(
+        commander, commander_script, tmp_path, entrypoint):
+    comms, _ = commander
+    script, repo = commander_script
+    (repo / 'count.txt').write_text('0\n')
+    if entrypoint == 'correct':
+        problem(script, order_body(repo))
+    before = comms.goals.todos.for_commander(comms.registry.require('lead').incarnation)
+    missing = tmp_path / 'missing-repo'
+    with pytest.raises(SystemExit, match='is not a directory'):
+        if entrypoint == 'send':
+            body = order_body(repo)
+            Path(body).write_text(Path(body).read_text().replace(f'Check: {repo}', f'Check: {missing}'))
+            problem(script, body)
+        else:
+            script.correct_check('P1', f'{missing} :: printf 0 -> 0',
+                                 'The recorded check must run in the correct configured source checkout.')
+    assert comms.goals.todos.for_commander(comms.registry.require('lead').incarnation) == before
 
 
 def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
@@ -1067,7 +1122,8 @@ def test_goal_stays_open_while_problems_pend(commander):
     other = comms.goals.todos.get('P3')
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P2', order=order(comms.root, 'revised'),
         request='request', deadline=RecordedEventTime(3000), commander='lead',
-        expected_revision=comms.goals.todos.get('P2').revision)).apply(comms, caller)
+        expected_revision=comms.goals.todos.get('P2').revision,
+        assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
     assert comms.goals.todos.get('P2').order.id == 'revised'
     assert comms.goals.todos.get('P3') == other
     CommsOrderDoneTool(problem='P2', order_id=comms.goals.todos.get('P2').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
@@ -1081,7 +1137,8 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     with pytest.raises(ValueError, match='Finish or release the assigned problems'):
         CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P3', order=order(comms.root, 'resent'),
             request='request', deadline=RecordedEventTime(3000), commander='lead',
-            expected_revision=comms.goals.todos.get('P3').revision)).apply(comms, caller)
+            expected_revision=comms.goals.todos.get('P3').revision,
+            assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
     assert todo_row(comms, 'P3') == before
     assert comms.registry.require('worker').goal == goal
 

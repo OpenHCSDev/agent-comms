@@ -1,12 +1,12 @@
 import asyncio
 
-from agent_comms import stall_watcher
+from agent_comms.commander import standing
 from agent_comms.change_report import FileLine
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_identity import StallWatcherIncarnation
-from agent_comms.todos import MechanicalOrderRun, PendingProblemOrder, StallReleaseTodo, StallStrikeTodo
+from agent_comms.todos import MechanicalOrderRun, PendingProblemOrder, ReleaseTodo, StrikeTodo
 from agent_comms.tools import CommsTodoCreateTool
 
 
@@ -21,13 +21,13 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
         request="request", deadline=RecordedEventTime(1000), commander="lead",
         repo="OpenHCSDev/agent-comms", text="Fix P1")).apply(comms, caller)
     # the one stubbed read: turn-digest activity marks worker and spare as recently active
-    monkeypatch.setattr(stall_watcher.WheelSpin, "idle", classmethod(
+    monkeypatch.setattr(standing.WheelSpin, "idle", classmethod(
         lambda cls, c, cmd: [c.registry.require("worker"), c.registry.require("spare")]))
-    stall_watcher.StallWheelSpin.after_stall(comms)
+    standing.UnownedWheelSpin.after_stall(comms)
     todo = comms.goals.todos.get("P1")
     # read back from the store: the strike keeps its kind and the watcher as its actor
-    assert [type(s) for s in todo.strikes] == [StallStrikeTodo]
-    assert [type(r) for r in todo.released] == [StallReleaseTodo]
+    assert [type(s) for s in todo.strikes] == [StrikeTodo]
+    assert [type(r) for r in todo.released] == [ReleaseTodo]
     assert todo.strikes[0].actor == todo.released[0].actor == StallWatcherIncarnation.watcher()
     assert StallWatcherIncarnation.watcher().name == "stall_watcher"
     # the same pass gives the order to the idle unit not struck on it, never back to worker
@@ -52,10 +52,10 @@ def test_a_failed_stall_pass_is_recorded_and_the_next_pass_still_runs(commander,
         if len(passes) == 2:
             raise asyncio.CancelledError
 
-    monkeypatch.setattr(stall_watcher.StallWheelSpin, "after_stall", classmethod(after_stall))
-    monkeypatch.setattr(stall_watcher.asyncio, "sleep", wait)
+    monkeypatch.setattr(standing.UnownedWheelSpin, "after_stall", classmethod(after_stall))
+    monkeypatch.setattr(standing.asyncio, "sleep", wait)
     try:
-        asyncio.run(stall_watcher.StallWheelSpin.watch(comms))
+        asyncio.run(standing.UnownedWheelSpin.watch(comms))
     except asyncio.CancelledError:
         pass
     assert passes == [[], ["FileNotFoundError: no commander config"]]
