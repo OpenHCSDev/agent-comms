@@ -127,6 +127,25 @@ def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_
         chain.pending(("carry_display_counts",))
 
 
+def test_a_bus_that_ran_a_retired_step_plans_the_kept_steps_after_it(tmp_path):
+    """The live shape: steps retired after a bus ran them, and a newer step placed before one it ran."""
+    repo = Repository(tmp_path)
+    repo.commit({"carry_pages": step_source(None)})
+    repo.commit({"carry_index": step_source("carry_pages"), "carry_run": step_source("carry_index")})
+    repo.commit({"carry_messages": step_source("carry_run")})
+    repo.commit({"carry_index": None, "carry_messages": step_source("carry_pages"),
+                 "carry_run": step_source("carry_messages")})
+    chain = CarryChain.at(tmp_path, "HEAD")
+    assert [step.name for step in chain.steps] == ["carry_pages", "carry_messages", "carry_run"]
+    assert chain.retired == {"carry_index"}
+    assert [step.name for step in chain.pending(("carry_pages", "carry_index", "carry_run"))] == [
+        "carry_messages"]
+    with pytest.raises(ValueError, match="does not declare"):
+        chain.pending(("carry_pages", "carry_index", "carry_never"))
+    with pytest.raises(ValueError, match="skips a step"):
+        chain.pending(("carry_run",))
+
+
 def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgrades_in_order(tmp_path):
     (tmp_path / "repo").mkdir()
     repo = Repository(tmp_path / "repo")
@@ -151,9 +170,9 @@ def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgra
     ledgerless = tmp_path / "ledgerless"
     ledgerless.mkdir()
     assert "must first run ['carry_a', 'carry_b']" in apply("carry_b", ledgerless).stderr
-    assert CarryLedger(ledgerless).applied() is None
+    assert CarryLedger(ledgerless).applied() == ()
     chain = CarryChain.at(repo.path, "HEAD")
-    for step in chain.pending(CarryLedger(ledgerless).applied() or ()):
+    for step in chain.pending(CarryLedger(ledgerless).applied()):
         assert apply(step.name, ledgerless).returncode == 0
     assert CarryLedger(ledgerless).applied() == ("carry_a", "carry_b", "carry_c")
 
@@ -171,7 +190,7 @@ def test_steps_that_do_not_form_one_chain_are_refused(tmp_path, steps):
 
 def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
     ledger = CarryLedger(tmp_path)
-    assert ledger.applied() is None
+    assert ledger.applied() == ()
     for name in ("carry_a", "carry_b", "carry_a"):
         ledger.record(name)
     assert ledger.applied() == ("carry_a", "carry_b")
@@ -359,7 +378,7 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     steps = [step.name for step in chain if step.revision == "HEAD"]
     for name in steps:
         # The older bus ran each deleted step while the tree still held it.
-        for deleted in chain[len(CarryLedger(root).applied() or ()):]:
+        for deleted in chain[len(CarryLedger(root).applied()):]:
             if deleted.revision == "HEAD":
                 break
             CarryLedger(root).record(deleted.name)
