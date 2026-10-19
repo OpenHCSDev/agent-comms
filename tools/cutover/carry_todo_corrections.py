@@ -12,7 +12,7 @@ from cutover import carry
 class TodoCorrections(carry.TodoColumnCarry):
     """Todo rows gain the empty corrections record; every stored strike stays as it was."""
 
-    after = "carry_todo_verdicts"
+    after = "carry_todo_messages"
     column = "corrections"
 
 

@@ -151,13 +151,15 @@ class RejectedTriageOutcome(SelectedTriageOutcome):
     async def continue_turn(self, participant, session, input_id, execution, settled):
         from .selected_result import CoordinatedTurn, publish_native_failure
 
-        await Coordination.run_worker(partial(
+        sent = await Coordination.run_worker(partial(
             publish_native_failure, participant, input_id,
             "The selected model returned an invalid triage decision.",
             source_error=self.error,
         ))
 
-        return await CoordinatedTurn.capture(participant, input_id, FailedAssignment)
+        return await CoordinatedTurn.capture(
+            participant, input_id, FailedAssignment,
+            notices=sent.notices)
 
 
 class TriageDecisionRecord(DeclaredFamily, JsonShapeFamily, affix="TriageDecisionRecord"):

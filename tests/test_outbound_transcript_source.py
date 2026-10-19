@@ -144,7 +144,7 @@ def test_publication_intent_joins_original_sender_and_target_only(tmp_path):  # 
     from agent_comms.transcript_sources import AssignedTranscriptSource
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
-    reply = comms.messaging.send_message("beta", "sender", "First original reply")
+    reply = comms.messaging.send("beta", "sender", "First original reply").message
     source = AssignedTranscriptSource.for_thread(
         comms.root, comms.registry.require("beta"), comms.bus.log
     )
@@ -283,7 +283,7 @@ def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     before = comms.transcripts.capture_page_read("beta")
     page = before.read()
-    comms.messaging.send_message("sender", "alpha", "Unrelated original")
+    comms.messaging.send("sender", "alpha", "Unrelated original").message
     after = comms.transcripts.capture_page_read("beta")
     assert before.identity.bus_revision != after.identity.bus_revision
     assert before.identity.wire_frontier == after.identity.wire_frontier
@@ -291,7 +291,7 @@ def test_unrelated_canonical_append_keeps_open_source_content(tmp_path):  # noqa
     assert before.content_current()
     assert before.read() == page
     assert before.identity.same_content(after.identity)
-    comms.messaging.send_message("sender", "beta", "Related original")
+    comms.messaging.send("sender", "beta", "Related original").message
     assert not before.content_current()
 
 
@@ -372,7 +372,7 @@ def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monk
 
     def append_after_page(*args, **kwargs):
         page = prepare(*args, **kwargs)
-        comms.messaging.send_message("sender", "beta", "Original concurrent append")
+        comms.messaging.send("sender", "beta", "Original concurrent append").message
         return page
 
     monkeypatch.setattr(comms.transcripts, "_thread_transcript_page", append_after_page)

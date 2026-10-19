@@ -1,5 +1,7 @@
 """A retained original cut is independent of later routes and timestamp history."""
 
+from agent_comms.wire_log import WireLog
+
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 from unittest.mock import patch
@@ -34,7 +36,7 @@ def test_original_empty_cut_cannot_clear_a_later_index(tmp_path):
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         assert source.through == 0
-        message = comms.messaging.send_message('sender', viewer, 'after empty capture')
+        message = comms.messaging.send('sender', viewer, 'after empty capture').message
         observer = wire(tmp_path)
         with observer.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
             assert observer.bus.pending_counts_opened(pending_source, pending_basis) == {'sender': 1}
@@ -54,9 +56,11 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
     originals = [comms.bus.publisher.publish_ordinary(Message(
         'sender', viewer, f'original {number}', InfoKind, timestamp=timestamp,
     ), origin=AgentOrigin()) for number, timestamp in enumerate((birth+2, birth-1, birth+2, birth+1))]
-    comms.bus.reads.mark_displayed(viewer, comms.bus.reads.capture(
-        viewer, (originals[0],), comms.registry.snapshot(), comms.bus.log.path,
-    ))
+    document = comms.bus.reads.read()
+    with WireLog(comms.bus.log.path).opened_wire_snapshot() as opened:
+        displayed = opened.query_page_index(lambda index: comms.bus.reads.capture_indexed(
+            viewer, (originals[0],), comms.registry.snapshot(), opened, index, document=document))
+    comms.bus.reads.mark_displayed(viewer, displayed)
     with comms.bus.snapshot(viewer=NamedViewer(viewer)) as (basis, source):
         delivery = DeliveryScope.capture(viewer, basis.registry, basis.catalog)
 
@@ -72,7 +76,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
                 with OpenedRouteCounts(
                     comms.bus.log.path, source, basis.registry, {viewer: delivery},
                 ) as index:
-                    answer = measure(index, viewer, basis.seen)
+                    answer = measure(index, viewer, basis.seen(source))
             assert answer[:2] == (
                 {viewer: {'sender': 2}}, (originals[2].seq, originals[3].seq),
             )
@@ -88,7 +92,7 @@ def test_retained_rank_and_listing_do_not_visit_later_messages_or_routes(tmp_pat
             for number in range(8):
                 sender = f'later-{phase}-{number}'
                 comms.registry.declare(comms.registry.new_thread(sender, frozenset(), str(tmp_path)))
-                comms.messaging.send_message(sender, viewer, 'a route absent at capture')
+                comms.messaging.send(sender, viewer, 'a route absent at capture').message
             observer = wire(tmp_path)
             with observer.bus.snapshot(viewer=NamedViewer(viewer)) as (pending_basis, pending_source):
                 observer.bus.pending_counts_opened(pending_source, pending_basis)  # Real independent catchup.

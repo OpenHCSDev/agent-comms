@@ -10,7 +10,7 @@ from .channel_targets import BuiltinChannel, CommandTarget
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
-from .read_basis import ChannelDisplayScope, DMDisplayScope, MessageDisplayScope, ReadCursor
+from .read_basis import DMDisplayScope, MessageDisplayScope, ReadCursor
 
 if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
@@ -180,12 +180,17 @@ class DeliveryScope(MessageDisplayScope):
             name for name in (self.actor, *self.aliases) if self.canonical(name) == self.actor
         )
 
+    @property
+    def index_predicate(self) -> tuple[str, tuple]:
+        targets = tuple(self.index_targets)
+        return "target IN (" + ",".join("?" for _ in targets) + ")", targets
+
     def includes(self, message: Message) -> bool:
         return self.delivers(message.sender, message.target)
 
     def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
         selected = CommandTarget.named(BuiltinChannel.ANY.value if target is None else target)
-        return selected.display_scope(self.actor, snapshot, catalog, ChannelDisplayScope, DMDisplayScope)
+        return selected.display_scope(self.actor, snapshot, catalog, DMDisplayScope)
 
     def canonical(self, name: str) -> str:
         return self.aliases.get(name, name)
@@ -230,7 +235,7 @@ class DeliveryScope(MessageDisplayScope):
         self, delivery: DeliveryMessage, snapshot: RegistryProvenance, seen: ReadCursor
     ) -> bool:
         message = delivery.message
-        if message.seq in seen:
+        if self.has_read(seen, message, snapshot):
             return False
         since = self.minimum_timestamp(
             message.sender, message.target, delivery.sender_lookup, snapshot

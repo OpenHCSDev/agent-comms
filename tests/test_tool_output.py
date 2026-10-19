@@ -51,7 +51,7 @@ def inbox_comms(root):
 def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, count, text):
     comms = inbox_comms
     ledger = seed_unknown(comms, count, text)
-    comms.messaging.send("a", "b", "An unread new message")
+    comms.messaging.send("a", "b", "An unread new message").message.message_id
     authority_before = ledger.path.read_bytes()
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b")],
@@ -90,7 +90,7 @@ def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, c
 def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "Earlier unresolved message")
-    comms.messaging.send("a", "b", "hello")
+    comms.messaging.send("a", "b", "hello").message.message_id
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b")],
         "acknowledged": int(ack),
@@ -107,11 +107,11 @@ def test_message_arriving_between_inbox_read_and_ack_remains_unread(
     inbox_comms, monkeypatch
 ):
     comms = inbox_comms
-    first = comms.messaging.send_message("a", "b", "shown")
+    first = comms.messaging.send("a", "b", "shown").message
     acknowledge = comms.messaging.acknowledge
 
     def append_then_acknowledge(name, references):
-        comms.messaging.send("a", "b", "arrived after read")
+        comms.messaging.send("a", "b", "arrived after read").message.message_id
         return acknowledge(name, references)
 
     monkeypatch.setattr(comms.messaging, "acknowledge", append_then_acknowledge)
@@ -126,7 +126,7 @@ def test_message_arriving_between_inbox_read_and_ack_remains_unread(
 def test_publication_failure_precedes_ack(inbox_comms, monkeypatch):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "body" * 20_000)
-    comms.messaging.send("a", "b", "Still unread after failure")
+    comms.messaging.send("a", "b", "Still unread after failure").message.message_id
     authority_before = ledger.path.read_bytes()
 
     def fail(*args, **kwargs):
@@ -149,7 +149,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         "b", SetGoalAction(text="Wait for a after reviewing its replies")
     )
     messages = [
-        comms.messaging.send_message("a", "b", body)
+        comms.messaging.send("a", "b", body).message
         for body in (large_body, "Previously reviewed reply")
     ]
     dispositions = InputDispositions(comms.root)
@@ -262,7 +262,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
             text="Uncertain owner input " * 45,
         )
     messages = [
-        comms.messaging.send_message("a", "b", body)
+        comms.messaging.send("a", "b", body).message
         for body in ("Already reviewed", "Complete new reply: " + "x" * 548)
     ]
     for message in messages:
@@ -314,7 +314,7 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
         invoke_tool(comms, "comms_goal", {**report, "reviewed_inputs": ["acp:owner-0"]}, caller=ThreadCaller("b"))
     assert stored_inputs(dispositions.root) == before
     # A reply arriving after this snapshot still blocks standby atomically.
-    late = comms.messaging.send_message("a", "b", "New evidence after inbox inspection")
+    late = comms.messaging.send("a", "b", "New evidence after inbox inspection").message
     dispositions.record(
         f"bus:{late.seq}", seq=late.seq, owner="b", claim_scope=1, target="b", text=late.body
     )

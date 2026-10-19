@@ -62,37 +62,37 @@ class TestChannelTargets:
 
 class TestChannelDelivery:
     def test_tag_channel_reaches_tagged_threads_only(self, chat):
-        chat.messaging.send("PR111", "#ci", "ci flaked again")
+        chat.messaging.send("PR111", "#ci", "ci flaked again").message.message_id
         assert chat.bus.pending_count("fixer") == 1  # carries tag 'ci'
         assert chat.bus.pending_count("PR112") == 0  # carries tag 'docs'
         assert chat.bus.pending_count("PR111") == 0  # sender excluded
 
     def test_global_channel_reaches_everyone(self, chat):
-        chat.messaging.send("PR111", "#all", "main is green")
+        chat.messaging.send("PR111", "#all", "main is green").message.message_id
         assert chat.bus.pending_count("fixer") == 1
         assert chat.bus.pending_count("PR112") == 1
 
     def test_dm_untagged_by_channels(self, chat):
-        chat.messaging.send("PR111", "PR112", "dm")
+        chat.messaging.send("PR111", "PR112", "dm").message.message_id
         assert chat.bus.pending_count("PR112") == 1
         assert chat.bus.pending_count("fixer") == 0
 
     def test_channel_send_fail_closed_unknown_dm(self, chat):
         with pytest.raises(UnregisteredThreadError, match="Target"):
-            chat.messaging.send("PR111", "ghost", "hi")
+            chat.messaging.send("PR111", "ghost", "hi").message.message_id
 
     def test_untagged_thread_does_not_receive_tag_channel(self, chat):
         # A thread with no tags receives only DMs and the global channel.
         chat.registry.declare(chat.registry.new_thread(name='loner', tags=frozenset(), worktree='/wt'))
-        chat.messaging.send("PR111", "#ci", "only tagged see this")
+        chat.messaging.send("PR111", "#ci", "only tagged see this").message.message_id
         assert chat.bus.pending_count("loner") == 0
 
 
 class TestHistory:
     def test_dm_history_is_full_conversation(self, chat):
-        chat.messaging.send("PR111", "fixer", "hello")
-        chat.messaging.send("fixer", "PR111", "hi back")
-        chat.messaging.send("PR111", "PR112", "unrelated")
+        chat.messaging.send("PR111", "fixer", "hello").message.message_id
+        chat.messaging.send("fixer", "PR111", "hi back").message.message_id
+        chat.messaging.send("PR111", "PR112", "unrelated").message.message_id
         history = [m.body for m in list(chat.views.dm_history_page("PR111", "fixer").messages)]
         assert history == ["hello", "hi back"]
 
@@ -101,13 +101,13 @@ class TestHistory:
             list(chat.views.dm_history_page("PR111", "ghost").messages)
 
     def test_channel_history_returns_all(self, chat):
-        chat.messaging.send("PR111", "#ci", "one")
-        chat.messaging.send("fixer", "#ci", "two")
-        chat.messaging.send("PR111", "#all", "three")
+        chat.messaging.send("PR111", "#ci", "one").message.message_id
+        chat.messaging.send("fixer", "#ci", "two").message.message_id
+        chat.messaging.send("PR111", "#all", "three").message.message_id
         assert [m.body for m in list(chat.views.channel_history_page("#ci").messages)] == ["one", "two"]
 
     def test_global_channel_history(self, chat):
-        chat.messaging.send("PR111", "#all", "hello")
+        chat.messaging.send("PR111", "#all", "hello").message.message_id
         assert [m.body for m in list(chat.views.channel_history_page("#all").messages)] == ["hello"]
         with pytest.raises(ValueError, match="not a channel"):
             list(chat.views.channel_history_page("broadcast").messages)

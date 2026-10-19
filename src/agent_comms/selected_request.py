@@ -41,9 +41,11 @@ class SelectedRequest:
         except NativePiTerminalFailure as error:
             # The current input operation has already confirmed the live failure
             # and settled this stage after raw writer, child and tool cleanup.
-            await Coordination.run_worker(partial(publish_native_failure,
+            sent = await Coordination.run_worker(partial(publish_native_failure,
                 self.participant, error.context.input_id, error.public_message, source_error=error
             ))
+            for notice in sent.notices:
+                error.add_note(notice)
             raise
         except NativeRequestFailure as error:
             await self._native_failure(error)
@@ -73,10 +75,12 @@ class SelectedRequest:
     async def _native_failure(self, error):
         if not await self._settle_unknown():
             return
-        await Coordination.run_worker(partial(publish_native_failure,
+        sent = await Coordination.run_worker(partial(publish_native_failure,
             self.participant,
             self.claim_scope.input_id,
             error.public_failure,
             native_response=error.rejected_response,
             source_error=error,
         ))
+        for notice in sent.notices:
+            error.add_note(notice)

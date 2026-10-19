@@ -280,7 +280,7 @@ class NativeTranscript(TranscriptSource):
             proof = NativeContextJournal.for_input(db, user.input_id)
             if proof is None:
                 raise MalformedRecord("Native publication has no committed context inclusion")
-            return proof.corroborate(self.path.absolute(), header, {user.input_id: user})
+            return proof.corroborate(self.path.absolute(), header, user)
 
     def inputs_for(self, records) -> tuple:
         """Each record's original input, found in one reverse walk for the batch.

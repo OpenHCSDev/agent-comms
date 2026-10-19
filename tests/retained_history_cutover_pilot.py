@@ -10,6 +10,7 @@ from pathlib import Path
 from agent_comms.comms import wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.historical_views import ChannelHistory, HistorySource
+from agent_comms.read_basis import ChannelDisplayScope
 from agent_comms.message_page import PageBounds
 from agent_comms.wire_log import WireLog
 
@@ -55,7 +56,7 @@ def test_current_saved_history_has_no_live_claim_or_delivery(tmp_path):
     reference_actual_history(comms.root, Path(os.environ['ACTUAL_COMMS_SOURCE_ROOT']))
     source=max(comms.bus.history.sources(),key=lambda source:source.size)
     live_before=(comms.root/'bus.jsonl').read_bytes()
-    historical=comms.bus.history.page(ChannelHistory('#comms',frozenset({'#comms'})),PageBounds())
+    historical=comms.bus.history.page(ChannelHistory(ChannelDisplayScope('#comms',frozenset({'#comms'}))),PageBounds())
     assert historical.messages,'Real supplied history must contain #comms messages'
     assert all(not message.role.response_policy(message).starts_turn for message in historical.messages)
     assert all(message.source==source for message in historical.messages)

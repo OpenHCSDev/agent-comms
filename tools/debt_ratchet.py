@@ -1151,6 +1151,18 @@ class EditedCarry(Measure):
     in every ledger that recorded it. A different change is a new step.
     """
 
+    @staticmethod
+    def conversion(source: bytes) -> str:
+        """Dependency rewiring retires steps without editing their conversion."""
+        tree = ast.parse(source)
+        for node in tree.body:
+            if isinstance(node, ast.ClassDef):
+                for statement in node.body:
+                    match statement:
+                        case ast.Assign(targets=[ast.Name(id="after")]):
+                            statement.value = ast.Constant(None)
+        return ast.dump(tree, include_attributes=False)
+
     @classmethod
     def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
         fields = iter(git(repo, "diff", "--name-status", "--find-renames=50%", "-z",
@@ -1164,7 +1176,10 @@ class EditedCarry(Measure):
             if not (name.startswith("carry_") and path.endswith(".py")):
                 continue
             if status[0] in "MRC" or status == "T":
-                edited += Step.declared(name, git(repo, "show", f"{base}:{path}"), base) is not None
+                before = git(repo, "show", f"{base}:{path}")
+                if Step.declared(name, before, base) is not None:
+                    edited += (status != "M" or cls.conversion(before) !=
+                               cls.conversion(git(repo, "show", f"{head}:{path}")))
             elif status == "A":
                 edited += bool(git(repo, "log", "-1", "--format=%H", "--diff-filter=D", base, "--", path).strip())
         return {cls.__name__: 0}, {cls.__name__: edited}

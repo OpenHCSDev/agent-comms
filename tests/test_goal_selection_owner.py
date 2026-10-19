@@ -127,8 +127,8 @@ def test_certified_reply_consumes_only_original_wait(selected_goal):
             expect=GoalPrecondition(goal_id=original.id), wait_for=("peer",),
         ))
         wait = comms.goals.goal_wait("worker")
-        wrong = comms.messaging.send_message("peer", "other", "Different recipient")
-        reply = comms.messaging.send_message("peer", "worker", "Original reply")
+        wrong = comms.messaging.send("peer", "other", "Different recipient").message
+        reply = comms.messaging.send("peer", "worker", "Original reply").message
         owner = comms.agents.begin_turn("worker", "original-reply-consumer").turn_lease
         captured = RegistryOwner.capture_local(comms.registry.snapshot(), "worker")
         assert not comms.goals.consume_reply_wait(captured, wrong.reference)
