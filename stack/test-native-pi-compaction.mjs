@@ -44,7 +44,6 @@ const server=createServer(async(request,response)=>{
 const root=mkdtempSync(join(tmpdir(),'native-pi-compaction-'));
 let manager,session;
 try {
-    process.env.AGENT_COMMS_SESSION_INDEX_DIR=join(root,'indexes');
     process.env.AGENT_COMMS_NATIVE_CONFIG_DIR=root;
     process.env.PI_TASK='TASK_BRIEF_FIXTURE';
     await new Promise(done=>server.listen(0,'127.0.0.1',done));
