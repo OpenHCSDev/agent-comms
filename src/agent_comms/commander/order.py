@@ -900,10 +900,11 @@ class DueVerb(OrderVerb, RuledVerb):
 class InstallVerb(RuledVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
     at: str = option("at", help="HH:MM the install is due")
+    installer: str = option("installer", help="the unit that runs the install")
 
     def run(self) -> None:
-        PlannedInstallDeadline(deadline(self.at)).plan(COMMS.root)
-        print(f'install due {self.at}')
+        PlannedInstallDeadline(deadline(self.at), self.installer).plan(COMMS.root)
+        print(f'install due {self.at}, run by {self.installer}')
 
 
 @dataclass(frozen=True, kw_only=True)
