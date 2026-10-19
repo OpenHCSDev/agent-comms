@@ -237,9 +237,8 @@ class Goals:
             owner = snapshot.threads.get(canonical)
             if owner is None or self.agents.is_working(owner.incarnation, snapshot):
                 return ()
-            return owner.goal.active().project(
-                lambda goal: self._recover_closed_wait(goal, owner, snapshot, canonical), tuple,
-            )
+            return tuple(member for goal in owner.goal.active()
+                         for member in self._recover_closed_wait(goal, owner, snapshot, canonical))
 
     def _recover_closed_wait(self, goal: Goal, owner: Thread, snapshot: RegistrySnapshot,
                              canonical: str) -> tuple[str, ...]:
@@ -290,7 +289,7 @@ class Goals:
                 source is None
                 or source.turn_record.read().executing
                 or observed is None
-                or not observed.matches(fence.renamed(canonical))
+                or observed != fence.renamed(canonical)
                 or not snapshot.statuses[canonical].active
             ):
                 return ()
@@ -307,9 +306,9 @@ class Goals:
                 owner = snapshot.threads.get(snapshot.canonical_name(wait.owner.name))
                 if owner is None:
                     continue
-                if owner.goal.active().project(lambda goal: self._release_finished_wait(
+                if any(self._release_finished_wait(
                     goal, owner, snapshot, canonical, goal_id, wait,
-                ), lambda: False):
+                ) for goal in owner.goal.active()):
                     released.append(owner.name)
             return tuple(released)
 
@@ -375,7 +374,7 @@ class Goals:
             owner.require_registry(self.registry)
             current = self.registry.require(owner.thread.name)
             goal = current.continuation_goal(owner.thread)
-            return goal.project(lambda actual: self._consume_reply_wait(actual, current, reference), lambda: False)
+            return any(self._consume_reply_wait(actual, current, reference) for actual in goal)
 
     def _consume_reply_wait(self, goal: Goal, current: Thread, reference: MessageReference) -> bool:
         wait = self.waits.for_goal(goal, self.waits.read())

@@ -8,7 +8,7 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.child_process import ProcessIdentity
-from agent_comms.coordination_errors import DMPaintedBoundChanged, DMScopeChanged
+from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.comms import Comms, wire
 from agent_comms.message_page import MessagePageRequest, PageBounds
 from agent_comms.page_traversal import OlderTraversal
@@ -433,7 +433,7 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                     comms.views.mark_channel_view_read(
                         target, worktree=str(tmp_path), mark=ReadThrough(through, proof)
                     )
-            except (DMScopeChanged, DMPaintedBoundChanged) as error:
+            except StaleRevision as error:
                 # A stale incarnation is a refused paint, not permission to
                 # acknowledge a new peer using an old page.
                 stale_participant = any(
@@ -441,11 +441,9 @@ def test_read_property_includes_dm_rebind_stale_paints_and_abrupt_reopen(tmp_pat
                     for item in proof.displayed.conversations
                     for p in item.conversation.participants
                 )
-                snapshot = comms.registry.snapshot()
-                changed_projection = kind == "channel" and proof != ChannelDisplayScope.capture(
-                    comms.views.presentation.catalog.read().require_channel(target, snapshot.threads), snapshot,
-                )
-                assert stale_participant or changed_projection, str(error)
+                # A mark past what its page painted is refused for either page kind.
+                changed_projection = isinstance(error, DMPaintedBoundChanged)
+                assert stale_participant or changed_projection, (kind, str(error))
             else:
                 acknowledged.update(record(proof.displayed.through(through)))
         elif operation == "rebind":

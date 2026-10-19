@@ -407,7 +407,6 @@ class CompactionEnd(ReasonedCompaction, ends=phases.CompactionPhase):
             reason=self.reason,
             aborted=not completed,
             summary=self.result.display_summary if completed else None,
-            context_used=None,
             will_retry=self.will_retry is True,
         )
         # A failed compaction is Pi's to handle: before a prompt Pi still sends it,

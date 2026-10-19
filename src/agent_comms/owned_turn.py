@@ -30,8 +30,6 @@ from .store_files import _store_lock
 from .thread_identity import TurnId
 from .turn_goal_account import TurnGoalAccount
 from .turn_goal_permission import (
-    ContinuationGoalPermission,
-    InactiveGoalPermission,
     OwnerGoalPermission,
 )
 from .turn_input_source import (
@@ -142,7 +140,7 @@ class OwnedTurn:
             self.turn_id, self.task[:80], self.routing,
         )
         active_goal = self.thread.goal.active()
-        prepared_goal = active_goal.project(lambda goal: self._prepare_goal_permit(goal, permits), lambda: False)
+        prepared_goal = any(self._prepare_goal_permit(goal, permits) for goal in active_goal)
         if self.autonomous_goal and not prepared_goal:
             return False
         self.input_cleanup = AsyncExitStack()
@@ -232,9 +230,7 @@ class OwnedTurn:
         if self.original_owner_input:
             permission = OwnerGoalPermission(self.thread.goal)
         else:
-            permission = self.thread.goal.active().project(
-                ContinuationGoalPermission, InactiveGoalPermission,
-            )
+            permission = self.thread.goal.active().following_permission()
         if self.original_owner_input:
             source_type = OwnerOriginalInput
         elif not self.origins:

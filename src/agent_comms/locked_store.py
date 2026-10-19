@@ -151,6 +151,22 @@ class RootFile:
         return cls(cls.path_in(root), *args, **kwargs)
 
 
+class RuntimeFile(RootFile):
+    """A bus file no carry writes: running owners rewrite it at any time, maintenance included."""
+
+    __slots__ = ()
+
+    @classmethod
+    def paths_in(cls, root: Path) -> frozenset[Path]:
+        declared, pending = set(), [cls]
+        while pending:
+            family = pending.pop()
+            pending.extend(family.__subclasses__())
+            if "filename" in vars(family):
+                declared.add(family.path_in(root))
+        return frozenset(declared)
+
+
 @dataclass(frozen=True, slots=True)
 class LockedStore(JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""

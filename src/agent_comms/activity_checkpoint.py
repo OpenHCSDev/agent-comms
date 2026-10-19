@@ -8,7 +8,6 @@ from typing import BinaryIO, ClassVar, Literal
 
 from .activity import Activity
 from .bus_projection import AppendCheckpoint, AppendProjectionStore
-from .locked_store import RootFile
 from .private_path import FileRevision
 
 
@@ -38,7 +37,7 @@ class ActivityCheckpoint(AppendCheckpoint):
 
 
 @dataclass(frozen=True, slots=True)
-class ActivityCheckpointStore(RootFile, AppendProjectionStore[ActivityCheckpoint]):
+class ActivityCheckpointStore(AppendProjectionStore[ActivityCheckpoint]):
     """The shared append projection owns both decoding and publication."""
 
     path: Path

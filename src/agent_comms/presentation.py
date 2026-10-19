@@ -37,10 +37,11 @@ from .message_reference import MessageReference
 from .messages import Message
 from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
+from .pi_counts import PiCount
 from .private_path import FileRevision
-from .recorded_bus import RecordedBusIdentity
 from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
 from .read_ledger import ReadLedger
+from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .runtime_info import RuntimeInfo
 from .store_files import SharedLock, _store_lock
@@ -70,7 +71,7 @@ if TYPE_CHECKING:
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
-    from .ui_model.observation import ReadNotifications, ThreadsObserved
+    from .ui_model.observation import ThreadsObserved
 
 
 class OutcomeViewer(ABC):
@@ -696,16 +697,13 @@ class ThreadView(ThreadRecord):
         return self.runtime.session_name
 
     @projected(view="presence")
-    def context_used(self) -> int | None:
+    def context_used(self) -> PiCount:
         return self.runtime.context_used
 
     @projected(view="presence")
-    def context_size(self) -> int | None:
+    def context_size(self) -> PiCount:
         return self.runtime.context_size
 
-    @projected(view="presence")
-    def context_percent(self) -> float | None:
-        return self.runtime.context_percent
 
 
 @dataclass(frozen=True, slots=True)

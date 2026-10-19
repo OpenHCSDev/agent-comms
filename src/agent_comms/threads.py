@@ -42,7 +42,8 @@ from .thread_identity import (
     TurnId,
     TurnIdentity,
 )
-from .turn_lease import NoTurnRecord, TurnFence, TurnLeaseFence, TurnRecord, TurnState
+from .thread_identity import TurnFence
+from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
 from .task_sources import TaskScope
 
 if TYPE_CHECKING:

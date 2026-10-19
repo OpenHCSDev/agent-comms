@@ -139,7 +139,7 @@ class TurnGoalAccount:
             return
         with _store_lock(self.comms._wire_lock_path):
             owner = self.comms.registry.snapshot().require(self.owner.name)
-            claimed = owner.goal.project(lambda goal: self._reserve_origin(owner, goal), tuple)
+            claimed = tuple(permit for goal in owner.goal for permit in self._reserve_origin(owner, goal))
         for permit in claimed:
             self._record_origin_usage(permit)
 
@@ -227,8 +227,7 @@ class TurnGoalAccount:
                 permit.settle_goal(OriginGoalSettlement, store, current, self.turn)
             if not permit.has_verified_progress(store):
                 permit.fail_origin(store, goal_id)
-                current.project(lambda goal: FailedGoalOrigin(
-                    self.comms, self.thread_name, goal,
-                ).dispatch_sync(goal.state), lambda: None)
+                for goal in current:
+                    FailedGoalOrigin(self.comms, self.thread_name, goal).dispatch_sync(goal.state)
             if self.pending_origins.get(self.thread_name) == goal_id:
                 self.pending_origins.pop(self.thread_name, None)

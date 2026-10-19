@@ -1,5 +1,6 @@
 """Run the existing continuous context case without source/conftest substitutes."""
-from agent_comms.native_package import pinned_native_package
+from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
+from agent_comms.storage_rules import StorageRule
 
 import argparse
 import asyncio
@@ -136,7 +137,7 @@ async def read_actual_context_publication(owner, thread, child, original_input, 
         original_acp_usage_updates=len(usage), final_HTTP_evaluated=False)
 
 
-async def run(root, receiving_only=False):
+async def run(root, receiving_only=False, *, package: VerifiedNativePackage):
     from pytest import MonkeyPatch
     from native_backend_fixture import native_backend_fixture
     from test_native_context_inspection import test_context_manifest_native_acp_and_cli_continuous
@@ -149,7 +150,7 @@ async def run(root, receiving_only=False):
     try:
         with MonkeyPatch.context() as monkey:
             monkey.delenv("AGENT_COMMS_THREAD", raising=False)
-            async with native_backend_fixture(root) as original:
+            async with native_backend_fixture(root, package=package) as original:
                 async with asyncio.timeout(90):
                     await test_context_manifest_native_acp_and_cli_continuous(
                         original, receiving_only=receiving_only)
@@ -513,6 +514,7 @@ def complete_history_controls(root):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("root", type=Path)
+    parser.add_argument("--native-cache", type=Path, default=StorageRule.native_cache)
     parser.add_argument("--test-support-site", type=Path)
     parser.add_argument("--toad-driver-dir", type=Path)
     parser.add_argument('--configured-source-root', type=Path)
@@ -544,4 +546,5 @@ if __name__ == "__main__":
         complete_goal_controls(options.root)
     else:
         asyncio.run(run_configured(options) if options.configured_source_root
-                    else run(options.root, receiving_only=options.receiving_only))
+                    else run(options.root, receiving_only=options.receiving_only,
+                             package=VerifiedNativePackage.from_environment(options.native_cache)))
