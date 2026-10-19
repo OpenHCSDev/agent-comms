@@ -1156,8 +1156,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
 
     def board_cells(self, todo: Todo) -> str:
         last = todo.released[-1:]
-        owner = todo.holder or f"unassigned: released from {last[0].previous.owner}: {last[0].reason.text}"
-        return f"{self.owner.to_wire()} | {owner} | {self.id} | {clock(todo.deadline.recorded_at('An order deadline'))}"
+        owner = todo.holder or (f"unassigned: released from {last[0].previous.owner}: "
+                                f"{last[0].reason.text}")
+        due = clock(todo.deadline.recorded_at("An order deadline"))
+        return f"{self.owner.to_wire()} | {owner} | {self.id} | {due}"
 
     def __post_init__(self):
         if not self.edits or not self.banned:
