@@ -8,7 +8,6 @@ from dataclasses import asdict, dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
-from acp import RequestError
 from acp.schema import (
     AgentMessageChunk,
     TextContentBlock,
@@ -358,4 +357,4 @@ class TurnProgress(events.AgentEventConsumer):
                 ),
             ),
         )
-        self.result.outcome.raise_if_failed(RequestError.internal_error)
+        self.result.outcome.raise_if_failed()
