@@ -116,7 +116,7 @@ class WireSnapshot(ObservedPath):
     @abstractmethod
     def records(self) -> Iterator[WireRecord]: ...
 
-    def ensure_page_index(self, index: BusPageIndex, mode: IndexLockMode) -> None:
+    def ensure_page_index(self, index: BusPageIndex, mode: LockMode) -> None:
         """The captured prefix owns whether page-index work exists."""
         self.complete_prefix.ensure_page_index(self, index, mode)
 
@@ -313,7 +313,7 @@ class OpenedWireSnapshot(WireSnapshot):
         finally:
             stream.seek(position)
 
-    def ensure_indexed_prefix(self, index: BusPageIndex, mode: IndexLockMode) -> None:
+    def ensure_indexed_prefix(self, index: BusPageIndex, mode: LockMode) -> None:
         """Prepare this opened complete source, under the admitted writer mode."""
         if not index.covers(self):
             mode.require_writer()
