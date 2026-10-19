@@ -41,15 +41,9 @@ class LaunchRuntime:
     def native_entrypoint(self) -> str:
         return str(self.interpreter.with_name("pi-comms-native"))
 
-    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
-        result = dict(source)
-        result.pop("PYTHONPATH", None)
-        result["VIRTUAL_ENV"] = str(self.prefix)
-        directory = str(self.interpreter.parent)
-        path = source.get("PATH", os.defpath)
-        result["PATH"] = os.pathsep.join((directory, *(part for part in path.split(os.pathsep)
-                                                      if part != directory)))
-        return result
+    def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
+        projected = replace(configuration, pythonpath=NoImportPath(), virtual_env=str(self.prefix))
+        return projected.for_interpreter(self.interpreter).apply_runtime(source)
 
     def require_available(self) -> None:
         if not self.interpreter.is_file() or not os.access(self.interpreter, os.X_OK):
@@ -57,7 +51,7 @@ class LaunchRuntime:
 
 
 class RestoredRuntime(LaunchRuntime):
-    def environment(self, source: Mapping[str, str]) -> dict[str, str]:
+    def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
         return dict(source)
 
 
@@ -106,7 +100,7 @@ class RestartEnvironment(EnvironmentRecord):
     virtual_env: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True})
     config: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"})
     native_config: Annotated[Path, PathText] = field(kw_only=True)
-    agent_directory: Annotated[Path, PathText] = field(kw_only=True)
+    agent_directory: Annotated[Path, PathText] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR", "native": True})
     default_agent_directory: ClassVar[Path] = Path("~/.pi/agent")
 
     def __post_init__(self) -> None:
@@ -127,7 +121,9 @@ class RestartEnvironment(EnvironmentRecord):
         return replace(self, path=path)
 
     def encode_native(self) -> dict[str, str]:
-        return {"PI_CODING_AGENT_DIR": str(self.agent_directory)}
+        encoded = self.encode()
+        return {FieldCodec.wire_key(declaration): encoded[FieldCodec.wire_key(declaration)]
+                for declaration in fields(self) if declaration.metadata.get("native")}
 
     def auth_revision(self) -> tuple[int, int]:
         info = (self.native_config / "auth.json").stat()
@@ -241,6 +237,10 @@ class LaunchRecord:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _atomic_write_text(path, json.dumps(FieldCodec.encode(self), separators=(",", ":")))
         return self.argument, str(path)
+
+    def route(self):
+        from .active_route import CommsRoute, resolve_comms_route
+        return CommsRoute.current() if self.implicit_root else resolve_comms_route(self.root)
 
     def require_thread(self) -> ThreadLaunch:
         if self.thread is None:

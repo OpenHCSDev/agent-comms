@@ -22,7 +22,6 @@ from pathlib import Path
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .maintenance_barrier import MaintenanceBarrier
 from .route_selection import RouteSelection, selected_write
-from .launch_runtime import LaunchRecord
 
 
 def _release_abandoned(task: asyncio.Future[ExitStack]) -> None:
@@ -128,8 +127,6 @@ class AcpIngress:
 
         def spawn_under_lock() -> None:
             try:
-                if LaunchRecord.current().root != self.selection.root:
-                    raise ValueError("ACP child launch record conflicts with its selected route")
                 # Route SH precedes the wire gate, matching the publisher's
                 # route EX -> private-root preflight order.
                 with self.selection.route.hold_client_route(), ExitStack() as locks:

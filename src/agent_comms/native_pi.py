@@ -438,7 +438,7 @@ class NativePiRpcLaunch:
             raise NativePiUnavailable("Canonical owner instruction asset is unavailable") from error
         env = package.node_environment(environment)
         env[ThreadLaunch.variable("worktree")] = str(cwd)
-        env = runtime.environment(env)
+        env = runtime.environment(env, configuration=configuration)
         env.update(configuration.encode_native())
         argv = (
             *package.node("agent-comms-project-bootstrap.mjs"),

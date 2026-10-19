@@ -22,7 +22,7 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRecord, LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .active_route import resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
@@ -321,7 +321,7 @@ class OwnerLifecycle:
 
     def restart_environment(self, environment: Mapping[str, str], runtime: LaunchRuntime) -> dict[str, str]:
         """Project the launch authority into the target runtime policy."""
-        result = runtime.environment(environment)
+        result = runtime.environment(environment, configuration=LaunchRecord.current().configuration)
         # The source owner's root is this launch's; the target derives the rest.
         self.launch_authority.check()
         return result
@@ -425,7 +425,7 @@ class OwnerLifecycle:
         self.maintenance.assert_open_unlocked()
         env = dict(os.environ if environment is None else environment)
         launch_runtime.require_available()
-        env = launch_runtime.environment(env)
+        env = launch_runtime.environment(env, configuration=LaunchRecord.current().configuration)
         agent_bin = self.require_launch_authority().prepare_owner(thread, agent_bin, launch_runtime)
         env = initial_input.launch(thread.launch()).apply(env)
         env[NativeArguments.binary_key] = agent_bin

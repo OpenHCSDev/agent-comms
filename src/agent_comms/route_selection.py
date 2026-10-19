@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TypeVar
 
-from .active_route import CommsRoute, guard_default_route_write, resolve_comms_route
+from .active_route import CommsRoute, guard_default_route_write
 from .launch_runtime import LaunchRecord
 
 
@@ -26,9 +26,7 @@ T = TypeVar("T")
 
 def current_root() -> Path:
     """Observe the launch's selected route without consulting process environment."""
-    record = LaunchRecord.current()
-    route = CommsRoute.current() if record.implicit_root else resolve_comms_route(record.root)
-    return route.observe_root()
+    return LaunchRecord.current().route().observe_root()
 
 
 def root_is_current(root: str | Path) -> bool:
@@ -57,7 +55,7 @@ class RouteSelection:
     @classmethod
     def for_child(cls, record: LaunchRecord) -> RouteSelection:
         """Capture exactly the selection declared by this child's launch."""
-        route = CommsRoute.current() if record.implicit_root else resolve_comms_route(record.root)
+        route = record.route()
         if route.observe_root() != record.root:
             raise RouteChanged("ACP route changed while selecting its child")
         return cls(route, record.root, record.implicit_root)
