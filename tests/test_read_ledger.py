@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.coordination_errors import DMPaintedBoundChanged, StaleRevision
 from agent_comms.comms import Comms, wire
@@ -134,7 +135,7 @@ def test_turn_lease_and_unrelated_registry_changes_do_not_invalidate_dm(tmp_path
         through=page.newest_seq,
         expected_display_basis=page.display_basis,
     )
-    assert wire(tmp_path).bus.pending_count(viewer, "alice") == 0
+    assert wire(tmp_path).bus.pending_count(viewer, CommandTarget.named("alice")) == 0
 
 
 def test_agent_sent_dm_includes_independent_human_read(tmp_path):
@@ -194,14 +195,14 @@ def test_dm_ack_survives_process_exit_and_rebind_does_not_inherit_reads(tmp_path
     )
     assert child.returncode == 9
     comms = wire(tmp_path)
-    assert comms.bus.pending_count(viewer, "alice") == 0
+    assert comms.bus.pending_count(viewer, CommandTarget.named("alice")) == 0
     comms.registry.unregister("alice")
     comms.registry.remove("alice")
     comms.registry.declare(comms.registry.new_thread('alice', frozenset({'team'}), str(tmp_path)))
     fresh = comms.messaging.send_message("alice", viewer, "new incarnation unseen")
     assert old.seq not in comms.bus.reads.cursor(viewer, comms.registry.snapshot())
-    assert comms.bus.pending_count(viewer, "alice") == 1
-    assert [row.seq for row in comms.bus.inbox(viewer, "alice")] == [fresh.seq]
+    assert comms.bus.pending_count(viewer, CommandTarget.named("alice")) == 1
+    assert [row.seq for row in comms.bus.inbox(viewer, CommandTarget.named("alice"))] == [fresh.seq]
 
 
 @pytest.mark.parametrize("seed", [7, 31, 99])

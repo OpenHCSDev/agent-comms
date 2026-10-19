@@ -3,6 +3,7 @@
 from dataclasses import replace
 from contextlib import AsyncExitStack
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordinator import Coordination
 from agent_comms.notification_progress import SentProgress
@@ -47,7 +48,7 @@ def test_no_wake_observer_keeps_bounded_pointers_after_ui_ack(tmp_path):  # noqa
     for number in range(6):
         message = comms.messaging.send_message("sender", "#team", f"@beta review {number}")
     assert not comms.registry.require("alpha").active_turn.executing
-    references = tuple(message.reference for message in comms.bus.inbox("alpha", "#team"))
+    references = tuple(message.reference for message in comms.bus.inbox("alpha", CommandTarget.named("#team")))
     comms.messaging.acknowledge("alpha", references)
     ledger = comms.bus.reads.path.read_bytes()
     source = comms.bus.log.path.read_bytes()

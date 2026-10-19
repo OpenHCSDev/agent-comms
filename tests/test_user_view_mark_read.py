@@ -1,5 +1,6 @@
 """Explicit human Mark read never acknowledges a persistent agent's inbox."""
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 import json
 
@@ -34,25 +35,25 @@ def test_mark_read_clears_thread_dm_and_channel_views_without_agent_delivery(tmp
     before = completed_snapshot(comms, str(tmp_path))
     assert before.thread_unread["sender"] == before.unread["sender"] == 1
     assert before.channel_unread["#ci"] == 1
-    assert comms.bus.pending_count("receiver", "sender") == 1
-    assert comms.bus.pending_count("receiver", "#ci") == 1
+    assert comms.bus.pending_count("receiver", CommandTarget.named("sender")) == 1
+    assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 1
 
     comms.views.mark_user_view_read("sender", worktree=str(tmp_path))
     after_dm = wire(tmp_path).views.viewer_snapshot(str(tmp_path))
     assert after_dm.thread_unread["sender"] == after_dm.unread.get("sender", 0) == 0
     assert after_dm.channel_unread["#ci"] == 1
-    assert comms.bus.pending_count("receiver", "sender") == 1
+    assert comms.bus.pending_count("receiver", CommandTarget.named("sender")) == 1
 
     comms.views.mark_user_view_read("#ci", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
-    assert comms.bus.pending_count("receiver", "#ci") == 1
+    assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 1
 
     comms.messaging.send("sender", "#ci", "One more channel message")
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] > 0
     comms.views.mark_user_view_read("#any", worktree=str(tmp_path))
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#any"] == 0
     assert comms.views.viewer_snapshot(str(tmp_path)).channel_unread["#ci"] == 0
-    assert comms.bus.pending_count("receiver", "#ci") == 2
+    assert comms.bus.pending_count("receiver", CommandTarget.named("#ci")) == 2
 
     comms.messaging.send("receiver", viewer, "Human DM from a peer with no transcript")
     assert comms.views.viewer_snapshot(str(tmp_path)).unread["receiver"] == 1
@@ -72,14 +73,14 @@ def test_sessionless_cli_painted_tail_and_explicit_inbox_read_share_bus_marks(tm
     ))
     viewer = comms.messaging.user_identity(str(tmp_path)).name
     comms.messaging.send('cli', viewer, 'Painted CLI reply')
-    assert comms.bus.pending_count(viewer, 'cli') == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 1
     comms.views.mark_thread_view_read('cli', worktree=str(tmp_path),
         through=comms.transcripts.transcript_checkpoint('cli'))
-    assert comms.bus.pending_count(viewer, 'cli') == 0
+    assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 0
     comms.messaging.send('cli', viewer, 'Explicitly marked CLI reply')
-    assert comms.bus.pending_count(viewer, 'cli') == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 1
     comms.views.mark_user_view_read('cli', worktree=str(tmp_path))
-    assert comms.bus.pending_count(viewer, 'cli') == 0
+    assert comms.bus.pending_count(viewer, CommandTarget.named('cli')) == 0
 
 
 def bytes_read() -> int:

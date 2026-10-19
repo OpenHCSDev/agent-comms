@@ -1,3 +1,4 @@
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.read_basis import NamedViewer
 import json
@@ -81,20 +82,20 @@ class TestMessaging:
         wired.messaging.send("PR111", "fixer", "direct")
         wired.messaging.send("PR111", "#all", "global")
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")))
         assert wired.messaging.acknowledge("fixer", references) == 1
-        assert wired.bus.pending_count("fixer", "PR111") == 0
-        assert wired.bus.pending_count("fixer", "#all") == 1
+        assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 0
+        assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 1
         assert wired.bus.pending_count("fixer") == 1
 
     def test_scoped_channel_ack_does_not_clear_dm(self, wired):
         wired.messaging.send("PR111", "fixer", "direct")
         wired.messaging.send("PR111", "#all", "global")
 
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", "#all"))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("#all")))
         assert wired.messaging.acknowledge("fixer", references) == 1
-        assert wired.bus.pending_count("fixer", "#all") == 0
-        assert wired.bus.pending_count("fixer", "PR111") == 1
+        assert wired.bus.pending_count("fixer", CommandTarget.named("#all")) == 0
+        assert wired.bus.pending_count("fixer", CommandTarget.named("PR111")) == 1
         assert wired.bus.pending_count("fixer") == 1
 
     def test_inbox_order_follows_seq(self, wired):
@@ -110,7 +111,7 @@ class TestMessaging:
 
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"PR111": 2, "#all": 1}
-        references = tuple(message.reference for message in wired.bus.inbox("fixer", "PR111"))
+        references = tuple(message.reference for message in wired.bus.inbox("fixer", CommandTarget.named("PR111")))
         wired.messaging.acknowledge("fixer", references)
         with wired.bus.snapshot(viewer=NamedViewer("fixer")) as (basis, source):
             assert wired.bus.pending_counts_opened(source, basis) == {"#all": 1}
@@ -363,7 +364,7 @@ class TestThreadOps:
 
     def test_rename_self_preserves_routing_history_and_state(self, wired, monkeypatch):
         wired.messaging.send("fixer", "PR111", "before rename")
-        references = tuple(message.reference for message in wired.bus.inbox("PR111", "fixer"))
+        references = tuple(message.reference for message in wired.bus.inbox("PR111", CommandTarget.named("fixer")))
         assert wired.messaging.acknowledge("PR111", references) == 1
         wired.agents.set_activity("PR111", ActivityState.WORKING, "renaming")
         wired.agents.observe_runtime_info("PR111", AgentInfo(model="test/model"))
@@ -381,11 +382,11 @@ class TestThreadOps:
         assert wired.agents.activity_of("planner", snapshot=wired.registry.snapshot()).detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == "test/model"
         assert wired.ledger.read()["owner"] == "planner"
-        assert wired.bus.pending_count("planner", "fixer") == 0
+        assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
         wired.messaging.send("fixer", "PR111", "old alias routes")
         wired.messaging.send("PR111", "fixer", "old process sends canonically")
-        assert [message.body for message in wired.bus.inbox("planner", "fixer")] == [
+        assert [message.body for message in wired.bus.inbox("planner", CommandTarget.named("fixer"))] == [
             "old alias routes"
         ]
         history = list(wired.views.dm_history_page("PR111", "fixer").messages)

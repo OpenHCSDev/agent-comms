@@ -1,6 +1,7 @@
 """Additional no-provider identity and lock-order probes for scoped DM basis."""
 
 from __future__ import annotations
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.registration import Registration
 
 import os
@@ -56,7 +57,7 @@ def test_dm_preparation_releases_native_claim_lock(tmp_path, monkeypatch):
     assert prepared == [True]
     assert page.messages[0].body == "original 2"
     assert page.has_older
-    assert comms.bus.pending_count(viewer, "peer") == 4
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 4
 
 
 def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_path: Path):
@@ -71,16 +72,16 @@ def test_alias_rename_invalidates_old_basis_but_fresh_alias_page_can_mark(tmp_pa
     with pytest.raises(DMScopeChanged, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
-    assert comms.bus.pending_count(viewer, "renamed") == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 1
 
     # The old spelling is now an alias for the SAME incarnation. A fresh
     # page, not stale name text, is authoritative after the rename.
     fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert fresh.display_basis is not None and fresh.display_basis.peer == "renamed"
     _mark(comms, "peer", tmp_path, fresh)
-    assert comms.bus.pending_count(viewer, "renamed") == 0
+    assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 0
     comms.messaging.send("renamed", viewer, "after bound")
-    assert comms.bus.pending_count(viewer, "renamed") == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("renamed")) == 1
 
 
 def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Path):
@@ -94,14 +95,14 @@ def test_delete_and_same_name_reregister_invalidates_old_peer_basis(tmp_path: Pa
     comms.registry.remove("peer")
     comms.registry.declare(_peer(tmp_path, "peer"))
     comms.messaging.send("peer", viewer, "new peer unseen")
-    before = comms.bus.pending_count(viewer, "peer")
+    before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     markers = tmp_path / "read_ledger.json"
     marker_before = markers.read_bytes() if markers.exists() else None
     assert before == 1
     with pytest.raises(DMScopeChanged, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, old)
     assert (markers.read_bytes() if markers.exists() else None) == marker_before
-    assert comms.bus.pending_count(viewer, "peer") == 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == 1
     fresh = comms.views.dm_display_page("peer", worktree=str(tmp_path))
     assert fresh.display_basis is not None
     assert fresh.display_basis.peer_created_at != old.display_basis.peer_created_at
@@ -125,11 +126,11 @@ def test_viewer_rebind_and_foreign_worktree_reject_old_basis(tmp_path: Path):
     comms.registry.remove(viewer)
     comms.registry.declare(comms.registry.new_thread(viewer, frozenset(), str(tmp_path), role=UserThreadRole))
     comms.messaging.send("peer", viewer, "new viewer unseen")
-    before = comms.bus.pending_count(viewer, "peer")
+    before = comms.bus.pending_count(viewer, CommandTarget.named("peer"))
     assert before == 1
     with pytest.raises(DMScopeChanged, match="incarnation changed"):
         _mark(comms, "peer", tmp_path, page)
-    assert comms.bus.pending_count(viewer, "peer") == before
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) == before
 
 
 def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: Path):
@@ -146,14 +147,14 @@ def test_old_viewer_alive_but_new_human_selected_rejects_stale_basis(tmp_path: P
     assert "old_user" in comms.registry
     assert comms.messaging.user_identity(str(tmp_path)).name == "new_user"
     comms.messaging.send("peer", "new_user", "new viewer unseen")
-    before = comms.bus.pending_count("new_user", "peer")
+    before = comms.bus.pending_count("new_user", CommandTarget.named("peer"))
     assert before == 1
     marker_path = tmp_path / "read_ledger.json"
     marker_before = marker_path.read_bytes() if marker_path.exists() else None
     with pytest.raises(DMScopeChanged, match="registry changed|viewer/peer incarnation changed"):
         _mark(comms, "peer", tmp_path, page)
     assert (marker_path.read_bytes() if marker_path.exists() else None) == marker_before
-    assert comms.bus.pending_count("new_user", "peer") == before
+    assert comms.bus.pending_count("new_user", CommandTarget.named("peer")) == before
 
 
 @pytest.mark.parametrize("marked_sender", ("peer", "other"))
@@ -199,7 +200,7 @@ def test_newest_page_mark_leaves_older_message_unread(tmp_path: Path):
     page = comms.views.dm_display_page("peer", worktree=str(tmp_path), bounds=PageBounds(limit=1))
     assert page.messages == (newest,)
     _mark(comms, "peer", tmp_path, page)
-    assert comms.bus.inbox(viewer, "peer") == [older]
+    assert comms.bus.inbox(viewer, CommandTarget.named("peer")) == [older]
 
 
 def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
@@ -221,6 +222,6 @@ def test_lifecycle_and_marker_lock_order_does_not_deadlock(tmp_path: Path):
         except DMScopeChanged as error:
             assert "registry changed" in str(error)
         lifecycle.result(timeout=3)
-    assert comms.bus.pending_count(viewer, "peer") in {0, 1}
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) in {0, 1}
     comms.messaging.send("peer", viewer, "after painted boundary")
-    assert comms.bus.pending_count(viewer, "peer") >= 1
+    assert comms.bus.pending_count(viewer, CommandTarget.named("peer")) >= 1

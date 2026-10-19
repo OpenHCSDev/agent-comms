@@ -1,5 +1,6 @@
 """Retained history never becomes work for a different thread incarnation."""
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.read_basis import NamedViewer
 import os
@@ -64,7 +65,7 @@ def test_current_inbox_bulk_and_index_exclude_rebound_history(tmp_path, rebound)
     consistent(current, "sender", "recipient")
     with current.bus.snapshot(viewer=NamedViewer("recipient")) as (basis, source):
         assert current.bus.pending_counts_opened(source, basis) == {"sender": 1, "#team": 1}
-    assert [row.seq for row in current.bus.inbox("recipient", "sender")] == [new.seq]
+    assert [row.seq for row in current.bus.inbox("recipient", CommandTarget.named("sender"))] == [new.seq]
     assert old in list(current.bus.full_history_page().messages)
     assert [row.body for row in list(current.views.dm_history_page("sender", "recipient").messages)] == [
         "retained history",

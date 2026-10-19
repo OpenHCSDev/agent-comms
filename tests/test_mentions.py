@@ -1,3 +1,4 @@
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.messages import NoticeRole
 import pytest
 from agent_comms.tool_caller import NoThreadCaller
@@ -212,8 +213,8 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
     for name in ("alpha", "beta"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     comms.messaging.send_user_message("#team", "@alpha please review", worktree=str(tmp_path))
-    assert comms.bus.pending_count("alpha", "#team") == 1
-    assert comms.bus.pending_count("beta", "#team") == 1
+    assert comms.bus.pending_count("alpha", CommandTarget.named("#team")) == 1
+    assert comms.bus.pending_count("beta", CommandTarget.named("#team")) == 1
     result = invoke_tool(
         comms, "comms_inbox", {"thread": "beta", "target": "#team"}, caller=NoThreadCaller()
     )
@@ -221,8 +222,8 @@ def test_targeted_inbox_returns_mentions_and_advances_only_own_cursor(comms, tmp
     assert result["messages"][0]["mentions"][0]["thread"] == "alpha"
     assert result["acknowledged"] == 1
     # beta no longer sees the ping; alpha's delivery is untouched.
-    assert comms.bus.pending_count("beta", "#team") == 0
-    assert comms.bus.pending_count("alpha", "#team") == 1
+    assert comms.bus.pending_count("beta", CommandTarget.named("#team")) == 0
+    assert comms.bus.pending_count("alpha", CommandTarget.named("#team")) == 1
 
 
 def test_inbox_rejects_an_empty_target(tmp_path):
