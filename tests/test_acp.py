@@ -4,18 +4,14 @@ Exercises the agent the way real clients (Toad, Zed) do: through
 ``acp.run_agent`` over real stdio pipes, plus direct handler-level tests.
 """
 
-from agent_comms.messages import NoticeRole
-from unittest.mock import AsyncMock
-
 import asyncio
 import json
 import os
 import subprocess
 import sys
 import tempfile
-from agent_comms.goal_attempts import ProviderUsageTotal
-from agent_comms.goal_actions import ActiveGoalAction, PausedGoalAction
 from pathlib import Path
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -24,8 +20,6 @@ from acp.schema import ConfigOptionUpdate, SessionInfoUpdate
 
 import agent_comms.agent_events as ae
 import agent_comms.backend as backend
-from agent_comms.schedule_rules import WakeScheduleCheck
-from agent_comms.send_outcome import GrantedSend
 from agent_comms.acp import CommsAgent, CommsClient
 from agent_comms.acp_extension import (
     ClearQueueRequest,
@@ -42,18 +36,24 @@ from agent_comms.acp_extension import (
     encode_request,
 )
 from agent_comms.activity import ActivityState
-from agent_comms.context_reading import ContextUsage
 from agent_comms.agent_backend import FailedCompaction
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import wire
+from agent_comms.context_reading import ContextUsage
 from agent_comms.errors import UnregisteredThreadError
+from agent_comms.goal_actions import ActiveGoalAction, PausedGoalAction
+from agent_comms.goal_attempts import ProviderUsageTotal
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration, ReadyGeneration
 from agent_comms.goal_states import ActiveGoal
-from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.manual_compaction_bridge import compact_context
+from agent_comms.messages import NoticeRole
 from agent_comms.native_pi import CAPABILITY
+from agent_comms.pi_counts import PiCount
 from agent_comms.pi_payloads import PiUsage, ReportedModel, StateData
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.runtime import RuntimeProxy, socket_path
+from agent_comms.schedule_rules import WakeScheduleCheck
+from agent_comms.send_outcome import GrantedSend
 from agent_comms.turn_phase import CompactionPhase
 from delivery_owner_fixture import canonical_agent
 
@@ -196,17 +196,17 @@ class TestHandlers:
         agent = self._agent(tmp_path)
         await agent.new_session(cwd="/wt/proj", mcp_servers=[])
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextUsageObservation(context_used=38723)
+            "proj", ae.ContextUsageObservation(context_used=PiCount.from_wire(38723))
         )
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.AgentInfo(model="test/model", context_size=272000)
+            "proj", ae.AgentInfo(model="test/model", context_size=PiCount.from_wire(272000))
         )
         reopened = canonical_agent(wire(agent._comms.root))
         assert facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[
             0
         ].context_usage == ContextUsage(38723, 272000)
         agent._comms.agents.observe_runtime_info(
-            "proj", ae.ContextInfo(context_used=None, context_size=272000)
+            "proj", ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(272000))
         )
         assert (
             facts((await reopened.sessions.metadata("proj")), CoordinationChangedUpdate)[0].context_usage
@@ -272,6 +272,7 @@ class TestHandlers:
     async def test_live_model_change_waits_for_backend_confirmation(self, native_backend, monkeypatch, selected):
         """Change settings through the actual ACP owner while native HTTP is active."""
         from acp.schema import TextContentBlock
+
         from agent_comms.coordinator import Coordination
 
         monkeypatch.setenv("AGENT_COMMS_AGENT_MODELS", "response-local/fixture,response-local/second,response-local/missing")
@@ -717,7 +718,7 @@ class TestAgentTurn:
             elif empty_kind == "unfinished_tool":
                 yield ae.ToolStart(id="unfinished", name="read")
             yield ae.StreamSettled()
-            yield ae.ContextInfo(context_used=None, context_size=1000)
+            yield ae.ContextInfo(context_used=PiCount.from_wire(None), context_size=PiCount.from_wire(1000))
             yield ae.Done(ok=True, text="")
 
         monkeypatch.setattr("agent_comms.backend.stream_agent_events", events)
@@ -1673,7 +1674,7 @@ class TestFailureFeedback:
     async def test_agent_origin_failure_notifies_origin_without_waking(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import AlertKind, InfoKind, Message
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
@@ -1707,7 +1708,7 @@ class TestFailureFeedback:
     async def test_failed_terminal_discards_partial_reply_and_deduplicates_notice(
         self, wired, tmp_path, monkeypatch, channel
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import AlertKind, InfoKind, Message
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
@@ -1751,7 +1752,7 @@ class TestFailureFeedback:
     async def test_missing_terminal_discards_partial_reply_and_route(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import AlertKind, InfoKind, Message
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -1784,7 +1785,7 @@ class TestFailureFeedback:
     async def test_foreign_tool_use_before_input_start_never_notifies_channel(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import AlertKind, InfoKind, Message
         from agent_comms.threads import Thread
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)
         await agent.new_session(cwd=str(tmp_path / "proj"), mcp_servers=[])
@@ -1814,7 +1815,7 @@ class TestFailureFeedback:
     async def test_failed_turn_notices_unique_reply_and_origin_targets(
         self, wired, tmp_path, monkeypatch
     ):
-        from agent_comms.messages import Message, AlertKind, InfoKind
+        from agent_comms.messages import AlertKind, InfoKind, Message
         from agent_comms.threads import Thread
 
         agent = TestAgentTurn()._agent_with_events(tmp_path, wired)

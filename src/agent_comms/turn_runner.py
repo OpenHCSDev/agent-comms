@@ -221,6 +221,13 @@ class TurnRunner:
                 self.turn_tasks.pop(session_id, None)
             self.inputs.ensure_live_drain(session_id)
 
+    def pause_active_goal(self, thread: Thread) -> None:
+        for goal in thread.goal.active():
+            self.comms.goals.update_goal(
+                thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
+                actor=OwnerInvocable,
+            )
+
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         if session_id in self.sessions.proxies:
             await self.sessions.proxies[session_id].request("cancel")
@@ -228,12 +235,7 @@ class TurnRunner:
         name = self.sessions.bindings.get(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
         if thread is not None:
-            await Coordination.run_worker(lambda: thread.goal.active().project(
-                lambda goal: self.comms.goals.update_goal(
-                    thread.name, PausedGoalAction(expect=GoalPrecondition(goal_id=goal.id)),
-                    actor=OwnerInvocable,
-                ), lambda: None,
-            ))
+            await Coordination.run_worker(self.pause_active_goal, thread)
         task = self.turn_tasks.get(session_id)
         if task is not None:
             current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None

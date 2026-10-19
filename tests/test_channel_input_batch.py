@@ -55,9 +55,9 @@ def test_channel_batch_exact_identity_and_no_false_multi_input_proof(tmp_path, *
 
 
 @pytest.mark.asyncio
-async def test_captured_originals_reach_context_reservation_and_unbound_retirement(tmp_path):
+async def test_captured_originals_reach_context_reservation_and_unbound_retirement(tmp_path, native_runtime_package):
     """Actual saved native owner; no prompt is dispatched or replayed."""
-    async with native_backend_fixture(tmp_path) as native:
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         await native.author_history()
         saved = native.session.read_bytes()
         async with native.open_owner() as (agent, session_id):

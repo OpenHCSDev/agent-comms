@@ -14,12 +14,13 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, UnplannedPhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.standing_rules import BridgeDown, DiskLow, HuntDue, PlanIdle, StandingRule
+from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
+from agent_comms.standing_rules import BridgeDown, DiskLow, HuntDue, PlanIdle, RulesDue, StandingRule
 from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import CleanHunt, RecordHuntTodo, Todo
-from agent_comms.tools import CommsOrderServeTool, CommsStandingRulesTool, CommsTodoTool
+from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsStandingRulesTool, CommsTodoTool
 
 from test_commander_problem_orders import create
 
@@ -27,8 +28,8 @@ from test_commander_problem_orders import create
 @pytest.fixture
 def standing(commander, commander_script):
     """The commander-file members reloaded against the scratch commander config."""
-    from agent_comms.commander import capacity, judge, rules
-    for module in (judge, rules, capacity):
+    from agent_comms.commander import capacity, judge
+    for module in (judge, capacity):
         importlib.reload(module)
     module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
     state = CommanderConfig.installed().state
@@ -99,14 +100,45 @@ def test_fork_now_and_unjudged_follow_the_unjudged_edits(standing):
     assert fork.startswith("FORK NOW: load 7 (0 open orders, 0 overdue, 70 unjudged edits) needs 1")
 
 
-def test_rules_due_until_a_fresh_review_is_answered(standing):
-    comms, state, module = standing
-    assert lines(comms, module.RulesDue) == [
+def test_fork_now_reads_the_load_of_the_bus_it_is_asked_about(commander, standing, tmp_path):
+    """Three overdue orders on one bus need a fork there; a second bus without orders carries no load."""
+    from agent_comms.tool_caller import ThreadCaller
+
+    comms, _, _ = standing
+    for problem in ("P1", "P2", "P3"):
+        create(commander, problem)
+    other = Comms(tmp_path / "other-bus")
+    other.registry.declare(other.registry.new_thread("lead", frozenset(), str(tmp_path), created_at=1.0))
+
+    def fork_now(bus):
+        read = CommsStandingRulesTool().apply(bus, ThreadCaller("lead"))
+        return [line for line in read.broken if line.startswith("FORK NOW")]
+
+    assert [line.split(") ")[0] for line in fork_now(comms)] == [
+        "FORK NOW: load 9 (3 open orders, 3 overdue, 0 unjudged edits"]
+    assert fork_now(other) == []
+
+
+def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monkeypatch):
+    comms, caller = commander
+
+    def review(entry):
+        return CommsRuleReviewTool(entry=entry).apply(comms, caller).broken
+
+    assert lines(comms, RulesDue) == [
         "RULES DUE (no rule review recorded for lead) -> agent-comms-commander rules review"
         " and answer the drawn rules before any order"]
-    (state / "rules.jsonl").write_text(
-        json.dumps({"kind": "review", "who": "lead", "at": time.time(), "drawn": []}) + "\n")
-    assert lines(comms, module.RulesDue) == []
+    review(DrawnRuleReviewEntry(("Declare each fact once", "Kinds are class families"), 1))
+    with pytest.raises(ValueError, match="file:line or P-number"):
+        review(AnsweredRuleReviewEntry(1, "This tick reads every open order before it sends any new one."))
+    review(AnsweredRuleReviewEntry(1, "This tick moves rules.py:47 into one typed Core record that Core owns."))
+    assert review(AnsweredRuleReviewEntry(2, "This tick sends no order until the review family answers it.")) == ()
+    assert lines(comms, RulesDue) == []
+    later = time.time() + RulesDue.max_age + 60
+    monkeypatch.setattr(time, "time", lambda: later)
+    assert lines(comms, RulesDue) == [
+        "RULES DUE (last rule review was 21 min ago (max 20)) -> agent-comms-commander rules review"
+        " and answer the drawn rules before any order"]
 
 
 def test_the_read_tool_returns_every_members_lines(commander, standing):

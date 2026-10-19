@@ -29,12 +29,12 @@ from .read_basis import (
     ListedDeliveries,
     DisplayBasis,
     WatchAcknowledgment,
+    CapturedSelection,
 )
 from .routing import DeliveryScope
 from .store_files import SharedLock, _store_lock
 
 if TYPE_CHECKING:
-    from .presentation import DisplaySelection
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .relationships import PeerRelation
@@ -83,22 +83,20 @@ class MessageBus[Writes: Publisher]:
     @contextmanager
     def snapshot(
         self, viewer: DisplayViewer = AnonymousViewer()
-    ) -> Iterator[tuple[DisplaySelection, WireSnapshot]]:
+    ) -> Iterator[tuple[CapturedSelection, WireSnapshot]]:
         """Keep a fixed bus, namespace and read snapshot after releasing its locks.
 
         The bus owns capture, including the committed sequence of this exact
         descriptor. Presentation and delivery borrow that same source instead
         of reconstructing it from independently sampled path revisions.
         """
-        from .presentation import DisplaySelection
-
         prepared = self.log.prepare_append_indexes()
         with ExitStack() as stack:
             with _store_lock(self.log.path.parent / "wire", mode=SharedLock()):
                 source = stack.enter_context(self.log.opened_wire_snapshot(
                     prepared_indexes=prepared,
                 ))
-                with DisplaySelection.reading(
+                with CapturedSelection.reading(
                     self._registry, self._channels, self.reads, viewer
                 ) as basis:
                     pass
@@ -191,7 +189,7 @@ class MessageBus[Writes: Publisher]:
             }
 
     def _pending_projection(
-        self, source: WireSnapshot, basis: DisplaySelection, names: Sequence[str],
+        self, source: WireSnapshot, basis: CapturedSelection, names: Sequence[str],
     ) -> Mapping[str, Mapping[str, int]]:
         """Bulk delivery counts from one original source, namespace and ledger."""
         actors = {name: basis.registry.canonical_name(name) for name in names}
@@ -207,7 +205,7 @@ class MessageBus[Writes: Publisher]:
         return {name: counts[actor] for name, actor in actors.items()}
 
     def pending_counts_opened(self, source: WireSnapshot,
-                              selection: DisplaySelection) -> Mapping[str, int]:
+                              selection: CapturedSelection) -> Mapping[str, int]:
         """Borrow the caller's original source, namespace and sparse reads."""
         actor = selection.require_viewer()
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)

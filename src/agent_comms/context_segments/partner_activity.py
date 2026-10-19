@@ -11,34 +11,26 @@ from typing import ClassVar
 
 from ..field_codec import FieldCodec
 from ..goal_history import GoalHistoryEntry
-from ..goals import GoalRevision
-from ..goal_states import GoalState
+from ..goals import GoalPeerChange
 from ..peer_relevance import Informed
 from ..turn_context import InstructionSegment, OwnerProvenance
 
 
 @dataclass(frozen=True)
-class PartnerGoalChange:
+class PartnerGoalChange(GoalPeerChange):
     """The latest recorded change to one peer's goal."""
 
     peer: str
     observed_at: float
-    # None when the peer no longer has a goal.
-    goal: GoalRevision | None
-    state: type[GoalState] | None
-    progress: str
-
     @classmethod
     def latest(cls, peer: str, history: tuple[GoalHistoryEntry, ...]):
         if not history:
             return None
         entry = history[-1]
         goal = entry.after
-        return goal.project(
-            lambda current: cls(peer, entry.observed_at, current.checkpoint,
-                                type(current.state), current.progress),
-            lambda: cls(peer, entry.observed_at, None, None, ""),
-        )
+        values = goal.peer_change_values()
+        return cls(peer=peer, observed_at=entry.observed_at,
+                   goal=values.goal, state=values.state, progress=values.progress)
 
 
 @dataclass(frozen=True, kw_only=True)

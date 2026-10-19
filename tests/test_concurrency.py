@@ -12,13 +12,14 @@ from typing import Any
 import pytest
 
 import agent_comms.store_files as store_files
-from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.threads import Thread
 from agent_comms.message_page import PageBounds
+from agent_comms.pi_counts import PiCount
+from agent_comms.thread_identity import RecordedThreadIncarnation
+from agent_comms.threads import Thread
 
 
 def _send_messages(root: str, sender: str, count: int, start: Event) -> None:
@@ -51,8 +52,8 @@ def _claim_thread(root: str, result_queue: Any, start: Event) -> None:
 def _write_runtime_state(root: str, name: str, start: Event) -> None:
     comms = wire(root)
     start.wait()
-    comms.agents.observe_runtime_info(name, ContextUsageObservation(context_used=25))
-    comms.agents.observe_runtime_info(name, AgentInfo(model=f"provider/{name}", context_size=100))
+    comms.agents.observe_runtime_info(name, ContextUsageObservation(context_used=PiCount.from_wire(25)))
+    comms.agents.observe_runtime_info(name, AgentInfo(model=f"provider/{name}", context_size=PiCount.from_wire(100)))
     comms.agents.set_activity(name, ActivityState.WORKING, f"work-{name}")
     comms.ledger.merge({name: "ready"}, author=name)
 

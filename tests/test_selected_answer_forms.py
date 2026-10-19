@@ -110,8 +110,8 @@ def test_one_selected_turn_answers_one_reply_route() -> None:
         assert (reply.target, reply.body) == ("sender", "One answer for everyone.")
 
 
-async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path) -> None:
-    async with native_backend_fixture(tmp_path) as native:
+async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path, native_runtime_package) -> None:
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         await native.author_history()
         async with native.open_owner(runtime_enabled=True, auto_wake=True) as (agent, session):
             comms = agent._comms

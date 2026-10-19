@@ -1,24 +1,26 @@
-from agent_comms.pi_vocabulary import HighThinkingLevel
-from agent_comms.read_basis import NamedViewer
+
 import json
 import os
 import subprocess
-from dataclasses import replace
 import sys
+from dataclasses import replace
 
 import pytest
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
-from agent_comms.comms import wire
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
+from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
-from agent_comms.messages import QuestionKind
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.message_page import PageBounds
+from agent_comms.messages import QuestionKind
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec, NewThreadSpec
 from agent_comms.threads import Thread
-from agent_comms.message_page import PageBounds
+from agent_comms.tool_caller import ThreadCaller
 
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
@@ -225,18 +227,18 @@ class TestThreadOps:
         wired.threads.set_thread_configuration(
             wired.registry.require("fixer"), model="configured/model"
         )
-        wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=25))
+        wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
         wired.agents.observe_runtime_info(
-            "fixer", AgentInfo(model="observed/model", context_size=100)
+            "fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100))
         )
         row = next(row for row in wired.views.who() if row["name"] == "fixer")
         assert row["model"] == "configured/model"
-        assert row["context_percent"] == 25
-        assert wired.agents.agent_info_of("fixer").context_used == 25
+        assert (row["context_used"], row["context_size"]) == (25, 100)
+        assert wired.agents.agent_info_of("fixer").context_used == PiCount.from_wire(25)
 
     def test_configuration_names_the_resolved_model(self, wired):
-        wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=25))
-        wired.agents.observe_runtime_info("fixer", AgentInfo(model="observed/model", context_size=100))
+        wired.agents.observe_runtime_info("fixer", ContextUsageObservation(context_used=PiCount.from_wire(25)))
+        wired.agents.observe_runtime_info("fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100)))
         answer = wired.configuration.answer("fixer")
         assert answer.model == "observed/model"
         assert answer.context_usage.label == "25/100 tokens (25.0%)"

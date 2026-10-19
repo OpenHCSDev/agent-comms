@@ -3,23 +3,36 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-from contextlib import ExitStack, contextmanager
 from collections.abc import Callable
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, ContextUsage, ReportsContext, RuntimeLocation
+from .agent_backend import (
+    AgentBackend,
+    CompactionOutcome,
+    Compacts,
+    ConfiguresModel,
+    RuntimeLocation,
+)
 from .agent_events import Error
 from .coordination_database import CoordinationStore
-from .native_child import PiChild
 from .external_transcript import ExternalCut
+from .native_child import PiChild
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
-from .pi_commands import Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
+from .pi_commands import (
+    Compact,
+    GetAvailableModels,
+    GetState,
+    PiCommand,
+    SetModel,
+    SetThinkingLevel,
+)
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField
@@ -189,7 +202,7 @@ class CompactDurable(Compact):
     response_payload = OutcomeData
 
 
-class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
+class PiDurableBackend(AgentBackend, Compacts, ConfiguresModel):
     serves_threads = False
     location_type = DurableDatabase
     unstarted_type = UnstartedRuntime
@@ -233,13 +246,6 @@ class PiDurableBackend(AgentBackend, Compacts, ReportsContext, ConfiguresModel):
     async def compact(self, thread, instructions):
         child = await self.open(thread)
         return (await child.request(CompactDurable(custom_instructions=instructions))).outcome
-
-    async def context_usage(self, thread):
-        child = await self.open(thread)
-        usage = (await child.request(GetSessionStats())).context_usage
-        if usage is None:
-            raise ValueError('Durable session has no context observation')
-        return ContextUsage(usage.tokens, usage.context_window)
 
     async def models(self, thread):
         child = await self.open(thread)

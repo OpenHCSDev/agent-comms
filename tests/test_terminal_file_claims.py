@@ -102,14 +102,14 @@ def test_terminal_release_spans_the_existing_envelope_bound():
 
 
 @pytest.mark.asyncio
-async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_path):
+async def test_real_worker_stop_start_releases_claim_and_edits_same_file(tmp_path, native_runtime_package):
     from agent_comms.comms import Comms
     from agent_comms.coordinator import Coordination
     from agent_comms.native_runtime_input import NativeRuntimeInput
     from agent_comms.threads import Thread
     from native_backend_fixture import native_backend_fixture
 
-    async with native_backend_fixture(tmp_path) as native:
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         target = native.project / "module.py"
         target.write_text("value = 1\n")
         comms = Comms(native.root)

@@ -1,14 +1,19 @@
 """Typed Pi boundaries exercised through the actual JSON-line codec and stream."""
 
 import json
-from types import SimpleNamespace
 from collections.abc import Mapping
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+from agent_comms.agent_event_updates import AcpEventConsumer
+from agent_comms.agent_events import ContextInfo
+from agent_comms.context_reading import ContextUsage, UnmeasuredContext
+from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import SelectedModel
-
-from agent_comms.pi_commands import GetState, PiCommand, Prompt
+from agent_comms.pi_commands import GetSessionStats, GetState, PiCommand, Prompt
+from agent_comms.pi_counts import PiCount, ReportedCount, UnreportedCount
 from agent_comms.pi_events import MessageEnd, MessageUpdate, Response, UnknownPiEvent
 from agent_comms.pi_payloads import (
     AssistantMessage,
@@ -16,18 +21,16 @@ from agent_comms.pi_payloads import (
     MissingToolResult,
     ProvidedToolResult,
     ReportedModel,
-    ReportedTokens,
     StateData,
     TextContent,
     ToolCallContent,
     UnknownData,
     UnreportedModel,
-    UnreportedTokens,
     UnreportedUsage,
 )
-from agent_comms.turn_usage import UsageAccount
-from agent_comms.field_codec import FieldCodec
 from agent_comms.pi_rpc import PiRpcChannel
+from agent_comms.runtime_info import AgentRuntimeInfo
+from agent_comms.turn_usage import UsageAccount
 
 
 def decode(record):
@@ -82,10 +85,63 @@ def test_known_nested_payload_has_one_typed_authority():
     assert event.message.tool_calls == (
         ToolCallContent(id="call", name="read", arguments={"path": "a"}),
     )
-    assert event.message.usage.total_tokens == 9
+    assert event.message.usage.total_tokens == PiCount.from_wire(9)
     assert event.message.stop_reason.tool_round
     assert not isinstance(event, Mapping)
     assert not hasattr(event, "wire") and not hasattr(event.message, "wire")
+
+
+@pytest.mark.parametrize("observation", ["reported", "omitted", "null", "zero"])
+async def test_pi_counts_share_reported_members_and_reader_outputs(observation):
+    model = {"provider": "p", "id": "m"}
+    wire = {"model": model}
+    if observation != "omitted":
+        value = 1000 if observation == "reported" else 0 if observation == "zero" else None
+        model.update(contextWindow=value, maxTokens=value)
+        wire.update(messageCount=0 if observation in ("reported", "zero") else None,
+                    pendingMessageCount=0 if observation in ("reported", "zero") else None)
+    response = decode({"type": "response", "command": "get_state", "success": True, "data": wire})
+    state = response.data
+    expected = ReportedCount(1000) if observation == "reported" else UnreportedCount()
+    assert state.model.context_window == state.model.max_tokens == expected
+    assert state.message_count == state.pending_message_count == (
+        ReportedCount(0) if observation in ("reported", "zero") else UnreportedCount())
+    assert state.pending_message_count.matches(0) is (observation in ("reported", "zero"))
+    assert StateData.from_wire(state.to_wire()) == state
+    assert FieldCodec.decode(StateData, FieldCodec.encode(state)) == state
+
+    account = UsageAccount(used=PiCount.from_wire(7), size=PiCount.from_wire(4096))
+    attestation = SimpleNamespace(uncertain=False)
+    attestation.observe = lambda state: attestation
+    session = SimpleNamespace(usage=account, native=SimpleNamespace(attestation=attestation),
+        active_session_file=None, persistent_session=object(),
+        context_info=lambda: ContextInfo(context_used=account.used, context_size=account.size))
+    info, = GetState.on_response(response, session)
+    assert info.context_size == account.size == expected
+    painted = info.project_runtime_info(AgentRuntimeInfo(thread="unit", context_used=PiCount.from_wire(7), timestamp=1.0))
+    assert painted.context_reading() == (
+        ContextUsage(7, 1000) if observation == "reported" else UnmeasuredContext())
+    context_wire = {"tokens": 7}
+    if observation != "omitted":
+        context_wire["contextWindow"] = 2000 if observation == "reported" else 0 if observation == "zero" else None
+    stats = decode({"type": "response", "command": "get_session_stats", "success": True,
+                    "data": {"contextUsage": context_wire}})
+    account.size = PiCount.from_wire(4096)
+    emitted, = GetSessionStats.on_response(stats, session)
+    assert emitted.context_used == PiCount.from_wire(7)
+    assert emitted.context_size == (PiCount.from_wire(2000) if observation == "reported" else PiCount.from_wire(4096))
+    client = AsyncMock()
+    consumer = AcpEventConsumer(SimpleNamespace(), "unit", client)
+    await consumer.on_context_info(ContextInfo(context_used=PiCount.from_wire(7), context_size=expected))
+    assert client.session_update.await_count == (1 if observation == "reported" else 0)
+    client.reset_mock()
+    await consumer.on_context_info(emitted)
+    assert client.session_update.await_args.kwargs["update"].used == 7
+    assert client.session_update.await_args.kwargs["update"].size == (
+        2000 if observation == "reported" else 4096)
+    context = stats.data.context_usage
+    assert context.context_window.reading(context.token_total) == (
+        ContextUsage(7, 2000) if observation == "reported" else UnmeasuredContext())
 
 
 def test_command_owns_response_schema_and_unknown_data_stays_opaque():
@@ -102,7 +158,7 @@ def test_command_owns_response_schema_and_unknown_data_stays_opaque():
     )
     assert isinstance(event, Response) and event.command is GetState
     assert isinstance(event.data, StateData)
-    assert event.data.model.context_window == 1000
+    assert event.data.model.context_window == ReportedCount(1000)
     unknown = decode({"type": "future_notice", "nested": [True, 7]})
     assert isinstance(unknown, UnknownPiEvent)
     assert unknown.payload == {"type": "future_notice", "nested": [True, 7]}
@@ -148,8 +204,8 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
         "type": "message_end",
         "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
     })
-    from agent_comms.turn_output import TurnOutput
     from agent_comms.turn_failure import ModelRequestFailed
+    from agent_comms.turn_output import TurnOutput
 
     session = SimpleNamespace(output=TurnOutput())
     event.message.tracked_end(session)
@@ -173,10 +229,15 @@ def test_tracked_commit_observations_preserve_original_receipt_and_refuse_repeti
 
 def test_tracked_terminal_states_preserve_failure_and_unique_stream_relation():
     from pathlib import Path
-    from agent_comms.native_pi import NativeContextProof, NativePiTerminalFailure, NativePiUnavailable
+
+    from agent_comms.native_pi import (
+        NativeContextProof,
+        NativePiTerminalFailure,
+        NativePiUnavailable,
+    )
     from agent_comms.tracked_turn import AmbiguousTrackedTerminal, PendingTrackedTerminal
+    from agent_comms.turn_failure import IdentityUncertain, ModelRequestFailed
     from agent_comms.turn_output import TurnOutput
-    from agent_comms.turn_failure import ModelRequestFailed, IdentityUncertain
 
     pending = PendingTrackedTerminal()
     with pytest.raises(NativePiUnavailable, match="unique authoritative"):
@@ -323,7 +384,7 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
         else:
             assert [charge.usage for charge in charged] == [event.message.usage]
         if usage == {"totalTokens": 7}:
-            assert event.message.measured_tokens == ReportedTokens(7) and account.confirmed == 7
+            assert event.message.measured_tokens == ReportedCount(7) and account.confirmed == PiCount.from_wire(7)
         else:
-            assert event.message.measured_tokens == UnreportedTokens() and account.confirmed is None
+            assert event.message.measured_tokens == UnreportedCount() and account.confirmed == PiCount.from_wire(None)
         assert "usage" not in event.to_wire() and decode(event.to_wire()).usage == event.usage
