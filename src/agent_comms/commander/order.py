@@ -334,6 +334,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for pid in [] if new else group:
         call(CommsOrderTool(owner=unit, order=OrderGoalAction(
             problem=pid, expected_revision=COMMS.goals.todos.get(pid).revision, traced=trace, **common)))
+    message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
     sent = post([unit], message)
     # The message is each order's recorded link; a verdict citing it lands on that order.
     for pid in group:
@@ -634,9 +635,8 @@ def replied(latest: dict | None) -> str:
 
 
 def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
-    """Each order that entered lateness (OVERDUE), changed it by a reply or push, or entered STALL
-    after the previous poll at ``since``; a tick where nothing changed is silent. Merged work waits
-    on the install, which ``install_lines`` reports."""
+    """Every past-due unrecorded order alarms with its state until recorded.
+    Stall crossings remain separate from deadline alarms."""
     now = time.time()
     late, stalled = [], []
     for t in pending:
@@ -646,12 +646,10 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
         if (crossed := t.late_since(now)) is None:
             continue
         answer = reply(t.holder, ordered)
-        replied_at = float(answer.get('ts', 0)) if answer else 0
-        if since < max(crossed, replied_at) or work.moved_after(since):
-            due = f'due {hhmm(t.deadline)}, order {t.order.id}'
-            late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
-    alarm = (f'OVERDUE: {", ".join(late)} -> read the diff now; '
-             'missed = order strike, 2 strikes = fire')
+        due = f'due {hhmm(t.deadline)}, order {t.order.id}'
+        late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
+    alarm = (f'OVERDUE: {", ".join(late)} -> record merged work; '
+             'push or merge unfinished work now')
     return [alarm] * bool(late) + stalled
 
 
@@ -916,6 +914,19 @@ class DoneVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         done(self.pid, self.sha, self.delivered)
+
+
+@dataclass(frozen=True, kw_only=True)
+class PullRequestVerb(OrderVerb, declared_name="pr"):
+    help = "open the problem's PR with its required immutable order identity"
+    pid: str = option("pid")
+    title: str = option("--title")
+    body_file: str = option("--body-file")
+
+    def run(self) -> None:
+        todo = COMMS.goals.todos.get(self.pid)
+        checkout = COMMS.registry.storage_rule.order_checkout(todo.holder, todo.id)
+        print(todo.order.open_pull_request(todo, checkout, self.title, Path(self.body_file).read_text()))
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -142,43 +142,15 @@ class PullRequest:
     merge: str | None = None
     merged_at: float | None = None
     updated_at: float = 0.0
+    orders: tuple[str, ...] = ()
 
     @classmethod
-    def listed(cls, number: str, branch: str, head: str, merge: str, merged: str,
-               updated: str) -> Self:
+    def listed(cls, number: int, branch: str, head: str, merge: str, merged: str,
+               updated: str, body: str) -> Self:
         """One row of ``gh pr list``; GitHub leaves an unmerged PR's merge commit and time empty."""
         return cls(int(number), branch, head, merge or None,
-                   _github_time(merged) if merged else None, _github_time(updated))
-
-
-@dataclass(frozen=True)
-class OrderBranch(DeclaredFamily, affix="Branch"):
-    """The branch an order's checkout works on: the one link from an order to its pull requests."""
-
-    @classmethod
-    def checked_out(cls, checkout: Path) -> OrderBranch:
-        named = subprocess.run(("git", "-C", str(checkout), "symbolic-ref", "--short", "-q",
-                                "HEAD"), capture_output=True, text=True, timeout=30)
-        return NoOrderBranch() if named.returncode else CheckedOutBranch(named.stdout.strip())
-
-    @abstractmethod
-    def carries(self, pr: PullRequest) -> bool: ...
-
-
-@dataclass(frozen=True)
-class CheckedOutBranch(OrderBranch):
-    name: str
-
-    def carries(self, pr: PullRequest) -> bool:
-        return pr.branch == self.name
-
-
-@dataclass(frozen=True)
-class NoOrderBranch(OrderBranch):
-    """No checkout, or one with a detached HEAD: no pull request is the order's."""
-
-    def carries(self, pr: PullRequest) -> bool:
-        return False
+                   _github_time(merged) if merged else None, _github_time(updated),
+                   ProblemOrder.pull_request_ids(body))
 
 
 def _github_time(text: str) -> float:
@@ -199,13 +171,15 @@ class PullRequests:
     def read(self, repo: str, state: str) -> tuple[PullRequest, ...]:
         listed = subprocess.run(
             ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
-             "--json", "number,headRefName,headRefOid,mergeCommit,mergedAt,updatedAt", "--jq",
-             '.[] | [.number, .headRefName, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
-             " .updatedAt] | @tsv"),
+             "--json", "number,headRefName,headRefOid,mergeCommit,mergedAt,updatedAt,body", "--jq",
+             'map([.number, .headRefName, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
+             " .updatedAt, .body])"),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
             raise ValueError(listed.stderr.strip() or f"gh pr list -R {repo} failed.")
-        return tuple(PullRequest.listed(*line.split("\t")) for line in listed.stdout.splitlines())
+        rows = FieldCodec.decode(tuple[tuple[int, str, str, str, str, str, str], ...],
+                                 FieldCodec.parse(listed.stdout))
+        return tuple(PullRequest.listed(*row) for row in rows)
 
 
 def _clock(at: float) -> str:
@@ -223,14 +197,10 @@ class ProgressSource:
     def since(self) -> float:
         return self.todo.order.at.recorded_at("An order")
 
-    @cached_property
-    def branch(self) -> OrderBranch:
-        return OrderBranch.checked_out(self.checkout)
-
     def requests(self, state: str) -> list[PullRequest]:
-        """PRs from the order's branch touched since the order; older ones served an earlier one."""
+        """The order's explicit PR references survive checkout removal or branch reuse."""
         return [pr for pr in self.pulls.listed(self.todo.repo, state)
-                if self.branch.carries(pr) and pr.updated_at >= self.since]
+                if self.todo.order.id in pr.orders and pr.updated_at >= self.since]
 
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
@@ -390,7 +360,7 @@ class OpenPrProgress(Moving, FoundProgress):
 
 @dataclass(frozen=True)
 class MergedProgress(FoundProgress):
-    """Merged work is done; its deadline no longer draws a strike."""
+    """A merge awaits its order record; its alarm does not itself draw a strike."""
     precedence: ClassVar[int] = 1
     strikes: ClassVar[bool] = False
     sha: str
@@ -402,7 +372,7 @@ class MergedProgress(FoundProgress):
 
     @property
     def line(self) -> str:
-        return f"merged as {self.sha}, record done"
+        return f"merged as {self.sha}, awaiting record"
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
         return (todo,)
@@ -752,9 +722,38 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
+    pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
+
+    @classmethod
+    def pull_request_ids(cls, body: str) -> tuple[str, ...]:
+        return tuple(line.removeprefix(cls.pull_request_label).strip()
+                     for line in body.splitlines() if line.startswith(cls.pull_request_label))
+
+    def pull_request_body(self, body: str) -> str:
+        declared = self.pull_request_ids(body)
+        if any(order != self.id for order in declared):
+            raise ValueError("The pull request body names a different order.")
+        content = "\n".join(line for line in body.splitlines()
+                            if not line.startswith(self.pull_request_label))
+        return f"{content.rstrip()}\n\n{self.pull_request_label} {self.id}\n"
+
+    def open_pull_request(self, todo: Todo, checkout: Path, title: str, body: str) -> str:
+        """The order creates its PR with the immutable identity every progress reader uses."""
+        created = subprocess.run(
+            ("gh", "pr", "create", "-R", todo.repo, "--title", title, "--body-file", "-"),
+            input=self.pull_request_body(body), cwd=checkout,
+            capture_output=True, text=True, timeout=60)
+        if created.returncode:
+            raise ValueError(created.stderr.strip() or "Order pull request creation failed.")
+        return created.stdout.strip()
+
+    def pull_request_instruction(self, problem: str) -> str:
+        return (f"Open the PR with agent-comms-commander order pr {problem} "
+                "--title '<title>' --body-file <file>; Core writes its required order identity.")
+
     def instructions(self, todo):
         return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
-            f"Owner: {self.owner.to_wire()}",
+            f"Owner: {self.owner.to_wire()}", self.pull_request_instruction(todo.id),
             f"Check: {self.check.directory} :: {self.check.command}",
             *self.deletes.instructions(),
             *self.run.instructions(),
