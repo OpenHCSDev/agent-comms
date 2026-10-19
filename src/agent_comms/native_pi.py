@@ -742,6 +742,7 @@ class PrivateEvidenceRead:
         self.path, self.stream = path, stream
         self.identity = FileIdentity.from_stat(os.fstat(stream.fileno()))
         self.prefix = UnverifiedNativeEvidencePrefix()
+        self.decoded_through = 0
 
     @property
     def size(self) -> int:
@@ -783,6 +784,7 @@ class PrivateEvidenceRead:
         self.stream = self._open_stream(self.path)
         self.identity = FileIdentity.from_stat(os.fstat(self.stream.fileno()))
         self.prefix = UnverifiedNativeEvidencePrefix()
+        self.decoded_through = 0
 
     def _capture_append(self):
         """Verify and hash original bytes without retaining the complete prefix."""
@@ -839,12 +841,12 @@ class PrivateEvidenceRead:
             raise
         try:
             try:
-                decoder.seek(self.size)
+                decoder.seek(self.decoded_through)
             except (OSError, ValueError) as error:
                 raise NativePiUnavailable(
                     "Native Pi evidence file is unavailable or not private"
                 ) from error
-            remaining = size - self.size
+            remaining = size - self.decoded_through
             while remaining:
                 try:
                     raw = decoder.readline(remaining)
@@ -884,6 +886,12 @@ class PrivateEvidenceRead:
             self.close()
             raise
 
+    def consume_header(self):
+        """Consume only record one; verification and decode positions are distinct."""
+        header = self.header()
+        self.decoded_through = max(self.decoded_through, self.stream.tell())
+        return header
+
     def _commit_snapshot(self, size, digest, revision) -> None:
         try:
             observed = self.prefix.commit(self, size, digest, revision)
@@ -895,7 +903,7 @@ class PrivateEvidenceRead:
 
     def rows(self):
         try:
-            previous_size = self.size
+            previous_size = self.decoded_through
             size, digest, revision = self._capture_append()
             if size == previous_size:
                 # The pinned revision is unchanged, or a suspicious non-growth
@@ -907,6 +915,7 @@ class PrivateEvidenceRead:
             # digest after a final pinned-revision check.
             yield from self._decode_captured(size)
             self._commit_snapshot(size, digest, revision)
+            self.decoded_through = size
         except BaseException:
             self.close()
             raise

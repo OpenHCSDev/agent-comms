@@ -235,6 +235,16 @@ class NativeEvidenceRead:
                         "ambiguous tracked user input: one input ID on two entries")
                 self.inputs[user.input_id] = position
 
+    def header(self):
+        """Read and decode the first physical record, without indexing history."""
+        header = NativeEntry.from_evidence(self.source.consume_header())
+        if not isinstance(header, SessionEntry):
+            raise MalformedRecord('Native Pi session header is invalid')
+        header.require_header()
+        if not self.entries:
+            self.entries = (header,)
+        return header
+
     def observe(self):
         """Decode the captured cut."""
         return self._observe(reverified=False)
