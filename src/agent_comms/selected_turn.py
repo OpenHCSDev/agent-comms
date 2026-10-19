@@ -6,18 +6,20 @@ from contextlib import suppress
 from dataclasses import dataclass, replace
 from functools import partial
 
-from .attempt_start import AttemptStart
 from .assignment_states import CompletedAssignment
+from .attempt_start import AttemptStart
 from .channel_coding_tools import SelectedCodingToolOwner
+from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
+from .context_segments.wake import SelectedWakeSegment
 from .coordination_errors import CoordinationError, IdentityConflict, StaleFence
-from .coordinator import Coordination
-from .coordination_tables.executions import ExecutionOrigin
 from .coordination_snapshot import RecoverySnapshot
+from .coordination_tables.executions import ExecutionOrigin
 from .coordination_tables.responses import ResponseObligation
+from .coordinator import Coordination
 from .durable_turn import DurableTurn
 from .envelope_claim_transitions import SelectedAttemptClaim
-from .optional_awareness_projection import OptionalAwarenessProjection
 from .native_pi import NativePiUnavailable
+from .optional_awareness_projection import OptionalAwarenessProjection
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
 from .selected_actions import BatchSelectedAction, NoSelectedTools, SelectedAction
@@ -26,12 +28,10 @@ from .selected_request import SelectedRequest
 from .selected_result import CoordinatedTurn
 from .selected_session import SelectedSession
 from .selected_triage import SelectedTriageOutcome
-from .wake_candidate_index import WakeCandidateIndex
-from .context_segments.wake import SelectedWakeSegment
-from .context_segments.selected import SelectedTriageSegment, SelectedWorkSegment
 from .thread_identity import TurnId
 from .turn_context import RecordedContextTurn, RenderedInput, TurnContext
 from .turn_phase import PreparingPhase, PromptAcceptancePhase, PublishingPhase
+from .wake_candidate_index import WakeCandidateIndex
 
 
 @dataclass(frozen=True)

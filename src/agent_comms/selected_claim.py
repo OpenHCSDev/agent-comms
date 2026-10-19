@@ -25,7 +25,7 @@ from .envelope_claim_transitions import (
     ClaimOwner,
     ExistingFileClaim,
     FileClaimPath,
-    WakeClaim,
+    SelectedAttemptClaim,
 )
 from .errors import RelationViolationError
 from .messages import ClaimNoticeKind
@@ -36,12 +36,12 @@ from .wire_metadata import WireMetadata
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import SharedLock, _store_lock
-from .wire_log import CheckedWireStoreLock
 from .threads import Thread
+from .wire_log import CheckedWireStoreLock
 
 
 def verify_selected_wake(
-    comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
+    comms: Comms, store: Coordination, claim_scope: SelectedAttemptClaim, owner_name: str
 ) -> None:
     """Reject any unselected, stale, stopped, or unrelated N/K execution."""
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
@@ -67,7 +67,7 @@ def _verify_selected_wake_state(
     owner: Thread,
     generation: int,
     store: Coordination,
-    claim_scope: WakeClaim,
+    claim_scope: SelectedAttemptClaim,
 ) -> None:
     """Check an already locked bus/owner snapshot against one SQL state."""
     registry_owner = RegistryOwner(thread=owner, claimed_generation=generation)
@@ -116,7 +116,7 @@ def _verify_selected_wake_state(
 
 
 def _committed_source(
-    bus_lock: CheckedWireStoreLock, claim_scope: WakeClaim, absent: str
+    bus_lock: CheckedWireStoreLock, claim_scope: SelectedAttemptClaim, absent: str
 ) -> CommittedDelivery:
     """The message a selected turn answers, read through the held bus lock's checkpoint."""
     try:
@@ -127,7 +127,7 @@ def _committed_source(
 
 @contextmanager
 def _selected_claim_boundary(
-    comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
+    comms: Comms, store: Coordination, claim_scope: SelectedAttemptClaim, owner_name: str
 ) -> Iterator[
     tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]
 ]:
@@ -163,7 +163,7 @@ def _selected_claim_boundary(
 def publish_selected_resource_claim(
     comms: Comms,
     store: Coordination,
-    claim_scope: WakeClaim,
+    claim_scope: SelectedAttemptClaim,
     owner_name: str,
     resource_path: FileClaimPath,
 ) -> ClaimOwner:
@@ -185,8 +185,7 @@ def publish_selected_resource_claim(
             existing = source.claim(resource)
             if existing is not None:
                 existing.require_holder(owner.name, str(owner.created_at))
-                # Same-operation lookup; holder identity was already checked above.
-                if claim_scope == existing.claim_scope:
+                if existing.claim_scope.same_attempt(claim_scope):
                     return existing
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
@@ -269,7 +268,7 @@ def _opened_selected_file(
 def write_selected_claimed_file(
     comms: Comms,
     store: Coordination,
-    claim_scope: WakeClaim,
+    claim_scope: SelectedAttemptClaim,
     owner_name: str,
     claimed: ClaimOwner,
     contents: bytes,

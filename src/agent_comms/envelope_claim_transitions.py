@@ -11,17 +11,30 @@ from __future__ import annotations
 
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Annotated, ClassVar, Literal
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
+
+if TYPE_CHECKING:
+    from .coordination_tables.attempts import AttemptRecord
 
 from .coordination_errors import IdentityConflict
 from .errors import RelationViolationError
+from .field_codec import (
+    BoundedText,
+    EnvelopeSequence,
+    FieldCodec,
+    Id128Text,
+    NullMember,
+    ProjectionSequence,
+    RecordMember,
+    ResourcePathText,
+    Sha256Text,
+    SubclassUnion,
+)
 from .message_reference import MessageReference
-from .field_codec import (BoundedText, EnvelopeSequence, FieldCodec, Id128Text, ProjectionSequence,
-                          NullMember, RecordMember, ResourcePathText, Sha256Text, SubclassUnion)
 from .thread_identity import GenerationCounter, TurnId
 
 
@@ -131,12 +144,18 @@ class WakeClaim(SubclassUnion, ABC, affix=""):
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None: ...
 
     @abstractmethod
-    def finished_by(self, attempt) -> bool: ...
+    def finished_by(self, attempt: AttemptRecord) -> bool: ...
 
     @abstractmethod
     def finished_turn(self, turn_id: str, claimed_generation: int) -> bool: ...
 
-    def require_claim_only(self, claims, releases) -> None:
+    def for_operation(self, operation_id: str) -> WakeClaim:
+        return self
+
+    def same_attempt(self, other: WakeClaim) -> bool:
+        return self == other
+
+    def require_claim_only(self, claims: Sequence[object], releases: Sequence[object]) -> None:
         if not claims or releases:
             raise ClaimTransitionError("Attempt scope requires a claim-only transition.")
 
@@ -151,18 +170,28 @@ class NoLiveAttempt(NullMember, WakeClaim):
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
         pass
 
-    def require_claim_only(self, claims, releases) -> None:
+    def require_claim_only(self, claims: Sequence[object], releases: Sequence[object]) -> None:
         pass  # Release envelopes also have no acquiring attempt.
 
-    def finished_by(self, attempt) -> bool:
+    def finished_by(self, attempt: AttemptRecord) -> bool:
         return True
 
     def finished_turn(self, turn_id: str, claimed_generation: int) -> bool:
         return True
 
 
+NO_LIVE_ATTEMPT = NoLiveAttempt()
+
+
+@dataclass(frozen=True, kw_only=True)
 class LiveAttemptClaim(RecordMember, WakeClaim):
-    operation_id: str
+    operation_id: Annotated[str, Id128Text]
+
+    def for_operation(self, operation_id: str) -> WakeClaim:
+        return replace(self, operation_id=operation_id)
+
+    def same_attempt(self, other: WakeClaim) -> bool:
+        return self == other.for_operation(self.operation_id)
 
     def require_live(self) -> None:
         pass
@@ -186,7 +215,7 @@ class OwnedAttemptClaim(LiveAttemptClaim):
         TurnId.for_registration(self.turn_id)
         GenerationCounter.require_positive(self.owner_claimed_generation)
 
-    def finished_by(self, attempt) -> bool:
+    def finished_by(self, attempt: AttemptRecord) -> bool:
         return False
 
     def finished_turn(self, turn_id: str, claimed_generation: int) -> bool:
@@ -211,9 +240,11 @@ class SelectedAttemptClaim(LiveAttemptClaim):
     attempt_ordinal: int
     version: Literal[1] = field(default=1, metadata={"wire_required": True})
 
-    def finished_by(self, attempt) -> bool:
-        return (self.execution_id, self.attempt_ordinal, self.recipient_lookup, self.participant_generation) == (
-            attempt.execution_id, attempt.attempt_ordinal, attempt.owner_lookup, attempt.owner_generation)
+    def finished_by(self, attempt: AttemptRecord) -> bool:
+        return (self.execution_id, self.attempt_ordinal,
+                self.recipient_lookup, self.participant_generation) == (
+            attempt.execution_id, attempt.attempt_ordinal,
+            attempt.owner_lookup, attempt.owner_generation)
 
     def finished_turn(self, turn_id: str, claimed_generation: int) -> bool:
         return (self.turn_id, self.owner_claimed_generation) == (turn_id, claimed_generation)

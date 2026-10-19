@@ -9,8 +9,6 @@ from contextlib import ExitStack
 from dataclasses import replace
 from functools import partial
 from itertools import groupby
-
-from .bus_activity_index import ActivityClocks
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -21,6 +19,7 @@ from agent_comms.coordination_tables.publications import (
 
 from .active_route import guard_original_root_write
 from .audience_manifest import MAX_WIRE_SEQ, FrozenRecipient, freeze_audience
+from .bus_activity_index import ActivityClocks
 from .bus_publication import (
     PRIVATE_WIRE_FIELD,
     InitialOrigin,
@@ -30,12 +29,12 @@ from .channel_targets import CommandTarget, NamedTarget
 from .coordinator import Coordination
 from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (
+    NO_LIVE_ATTEMPT,
     ClaimOwner,
     ClaimRelease,
     ClaimTransition,
     FileClaimPath,
     WakeClaim,
-    NoLiveAttempt,
     _release_resource,
 )
 from .errors import (
@@ -62,8 +61,8 @@ if TYPE_CHECKING:
     from .registration import Registration
 
 from .catalog_document import CatalogDocument
-from .channels import Channel
 from .catalog_store import ChannelCatalog
+from .channels import Channel
 from .wire_log import WireLog, WireStoreLock
 from .wire_metadata import WireMetadata
 
@@ -176,7 +175,7 @@ class ClaimWrites(PrivateWrites):
         incarnation: str,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path | ClaimRelease] = (),
-        claim: WakeClaim = NoLiveAttempt(),
+        claim: WakeClaim = NO_LIVE_ATTEMPT,
     ) -> Message:
         """One guarded message and whole-set claim transition in ONE bus row.
 
@@ -188,7 +187,8 @@ class ClaimWrites(PrivateWrites):
         with self.opened_activity() as activity, self.log.locked() as bus_lock:
             return self._publish_claim_envelope_unlocked(
                 bus_lock, self._registry.snapshot(), message,
-                worktree=worktree, incarnation=incarnation, claims=claims, releases=releases, claim=claim, activity=activity,
+                worktree=worktree, incarnation=incarnation, claims=claims,
+                releases=releases, claim=claim, activity=activity,
             )
 
     def _publish_claim_envelope_unlocked(
@@ -201,7 +201,7 @@ class ClaimWrites(PrivateWrites):
         incarnation: str,
         claims: Sequence[FileClaimPath] = (),
         releases: Sequence[str | Path | ClaimRelease] = (),
-        claim: WakeClaim = NoLiveAttempt(),
+        claim: WakeClaim = NO_LIVE_ATTEMPT,
         activity: ActivityClocks,
     ) -> Message:
         """The claim envelope under a held bus lock and its locked registry snapshot."""

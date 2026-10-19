@@ -24,7 +24,7 @@ from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
 from .coordination_tables.participants import OwnerGenerations
-from .envelope_claim_transitions import ExistingFileClaim, WakeClaim
+from .envelope_claim_transitions import ExistingFileClaim, SelectedAttemptClaim
 from .field_codec import FieldCodec, Id128Text, MalformedRecord
 from .native_input_record import FullNativeExecution, NativeInputIdentity
 from .native_runtime_input import NativeRuntimeInput
@@ -231,7 +231,7 @@ def record_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
 def selected_tool_mode_for_owner(
     comms: Comms,
     store: Coordination,
-    claim_scope: WakeClaim,
+    claim_scope: SelectedAttemptClaim,
     owner_name: str,
     session_dir: Path,
     input_id: str,
@@ -263,7 +263,7 @@ def selected_tool_mode_for_owner(
 
 
 def verify_sent_full_input(
-    store: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
+    store: Coordination, claim_scope: SelectedAttemptClaim, owner_name: str, input_id: str
 ) -> None:
     """Only the exact FULL input authorized by the owner may call native tools.
 
@@ -280,7 +280,7 @@ def verify_sent_full_input(
 
 
 def _require_sent_full_input(
-    scoped: Coordination, claim_scope: WakeClaim, owner_name: str, input_id: str
+    scoped: Coordination, claim_scope: SelectedAttemptClaim, owner_name: str, input_id: str
 ) -> None:
     assert_native_runtime_schema(scoped.session._connection)
     row = NativeRuntimeInput.one(scoped.session._connection, input_id=input_id)
@@ -319,7 +319,7 @@ def verify_selected_terminal(directory: Path, input_id: str, call_id: str) -> No
 def perform_selected_write(
     comms: Comms,
     store: Coordination,
-    claim_scope: WakeClaim,
+    claim_scope: SelectedAttemptClaim,
     owner_name: str,
     session_dir: Path,
     input_id: str,

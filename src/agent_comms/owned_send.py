@@ -12,9 +12,9 @@ from typing import TYPE_CHECKING
 from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
-from .messages import ClaimNoticeKind
 from .envelope_claim_transitions import OwnedAttemptClaim
-
+from .input_attempt import InputAlreadyCleared
+from .messages import ClaimNoticeKind
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
     InputKeysCheck,
@@ -27,8 +27,7 @@ from .ordinary_turn_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
-from .send_outcome import SendOutcome, GrantedSend, RefusedSend, AuthorityChangedSend
-from .input_attempt import InputAlreadyCleared
+from .send_outcome import AuthorityChangedSend, GrantedSend, RefusedSend, SendOutcome
 from .thread_identity import TurnId
 from .turn_input_source import (
     OriginalTurnInput,
@@ -205,7 +204,8 @@ class OwnedSend(CodingToolOwner):
                 worktree=Path(self.thread.worktree),
                 incarnation=str(owner.created_at),
                 claims=(resource,),
-                claim=OwnedAttemptClaim(self.turn.value, self.claim_scope, slot),
+                claim=OwnedAttemptClaim(turn_id=self.turn.value,
+                                        owner_claimed_generation=self.claim_scope, operation_id=slot),
             )
             return committed.require_claim_transition().claimed(canonical)
 
@@ -217,7 +217,8 @@ class OwnedSend(CodingToolOwner):
                 with boundary.bus_lock.current_source(boundary.bus.log, metadata) as source:
                     owned = tuple(claim for claim in source.claim_projection().values()
                                   if claim.incarnation == str(self.thread.created_at)
-                                  and claim.claim_scope.finished_turn(self.turn.value, self.claim_scope))
+                                  and claim.claim_scope.finished_turn(
+                                      self.turn.value, self.claim_scope))
                 boundary.bus.publisher.release_resources(
                     boundary, owned, "Released files after an ordinary turn"
                 )
