@@ -20,18 +20,19 @@ from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
-from .registry_document import RosterVisibility
+from .registry_document import DEFAULT_ROSTER, RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
-from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
+from .wire_watch import FileWatch, NativeFileWatch, WatchSource
 
 if TYPE_CHECKING:
-    from .threads import Thread
-    from .registration import Registration
     from .agent_backend import RuntimeLocation
+    from .registration import Registration
+    from .registry_document import RegistrySnapshot
     from .thread_identity import ThreadIncarnation
+    from .threads import Thread
 
 _INDEX_VERSION = 7
 
@@ -379,10 +380,13 @@ class TranscriptReadKeys:
         return self.incarnation == thread.incarnation and self.runtime == thread.runtime
 
     @classmethod
-    def capture(cls, thread: Thread, observed: Mapping[str, FileRevision | None]):
-        return cls(thread.incarnation, thread.runtime, {
+    def capture(cls, thread: Thread):
+        return cls(thread.incarnation, thread.runtime, {}).refresh({})
+
+    def refresh(self, observed: Mapping[str, FileRevision | None]) -> TranscriptReadKeys:
+        return replace(self, revisions={
             key: observed[key] if key in observed else FileRevision.capture(Path(key))
-            for key in thread.runtime.read_keys()
+            for key in self.runtime.read_keys()
         })
 
 
@@ -396,6 +400,8 @@ class TranscriptReadState(ThreadOwnedState):
     def __init__(self, path: Path, registry: Registration):
         self.registry = registry
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
+        self._key_snapshot: RegistrySnapshot | None = None
+        self._key_visibility = DEFAULT_ROSTER
         self._source_watch: FileWatch = NativeFileWatch.open()
         self._source_resources = ExitStack()
         self.path = ReadLedger.path_in(path.parent)
@@ -523,31 +529,32 @@ class TranscriptReadState(ThreadOwnedState):
         # cancellation, never this connection, the observer pipe or the owner's locks.
         self._preparation = self._preparation.started(self, needed)
 
-    def _refresh_keys(self, visibility: RosterVisibility) -> frozenset[str]:
+    def _refresh_keys(self, visibility: RosterVisibility) -> None:
         changed = self._source_watch.changed_paths()
         invalid = self._source_watch.invalid
+        # Each RegistryRevision owns one stable detached snapshot.
         snapshot = self.registry.snapshot()
-        visible = frozenset(thread.name for thread in snapshot.visible_threads(visibility))
-        threads = {executor.name: executor for thread in snapshot.threads.values()
-                   for executor in thread.role.executor(thread)}
-        rebuild = bool(self._thread_keys.keys() - threads.keys()) or invalid
-        for name in self._thread_keys.keys() - threads.keys():
-            del self._thread_keys[name]
-        for name, thread in threads.items():
-            prior = self._thread_keys.get(name)
-            if prior is None and name not in visible:
-                continue
-            if prior is None or not prior.matches(thread):
-                current = TranscriptReadKeys.capture(thread, {})
-            elif invalid or any(Path(key).absolute() in changed for key in prior.revisions):
-                observed = {key: FileRevision.capture(Path(key)) for key in prior.revisions}
-                if observed == prior.revisions:
-                    continue
-                current = TranscriptReadKeys.capture(thread, observed)
-            else:
-                continue
-            rebuild |= prior is None or prior.revisions.keys() != current.revisions.keys()
-            self._thread_keys[name] = current
+        rebuild = invalid
+        if snapshot is not self._key_snapshot or visibility != self._key_visibility:
+            current = {}
+            for thread in snapshot.visible_threads(visibility):
+                prior = self._thread_keys.get(thread.name)
+                keys = (prior if prior is not None and prior.matches(thread)
+                        else TranscriptReadKeys.capture(thread))
+                rebuild |= prior is None or prior.revisions.keys() != keys.revisions.keys()
+                current[thread.name] = keys
+            rebuild |= bool(self._thread_keys.keys() - current.keys())
+            self._thread_keys = current
+            self._key_snapshot = snapshot
+            self._key_visibility = visibility
+        if changed or invalid:
+            for name, keys in self._thread_keys.items():
+                if invalid or any(Path(key).absolute() in changed for key in keys.revisions):
+                    observed = {key: FileRevision.capture(Path(key)) for key in keys.revisions}
+                    if observed != keys.revisions:
+                        current_keys = keys.refresh(observed)
+                        rebuild |= keys.revisions.keys() != current_keys.revisions.keys()
+                        self._thread_keys[name] = current_keys
         if rebuild:
             self._source_resources.close()
             sources = tuple(WatchSource.modified_file(Path(key).absolute())
@@ -564,8 +571,7 @@ class TranscriptReadState(ThreadOwnedState):
             for name, keys in tuple(self._thread_keys.items()):
                 observed = {key: FileRevision.capture(Path(key)) for key in keys.revisions}
                 if observed != keys.revisions:
-                    self._thread_keys[name] = TranscriptReadKeys.capture(threads[name], observed)
-        return visible
+                    self._thread_keys[name] = keys.refresh(observed)
 
     def counts(self, viewer: str, *, document: ReadDocument,
                visibility: RosterVisibility) -> TranscriptUnread:
@@ -575,25 +581,19 @@ class TranscriptReadState(ThreadOwnedState):
         try:
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
-            visible = self._refresh_keys(visibility)
+            self._refresh_keys(visibility)
             try:
-                result = self._counts_locked(viewer, document, visible)
+                return self._counts_locked(viewer, document)
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
                     CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
-                result = self._counts_locked(viewer, document, visible)
-            return TranscriptUnread(
-                {name: count for name, count in result.counts.items() if name in visible}
-            )
+                return self._counts_locked(viewer, document)
         finally:
             self._lock.release()
 
-    def _counts_locked(
-        self, viewer: str, document: ReadDocument, visible: Collection[str]
-    ) -> TranscriptUnread:
-        ordered = sorted(self._thread_keys.items(), key=lambda item: item[0] not in visible)
-        revisions = {source: revision for _, keys in ordered
+    def _counts_locked(self, viewer: str, document: ReadDocument) -> TranscriptUnread:
+        revisions = {source: revision for keys in self._thread_keys.values()
                      for source, revision in keys.revisions.items()}
         if not revisions:
             return TranscriptUnread({name: ReplyUnread(0) for name in self._thread_keys})
