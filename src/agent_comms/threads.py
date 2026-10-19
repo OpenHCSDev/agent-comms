@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import os
 import time
-from collections.abc import Iterator
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -366,11 +365,6 @@ class Thread(ThreadProvenance):
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
 
-    def turn_leases(self) -> Iterator[TurnLeaseFence]:
-        return self.turn_record.leases(
-            self.incarnation, self.process_identity, self.turn_generation,
-        )
-
     @property
     def turn_lease(self) -> TurnLeaseFence | None:
         """Read the record's public optional projection, without deciding its state."""
@@ -383,7 +377,8 @@ class Thread(ThreadProvenance):
 
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         return any((lease.identity, lease.turn_id) == (identity, turn.value)
-                   for lease in self.turn_leases())
+                   for lease in self.turn_record.leases(
+                       self.incarnation, self.process_identity, self.turn_generation))
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         """Check whether a task record can refer to this thread's current or preceding turn.
@@ -418,7 +413,7 @@ class Thread(ThreadProvenance):
 
     @property
     def executing(self) -> bool:
-        return self.turn_record.executing
+        return self.turn_record.read().executing
 
     def to_wire(self) -> dict[str, object]:
         """Schema-derived projection at a JSON boundary, not a hand-maintained mirror."""

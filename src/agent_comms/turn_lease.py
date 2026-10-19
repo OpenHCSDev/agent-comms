@@ -274,7 +274,8 @@ class ActiveTurn(RecordMember, TurnDeclaration):
         return any(
             (lease.identity, lease.turn_id) == (identity, turn.value)
             or identity.generation == lease.identity.generation - 1
-            for lease in thread.turn_leases()
+            for lease in thread.turn_record.leases(
+                thread.incarnation, thread.process_identity, thread.turn_generation)
         )
 
     def held_by(self, lease: TurnLeaseFence) -> bool:
@@ -359,10 +360,6 @@ class TurnRecord(SubclassUnion, affix=""):
     @abstractmethod
     def read(self) -> TurnDeclaration: ...
 
-    @property
-    def executing(self) -> bool:
-        return self.read().executing
-
     @abstractmethod
     def without_claim(self) -> None: ...
 
@@ -378,9 +375,10 @@ class TurnRecord(SubclassUnion, affix=""):
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLeaseFence | None: ...
 
-    @abstractmethod
     def leases(self, incarnation: ThreadIncarnation, process: ProcessState,
-               generation: int) -> Iterator[TurnLeaseFence]: ...
+               generation: int) -> Iterator[TurnLeaseFence]:
+        self.read().require_idle()
+        return iter(())
 
 
 @dataclass(frozen=True)
@@ -398,10 +396,6 @@ class NoTurnRecord(NullMember, TurnRecord):
               generation: int) -> TurnLeaseFence | None:
         return None
 
-    def leases(self, incarnation: ThreadIncarnation, process: ProcessState,
-               generation: int) -> Iterator[TurnLeaseFence]:
-        return iter(())
-
 
 @dataclass(frozen=True)
 class StoredTurnReference(RecordMember, TurnRecord):
@@ -418,10 +412,6 @@ class StoredTurnReference(RecordMember, TurnRecord):
 
     def lease(self, incarnation: ThreadIncarnation, process: ProcessState,
               generation: int) -> TurnLeaseFence | None:
-        raise RelationViolationError("Turn reference must be bound by its registry")
-
-    def leases(self, incarnation: ThreadIncarnation, process: ProcessState,
-               generation: int) -> Iterator[TurnLeaseFence]:
         raise RelationViolationError("Turn reference must be bound by its registry")
 
 

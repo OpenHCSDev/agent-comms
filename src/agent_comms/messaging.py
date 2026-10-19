@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING
 
 from .active_route import guard_original_root_write
 from .registration import Registration
@@ -49,7 +49,7 @@ class Messaging:
         sender: str,
         target: str,
         body: str,
-        type: Type[MessageKind] = InfoKind,
+        type: type[MessageKind] = InfoKind,
         *,
         role: MessageRole = ConversationRole(),
         claims: Sequence[FileClaimPath] = (),

@@ -50,7 +50,7 @@ def test_active_turn_validates_its_owner_and_preserves_fences(tmp_path):
     assert turn.without_claim() == replace(turn, claimed_generation=None)
     incarnation = RecordedThreadIncarnation('worker', 1.0)
     record = StoredTurnRecord.for_identity(tmp_path / 'registry.json', TurnIdentity(incarnation, 3))
-    lease = turn.lease(incarnation, record)
+    lease, = turn.leases(incarnation, record)
     assert lease.turn_id == 'turn' and lease.claimed_generation == 2
     with pytest.raises(RelationViolationError):
         turn.validate_owner(NoProcess(), 3)
