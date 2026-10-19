@@ -758,13 +758,15 @@ class AuthorizedAct(DeclaredFamily, affix="Act"):
     whether to take it costs his attention and stalls the fleet. Product meaning and costly or
     irreversible acts are not members, so questions about them still reach him."""
 
-    ASKS: ClassVar[str] = (r"\b(?:do you want me to|want me to|should i|shall i|may i|can i"
-                           r"|ok(?:ay)? (?:for me )?to|permission to)\s+")
+    ASKS: ClassVar[str] = (
+        r"\b(?:(?:do you want me to|want me to|would you like me to|should (?:i|we)|shall i"
+        r"|may i|can i|ok(?:ay)? (?:for me )?to|permission to)\s+(?:{acts})\b[^?\n]*\?"
+        r"|let me know if you want me to\s+(?:{acts})\b)")
     words: ClassVar[tuple[str, ...]]
 
     @classmethod
     def asked(cls, text: str) -> bool:
-        return bool(re.search(cls.ASKS + rf"(?:{'|'.join(cls.words)})\b[^?\n]*\?", text, re.I))
+        return bool(re.search(cls.ASKS.format(acts="|".join(cls.words)), text, re.I))
 
 
 class SendAct(AuthorizedAct):
@@ -785,6 +787,38 @@ class ReassignAct(AuthorizedAct):
 
 class FixAct(AuthorizedAct):
     words = ("fix", "repair", "patch")
+
+
+class RegisterAct(AuthorizedAct):
+    words = ("register",)
+
+
+class RestartAct(AuthorizedAct):
+    words = ("restart",)
+
+
+class InstallAct(AuthorizedAct):
+    words = ("install",)
+
+
+class MergeAct(AuthorizedAct):
+    words = ("merge",)
+
+
+class KillAct(AuthorizedAct):
+    words = ("kill", "stop")
+
+
+class ArchiveAct(AuthorizedAct):
+    words = ("archive",)
+
+
+class RetryAct(AuthorizedAct):
+    words = ("retry", "clear")
+
+
+class StartAct(AuthorizedAct):
+    words = ("start",)
 
 
 class PermissionText(OrderWords):

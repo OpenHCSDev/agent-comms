@@ -33,6 +33,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from pydantic import JsonValue
 
+from .channel_targets import CommandTarget
 from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
@@ -58,14 +59,13 @@ class DirectorCaller(ThreadCaller):
     request when that thread holds owner requests."""
 
     def require_directive(self, comms: Comms, target: str, body: str) -> None:
-        """A directive passes DirectiveText, and its TO_USER families when the target is the
+        """A directive passes DirectiveText, and its TO_USER families when the target names the
         human user, and needs this caller's rules review, drawn, answered and under 20 minutes
         old."""
-        readers = (comms.registry.require(target),) if target in comms.registry else ()
         also = tuple(
             family
-            for thread in readers
-            for families in thread.role.human(DirectiveText.TO_USER)
+            for name in CommandTarget.named(target).direct_names
+            for families in comms.registry.require(name).role.human(DirectiveText.TO_USER)
             for family in families
         )
         due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))

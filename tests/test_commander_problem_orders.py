@@ -893,10 +893,11 @@ def todo_row(comms, problem):
         return db.execute('SELECT * FROM todo WHERE id=?', (problem,)).fetchone()
 
 
-def test_claude_ai_permission_seeking_to_the_user_is_refused_and_product_questions_pass(commander, tmp_path):
-    """claude-ai asking the user whether to take an act it is authorized for is refused before
-    anything is sent; a question about product meaning still reaches the user, and the same
-    permission question to a unit is a message to that unit."""
+def test_claude_ai_permission_seeking_register_or_restart_to_the_user_is_refused_and_product_questions_pass(
+        commander, tmp_path):
+    """claude-ai asking the user whether to take an act it is authorized for, in any common way of
+    asking, is refused before anything is sent; a question about product meaning still reaches the
+    user, and the same permission question to a unit is a message to that unit."""
     from agent_comms.connector import CALLER
     from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
     from agent_comms.thread_identity import UserThreadRole
@@ -911,8 +912,11 @@ def test_claude_ai_permission_seeking_to_the_user_is_refused_and_product_questio
         CommsSendTool.invoke(comms, {'from': 'claude-ai', 'to': target, 'body': body}, caller=CALLER)
         return comms.bus.log.latest_sequence()
     sent = comms.bus.log.latest_sequence()
-    with pytest.raises(ValueError, match=r"authorized; act: \['send'\] is yours to do"):
-        direct('user', 'Want me to send the order?')
+    for act, body in (('send', 'Want me to send the order?'),
+                      ('register', 'Should I register claude-ai on the desktop?'),
+                      ('restart', 'Would you like me to restart the connector?')):
+        with pytest.raises(ValueError, match=rf"authorized; act: \['{act}'\] is yours to do"):
+            direct('user', body)
     assert comms.bus.log.latest_sequence() == sent
     assert direct('user', 'Should P174 keep the old ledger format?') == sent + 1
     assert direct('worker', 'Want me to send the order?') == sent + 2
