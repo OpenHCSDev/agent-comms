@@ -194,7 +194,7 @@ class OkVerb(VerdictVerb):
     peer: str = option("--peer", default="", help="another sender's retained order message to the unit")
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        actor = ctx.comms.registry.require(ctx.commander).incarnation
+        actor = ctx.incarnation
         if self.peer:
             return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit_id,
                                        quote=self.serves, peer=self.peer)
@@ -219,7 +219,7 @@ class SupersededVerb(VerdictVerb):
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
         return SupersededVerdict(todo.revision,
-                                 ctx.comms.registry.require(ctx.commander).incarnation,
+                                 ctx.incarnation,
                                  todo.held(), edit_id, replacement=self.by, reason=self.why)
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -246,7 +246,7 @@ class BackVerb(VerdictVerb):
                                            at=self.at, derive=self.derive, by=self.by))
 
     def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, ctx.comms.registry.require(ctx.commander).incarnation,
+        return SendBackVerdict(todo.revision, ctx.incarnation,
                                todo.held(), edit_id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 

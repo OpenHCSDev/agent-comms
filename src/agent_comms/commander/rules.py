@@ -1,7 +1,7 @@
 """Forced rule review for the commander (HARD RULE: the commander cannot trust itself to remember the rules alone).
 
-The rules have one source each: the commander skill's bold-lead lines, every feedback rule in the configured rule
-directories (the packaged rules first, then the project's own memory), and paper 1's correct-maintenance results
+The rules have one source each: the commander skill's bold-lead lines, every packaged feedback rule,
+and paper 1's correct-maintenance results
 (the packaged correct-maintenance rule). `review` prints all of them and draws three, two always from the paper, that must each be answered with how the current tick obeys or breaks it. Core records each
 review and answer (CommsRuleReviewTool); its RulesDue member refuses every commander action in order and prints
 RULES DUE in rotate until the last review is answered and fresh.
@@ -99,7 +99,8 @@ class StaleVerb(RulesVerb):
     help = "show whether the acting commander's rule review is due"
 
     def run(self, ctx: Commander) -> None:
-        print('\n'.join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx))) or 'fresh')
+        print('\n'.join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx)))
+              or 'fresh')
 
 
 def main(a, ctx):
