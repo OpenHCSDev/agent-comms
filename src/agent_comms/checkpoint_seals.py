@@ -66,7 +66,13 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
         path: Path,
         saved: PrefixWitness,
         info: os.stat_result,
-    ) -> PrefixWitness | None: ...
+    ) -> PrefixWitness: ...
+
+    @abstractmethod
+    def recovery_end(self, info: os.stat_result) -> int: ...
+
+    @abstractmethod
+    def chunk_complete(self, offset: int, size: int, rows: int) -> bool: ...
 
     def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
         raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
@@ -100,8 +106,19 @@ class FinalSeal(CheckpointSeal):
         path: Path,
         saved: PrefixWitness,
         info: os.stat_result,
-    ) -> None:
+    ) -> PrefixWitness:
+        from .private_bus_checkpoint import _rebuild_checkpoint_unlocked
+
         self.check_final(saved, path)
+        if saved.revision == FileRevision.from_stat(info):
+            return saved
+        return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, self)
+
+    def recovery_end(self, info: os.stat_result) -> int:
+        return info.st_size
+
+    def chunk_complete(self, offset: int, size: int, rows: int) -> bool:
+        return size >= 16 * 1024 * 1024 or rows >= 10_000
 
     def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
         if self.witness != saved.seal():
@@ -133,11 +150,18 @@ class PendingSeal(CheckpointSeal):
 
         if (
             saved.seal() not in (self.prior, self.expected)
-            or self.expected.revision != FileRevision.from_stat(info)
+            or self.expected.revision.identity != FileRevision.from_stat(info).identity
+            or self.expected.revision.size > info.st_size
             or self.prior.root_id != marker.root_id
         ):
             raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
         return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, self)
+
+    def recovery_end(self, info: os.stat_result) -> int:
+        return self.expected.revision.size
+
+    def chunk_complete(self, offset: int, size: int, rows: int) -> bool:
+        return offset == self.expected.revision.size
 
     def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
         if (
