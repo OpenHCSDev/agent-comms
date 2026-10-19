@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -32,11 +31,6 @@ class NativeSessionIdentity:
     @property
     def path(self) -> Path:
         return Path(self.session_file)
-
-    @property
-    def lookup(self) -> str:
-        identity = f"agent-comms:native-session:v1\0{self.session_id}\0{self.session_file}".encode()
-        return hashlib.sha256(identity).hexdigest()[:32]
 
     def require_same_session(self, other: NativeSessionIdentity) -> None:
         if not self.same_session(other):
