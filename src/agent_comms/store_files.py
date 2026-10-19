@@ -66,9 +66,8 @@ class LockMode(ABC):
     def require_writer(self) -> None:
         """Require the exclusive holder before rebuilding a replaced source."""
 
-    @abstractmethod
     def require_held(self, held: LockMode) -> None:
-        """Require an enclosing acquisition that already grants this mode."""
+        pass
 
     @abstractmethod
     def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
@@ -91,9 +90,6 @@ class SharedLock(LockMode):
 
     def require_writer(self) -> None:
         raise CheckpointNeedsRepairError("Replaced bus file needs its page index rebuilt.")
-
-    def require_held(self, held: LockMode) -> None:
-        pass
 
     def after_repair_needed(self, error: CheckpointNeedsRepairError) -> LockMode:
         return ExclusiveLock()
@@ -130,11 +126,7 @@ class ExclusiveLock(LockMode):
 
 @dataclass(slots=True)
 class StoreLockContention:
-    """One operation's borrowed wait resource, spent only at physical locks.
-
-    Source reading, decoding and consumer work cannot spend this resource.
-    It grants no owner, input, proof or replay permission.
-    """
+    """One operation's contention budget, spent only while acquiring physical locks."""
 
     remaining: float
 
@@ -167,8 +159,6 @@ class StoreLockContention:
 
 @dataclass
 class StoreLockRelease:
-    """Actions owned by one outer physical-lock lifetime."""
-
     actions: ExitStack = field(default_factory=ExitStack)
     active: bool = True
 
@@ -182,16 +172,12 @@ class StoreLockRelease:
 
     def close(self) -> None:
         if self.active:
-            # Callbacks may take fresh locks; every inherited context sees this
-            # scope as ended before the first callback runs.
             self.active = False
             self.actions.close()
 
 
 @dataclass(frozen=True)
 class StoreLock:
-    """A held store lock's file descriptor."""
-
     descriptor: int
     _releases: ClassVar[ContextVar[StoreLockRelease]] = ContextVar(
         "store_lock_release", default=StoreLockRelease(active=False)
@@ -200,7 +186,6 @@ class StoreLock:
     @classmethod
     @contextmanager
     def hold(cls, path: Path, descriptor: int, mode: LockMode):
-        """Keep a plain store lock; it does not hold a checked bus read."""
         yield cls(descriptor)
 
     @classmethod
@@ -230,12 +215,7 @@ class StoreLock:
     @classmethod
     @contextmanager
     def releasing(cls):
-        """Nested locks share the outer lock's post-release work.
-
-        The scope object, not a context-specific token, owns retirement. Marking
-        it inactive retires every inherited context before callbacks take fresh
-        locks. A stale inherited value therefore starts an independent scope.
-        """
+        """Share outer retirement; inherited contexts observe that same scope ending."""
         current = cls._releases.get()
         if current.active:
             yield current
@@ -274,14 +254,10 @@ UNBOUNDED_STORE_READ = StoreReadBudget()
 
 
 class StoreOwner(DeclaredFamily):
-    """Shared declaration membership for composable store capabilities."""
-
     __slots__ = ()
 
 
 class StoreLockOwner(StoreOwner, declared_name=None):
-    """Store transactions use ranks assigned by the complete ordered declaration."""
-
     __slots__ = ()
     path: Path
     lock_rank: ClassVar[int]
@@ -314,12 +290,7 @@ def store_lock_path(store_path: Path) -> Path:
 
 @contextmanager
 def _store_lock_file(store_path: Path):
-    """Own the original lock inode's descriptor before any acquisition.
-
-    The lock file is never written, so it is opened read-only: closing a
-    descriptor opened for writing is a close-write event that wakes every
-    owner watching the store directory, once per lock taken.
-    """
+    """Open read-only: lock retirement must not generate a close-write watch event."""
     store_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = store_lock_path(store_path)
     with StoreLock.releasing(), os.fdopen(
@@ -330,7 +301,7 @@ def _store_lock_file(store_path: Path):
 
 @dataclass(frozen=True)
 class SynchronousStoreExecution:
-    """This thread is not executing an asyncio task."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -341,20 +312,15 @@ class StoreLockExecution:
 
 
 class UnacquiredStoreLock:
-    """No physical acquisition can be borrowed by this execution."""
-
     @contextmanager
     def locked(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
     ) -> Iterator[StoreLock]:
         platform = Platform.current()
         with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
             def acquire(mode):
-                if contention is None:
-                    platform.acquire_store_lock(lock_file.fileno(), mode=mode, blocking=blocking)
-                else:
-                    contention.acquire(lock_file.fileno(), platform, mode=mode)
+                contention.acquire(lock_file.fileno(), platform, mode=mode)
                 return resources.enter_context(StoreLockAcquisition.holding(
                     store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type))
             try:
@@ -366,14 +332,11 @@ class UnacquiredStoreLock:
     @asynccontextmanager
     async def locked_async(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
     ) -> AsyncIterator[StoreLock]:
         platform = Platform.current()
-        wait = contention if contention is not None else StoreLockContention(
-            math.inf if blocking else 0
-        )
         with _store_lock_file(store_path) as lock_file:
-            await wait.acquire_async(lock_file.fileno(), platform, mode=mode)
+            await contention.acquire_async(lock_file.fileno(), platform, mode=mode)
             with StoreLockAcquisition.holding(
                 store_path, lock_file, platform, read_budget, mode=mode, lock_type=lock_type,
             ) as lock:
@@ -388,8 +351,6 @@ class UnacquiredStoreLock:
 
 @dataclass
 class StoreLockAcquisition:
-    """One physical file lock, borrowed only within its owning execution."""
-
     file: BinaryIO
     mode: LockMode
     identity: FileIdentity
@@ -428,14 +389,14 @@ class StoreLockAcquisition:
 
     def locked(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
     ) -> AbstractContextManager[StoreLock]:
         return self.source(store_path, read_budget, lock_type)
 
     @asynccontextmanager
     async def locked_async(
         self, store_path: Path, read_budget: StoreReadBudget, mode: LockMode,
-        contention: StoreLockContention | None, lock_type: type[StoreLock], blocking: bool,
+        contention: StoreLockContention, lock_type: type[StoreLock], blocking: bool,
     ) -> AsyncIterator[StoreLock]:
         with self.source(store_path, read_budget, lock_type) as lock:
             yield lock
@@ -473,7 +434,6 @@ class StoreLockAcquisition:
             self._held.reset(token)
 
 
-@contextmanager
 def _store_lock(
     store_path: Path,
     *,
@@ -482,16 +442,14 @@ def _store_lock(
     mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
     lock_type: type[StoreLock] = StoreLock,
-) -> Iterator[StoreLock]:
-    """Acquire a store lock synchronously; inherited POSIX locks end at last close."""
-    with StoreLockAcquisition.current(store_path, mode).locked(
-        store_path, read_budget, mode, contention, lock_type, blocking,
-    ) as lock:
-        yield lock
+) -> AbstractContextManager[StoreLock]:
+    wait = contention or StoreLockContention(math.inf if blocking else 0)
+    return StoreLockAcquisition.current(store_path, mode).locked(
+        store_path, read_budget, mode, wait, lock_type, blocking,
+    )
 
 
-@asynccontextmanager
-async def _async_store_lock(
+def _async_store_lock(
     store_path: Path,
     *,
     blocking: bool = True,
@@ -499,12 +457,11 @@ async def _async_store_lock(
     mode: LockMode = ExclusiveLock(),
     contention: StoreLockContention | None = None,
     lock_type: type[StoreLock] = StoreLock,
-) -> AsyncIterator[StoreLock]:
-    """Borrow the same physical resource cancellably on this event loop."""
-    async with StoreLockAcquisition.current(store_path, mode).locked_async(
-        store_path, read_budget, mode, contention, lock_type, blocking,
-    ) as lock:
-        yield lock
+) -> AbstractAsyncContextManager[StoreLock]:
+    wait = contention or StoreLockContention(math.inf if blocking else 0)
+    return StoreLockAcquisition.current(store_path, mode).locked_async(
+        store_path, read_budget, mode, wait, lock_type, blocking,
+    )
 
 
 def _atomic_write_text(

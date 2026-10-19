@@ -1458,7 +1458,9 @@ class UncarriedRecordFormat(Measure):
     @classmethod
     def formats(cls, repo: Path, ref: str, root: str, changed: set[str]) -> dict[str, StoredForm]:
         """Each versioned record in the changed modules, measured by that revision's own code."""
-        package = Path(root).parent
+        package = Path(root)
+        while git(repo, "ls-tree", "--name-only", ref, "--", str(package / "__init__.py")):
+            package = package.parent
         modules = [".".join(Path(path).relative_to(package).with_suffix("").parts)
                    for path in sorted(changed & python_paths(repo, ref, root))
                    if cls.declares_version(git(repo, "show", f"{ref}:{path}"))]
@@ -1468,7 +1470,10 @@ class UncarriedRecordFormat(Measure):
             source = git(repo, "archive", ref, "--", str(package))
             subprocess.run(["tar", "-x", "-C", scratch], input=source, check=True, timeout=60)
             # Extracted source is stamped with its commit the way a build stamps it.
-            WheelStamp(revision(repo, ref)).write(Path(scratch) / root / "package_stamp.py")
+            for module in {module.split(".")[0] for module in modules}:
+                WheelStamp(revision(repo, ref)).write(
+                    Path(scratch) / package / module / "package_stamp.py"
+                )
             result = subprocess.run([sys.executable, "-c", cls.probe,
                                      str(Path(scratch) / package), str(Path(__file__).resolve().parent),
                                      *modules], cwd=scratch, env=cls.environment(root),
