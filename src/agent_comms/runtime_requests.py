@@ -216,18 +216,15 @@ class SubscribeRuntimeRequest(RuntimeRequest):
         )
         await agent.turns.publish_turn_state(ctx.session_id, client=ctx.client)
         await agent.inputs.emit_input_delivery_changed(ctx.session_id, client=ctx.client)
-        async with agent.sessions.config.session_options(ctx.name) as config_options:
-            metadata = await agent.sessions.metadata(ctx.name)
-            await ctx.send(
-                OwnerReady(
-                    ready=metadata,
-                    config_options=[
-                        option.model_dump(by_alias=True, exclude_none=True)
-                        for option in config_options
-                    ],
-                    controller_token=ctx.client.token,
-                )
+        metadata = await agent.sessions.metadata(ctx.name)
+        await ctx.send(
+            OwnerReady(
+                ready=metadata,
+                config_options=[],
+                controller_token=ctx.client.token,
             )
+        )
+        agent.sessions.config.observe_configuration(ctx.session_id)
         while line := await ctx.reader.readline():
             ClientLine.read(line).answer(ctx.client)
 

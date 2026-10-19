@@ -186,7 +186,7 @@ class FullTick:
         try:
             async with drain_failures(observation.comms, thread, owner):
                 # Configuration changes precede messages handed over by this tick.
-                await observation.sessions.config.sync_thread(session_id)
+                await observation.sessions.config.apply_stored_settings(session_id)
                 drained = await observation.drain_inbox(session_id)
                 if observation.effects.turns.goals.in_standby(session_id):
                     await Coordination.run_worker(partial(

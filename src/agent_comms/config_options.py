@@ -7,7 +7,7 @@ import os
 from dataclasses import dataclass, replace
 from abc import abstractmethod
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import aclosing, asynccontextmanager
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Protocol
@@ -31,6 +31,7 @@ from .native_pi import NativePiUnavailable, NativePiRpcLaunch
 from .native_package import VerifiedNativePackage
 from .launch_runtime import LaunchRuntime, RestartEnvironment
 from .threads import Thread
+from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
     from .runtime import RuntimeServer
@@ -299,6 +300,7 @@ class SessionConfigOptions(ConfigOptions):
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()
         self.publications: dict[str, ConfigOptionUpdate] = {}
+        self.observers: dict[str, asyncio.Task[None]] = {}
         # The stored settings each session's owner last saw, to notice a change.
         # The model and thinking level each running turn currently uses.
         self.settings_in_use: dict[str, UseSettings] = {}
@@ -394,11 +396,31 @@ class SessionConfigOptions(ConfigOptions):
             self.settings_in_use[session_id] = settings
             inbox.put_nowait(settings)
 
-    async def sync_thread(self, session_id: str) -> None:
+    async def apply_stored_settings(self, session_id: str) -> None:
+        """Apply execution state without discovering presentation catalogs."""
         name = await self.sessions.sync_identity(session_id)
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
         await self.use_stored_settings(session_id, name)
-        await self.publish_configuration(session_id, name)
+
+    def observe_configuration(self, session_id: str) -> None:
+        """An opened ACP session owns presentation work, never its input drain."""
+        if session_id not in self.observers:
+            self.observers[session_id] = self.runtime.background(self._observe_configuration(session_id))
+
+    async def _observe_configuration(self, session_id: str) -> None:
+        sources = (
+            WatchSource.file(self.comms.registry.store.path),
+            WatchSource.file(self.configuration.native_config / "auth.json"),
+        )
+        async with aclosing(WireWatch.observations(*sources)) as observations:
+            async for _ in observations:
+                await self.publish_configuration(session_id, self.sessions.require(session_id))
+
+    async def close(self) -> None:
+        for task in self.observers.values():
+            task.cancel()
+        await asyncio.gather(*self.observers.values(), return_exceptions=True)
+        self.observers.clear()
 
     async def publish_configuration(self, session_id: str, thread_name: str) -> None:
         if self.sessions.client is None and not self.sessions.runtime_enabled:
