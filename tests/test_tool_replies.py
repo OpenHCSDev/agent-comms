@@ -11,7 +11,7 @@ from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, P
 from agent_comms.goals import CountCheckResult, OrderCheck, RequestGoalOrder
 from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
-from agent_comms.todos import (AcceptedVerdict, MechanicalOrderRun, OperationDelivery, PendingProblemOrder,
+from agent_comms.todos import (AcceptedVerdict, RuntimeEvidence, MechanicalOrderRun, OperationDelivery, PendingProblemOrder,
     StrikeTodo)
 from agent_comms.rule_reviews import DrawnRuleReviewEntry
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
@@ -82,8 +82,8 @@ def scenario(comms: Comms, project, monkeypatch):
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
     yield CommsTodoTool, {"id": "P1", "operation": FieldCodec.encode(StrikeTodo(
-        todo.revision, actor, todo.assignment, f"The assigned change broke the existing resource release path in {__file__} during review.",
-        RecordedEventTime(500)))}, lead
+        todo.revision, actor, todo.assignment, "The assigned change broke the existing resource release path during review.",
+        RecordedEventTime(500), (RuntimeEvidence(__file__),)))}, lead
     yield CommsVerdictTool, {"id": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
         todo.revision + 1, actor, todo.assignment, "toolu_1", quote="Repair the existing owner"))}, lead
     yield CommsOrderServeTool, {"problem": "P1", "serves": RecordPlanePhase.declared_name}, lead

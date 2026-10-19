@@ -4,10 +4,13 @@ Edits are derived from native turn calls, not journaled by the watcher (7e8a0ef8
 import collections
 import importlib
 import json
+import time
+from dataclasses import replace
+from datetime import UTC, datetime
 
 from agent_comms.channel_coding_tools import RefusedCodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
-from agent_comms.todos import StorageStrikeTodo
+from agent_comms.todos import StorageStrikeTodo, TurnEvidence
 from test_commander_problem_orders import create
 
 
@@ -41,9 +44,9 @@ def test_storage_watch_judges_only_core_units(tool_watch, commander, monkeypatch
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
                         lambda self, thread, effects: judged.append(thread))
     call = tool_watch.decoded('write', {'path': 'a.py', 'content': 'body'}, 'write-1')
-    tool_watch.enforce_storage(comms.registry, 'lead', call, 'session.jsonl@0')
+    tool_watch.enforce_storage(comms.registry, 'lead', call)
     assert judged == []
-    tool_watch.enforce_storage(comms.registry, 'worker', call, 'session.jsonl@0')
+    tool_watch.enforce_storage(comms.registry, 'worker', call)
     assert judged == ['worker']
 
 
@@ -55,7 +58,7 @@ def test_storage_watch_reports_refused_call_without_judging(tool_watch, commande
                         lambda self, thread, effects: judged.append(thread))
     call = tool_watch.decoded('write', {'path': 'a.py'}, 'refused-1')
     assert isinstance(call, RefusedCodingCall)
-    tool_watch.enforce_storage(comms.registry, 'worker', call, 'session.jsonl@0')
+    tool_watch.enforce_storage(comms.registry, 'worker', call)
     assert judged == []
     assert 'REFUSED tool write [refused-1]' in capsys.readouterr().out
     assert tool_watch.digest_line('write', {'path': 'a.py'}, call).startswith('REFUSED write:')
@@ -63,9 +66,14 @@ def test_storage_watch_reports_refused_call_without_judging(tool_watch, commande
 
 def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, commander, monkeypatch, tmp_path):
     comms, _ = commander
-    session = tmp_path / 'session.jsonl'
-    session.write_text('{}\n')
-    record = f'{session}@0'
+    session = tmp_path / 'worker-session.jsonl'
+    stamp = datetime.now(UTC).isoformat()
+    session.write_text(''.join(json.dumps(row) + '\n' for row in (
+        dict(type='session', id='worker-session', version=3, timestamp=stamp),
+        dict(type='message', id='worker-input', timestamp=stamp,
+             message=dict(role='user', content='Repair the owner', timestamp=time.time() * 1000)))))
+    session.chmod(0o600)
+    comms.registry.register(replace(comms.registry.require('worker'), session_file=str(session)))
     before = create(commander, 'P1')
     announcements = []
     monkeypatch.setattr(tool_watch.order, 'on_record', lambda *args: announcements.append(args))
@@ -75,12 +83,13 @@ def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, comma
 
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage', deny)
     call = tool_watch.decoded('write', {'path': 'a.py', 'content': 'body'}, 'write-1')
-    tool_watch.enforce_storage(comms.registry, 'worker', call, record)
-    tool_watch.enforce_storage(comms.registry, 'worker', call, record)
+    tool_watch.enforce_storage(comms.registry, 'worker', call)
+    tool_watch.enforce_storage(comms.registry, 'worker', call)
     restarted = importlib.reload(tool_watch)
-    restarted.enforce_storage(comms.registry, 'worker', call, record)
+    restarted.enforce_storage(comms.registry, 'worker', call)
     after = comms.goals.todos.get('P1')
     assert after.revision == before.revision + 1
     assert len(after.live_strikes('worker')) == 1
     assert isinstance(after.live_strikes('worker')[0], StorageStrikeTodo)
+    assert after.live_strikes('worker')[0].evidence == (TurnEvidence('worker', 'worker-input'),)
     assert len(announcements) == 1

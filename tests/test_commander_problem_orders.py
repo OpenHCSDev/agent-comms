@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,7 @@ from cutover.carry import CarryChain
 
 from agent_comms.change_report import FileLine
 from agent_comms.channel_targets import CommandTarget
-from agent_comms.child_process import BoundedRun
+from agent_comms.child_process import BoundedRun, Platform
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
@@ -33,13 +34,17 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (CommitEvidence, DiffEvidence, ProcessEvidence, RuntimeEvidence, TurnEvidence,
+    AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
 from agent_comms.turn_context import GoalSegment
+
+
+CITED = (RuntimeEvidence(__file__),)  # state a strike stands on: this file exists
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -137,7 +142,8 @@ def test_strike_time_and_clean_ordered_hunts_belong_to_problem(commander):
     todo = create(commander, 'P1')
     actor = comms.registry.require('lead').incarnation
     CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, actor, todo.assignment,
-        f'The assigned change broke the existing resource release path in {__file__} during review.', RecordedEventTime(500))).apply(comms, caller)
+        'The assigned change broke the existing resource release path during review.', RecordedEventTime(500),
+        CITED)).apply(comms, caller)
     current = comms.goals.todos.get('P1')
     assert current.strikes[0].at == RecordedEventTime(500)
     assert current.strikes[0].actor == actor
@@ -377,7 +383,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
                     "Works when: the installed app shows the counter at one after restart\n"
-                    f"The counter in {repo / 'count.txt'} is wrong and that is stupid.\n1. Set count.txt to 1.\n"
+                    "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     due = '23:59'
     script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body), 'request')
@@ -385,7 +391,8 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    script.send('worker', due, str(body), 'request')  # the same holder again without --clean is a send-back
+    # the same holder again without --clean is a send-back
+    script.send('worker', due, str(body), 'request', evidence=(RuntimeEvidence(str(repo)),))
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
@@ -416,7 +423,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
     body = repo.parent / 'order.txt'
     body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: {check or 'cat count.txt -> 1'}\n"
                     "Works when: the installed app shows the counter at one after restart\n"
-                    f"The counter in {repo / 'count.txt'} is wrong and that is stupid.\n1. {edit}\n{extra}"
+                    f"The counter is wrong and that is stupid.\n1. {edit}\n{extra}"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     return str(body)
 
@@ -433,10 +440,10 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     (repo / 'count.txt').write_text('0\n')
     body = order_body(repo)
     problem(script, body)
-    script.strike('worker', 'P1', f'P1 left {repo / "count.txt"} at zero and reported it fixed')
+    script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed', evidence=(RuntimeEvidence(str(repo)),))
     script.send('worker', '23:59', body, 'request')
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', body, 'request')
+    script.send('worker', '23:59', body, 'request', evidence=(RuntimeEvidence(str(repo)),))
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
 
@@ -448,7 +455,7 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
     (repo / 'count.txt').write_text('0\n')
     problem(script, order_body(repo))
     create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
-    script.strike('worker', 'P2', f'P1 was compared with this miss: P2 left {repo / "count.txt"} at zero and reported it fixed')
+    script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed', evidence=(RuntimeEvidence(str(repo)),))
     assert [script.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
     script.hunt(f'{__file__}:1', 'P2', 'P1 rereads the counter per event; this read of the P2 path found it clean', None)
     assert [len(comms.goals.todos.get(pid).hunts) for pid in ('P1', 'P2')] == [0, 1]
@@ -501,7 +508,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
-    script.strike('worker', 'P1', f'P1 was sent back once before its check in {repo} was corrected')
+    script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected', evidence=(RuntimeEvidence(str(repo)),))
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
     why = 'the recorded check greps a word the ordered edit never writes'
@@ -577,7 +584,8 @@ def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander)
     todo = create(commander, 'P1')
     lead = comms.registry.require('lead').incarnation
     CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, lead, todo.assignment,
-        f'The unit delivered {__file__} after the recorded deadline had already passed.')).apply(comms, caller)
+        'The unit delivered its order after the recorded deadline had already passed.',
+        evidence=CITED)).apply(comms, caller)
     struck = comms.goals.todos.get('P1')
     strike, = struck.strikes
     assert struck.strike_count == 1 and struck.live_strikes('worker') == (strike,)
@@ -602,7 +610,7 @@ def test_order_unstrike_voids_the_newest_live_strike_on_the_record(commander, co
     create(commander, 'P1')
     posted = []
     monkeypatch.setattr(script, 'post', lambda recipients, body: posted.append((recipients, body)))
-    script.strike('worker', 'P1', f'P1 was struck for lateness against the wrong delivered commit in {repo}')
+    script.strike('worker', 'P1', 'P1 was struck for lateness against the wrong delivered commit', evidence=(RuntimeEvidence(str(repo)),))
     script.unstrike('P1', 'P1 was delivered before its deadline; the commander recorded the later merge as the delivery')
     current = comms.goals.todos.get('P1')
     assert len(current.strikes) == 1 and script.struck(current, 'worker') == 0
@@ -630,7 +638,7 @@ def test_a_withdrawn_order_is_neither_open_nor_overdue_and_strikes_no_one(comman
         script.withdraw('P1', 'withdrawing the same order twice records nothing new')
 
 
-FIRED = f'The unit took two strikes on this problem and its second delivery of {__file__} was late again.'
+FIRED = 'The unit took two strikes on this problem and its second delivery was late again.'
 
 
 @pytest.mark.parametrize('caller, why, refused', [
@@ -642,7 +650,7 @@ def test_only_the_commander_releases_a_problem_and_its_owner_stays_on_record(com
     comms, _ = commander
     todo = create(commander, 'P1')
     CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
-        todo.assignment, FIRED)).apply(comms, commander[1])
+        todo.assignment, FIRED, evidence=CITED)).apply(comms, commander[1])
     struck = comms.goals.todos.get('P1')
     def release():
         CommsTodoTool(id='P1', operation=ReleaseTodo(struck.revision, comms.registry.require(caller).incarnation,
@@ -775,7 +783,8 @@ def test_todo_record_carries_keep_every_stored_strike(commander, step, name, col
     comms, caller = commander
     todo = create(commander, 'P1')
     CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, comms.registry.require('lead').incarnation,
-        todo.assignment, f'The unit delivered {__file__} after the recorded deadline had already passed.')).apply(comms, caller)
+        todo.assignment, 'The unit delivered its order after the recorded deadline had already passed.',
+        evidence=CITED)).apply(comms, caller)
     struck = comms.goals.todos.get('P1')
     path = TodoStore.path_in(comms.root)
     with closing(sqlite3.connect(path)) as db:
@@ -1108,7 +1117,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
         slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
-        derive='delete-copy', by=f'{__file__}:1').run()
+        derive='delete-copy', by=f'{__file__}:1', runtime=(__file__,)).run()
     saved = comms.goals.todos.get('P1')
     assert len(saved.verdicts) == len(saved.strikes) == 1
     assert isinstance(saved.verdicts[0], SendBackVerdict)
@@ -1160,9 +1169,9 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     comms, caller = commander
     todo = create(commander, 'P1')
     goal = comms.registry.require('worker').goal
-    why = f'The unit wrapped the old store in {__file__} in a forwarding class instead of deleting it.'
+    why = 'The unit wrapped the old store in a forwarding class instead of deleting it.'
     sent_back = SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation, todo.assignment,
-                                'toolu_2', reason=StrikeReason(why))
+                                'toolu_2', reason=StrikeReason(why), evidence=CITED)
     CommsVerdictTool(id='P1', operation=sent_back).apply(comms, caller)
     judged = comms.goals.todos.get('P1')
     assert (judged.verdicts, judged.revision, judged.strike_count) == ((sent_back,), todo.revision + 1, 1)
@@ -1184,9 +1193,9 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
     assert (goal.text, goal.progress) == (ProblemGoalOrder.text, '')
     assert [line.split(':')[0] for line in GoalSegment.capture(worker, goal, comms.goals).progress.splitlines()] == ['P1', 'P2']
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
-    why = f'The unit kept a second copy of the goal text in {__file__} beside the first.'
+    why = 'The unit kept a second copy of the goal text.'
     CommsVerdictTool(id='P2', operation=SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation,
-        todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
+        todo.assignment, 'toolu_3', reason=StrikeReason(why), evidence=CITED)).apply(comms, caller)
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
     assert progress.splitlines() == ['P1: Delivered, waiting on install', f'P2: Open · Sent back: {why}']
@@ -1199,7 +1208,7 @@ VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
     'ok-unowned': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner' --no-owner proof",
     'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
-            f" --fact 'four words of fact' --at {__file__}:1 --derive delete-copy --by b.py:2",
+            f" --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2 --runtime {__file__}",
 }
 
 
@@ -1211,7 +1220,8 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
     create(commander, 'P1')
     for name, line in VERDICT_LINES.items():
         argv = [name, *shlex.split(line)]
-        for at in [i for i, token in enumerate(argv) if token.startswith('--')]:
+        # Each evidence option is optional; the strike refuses a verdict citing none.
+        for at in [i for i, token in enumerate(argv) if token.startswith('--') and token != '--runtime']:
             with pytest.raises(SystemExit):
                 judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
         operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
@@ -1430,8 +1440,8 @@ def test_a_done_report_with_no_claim_is_refused_and_a_merged_claim_passes_claim_
 
 
 def test_a_strike_or_send_back_citing_a_report_instead_of_state_is_refused(commander, tmp_path):
-    """Each Evidence member checks its citation exists; a board row, goal text or a missing
-    commit is a report of state, so the strike and the send-back that strikes are refused."""
+    """Each Evidence member verifies itself; an empty tuple is refused, and the why is prose
+    that is never searched for state, even when it names a real commit."""
     comms, caller = commander
     repo = tmp_path / 'repo'
     git = ('git', '-C', str(repo), '-c', 'user.name=t', '-c', 'user.email=t@t')
@@ -1442,36 +1452,45 @@ def test_a_strike_or_send_back_citing_a_report_instead_of_state_is_refused(comma
         subprocess.run((*git, 'commit', '-qm', text), check=True)
     first, last = subprocess.run((*git, 'rev-list', 'HEAD'), capture_output=True, text=True,
                                  check=True).stdout.split()[::-1]
-    record = tmp_path / 'session.jsonl'
-    record.write_text('{}\n{}\n')
-    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem='P1', order=order(repo, 'order-P1'), request='request',
-        deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms',
-        text='Fix P1')).apply(comms, caller)
+    session = tmp_path / 'worker-session.jsonl'
+    stamp = datetime.now(UTC).isoformat()
+    session.write_text(''.join(json.dumps(row) + '\n' for row in (
+        dict(type='session', id='worker-session', version=3, timestamp=stamp),
+        dict(type='message', id='worker-input', timestamp=stamp,
+             message=dict(role='user', content='Repair the owner', timestamp=time.time() * 1000)))))
+    session.chmod(0o600)
+    comms.registry.register(replace(comms.registry.require('worker'), session_file=str(session)))
+    create(commander, 'P1', directory=repo)
     lead = comms.registry.require('lead').incarnation
-    did = 'The unit left count.txt at zero and reported the problem fixed'
+    did = f'The unit left count.txt at zero at {last} and reported the problem fixed'
 
-    def strike(reason):
+    def strike(*evidence):
         todo = comms.goals.todos.get('P1')
-        return CommsTodoTool(id='P1', operation=StrikeTodo(todo.revision, lead, todo.assignment,
-                                                            reason)).apply(comms, caller)
+        return CommsTodoTool(id='P1', operation=StrikeTodo(
+            todo.revision, lead, todo.assignment, did, evidence=evidence)).apply(comms, caller)
 
-    def send_back(reason):
+    def send_back(*evidence):
         todo = comms.goals.todos.get('P1')
         return CommsVerdictTool(id='P1', operation=SendBackVerdict(
-            todo.revision, lead, todo.assignment, 'call-1', reason=StrikeReason(reason))).apply(comms, caller)
+            todo.revision, lead, todo.assignment, 'call-1', reason=StrikeReason(did),
+            evidence=evidence)).apply(comms, caller)
 
-    for refused in (f'{did}, says the board row for P1', f'{did}, says the Goal text Fix P1',
-                    f'{did}, says another agent', f'{did} at commit {"0" * 12}',
-                    f'{did} in {first[:9]}..{first[:9]}', f'{did} at {record}@99',
-                    f'{did} from pid 999999999', f'{did}, see /nonexistent/state'):
-        for write in (strike, send_back):
-            with pytest.raises(ValueError, match='Cite the state the strike stands on'):
-                write(refused)
+    for write in (strike, send_back):
+        with pytest.raises(ValueError, match='Cite the state the strike stands on: --commit SHA'):
+            write()
+        for refused, why in ((CommitEvidence('0' * 12), 'is no commit'),
+                             (DiffEvidence(first, first), 'changes nothing'),
+                             (TurnEvidence('worker', 'never-recorded'), 'recorded no turn'),
+                             (ProcessEvidence(os.getpid(), 1), 'No process'),
+                             (RuntimeEvidence('/nonexistent/state'), 'no existing absolute'),
+                             (RuntimeEvidence('count.txt'), 'no existing absolute')):
+            with pytest.raises(ValueError, match=why):
+                write(CommitEvidence(last), refused)
     assert comms.goals.todos.get('P1').strikes == ()
-    for cited in (f'{did} at commit {last[:12]}', f'{did} in {first[:9]}..{last[:9]}',
-                  f'{did} at {record}@3', f'{did} from pid {os.getpid()}', f'{did}, see {record}'):
-        strike(cited)
-        assert comms.goals.todos.get('P1').strikes[-1].reason == cited
-    send_back(f'{did} at commit {last}')
-    assert comms.goals.todos.get('P1').strikes[-1].reason == f'{did} at commit {last}'
+    held = (CommitEvidence(last), DiffEvidence(first, last), TurnEvidence('worker', 'worker-input'),
+            ProcessEvidence(os.getpid(), Platform.current().identity(os.getpid()).start_time),
+            RuntimeEvidence(str(session)))
+    strike(*held)
+    send_back(CommitEvidence(first))
+    assert [strike.evidence for strike in comms.goals.todos.get('P1').strikes] == [
+        held, (CommitEvidence(first),)]
