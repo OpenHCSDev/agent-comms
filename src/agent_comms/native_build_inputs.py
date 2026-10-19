@@ -35,6 +35,7 @@ class NativeBuildInputs:
         digest = hashlib.sha256()
         for path in self.paths():
             digest.update(str(path.relative_to(self.root)).encode() + b"\0")
+            digest.update((path.stat().st_mode & 0o111).to_bytes(2, "big"))
             digest.update(hashlib.sha256(path.read_bytes()).digest())
         for line in manifest.read_text().splitlines():
             if line.startswith("# agent-comms-native-stock-v1 "):
