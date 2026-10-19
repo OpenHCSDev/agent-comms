@@ -7,7 +7,7 @@ from contextlib import AsyncExitStack, ExitStack
 from dataclasses import replace
 from functools import partial
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 from acp import RequestError
 
@@ -45,6 +45,14 @@ from .turn_phase import CancellingPhase, PromptAcceptancePhase
 
 if TYPE_CHECKING:
     from .turn_runner import TurnRunner
+
+
+class UnexpectedTurnFailure(NativeRequestFailure):
+    """An execution fault is reported without claiming the native runtime is unavailable."""
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(f"Unexpected turn failure: {cause}")
+        self.__cause__ = cause
 
 
 class OwnedTurn:
@@ -399,6 +407,12 @@ class OwnedTurn:
             document = self.runner.inputs.dispositions.settle_unbound(self.original_keys)
             return document.shared_state(self.original_keys)
 
+    async def fail(self, failure: Exception, cause: Exception) -> NoReturn:
+        """Settle and report once, retaining the exception that actually failed the turn."""
+        await Coordination.run_worker(self.settle_unbound)
+        outcome = await self.progress.report_failure(failure)
+        outcome.raise_fault(cause)
+
     async def run_native(self) -> None:
         try:
             await self.prepare_native()
@@ -412,11 +426,9 @@ class OwnedTurn:
             )
             raise
         except (NativeRequestFailure, RequestError) as error:
-            await Coordination.run_worker(self.settle_unbound)
-            request_failure = await self.progress.report_failure(error)
-            if request_failure is not None:
-                raise request_failure.request_error() from error
-            raise
+            await self.fail(error, error)
+        except Exception as error:
+            await self.fail(UnexpectedTurnFailure(error), error)
         # The completed outcome owns notification delivery and request failure;
         # it is outside stream-fault reporting, so no failure is published twice.
         await self.progress.publish_result()

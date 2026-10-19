@@ -38,10 +38,10 @@ from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
-                     OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
+from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
-                     WithdrawTodo, AssignTodo, OrderProgress, Todo)
+                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo)
 from . import capacity
 from .config import CommanderConfig, Repo
 
@@ -53,7 +53,7 @@ BOARD = str(CONFIG.board)
 NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain words
 B = str(CONFIG.root)
 CLI = str(CONFIG.cli)
-OUTGOING = (FairText, HierarchyText, PlainText)  # every commander text passes each one
+OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
 def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""
@@ -487,7 +487,8 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
 
-def strike(unit, why, caught=f'{ME} at review'):
+def strike(unit: str, why: str, caught: str = f'{ME} at review', *,
+           kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact.
 
     Core records the strike on the task's Todo; the strike is written to the narrative file and posted to
@@ -496,15 +497,18 @@ def strike(unit, why, caught=f'{ME} at review'):
     # What matters is how a mistake happened, how often, and how and when it was caught.
     if not any(stage in caught for stage in STAGES):
         sys.exit(f'Refused: --caught must say who caught it and at which stage {STAGES}, e.g. "{ME} at review".')
-    task = (re.search(r'\bP\d+\b', why) or re.search('', '')).group(0) or None
-    if task is None:
+    match = re.search(r'\bP\d+\b', why)
+    if not match:
         sys.exit('Refused: name the task (P-number) the strike is for; strikes count per task.')
+    task = match.group(0)
     todo = COMMS.goals.todos.get(task)
-    if not todo.state.open or todo.assignment.owner != unit:
+    if not todo.state.open or todo.held().owner != unit:
         sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
-    call(CommsTodoTool(id=task, operation=StrikeTodo(
-        todo.revision, COMMS.registry.require(ME).incarnation, todo.assignment, f'{why} (caught by {caught})')))
+    recorded = call(CommsTodoTool(id=task, operation=kind(
+        todo.revision, COMMS.registry.require(ME).incarnation, todo.held(), f'{why} (caught by {caught})')))
+    if recorded.todo.revision == todo.revision:
+        return
     n = struck(COMMS.goals.todos.get(task), unit)
     line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
             f'caught by {caught}): {why}')
@@ -898,10 +902,11 @@ class DueVerb(OrderVerb, RuledVerb):
 class InstallVerb(RuledVerb):
     help = "plan the fleet's next install; merged and delivered orders wait on it"
     at: str = option("at", help="HH:MM the install is due")
+    installer: str = option("installer", help="the unit that runs the install")
 
     def run(self) -> None:
-        PlannedInstallDeadline(deadline(self.at)).plan(COMMS.root)
-        print(f'install due {self.at}')
+        PlannedInstallDeadline(deadline(self.at), self.installer).plan(COMMS.root)
+        print(f'install due {self.at}, run by {self.installer}')
 
 
 @dataclass(frozen=True, kw_only=True)

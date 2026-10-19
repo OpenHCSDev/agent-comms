@@ -1,5 +1,4 @@
 import type { FileEntry, SessionEntry, SessionHeader } from './session-manager.js';
-import type { Usage } from '@earendil-works/pi-ai/compat';
 
 export declare abstract class StoreAvailability {
     abstract requireOpen(): void;
@@ -27,8 +26,6 @@ export declare class EntryMetadata {
     inputDigest: string | null;
     firstKeptEntryId: string | null;
     contextMessageCount: number;
-    usage: Usage | undefined;
-    toolCallCount: number;
     model: {provider: string; modelId: string} | null;
     thinkingLevel: string | null;
     label: {targetId: string; label: string | null; timestamp: string} | null;
@@ -40,7 +37,8 @@ export declare abstract class EntryStore {
     abstract metadata(id: string | null): EntryMetadata | undefined;
     abstract get(id: string): SessionEntry | undefined;
     abstract metadataEntries(): IterableIterator<EntryMetadata>;
-    abstract branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
+    abstract chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
+    branchMetadata(leafId?: string | null, firstId?: string | null): IterableIterator<EntryMetadata>;
     abstract append(entry: SessionEntry): void;
     abstract committedAppend(entry: SessionEntry, file?: string): EntryStore;
     abstract storedAt(file: string): EntryStore;
@@ -78,7 +76,7 @@ export declare class MemoryEntryStore extends EntryStore {
     metadata(id: string | null): EntryMetadata | undefined;
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
-    branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
+    chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
     append(entry: SessionEntry): void;
     committedAppend(entry: SessionEntry, file?: string): EntryStore;
     storedAt(file: string): DiskEntryStore;
@@ -93,7 +91,7 @@ export declare class DiskEntryStore extends EntryStore {
     metadata(id: string | null): EntryMetadata | undefined;
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
-    branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
+    chronologicalMetadata(firstId?: string | null): IterableIterator<EntryMetadata>;
     append(entry: SessionEntry): void;
     committedAppend(entry: SessionEntry, file?: string): EntryStore;
     storedAt(file: string): EntryStore;
@@ -103,6 +101,6 @@ export declare class DiskEntryStore extends EntryStore {
 export declare class EntryBranchRange implements Iterable<SessionEntry> {
     constructor(store: EntryStore, leafId: string | null, ancestorId?: string | null);
     [Symbol.iterator](): IterableIterator<SessionEntry>;
-    reverse(): IterableIterator<SessionEntry>;
+    newestFirst(): IterableIterator<SessionEntry>;
     isEmpty(): boolean;
 }

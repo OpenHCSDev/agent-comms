@@ -401,8 +401,9 @@ class MergedProgress(FoundProgress):
 
 
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
-    """The fleet's next install: one time for the bus, set by the commander when it plans an
-    upgrade. Merged and delivered orders wait on it; none of them carries it as its own deadline."""
+    """The fleet's next install: one time for the bus and the unit that runs it, set by the
+    commander when it plans an upgrade. Merged and delivered orders wait on it; none of them
+    carries it as its own deadline. Install, maintenance and carry work is the installer's."""
 
     @staticmethod
     def path_in(root: Path) -> Path:
@@ -413,27 +414,43 @@ class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
         path = cls.path_in(root)
         if not path.exists():
             return UnplannedInstallDeadline()
-        return PlannedInstallDeadline(RecordedEventTime(**json.loads(path.read_text())))
+        record = json.loads(path.read_text())
+        return PlannedInstallDeadline(RecordedEventTime(record.pop("at")), **record)
 
     @abstractmethod
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         """One INSTALL line for every order waiting on install; it strikes nobody."""
+
+    @abstractmethod
+    def refusal(self, work: str, commander: str) -> str:
+        """Why the commander does not run the installer's work itself."""
 
 
 class UnplannedInstallDeadline(InstallDeadline):
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
+    def refusal(self, work: str, commander: str) -> str:
+        return (f"{work.capitalize()} is the installer's work, and no install is planned. "
+                "Plan one with agent-comms-commander order install HH:MM UNIT, "
+                f"then order the {work} from that unit.")
+
 
 @dataclass(frozen=True)
 class PlannedInstallDeadline(InstallDeadline):
     at: RecordedEventTime
+    installer: str
 
     def plan(self, root: Path) -> None:
         path = self.path_in(root)
         staged = path.with_suffix(".tmp")
-        staged.write_text(json.dumps({"at": self.at.at}))
+        staged.write_text(json.dumps({"at": self.at.at, "installer": self.installer}))
         staged.replace(path)
+
+    def refusal(self, work: str, commander: str) -> str:
+        return (f"{work.capitalize()} is {self.installer}'s work, as the planned installer, not "
+                f"{commander}'s. Send it as an order: agent-comms-commander order send --to "
+                f"{self.installer}, naming the {work} to run.")
 
     def alarm(self, waiting: list[str], now: float) -> list[str]:
         if not waiting:
@@ -612,6 +629,30 @@ class HierarchyText(OrderWords):
         banned = re.findall(r'(?m)^Banned:(.*)$', cls.CITED.sub(' ', text))
         return super().found(text) + [item.strip() for line in banned for item in re.split(r',|;|\bor\b', line)
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
+
+
+class DefectText(BluntText):
+    """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
+    a text naming no defect needs no label."""
+
+    SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
+
+    @classmethod
+    def found(cls, text: str) -> list[str]:
+        named = cls.SLOP.search(text)
+        return super().found(cls.SLOP.sub(' ', text)) if named else ['no defect named']
+
+
+class DirectiveText:
+    """What the commander and the owner's voice send units: order send, order say and the
+    connector's send refuse a text failing any of these."""
+
+    OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
+        FairText, HierarchyText, PlainText, OrderText, DefectText)
+
+    @classmethod
+    def refused(cls, text: str) -> tuple[str, ...]:
+        return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
@@ -801,6 +842,11 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
+    def require_checked(self, problem: str) -> None:
+        """An installed claim stands on this order's recorded check result."""
+        raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
+                         "its order has none.")
+
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
@@ -854,6 +900,9 @@ class DeliveredProblemOrder(ProblemOrder):
     def installed(self, works, artifact):
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
+
+    def require_checked(self, problem: str) -> None:
+        """The delivery passed the order's check, so its result is recorded."""
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
@@ -1140,7 +1189,21 @@ class StrikeTodo(TodoOperation):
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
         StrikeReason(self.reason)
+        if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
+            return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class StorageStrikeTodo(StrikeTodo):
+    """Repeated reports of one storage violation retain its recorded strike."""
+
+    def repeats(self, recorded: StrikeTodo) -> bool:
+        return (self.actor == recorded.actor and self.previous.owner == recorded.previous.owner
+                and self.reason == recorded.reason)
 
 
 @dataclass(frozen=True)
@@ -1630,8 +1693,8 @@ class TodoStore(TypedStore):
             (owner.name, owner.wire_birth)))
 
     def for_request(self, commander: ThreadIncarnation, goal_id: str) -> tuple[Todo, ...]:
-        """The orders serving one request: a Goal on the commander's thread."""
-        return self._open(
+        """Every order that served one request, a Goal on the commander's thread, open or done."""
+        return self._select(
             "json_extract(goal,'$.owner')=? AND json_extract(goal,'$.owner_created')=? "
             "AND json_extract(goal,'$.goal_id')=?", (commander.name, commander.wire_birth, goal_id))
 

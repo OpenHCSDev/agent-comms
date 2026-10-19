@@ -1,7 +1,7 @@
 /** Native session history storage. JSONL is authority; SQLite contains rebuildable selectors only. */
 import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { getHeapStatistics } from 'node:v8';
 import { sessionEntryToContextMessages } from './session-manager.js';
@@ -24,12 +24,6 @@ export class EntryMetadata {
         this.inputDigest = entry.message?.inputDigest ?? null;
         this.firstKeptEntryId = entry.firstKeptEntryId ?? null;
         this.contextMessageCount = sessionEntryToContextMessages(entry).length;
-        // Statistics consume facts from the same strict scan/append that owns
-        // selectors. Reading lifetime totals must not decode history again.
-        this.usage = entry.type === 'message' ? entry.message.usage : entry.usage;
-        this.toolCallCount = this.role === 'assistant' && Array.isArray(entry.message.content)
-            ? entry.message.content.reduce((count, block) => count + (block.type === 'toolCall' ? 1 : 0), 0)
-            : 0;
         this.model = entry.type === 'model_change'
             ? { provider: entry.provider, modelId: entry.modelId }
             : this.role === 'assistant' ? { provider: entry.message.provider, modelId: entry.message.model } : null;
@@ -67,7 +61,18 @@ export class EntryStore {
     metadata(id) { throw new Error('EntryStore.metadata must be implemented'); }
     get(id) { throw new Error('EntryStore.get must be implemented'); }
     *metadataEntries() { throw new Error('EntryStore.metadataEntries must be implemented'); }
-    *branchMetadata(leafId) { throw new Error('EntryStore.branchMetadata must be implemented'); }
+    *chronologicalMetadata() { throw new Error('EntryStore.chronologicalMetadata must be implemented'); }
+    *branchMetadata(leafId = this.lastId, firstId = null) {
+        const selected = new Set();
+        let first;
+        for (const meta of this.ancestors(leafId)) {
+            selected.add(meta.id);
+            first = meta;
+            if (meta.id === firstId) break;
+        }
+        if (first) for (const meta of this.chronologicalMetadata(first.id))
+            if (selected.has(meta.id)) yield meta;
+    }
     append(entry) { throw new Error('EntryStore.append must be implemented'); }
     committedAppend(entry, file) { throw new Error('EntryStore.committedAppend must be implemented'); }
     storedAt(file) { throw new Error('EntryStore.storedAt must be implemented'); }
@@ -79,8 +84,8 @@ export class EntryStore {
     validate(entry) {
         if (!entry || typeof entry !== 'object' || Array.isArray(entry) ||
             typeof entry.type !== 'string' || entry.type === 'session' ||
-            typeof entry.id !== 'string' || !entry.id || entry.id === this.header.id || this.has(entry.id) ||
-            !(entry.parentId === null || typeof entry.parentId === 'string' && this.has(entry.parentId)))
+            typeof entry.id !== 'string' || !entry.id || entry.id === this.header.id ||
+            !(entry.parentId === null || typeof entry.parentId === 'string'))
             throw new Error('Invalid native entry identity or ancestry');
         if (entry.type === 'message' && (!entry.message || typeof entry.message !== 'object' ||
             typeof entry.message.role !== 'string')) throw new Error('Invalid native message entry');
@@ -91,14 +96,17 @@ export class EntryStore {
             throw new Error('Strict native v3 session header required');
         return header;
     }
-    *entries() { for (const meta of this.metadataEntries()) yield this.get(meta.id); }
+    *entries() { for (const meta of this.chronologicalMetadata()) yield this.get(meta.id); }
     *fileEntries() { yield this.header; yield* this.entries(); }
     *branch(leafId = this.lastId) { for (const meta of this.branchMetadata(leafId)) yield this.get(meta.id); }
     *ancestors(leafId = this.lastId) {
         let meta = leafId === null ? undefined : this.metadata(leafId);
         while (meta) {
             yield meta;
-            meta = meta.parentId === null ? undefined : this.metadata(meta.parentId);
+            if (meta.parentId === null) return;
+            const parent = this.metadata(meta.parentId);
+            if (!parent || parent.sequence >= meta.sequence) throw new Error('Invalid native entry ancestry');
+            meta = parent;
         }
     }
     branchContains(leafId, id) {
@@ -144,12 +152,8 @@ export class EntryStore {
     *keptMetadata(leafId = this.lastId, compaction = this.latestMetadata(leafId, 'compaction')) {
         // The same original floor owns both canonical and recent-only views.
         if (!compaction) throw new Error('Kept-source view requires an original compaction floor');
-        let keeping = false;
-        for (const meta of this.branchMetadata(leafId)) {
-            if (meta.id === compaction.firstKeptEntryId) keeping = true;
-            if (meta.id === compaction.id) { keeping = true; continue; }
-            if (keeping) yield meta;
-        }
+        for (const meta of this.branchMetadata(leafId, compaction.firstKeptEntryId ?? compaction.id))
+            if (meta.id !== compaction.id) yield meta;
     }
     *contextEntries(leafId = this.lastId) {
         for (const meta of this.contextMetadata(leafId)) yield this.get(meta.id);
@@ -165,12 +169,8 @@ export class EntryStore {
         for (const meta of this.metadataEntries()) if (meta.inputId !== null) yield meta;
     }
     trackedInputMetadata(inputId) {
-        let found;
-        for (const meta of this.trackedMetadata()) if (meta.inputId === inputId) {
-            if (found) throw new Error('Duplicate native input ID in session');
-            found = meta;
-        }
-        return found;
+        for (const meta of this.trackedMetadata()) if (meta.inputId === inputId) return meta;
+        return undefined;
     }
     *trackedInputs() { for (const meta of this.trackedMetadata()) yield this.get(meta.id); }
     trackedInput(inputId) {
@@ -178,12 +178,13 @@ export class EntryStore {
         return meta ? this.get(meta.id) : undefined;
     }
     *children(parentId) {
-        for (const meta of this.metadataEntries()) if (meta.parentId === parentId) yield this.get(meta.id);
+        for (const meta of this.chronologicalMetadata())
+            if (meta.parentId === parentId) yield this.get(meta.id);
     }
     label(id) {
-        let found;
-        for (const meta of this.metadataEntries()) if (meta.label?.targetId === id) found = meta.label;
-        return found?.label ? found : undefined;
+        for (const meta of this.metadataEntries()) if (meta.label?.targetId === id)
+            return meta.label.label ? meta.label : undefined;
+        return undefined;
     }
 }
 
@@ -192,14 +193,15 @@ export class EntryBranchRange {
     constructor(store, leafId, ancestorId = null) {
         this.store = store;
         this.leafId = leafId;
+        this.ancestorId = ancestorId;
         this.start = ancestorId === null ? -1 : store.metadata(ancestorId).sequence;
     }
     *[Symbol.iterator]() {
-        for (const meta of this.store.branchMetadata(this.leafId)) {
+        for (const meta of this.store.branchMetadata(this.leafId, this.ancestorId)) {
             if (meta.sequence > this.start) yield this.store.get(meta.id);
         }
     }
-    *reverse() {
+    *newestFirst() {
         for (const meta of this.store.ancestors(this.leafId)) {
             if (meta.sequence <= this.start) break;
             yield this.store.get(meta.id);
@@ -210,26 +212,38 @@ export class EntryBranchRange {
 
 export class MemoryEntryStore extends EntryStore {
     #header;
-    #entries = new Map();
+    #entries = [];
     #metadata = new Map();
-    #last = null;
     constructor(header, entries = []) {
         super();
         this.#header = EntryStore.validateHeader(header);
         for (const entry of entries) this.append(entry);
     }
     get header() { this.assertUsable(); return this.#header; }
-    get lastId() { this.assertUsable(); return this.#last; }
-    get(id) { this.assertUsable(); return this.#entries.get(id); }
+    get lastId() { this.assertUsable(); return this.#entries.at(-1)?.id ?? null; }
+    get(id) {
+        const meta = this.metadata(id);
+        return meta ? this.#entries[meta.sequence - 1] : undefined;
+    }
     metadata(id) { this.assertUsable(); return this.#metadata.get(id); }
     assertCurrent() { this.assertUsable(); }
-    *metadataEntries() { this.assertUsable(); yield* this.#metadata.values(); }
-    *branchMetadata(leafId = this.lastId) { yield* [...this.ancestors(leafId)].reverse(); }
+    *metadataEntries() {
+        this.assertUsable();
+        for (let i = this.#entries.length - 1; i >= 0; i--)
+            yield this.#metadata.get(this.#entries[i].id);
+    }
+    *chronologicalMetadata(firstId = null) {
+        this.assertUsable();
+        const start = firstId === null ? 0 : this.metadata(firstId).sequence - 1;
+        for (let i = start; i < this.#entries.length; i++)
+            yield this.#metadata.get(this.#entries[i].id);
+    }
     append(entry) {
         this.validate(entry);
-        this.#metadata.set(entry.id, new EntryMetadata(entry, this.#entries.size + 1));
-        this.#entries.set(entry.id, entry);
-        this.#last = entry.id;
+        if (this.#metadata.has(entry.id) || entry.parentId !== null && !this.has(entry.parentId))
+            throw new Error('Invalid native entry identity or ancestry');
+        this.#metadata.set(entry.id, new EntryMetadata(entry, this.#entries.length + 1));
+        this.#entries.push(entry);
     }
     committedAppend(entry, file) {
         if (file) return this.storedAt(file);
@@ -240,7 +254,7 @@ export class MemoryEntryStore extends EntryStore {
         this.close();
         return store;
     }
-    close() { this.invalidate(); this.#entries.clear(); this.#metadata.clear(); }
+    close() { this.invalidate(); this.#entries.length = 0; this.#metadata.clear(); }
 }
 
 /** Disk-backed, bounded-page selector index; payloads remain exclusively in the native JSONL. */
@@ -251,10 +265,13 @@ export class DiskEntryStore extends EntryStore {
     #last = null;
     #revision;
     #extent = 0;
-    #sequence = 0;
     #metadata;
+    #input;
+    #label;
     #insert;
-    constructor(file, { indexDirectory = process.env.AGENT_COMMS_SESSION_INDEX_DIR ?? join(homedir(), '.cache', 'agent-comms', 'session-indexes') } = {}) {
+    #lines;
+    #headerEnd;
+    constructor(file, { indexDirectory = join(homedir(), '.cache', 'agent-comms', 'session-indexes') } = {}) {
         super();
         this.file = resolve(file);
         mkdirSync(indexDirectory, { recursive: true, mode: 0o700 });
@@ -267,7 +284,6 @@ export class DiskEntryStore extends EntryStore {
             this.#db.exec(`CREATE TABLE entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
                 input_id TEXT, selectors TEXT NOT NULL);
-                CREATE INDEX entry_parent ON entries(parent);
                 CREATE INDEX entry_input ON entries(input_id);
                 CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence);`);
             // SQLite has initialized and owns an exclusive open inode. Derived pages
@@ -275,6 +291,8 @@ export class DiskEntryStore extends EntryStore {
             unlinkSync(index);
             rmSync(directory, {recursive:true});
             this.#metadata = this.#db.prepare('SELECT selectors FROM entries WHERE id=?');
+            this.#input = this.#db.prepare('SELECT selectors FROM entries WHERE input_id=? ORDER BY sequence DESC LIMIT 1');
+            this.#label = this.#db.prepare("SELECT selectors FROM entries WHERE json_extract(selectors,'$.label.targetId')=? ORDER BY sequence DESC LIMIT 1");
             this.#insert = this.#db.prepare('INSERT INTO entries VALUES(?,?,?,?,?,?,?,?)');
             this.refresh();
         } catch (error) {
@@ -286,42 +304,47 @@ export class DiskEntryStore extends EntryStore {
     get header() { this.assertUsable(); return this.#header; }
     get lastId() { this.assertUsable(); return this.#last; }
     get revision() { this.assertUsable(); return this.#revision; }
-    metadata(id) { this.assertUsable(); return EntryMetadata.fromIndex(this.#metadata.get(id)); }
+    #find(statement, key) {
+        this.assertUsable();
+        let row = statement.get(key);
+        if (!row) {
+            this.assertCurrent();
+            while (this.#readPrevious()) {
+                row = statement.get(key);
+                if (row) break;
+            }
+            this.assertCurrent();
+        }
+        return EntryMetadata.fromIndex(row);
+    }
+    metadata(id) { return id === null || id === this.#header.id ? undefined : this.#find(this.#metadata, id); }
     *metadataEntries() {
-        this.assertUsable();
-        for (const row of this.#db.prepare('SELECT selectors FROM entries ORDER BY sequence').iterate())
-            yield EntryMetadata.fromIndex(row);
-    }
-    *branchMetadata(leafId = this.lastId) {
-        this.assertUsable();
-        if (leafId === null) return;
-        for (const row of this.#db.prepare(`WITH RECURSIVE path(id,parent,sequence,selectors) AS (
-            SELECT id,parent,sequence,selectors FROM entries WHERE id=? UNION ALL
-            SELECT e.id,e.parent,e.sequence,e.selectors FROM entries e JOIN path p ON e.id=p.parent)
-            SELECT selectors FROM path ORDER BY sequence`).iterate(leafId)) yield EntryMetadata.fromIndex(row);
-    }
-    *trackedMetadata() {
         this.assertCurrent();
-        try { for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE input_id IS NOT NULL ORDER BY sequence').iterate())
-            yield EntryMetadata.fromIndex(row);
+        let ceiling = Number.MAX_SAFE_INTEGER;
+        try {
+            const page = this.#db.prepare('SELECT sequence,selectors FROM entries WHERE sequence < ? ORDER BY sequence DESC');
+            for (;;) {
+                for (const row of page.iterate(ceiling)) {
+                    ceiling = row.sequence;
+                    yield EntryMetadata.fromIndex(row);
+                }
+                if (!this.#readPrevious()) return;
+            }
         } finally { this.assertCurrent(); }
     }
-    trackedInputMetadata(inputId) {
+    *chronologicalMetadata(firstId = null) {
         this.assertCurrent();
-        const rows = this.#db.prepare('SELECT selectors FROM entries WHERE input_id=? LIMIT 2').all(inputId);
-        this.assertCurrent();
-        if (rows.length > 1) throw new Error('Duplicate native input ID in session');
-        return EntryMetadata.fromIndex(rows[0]);
+        try {
+            const start = firstId === null ? 0 : this.metadata(firstId).sequence;
+            if (firstId === null) while (this.#readPrevious()) {}
+            for (const row of this.#db.prepare('SELECT selectors FROM entries WHERE sequence >= ? ORDER BY sequence').iterate(start))
+                yield EntryMetadata.fromIndex(row);
+        } finally { this.assertCurrent(); }
     }
+    trackedInputMetadata(inputId) { return this.#find(this.#input, inputId); }
     label(id) {
-        this.assertUsable();
-        const row = this.#db.prepare("SELECT selectors FROM entries WHERE json_extract(selectors,'$.label.targetId')=? ORDER BY sequence DESC LIMIT 1").get(id);
-        const label = EntryMetadata.fromIndex(row)?.label;
+        const label = this.#find(this.#label, id)?.label;
         return label?.label ? label : undefined;
-    }
-    *children(parentId) {
-        this.assertUsable();
-        for (const row of this.#db.prepare('SELECT id FROM entries WHERE parent IS ? ORDER BY sequence').iterate(parentId)) yield this.get(row.id);
     }
     assertCurrent() {
         this.assertUsable();
@@ -354,11 +377,72 @@ export class DiskEntryStore extends EntryStore {
         return entry;
     }
     #index(entry, offset, length) {
-        if (!this.#header) { this.#header = EntryStore.validateHeader(entry); return; }
         this.validate(entry);
-        const meta = new EntryMetadata(entry, ++this.#sequence, offset, length);
+        // Byte offsets supply ordering; no lifetime row counter is needed.
+        const meta = new EntryMetadata(entry, offset, offset, length);
+        const parent = entry.parentId === null ? undefined : EntryMetadata.fromIndex(this.#metadata.get(entry.parentId));
+        if (parent && parent.sequence >= meta.sequence) throw new Error('Invalid native entry ancestry');
         this.#insert.run(meta.sequence, meta.id, meta.parentId, meta.type, offset, length, meta.inputId, JSON.stringify(meta));
-        this.#last = meta.id;
+        return meta;
+    }
+    #readHeader() {
+        const buffer = Buffer.allocUnsafe(4096), parts = [];
+        let size = 0;
+        for (let position = 0; position < this.#extent;) {
+            const count = readSync(this.#fd, buffer, 0, Math.min(buffer.length, this.#extent - position), position);
+            if (!count) throw new Error('Incomplete native header');
+            const newline = buffer.subarray(0, count).indexOf(10);
+            const part = Buffer.from(buffer.subarray(0, newline < 0 ? count : newline));
+            parts.push(part); size += part.length;
+            if (size * Uint16Array.BYTES_PER_ELEMENT > getHeapStatistics().total_available_size)
+                throw new Error('Native header exceeds currently available VM heap');
+            if (newline >= 0) {
+                this.#header = EntryStore.validateHeader(this.#decode(Buffer.concat(parts, size)));
+                this.#headerEnd = position + newline + 1;
+                return;
+            }
+            position += count;
+        }
+        throw new Error('Incomplete native session header newline');
+    }
+    *#backwardLines() {
+        const buffer = Buffer.allocUnsafe(64 * 1024);
+        const newline = Buffer.allocUnsafe(1);
+        if (!this.#extent || readSync(this.#fd, newline, 0, 1, this.#extent - 1) !== 1 || newline[0] !== 10)
+            throw new Error('Incomplete native session newline');
+        let position = this.#extent - 1, parts = [], size = 0;
+        while (position > this.#headerEnd) {
+            const start = Math.max(this.#headerEnd, position - buffer.length);
+            const count = position - start;
+            if (readSync(this.#fd, buffer, 0, count, start) !== count)
+                throw new Error('Native session truncated during backward read');
+            let end = count;
+            for (let i = count - 1; i >= 0; i--) if (buffer[i] === 10) {
+                const part = buffer.subarray(i + 1, end);
+                const raw = parts.length ? Buffer.concat([part, ...parts], part.length + size) : part;
+                yield { raw, offset: start + i + 1 };
+                end = i; parts = []; size = 0;
+            }
+            const part = Buffer.from(buffer.subarray(0, end));
+            parts.unshift(part); size += part.length;
+            if (size * Uint16Array.BYTES_PER_ELEMENT > getHeapStatistics().total_available_size)
+                throw new Error('Native entry exceeds currently available VM heap');
+            position = start;
+        }
+        if (size) yield {raw: Buffer.concat(parts, size), offset: this.#headerEnd};
+    }
+    #readPrevious() {
+        try {
+            const next = this.#lines.next();
+            if (next.done) return undefined;
+            const {raw, offset} = next.value;
+            const meta = this.#index(this.#decode(raw), offset, raw.length);
+            this.#last ??= meta.id;
+            return meta;
+        } catch (error) {
+            this.invalidate(error);
+            throw error;
+        }
     }
     refresh() {
         const before = fstatSync(this.#fd, { bigint: true });
@@ -366,37 +450,15 @@ export class DiskEntryStore extends EntryStore {
             Number(before.size) < this.#extent) throw new Error('Native session replaced or truncated');
         if (this.#revision && revision(before) === this.#revision) return;
         if (this.#revision) throw new Error('Unrecognized native revision; open a fresh store');
-        const buffer = Buffer.allocUnsafe(64 * 1024);
-        let position = this.#extent, lineStart = position, parts = [], size = 0;
-        this.#db.exec('BEGIN');
-        try {
-            while (position < Number(before.size)) {
-                const n = readSync(this.#fd, buffer, 0, Math.min(buffer.length, Number(before.size) - position), position);
-                if (!n) throw new Error('Native session truncated during scan');
-                let start = 0;
-                for (let end = 0; end < n; end++) if (buffer[end] === 10) {
-                    const tail = buffer.subarray(start, end);
-                    const raw = parts.length ? Buffer.concat([...parts, tail], size + tail.length) : tail;
-                    this.#index(this.#decode(raw), lineStart, size + tail.length);
-                    lineStart = position + end + 1;
-                    parts = []; size = 0; start = end + 1;
-                }
-                if (start < n) {
-                    size += n - start;
-                    if (size * Uint16Array.BYTES_PER_ELEMENT > getHeapStatistics().total_available_size)
-                        throw new Error('Native entry decode exceeds currently available VM heap');
-                    parts.push(Buffer.from(buffer.subarray(start, n)));
-                }
-                position += n;
-            }
-            if (size || !this.#header) throw new Error('Incomplete native session newline/header');
-            if (revision(fstatSync(this.#fd, { bigint: true })) !== revision(before) ||
-                revision(statSync(this.file, { bigint: true })) !== revision(before))
-                throw new Error('Native session changed during strict scan');
-            this.#db.exec('COMMIT');
-            this.#extent = position;
-            this.#revision = revision(before);
-        } catch (error) { this.#db.exec('ROLLBACK'); throw error; }
+        this.#extent = Number(before.size);
+        this.#revision = revision(before);
+        this.#readHeader();
+        this.#lines = this.#backwardLines();
+        const latest = this.#readPrevious();
+        if (latest) for (const meta of this.ancestors(latest.id)) {
+            if (meta.type === 'compaction') break;
+        }
+        this.assertCurrent();
     }
     /** Extend only after SessionManager's existing writer fence appended these exact bytes. */
     append(entry) {
@@ -410,7 +472,9 @@ export class DiskEntryStore extends EntryStore {
         const saved = Buffer.allocUnsafe(encoded.length);
         if (readSync(this.#fd, saved, 0, saved.length, before) !== saved.length || !saved.equals(encoded))
             throw new Error('Native appended entry differs');
-        this.#index(entry, before, encoded.length - 1);
+        if (entry.parentId !== null && !this.metadata(entry.parentId))
+            throw new Error('Invalid native append ancestry');
+        this.#last = this.#index(entry, before, encoded.length - 1).id;
         this.#extent = Number(current.size);
         this.#revision = revision(current);
     }
@@ -421,6 +485,8 @@ export class DiskEntryStore extends EntryStore {
     }
     close() {
         this.invalidate();
+        this.#lines?.return();
+        this.#lines = undefined;
         const database = this.#db, descriptor = this.#fd;
         this.#db = undefined; this.#fd = undefined;
         try { database?.close(); }
