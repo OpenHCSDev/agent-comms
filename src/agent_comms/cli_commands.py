@@ -2129,7 +2129,7 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
         if channel is None:
             return ()
-        if not catalog.resolve(channel).matches(thread.tags):
+        if not catalog.require_channel(channel).matches(thread.tags):
             return ()
         return (cls(name=thread.name, channel=channel,
                     pinned=thread.name not in catalog.pinned_threads(channel)),)
