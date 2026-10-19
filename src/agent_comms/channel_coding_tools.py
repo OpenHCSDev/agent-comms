@@ -11,7 +11,7 @@ import asyncio
 import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
-from dataclasses import InitVar, dataclass, field, replace
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Never
 
@@ -31,6 +31,7 @@ from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied
 from .native_arguments import NativeArguments
 from .native_tools import NativeExecutableTool
 from .native_tool_transport import ToolTransport
+from .tool_declaration import ToolDeclaration, one_line
 from .selected_tool_broker import (
     consume_selected_slot,
     record_selected_terminal,
@@ -42,6 +43,13 @@ from .selected_tool_broker import (
 class CodingCall(NativeToolCall):
     @abstractmethod
     def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]: ...
+
+    @abstractmethod
+    def digest(self) -> str: ...
+
+    def storage_violation(self, registry, thread: str) -> str | None:
+        """A call without executable effects has nothing to judge."""
+        return None
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
@@ -84,15 +92,26 @@ class ExecutableCodingCall(CodingCall):
     def require_tool(self) -> NativeExecutableTool | type[NativeExecutableTool]:
         return self.tool
 
+    def digest(self) -> str:
+        return self.tool.digest()
+
+    def storage_violation(self, registry, thread: str) -> str | None:
+        try:
+            worktree = Path(registry.require(thread).worktree)
+            registry.decide_storage(thread, self.tool.storage_effects(worktree))
+        except SelectedToolDenied as denied:
+            return str(denied)
+        return None
+
 
 @dataclass
 class ArgumentRefusal(UncertainClaim):
-    reason: str
+    refusal: RefusedCodingCall
 
     async def consume(
         self, call: NativeToolCall, action: Callable[[], Awaitable[None]],
     ) -> None:
-        raise SelectedToolDenied(self.reason)
+        raise SelectedToolDenied(self.refusal.reason)
 
 
 @dataclass
@@ -101,10 +120,10 @@ class RefusedCodingCall(CodingCall):
 
     tool_name: str
     arguments: object
-    reason: InitVar[str]
+    reason: str
 
-    def __post_init__(self, reason: str) -> None:
-        self.claim_scope = ArgumentRefusal(reason)
+    def __post_init__(self) -> None:
+        self.claim_scope = ArgumentRefusal(self)
 
     @property
     def name(self) -> str:
@@ -112,6 +131,9 @@ class RefusedCodingCall(CodingCall):
 
     def require_tool(self) -> Never:
         raise SelectedToolDenied("Refused native coding arguments cannot execute")
+
+    def digest(self) -> str:
+        return f'REFUSED {self.name}: {one_line(self.reason, 200)}'
 
     def correlate(self, candidate: NativeToolCall) -> None:
         self.reject_correlated(candidate)
@@ -130,6 +152,10 @@ class CoordinationCall(ExecutableCodingCall):
 
     tool: type[NativeExecutableTool]
     arguments: dict[str, object]
+
+    def digest(self) -> str:
+        # Coordination arguments belong to the request executor, not this watcher.
+        return ToolDeclaration.call_digest(self.name, None, self.arguments)
 
 
 @dataclass(frozen=True, kw_only=True)
