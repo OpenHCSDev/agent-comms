@@ -6,6 +6,7 @@ import asyncio
 import os
 from dataclasses import dataclass, replace
 from abc import abstractmethod
+from collections import Counter
 from collections.abc import Callable
 from contextlib import aclosing
 from functools import cached_property, partial
@@ -95,6 +96,7 @@ class CatalogConfigOption(ConfigOption):
         self.record = record
         self.package = package
         self.catalogs: dict[tuple[str, ...], asyncio.Task[list[CatalogChoice]]] = {}
+        self.waiters: Counter[asyncio.Task[list[CatalogChoice]]] = Counter()
         self.auth: tuple[int, int] | None = None
         self.lock = asyncio.Lock()
 
@@ -117,7 +119,22 @@ class CatalogConfigOption(ConfigOption):
                 # the client can connect a provider before selecting a model.
                 self.catalogs[key] = asyncio.create_task(self.discover(thread))
             catalog = self.catalogs[key]
-        return await asyncio.shield(catalog)
+            self.waiters[catalog] += 1
+        try:
+            return await asyncio.shield(catalog)
+        except asyncio.CancelledError:
+            # The shield keeps one waiter's cancellation from failing the others;
+            # the last waiter to leave retires the discovery and reaps its child.
+            if self.waiters[catalog] == 1:
+                catalog.cancel()
+                if self.catalogs.get(key) is catalog:
+                    del self.catalogs[key]
+                await asyncio.gather(catalog, return_exceptions=True)
+            raise
+        finally:
+            self.waiters.subtract((catalog,))
+            if not self.waiters[catalog]:
+                del self.waiters[catalog]
 
     async def display_choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
         choices = await self.choices(thread)

@@ -9,7 +9,7 @@ from .coordinator import Coordination
 from contextlib import suppress
 
 from .acp import CommsAgent
-from .comms import wire
+from .comms import Comms, wire
 from .launch_runtime import LaunchRecord, ThreadLaunch
 
 
@@ -20,6 +20,12 @@ async def run() -> None:
     comms = wire(record.root_selection.path)
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
+    async with Coordination.worker(comms.root / "coordination.sqlite3"):
+        await run_owner(comms)
+
+
+async def run_owner(comms: Comms) -> None:
+    record = LaunchRecord.current()
     name = ThreadLaunch.current().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(

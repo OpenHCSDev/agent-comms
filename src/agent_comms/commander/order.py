@@ -761,21 +761,12 @@ def fire(unit: str, why: str) -> None:
         print(f'{todo.id}: released from {unit}: {why}')
 
 
-class LoadedVerb(RuledVerb):
-    """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
-
-    def gate(self) -> None:
-        super().gate()
-        if not self.fork:
-            capacity.Load.of(COMMS, ME).require()
-
-
 class OrderVerb(CommanderVerb):
     """A verb of `order`."""
 
 
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(OrderVerb, LoadedVerb):
+class SendVerb(OrderVerb, RuledVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
@@ -918,7 +909,7 @@ class ServeVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SayVerb(OrderVerb, LoadedVerb):
+class SayVerb(OrderVerb, RuledVerb):
     help = "a non-order message; refused if it orders work"
     units: str = option("units", metavar="UNIT[,UNIT]")
     body_file: str = option("body_file", metavar="BODYFILE")
@@ -928,7 +919,7 @@ class SayVerb(OrderVerb, LoadedVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, LoadedVerb):
+class ProblemVerb(OrderVerb, RuledVerb):
     help = "Core records the problem with its order, or nothing"
     text: str = option("text")
     to: str = option("--to")
@@ -989,7 +980,7 @@ class CloseVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HuntVerb(OrderVerb, LoadedVerb):
+class HuntVerb(OrderVerb, RuledVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
     where: str = option("where", metavar="FILE:LINE")
     why: str = option("--why")
