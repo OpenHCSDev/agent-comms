@@ -313,7 +313,7 @@ class RegistryStore(LockedStore[RegistryDocument]):
         if (revision := FileRevision.capture(self.path)) is not None:
             self.cache.entry = RegistryRevision(revision, document.copy(), raw)
 
-    def _write_unlocked(self, text: str) -> None:
+    def _replace_unlocked(self, text: str) -> None:
         # The two-file private guard protocol cannot use A8's rollback writer.
         self.cache.entry = None
         self.private_guard_unlocked().write(self.path, text)
