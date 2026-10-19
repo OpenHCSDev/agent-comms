@@ -12,10 +12,10 @@ def test_all_is_the_only_global_target(tmp_path):
     for name in ("sender", "first", "second"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     with pytest.raises(ValueError):
-        BuiltinChannelView.decode("broadcast")
+        BuiltinChannelView.member_named("broadcast")
     with pytest.raises(UnregisteredThreadError):
         comms.messaging.send("sender", "broadcast", "must not become a global message").message.message_id
-    assert not list(comms.bus.full_history_page().messages)
+    assert not list(comms.views.history_page(CommandTarget.named("#any")).messages)
 
     global_message = comms.messaging.send("sender", "#all", "global").message
     assert global_message.target == "#all"
