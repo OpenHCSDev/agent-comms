@@ -317,7 +317,7 @@ class MessageNotification:
     def sent_sources(
         cls, root: Path, registry: Registration, log: WireLog, name: str, *, limit: int = 5
     ):
-        """Capture one sender's bounded original source cut."""
+        """Read up to the requested number of messages sent by this thread."""
         if not 1 <= limit <= cls.window_limit:
             raise ValueError("Sent notification limit must fit one bounded window")
         owner = registry.require(name)
@@ -334,7 +334,7 @@ class MessageNotification:
         sources: Sequence[CommittedDelivery], *,
         assignment_read: NotificationAssignmentRead,
     ) -> tuple[MessageNotification, ...]:
-        """Project outcomes from the caller's original certified source window."""
+        """Attach notification outcomes to the messages the caller already checked."""
         projected = cls.delivery_window(
             root, registry, sources, assignment_read, viewer=viewer,
         )
@@ -460,8 +460,8 @@ class BusPresentation:
                     self.bus.activity_index.snapshot(source),
                 ) as basis:
                     scope = basis.scope(target.name)
-            # Reading identity is separate from preparing pages. Both
-            # DM and channel pages borrow the same original reader and source cut.
+            # Resolve the reader separately from page preparation. Both direct
+            # messages and channels use the captured reader and bus state.
             return basis.viewer.read_page(scope, bounds, basis, source)
 
     def mark_channel_read(

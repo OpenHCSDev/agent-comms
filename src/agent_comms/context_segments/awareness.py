@@ -1,4 +1,4 @@
-"""Original certified source pointers as an instruction-file contribution."""
+"""Include checked references to stored messages in the instruction file."""
 
 import json
 from dataclasses import dataclass

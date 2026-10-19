@@ -311,10 +311,10 @@ def next_sealed_assignment(
     *,
     after_seq: int = 0,
 ) -> WakeAssignment | None:
-    """One acknowledgement-backed pending selection shared by observation and execution.
+    """Choose pending work with a saved acknowledgement for display or execution.
 
-    Saturated settled pages cannot hide later work. Observation grants no turn;
-    the execution still checks live ownership and verifies its original source.
+    Skip completed pages to find later work. Displaying work does not start a
+    turn; executing it still requires checking the process and stored message.
     """
     pending = pending_sealed_assignments(store, recipient_lookup, owner_name, after_seq=after_seq)
     return next(iter(pending), None)
@@ -323,11 +323,11 @@ def next_sealed_assignment(
 def pending_sealed_assignments(
     store: Coordination, recipient_lookup: str, owner_name: str, *, after_seq: int = 0,
 ) -> tuple[WakeAssignment, ...]:
-    """Snapshot pending sealed work once, excluding arrivals after this read.
+    """Read acknowledged pending work once, excluding messages arriving afterward.
 
-    Page reads share the same original coordinator transaction. Settled rows
-    do not impose an arbitrary work horizon; no historical input is revived.
-    The returned assignments retain each original source and frozen decision.
+    Read all pages in one database transaction, continuing past completed rows
+    without reviving old input. Each assignment keeps the message and decision
+    recorded when it was accepted.
     """
     pending = []
     cursor = after_seq

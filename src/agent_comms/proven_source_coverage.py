@@ -109,11 +109,12 @@ class SourceCoverage:
         self, *, limit: int = 100, after_seq: int = 0, partial: bool = False,
         source_reads: NativeEvidenceScope | None = None,
     ) -> ProvenSourceCoverage:
-        """Inspect a certified page; selected UNKNOWN or absent proof stops coverage.
+        """Check a page; stop at selected UNKNOWN input or missing evidence.
 
-        No-wake and absent-audience initials are coverage, never injection. An
-        exhausted page uses certified latest initial, not global bus high-water.
-        Filesystem fsync/locks are not a hard wall-clock deadline.
+        Count messages with no wake or no recipients without submitting input.
+        At the end of a page, use the last checked message for this recipient,
+        not the last message anywhere on the bus. Filesystem flushes and locks
+        can still take longer than the requested time limit.
         """
         from .native_entries import NativeEvidenceScope
 

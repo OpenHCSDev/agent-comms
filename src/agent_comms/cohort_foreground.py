@@ -25,11 +25,11 @@ async def _accept_visible_deliveries(
     owner_name: str,
     acquire_package: Callable[[], None] | None = None,
 ) -> int:
-    """Accept only committed initial rows addressed to this durable recipient.
+    """Accept only committed initial messages addressed to this registered recipient.
 
-    Membership comes from the certified addressed index; only unsealed rows are
-    captured and decoded. All N identities must already be registered. Never
-    infer a cohort from an ordinary public message or its body.
+    Use the checked address index to find messages and decode only those not
+    yet accepted. Every participant must already be registered. Public message
+    text alone cannot identify the group receiving private input.
     """
     def accept(resource: Coordination) -> int:
         with bus.log.certified_read() as source:

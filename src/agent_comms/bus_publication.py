@@ -252,7 +252,7 @@ class InitialOrigin(ABC):
 
     @abstractmethod
     def require_source(self, source: CertifiedSourceRead, sender: str, message_id: str) -> None:
-        """What the certified source must show before the append."""
+        """Check the sender and message ID against the bus before appending."""
 
     @abstractmethod
     def append(
