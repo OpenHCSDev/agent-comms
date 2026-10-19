@@ -354,6 +354,37 @@ def test_each_delivery_declares_the_strikes_it_carries(commander):
     assert strikes(OperationDelivery(), 9000) == ()
 
 
+@pytest.mark.parametrize('retained_problem', [None, 'P197', 'P1970'])
+def test_done_distinguishes_non_git_home_from_exact_order_checkout(
+        commander, commander_script, tmp_path, retained_problem):
+    from agent_comms.storage_rules import StorageRule, UnitStorage
+
+    comms, _ = commander
+    script, _ = commander_script
+    home = tmp_path / 'P197-application'
+    home.mkdir()
+    comms.registry.declare(comms.registry.new_thread('scratch', frozenset({'comms'}), str(home)))
+    rule = StorageRule(checkout_base=tmp_path / 'wt', scratch_base=tmp_path / 'scratch', floor_gib=0)
+    comms.registry.storage_rule = rule
+    if retained_problem:
+        repository = tmp_path / 'repository'
+        subprocess.run(('git', 'init', '-q', str(repository)), check=True)
+        subprocess.run(('git', '-C', str(repository), '-c', 'user.name=t', '-c', 'user.email=t@t',
+                        'commit', '-q', '--allow-empty', '-m', 'base'), check=True)
+        subprocess.run(('git', '-C', str(repository), 'worktree', 'add', '-q', '-b', 'work',
+                        str(rule.order_checkout('scratch', retained_problem))), check=True)
+    todo = create(commander, 'P197', owner='scratch', deadline=time.time() + 3600)
+    assert not (home / '.git').exists()
+    assert UnitStorage.read(rule, comms.registry.require('scratch')).checkouts[0] == home
+    if retained_problem == 'P197':
+        with pytest.raises(SystemExit, match='still has the checkout'):
+            script.done('P197', 'op', seen=working(comms)[0].screenshot)
+        assert comms.goals.todos.get('P197').pending
+    else:
+        script.done('P197', 'op', seen=working(comms)[0].screenshot)
+        assert not comms.goals.todos.get('P197').pending
+
+
 def test_a_late_commit_done_through_the_tool_is_struck_in_its_delivery(commander):
     """Core strikes a late delivered commit in the revision that records it; no script is needed."""
     comms, caller = commander
