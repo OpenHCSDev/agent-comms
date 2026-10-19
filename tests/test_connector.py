@@ -53,10 +53,6 @@ def test_connector_round_trip_owns_runtime_and_caller_validation(comms, tmp_path
     import sys
 
     comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
-    reviews = RuleReviews(comms.root)
-    reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
-    reviews.write("claude-ai", AnsweredRuleReviewEntry(
-        1, "connector.py:578 owns runtime validation; this test exercises it without imposing it on native-only upgrades."))
     runtimes = {name: tmp_path / name / "bin/python" for name in ("installed", "other")}
     for runtime in runtimes.values():
         runtime.parent.mkdir(parents=True)
