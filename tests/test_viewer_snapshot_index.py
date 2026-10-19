@@ -43,7 +43,7 @@ def test_display_metrics_store_only_append_facts(tmp_path):
     encoded = FieldCodec.encode(DisplaySnapshot.empty(scopes))
     assert set(encoded) == {"scopes", "activity"}
     index = BusDisplayIndex(tmp_path / "bus.jsonl", "viewer")
-    assert index.path.name.startswith("bus_display_6_")
+    assert index.path.name.startswith(f"bus_display_{BusDisplayIndex.record_type.schema}_")
 
 
 def test_display_rebase_combines_changed_reads_and_changed_channel_inclusion(tmp_path):
