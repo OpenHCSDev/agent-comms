@@ -47,7 +47,7 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
-from .config import CommanderConfig, Repo
+from .config import CommanderConfig, CommanderRole, Repo
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
@@ -645,7 +645,7 @@ def overdue():
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
+class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
     fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
 
@@ -658,6 +658,7 @@ class CommanderVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
         self.run()
 
     def gate(self) -> None:
+        self.require_commander(COMMS.registry.require(self.who))
         if self.fork:
             capacity.beat(self.fork)
 
@@ -693,7 +694,7 @@ class RuledVerb(CommanderVerb):
     def gate(self) -> None:
         super().gate()
         for due in RulesDue.violations(COMMS, self.who):
-            flag = '' if self.who == ME else f' --as {self.who}'
+            flag = '' if self.who == ME else f' --fork {self.who}'
             sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
                      f' rules review{flag}, then answer each drawn rule{flag}.')
 
@@ -763,9 +764,9 @@ class LoadedVerb(RuledVerb):
     """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
 
     def gate(self) -> None:
+        super().gate()
         if not self.fork:
             capacity.Load.of(COMMS, ME).require()
-        super().gate()
 
 
 class OrderVerb(CommanderVerb):
