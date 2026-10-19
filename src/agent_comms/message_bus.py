@@ -6,7 +6,7 @@ import asyncio
 import inspect
 
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping, Sequence
-from contextlib import AbstractContextManager, ExitStack, aclosing, contextmanager
+from contextlib import ExitStack, aclosing, contextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -100,20 +100,12 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         """
         with ExitStack() as stack:
             with self.locked(mode=SharedLock()):
-                captured = stack.enter_context(self._snapshot_unlocked(viewer))
-            yield captured
-
-    @contextmanager
-    def _snapshot_unlocked(
-        self, viewer: DisplayViewer,
-    ) -> Iterator[tuple[CapturedSelection, WireSnapshot]]:
-        """Capture under the caller's wire lock; retain the opened source after capture."""
-        with self.log.opened_wire_snapshot() as source:
-            with CapturedSelection.reading(
-                self._registry, self._channels, self.reads, viewer,
-                self.activity_index.snapshot(source),
-            ) as basis:
-                pass
+                source = stack.enter_context(self.log.opened_wire_snapshot())
+                with CapturedSelection.reading(
+                    self._registry, self._channels, self.reads, viewer,
+                    self.activity_index.snapshot(source),
+                ) as basis:
+                    pass
             yield basis, source
 
     def inbox(
@@ -295,21 +287,9 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         self, name: str, sequence: int, *, target: CommandTarget = ANY_CHANNEL,
     ) -> None:
         """Mark the selected inbox through one captured cut, without loading its messages."""
-        self._mark_delivered_snapshot(self.snapshot(NamedViewer(name)), sequence, target)
-
-    def mark_delivered_through_unlocked(
-        self, name: str, sequence: int, *, target: CommandTarget = ANY_CHANNEL,
-    ) -> None:
-        """The importing writer already holds wire; never acquire it on another descriptor."""
-        self._mark_delivered_snapshot(self._snapshot_unlocked(NamedViewer(name)), sequence, target)
-
-    def _mark_delivered_snapshot(
-        self, captured: AbstractContextManager[tuple[CapturedSelection, WireSnapshot]],
-        sequence: int, target: CommandTarget,
-    ) -> None:
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
-        with captured as (basis, source):
+        with self.snapshot(NamedViewer(name)) as (basis, source):
             canonical = basis.require_viewer()
             delivery = DeliveryScope.capture(canonical, basis.registry, basis.catalog)
             scope = delivery.selection(target, basis.registry,

@@ -51,11 +51,11 @@ from .store_files import (
     StoreLock,
     StoreLockOwner,
     StoreLockContention,
+    StoreLockAcquisition,
     _atomic_write_text,
     _iter_jsonl_stream,
     _store_lock,
     _store_lock_file,
-    _held_store_source,
 )
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord, WireScan
@@ -603,20 +603,28 @@ class WireLog(StoreLockOwner):
         from .child_process import Platform
         from .coordinator import Coordination
 
+        def consume(acquisition):
+            with acquisition as lock, self._checked_source(lock) as source:
+                return read(source)
+
+        held = StoreLockAcquisition.current(self.path, mode)
+        if held is not None:
+            return await Coordination.run_worker(partial(
+                consume, held.source(self.path, None, self.lock_type),
+            ))
         platform = Platform.current()
         with _store_lock_file(self.path) as lock_file:
             await StoreLockContention(math.inf).acquire_async(
                 lock_file.fileno(), platform, mode=mode,
             )
-            return await Coordination.run_worker(
-                partial(self._read_checked, lock_file, platform, read, mode),
-            )
 
-    def _read_checked(self, lock_file, platform, read, mode):
-        with lock_file, _held_store_source(self.path, lock_file, platform, None,
-                                           mode=mode, lock_type=self.lock_type) as lock:
-            with self._checked_source(lock) as source:
-                return read(source)
+            def read_acquired():
+                with lock_file:
+                    return consume(StoreLockAcquisition.holding(
+                        self.path, lock_file, platform, None, mode=mode, lock_type=self.lock_type,
+                    ))
+
+            return await Coordination.run_worker(read_acquired)
 
     @contextmanager
     def _checked_source(self, lock: CheckedWireStoreLock):

@@ -8,6 +8,7 @@ import math
 import os
 import stat
 import tempfile
+import threading
 import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Iterator, Mapping
@@ -25,7 +26,7 @@ from typing import TYPE_CHECKING, BinaryIO, ClassVar
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .private_path import PrivateFileRole
+from .private_path import FileIdentity, PrivateFileRole
 
 with suppress(ModuleNotFoundError):  # Windows; Win32Platform never asks a mode for its flock.
     import fcntl
@@ -65,6 +66,10 @@ class LockMode(ABC):
         """Require the exclusive holder before rebuilding a replaced source."""
 
     @abstractmethod
+    def require_held(self, held: LockMode) -> None:
+        """Require an enclosing acquisition that already grants this mode."""
+
+    @abstractmethod
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         """The mode that may repair what this holder could only name."""
 
@@ -87,6 +92,9 @@ class SharedLock(LockMode):
         from .private_bus_checkpoint import CheckpointNeedsRepair
         raise CheckpointNeedsRepair("Replaced bus file needs its page index rebuilt.")
 
+    def require_held(self, held: LockMode) -> None:
+        pass
+
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         return ExclusiveLock()
 
@@ -107,6 +115,13 @@ class ExclusiveLock(LockMode):
 
     def require_writer(self) -> None:
         pass
+
+    def require_held(self, held: LockMode) -> None:
+        from .private_bus_checkpoint import CheckpointNeedsRepair
+        try:
+            held.require_writer()
+        except CheckpointNeedsRepair as error:
+            raise RelationViolationError("Cannot upgrade an enclosing shared store lock.") from error
 
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         raise error
@@ -287,21 +302,78 @@ def _store_lock_file(store_path: Path):
         yield lock_file
 
 
-@contextmanager
-def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, mode, lock_type):
-    """Check durability after locking; release the lock if the check refuses access."""
-    try:
-        if max_bus_bytes is not None:
-            if type(max_bus_bytes) is not int or max_bus_bytes < 0:
-                raise ValueError("bus read cap must be a nonnegative integer")
-            if store_path.exists():
-                bus_info = store_path.lstat()
-                if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
-                    raise RelationViolationError("Bus exceeds bounded read budget.")
-        with lock_type.hold(store_path, lock_file.fileno(), mode) as lock:
-            yield lock
-    finally:
-        platform.release_store_lock(lock_file.fileno())
+@dataclass
+class StoreLockAcquisition:
+    """One physical acquisition, borrowed only by its own nested execution.
+
+    Context copies cannot lend an exclusive transaction to another thread or
+    asyncio task. The inode identifies aliases; an ended scope is never reused.
+    """
+
+    file: BinaryIO
+    mode: LockMode
+    identity: FileIdentity
+    active: bool = True
+    _held: ClassVar[
+        ContextVar[tuple[tuple[tuple[int, int, asyncio.Task | None], StoreLockAcquisition], ...]]
+    ] = ContextVar("store_lock_acquisitions", default=())
+
+    @staticmethod
+    def execution() -> tuple[int, int, asyncio.Task | None]:
+        try:
+            task = asyncio.current_task()
+        except RuntimeError:  # Synchronous execution has no running event loop.
+            task = None
+        return os.getpid(), threading.get_ident(), task
+
+    @classmethod
+    def current(cls, store_path: Path, mode: LockMode) -> StoreLockAcquisition | None:
+        execution = cls.execution()
+        held = cls._held.get()
+        try:
+            identity = FileIdentity.from_stat(store_lock_path(store_path).stat())
+        except FileNotFoundError:
+            return None
+        for borrower, acquisition in reversed(held):
+            if acquisition.active and borrower == execution and acquisition.identity == identity:
+                mode.require_held(acquisition.mode)
+                return acquisition
+        return None
+
+    @classmethod
+    @contextmanager
+    def holding(cls, store_path, file, platform, max_bus_bytes, *, mode, lock_type):
+        acquisition = cls(file, mode, FileIdentity.from_stat(os.fstat(file.fileno())))
+        try:
+            with acquisition.source(store_path, max_bus_bytes, lock_type) as lock:
+                yield lock
+        finally:
+            if acquisition.active:
+                acquisition.active = False
+                platform.release_store_lock(file.fileno())
+
+    @contextmanager
+    def source(self, store_path: Path, max_bus_bytes: int | None, lock_type: type[StoreLock]):
+        """Recheck each borrow's source without reopening or downgrading its lock.
+
+        An explicit joined-worker borrow installs the same owner in that worker;
+        merely inheriting a context never grants another execution access.
+        """
+        if not self.active:
+            raise RelationViolationError("Store lock acquisition has ended.")
+        token = self._held.set((*self._held.get(), (self.execution(), self)))
+        try:
+            if max_bus_bytes is not None:
+                if type(max_bus_bytes) is not int or max_bus_bytes < 0:
+                    raise ValueError("bus read cap must be a nonnegative integer")
+                if store_path.exists():
+                    bus_info = store_path.lstat()
+                    if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
+                        raise RelationViolationError("Bus exceeds bounded read budget.")
+            with lock_type.hold(store_path, self.file.fileno(), self.mode) as lock:
+                yield lock
+        finally:
+            self._held.reset(token)
 
 
 @contextmanager
@@ -318,6 +390,11 @@ def _store_lock(
     from .child_process import Platform
     from .private_bus_checkpoint import CheckpointNeedsRepair
 
+    held = StoreLockAcquisition.current(store_path, mode)
+    if held is not None:
+        with held.source(store_path, max_bus_bytes, lock_type) as lock:
+            yield lock
+        return
     platform = Platform.current()
     with _store_lock_file(store_path) as lock_file, ExitStack() as resources:
         def acquire(mode):
@@ -325,7 +402,7 @@ def _store_lock(
                 platform.acquire_store_lock(lock_file.fileno(), mode=mode, blocking=blocking)
             else:
                 contention.acquire(lock_file.fileno(), platform, mode=mode)
-            return resources.enter_context(_held_store_source(
+            return resources.enter_context(StoreLockAcquisition.holding(
                 store_path, lock_file, platform, max_bus_bytes, mode=mode, lock_type=lock_type))
 
         try:
@@ -353,11 +430,16 @@ async def _async_store_lock(
     """
     from .child_process import Platform
 
+    held = StoreLockAcquisition.current(store_path, mode)
+    if held is not None:
+        with held.source(store_path, max_bus_bytes, lock_type) as lock:
+            yield lock
+        return
     platform = Platform.current()
     wait = contention if contention is not None else StoreLockContention(math.inf if blocking else 0)
     with _store_lock_file(store_path) as lock_file:
         await wait.acquire_async(lock_file.fileno(), platform, mode=mode)
-        with _held_store_source(store_path, lock_file, platform, max_bus_bytes,
+        with StoreLockAcquisition.holding(store_path, lock_file, platform, max_bus_bytes,
                                 mode=mode, lock_type=lock_type) as lock:
             yield lock
 
