@@ -2053,8 +2053,13 @@ class Todo(TypedTable):
         return bool(self.messages) and self.messages[-1].message_id == message_id
 
     def require_replacement(self, message_id: str) -> None:
+        if not self.messages:
+            raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
         if not self.sent_in(message_id):
-            raise ValueError(f"{self.holder} already holds {self.id}; pass --replaces with its current message.")
+            raise ValueError(
+                f"{self.holder} already holds {self.id}; "
+                f"pass --replaces {self.messages[-1].message_id}"
+            )
 
     @classmethod
     def require_order_body(cls, body: str) -> None:
