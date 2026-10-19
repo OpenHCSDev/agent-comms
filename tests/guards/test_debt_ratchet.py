@@ -714,7 +714,8 @@ def test_local_import_scope_counts_nested_functions_and_classes_once():
 
 def string_identity_readings(source: bytes) -> list[tuple[str, type]]:
     declared = b"class CarryStep: pass\ndef carry_hunts(): pass\n"
-    spellings = DeclaredSpellings.read([("tools/carry_hunts.py", declared), ("src/pkg/route_table.py", b"")])
+    spellings = DeclaredSpellings.read([("tools/carry_hunts.py", declared), ("src/pkg/__init__.py", b""),
+                                         ("src/pkg/route_table.py", b""), ("tools/use.py", source)])
     return [(site.spelling, site.reading) for site in spellings.sites(source, "tools/use.py")]
 
 

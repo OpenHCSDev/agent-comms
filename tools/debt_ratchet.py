@@ -529,23 +529,35 @@ class DeclaredSpellings:
     selecting_calls: typing.ClassVar[frozenset[str]] = frozenset(
         call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
     kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
+    package_marker: typing.ClassVar[str] = Path(importlib.__file__).name
     entry_guard: typing.ClassVar[str] = ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body)
 
     @staticmethod
     def multiword(name: str) -> bool:
         return name.strip("_").count("_") > 0
 
+    @staticmethod
+    def dotted_name(module: Path, packages: set[Path]) -> str:
+        """The import name of a module inside a package, from the package directories above it."""
+        top = module.parent
+        if top not in packages:
+            return ""
+        while top.parent in packages:
+            top = top.parent
+        parts = module.relative_to(top.parent).parts
+        return ".".join(parts[:-1] if module.name == Path(DeclaredSpellings.package_marker).stem else parts)
+
     @classmethod
     def read(cls, sources: list[tuple[str, bytes]]) -> DeclaredSpellings:
         names: dict[str, str] = {}
         bases: dict[str, set[str]] = {}
+        packages = {Path(path).parent for path, _ in sources if Path(path).name == cls.package_marker}
         for path, source in sources:
             module = Path(path).with_suffix("")
-            parts = [part for part in module.parts if part != "__init__"]
             if cls.multiword(module.stem):
                 names[module.stem] = f"module {path}"
-            if module.parts[0] == "src" and len(parts) > 1:
-                names[".".join(parts[1:])] = f"module {path}"
+            if dotted := cls.dotted_name(module, packages):
+                names[dotted] = f"module {path}"
             tree = ast.parse(source, path)
             for node in tree.body:
                 if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and cls.multiword(node.name):
