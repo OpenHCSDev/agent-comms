@@ -72,7 +72,8 @@ class DirectorCaller(ThreadCaller):
             )
 
 
-CALLER = DirectorCaller(AcceptedVerdict.reviewer)  # Owner-typed calls act as this registered bus thread.
+# Owner-typed calls act as this registered bus thread.
+CALLER = DirectorCaller(AcceptedVerdict.reviewer)
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
