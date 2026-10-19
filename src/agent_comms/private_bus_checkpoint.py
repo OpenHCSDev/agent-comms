@@ -22,7 +22,7 @@ from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from collections.abc import Iterator, Mapping
-from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Annotated, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import CheckpointSeal, FinalSeal, PendingSeal, PrefixSeal, PrefixSource
@@ -35,7 +35,7 @@ from .coordination_tables.publications import PublicationIntents
 from .errors import HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, ProjectionSequence
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
@@ -631,7 +631,8 @@ class ResourceClaims(CheckpointTable, TypedTable):
             originals = ClaimCommits.select(db, where=f'"seq" IN ({marks})', parameters=sequences)
             transitions = {row.transition.seq: row.transition for row in originals}
             owners = {row.resource: transitions[row.claim_seq].claimed(row.resource) for row in current}
-        return ClaimProjection(ClaimCommits.latest_sequence(db), owners)
+        latest = FieldCodec.decode(Annotated[int, ProjectionSequence], ClaimCommits.latest_sequence(db))
+        return ClaimProjection(latest, owners)
 
 
 @dataclass(frozen=True, kw_only=True)

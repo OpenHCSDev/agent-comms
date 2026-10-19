@@ -810,6 +810,11 @@ class FieldCodec(Sealed):
                 object_pairs_hook=_unique_object,
             )
 
+    @classmethod
+    def rebuilt(cls, record: T) -> T:
+        """A record built in code, held to every rule its field types state on the wire."""
+        return cls.decode(type(record), cls.encode(record))
+
     @staticmethod
     def construct(target: Callable[..., T], values: dict[str, object]) -> T:
         """A record built from decoded data refuses its values as a malformed record."""

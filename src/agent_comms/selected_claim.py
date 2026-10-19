@@ -29,6 +29,7 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .errors import RelationViolationError
+from .field_codec import FieldCodec
 from .messages import ClaimNoticeKind, Message
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
@@ -197,7 +198,7 @@ def publish_selected_resource_claim(
         )
         transition = committed.claim_transition
         assert transition is not None and transition.generation is not None
-        return ClaimOwner(
+        return FieldCodec.rebuilt(ClaimOwner(
             resource,
             transition.owner,
             transition.incarnation,
@@ -205,7 +206,7 @@ def publish_selected_resource_claim(
             committed.seq,
             committed.message_id,
             claim_scope,
-        )
+        ))
 
 
 @contextmanager

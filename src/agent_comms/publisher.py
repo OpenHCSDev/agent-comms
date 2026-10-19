@@ -212,11 +212,11 @@ class ClaimWrites(PrivateWrites):
                         raise RelationViolationError("Cannot release an unclaimed resource.")
                     release_records.append(ClaimRelease(resource, current.generation))
             release_records.sort(key=lambda release: release.resource)
-            transition = ClaimTransition(
+            transition = FieldCodec.rebuilt(ClaimTransition(
                 stored.sender, owner_incarnation, stored.seq, stored.message_id,
                 requested, tuple(release_records),
                 Id128Text.mint() if requested else None, claim,
-            )
+            ))
             source.prepare_claim(transition)  # pre-append conflict is synchronous
         stored = replace(stored, claim_transition=transition)
         try:
