@@ -32,7 +32,7 @@ from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
-from ..progress_claims import MergedClaim, WorkingClaim
+from ..progress_claims import WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
@@ -533,9 +533,9 @@ def done(pid, sha, delivered=None, screenshot=''):
         COMMS.registry.storage_rule.require_quota(thread)
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
-    delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
-    claim = WorkingClaim(screenshot) if operation else MergedClaim(delivered)
-    call(CommsOrderDoneTool(problem=pid, delivery=delivery, claims=(claim,)))
+    delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered or sha)
+    claims = (WorkingClaim(screenshot),) if operation else ()
+    call(CommsOrderDoneTool(problem=pid, delivery=delivery, claims=claims))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
