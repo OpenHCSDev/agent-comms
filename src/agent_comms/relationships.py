@@ -649,7 +649,7 @@ class RemoveRelationshipEdit(RelationshipEdit):
         )
 
 
-class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocument], lock_rank=5):
+class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"

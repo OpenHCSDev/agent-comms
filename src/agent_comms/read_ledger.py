@@ -124,7 +124,7 @@ class ReadDocument:
         )
 
 
-class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument], lock_rank=4):
+class ReadLedger(RootFile, Sealed, ThreadOwnedState, LockedStore[ReadDocument]):
     filename = "read_ledger.json"
 
     @property
