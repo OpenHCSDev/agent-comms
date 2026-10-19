@@ -227,8 +227,8 @@ class Step:
     after: str | None
     revision: str
     columns: tuple[str, ...] = ()
-    after_line: int = 0
     """The todo column this step adds, as its ``column`` declares it."""
+    after_line: int = 0
 
     @staticmethod
     def declared_columns(source: bytes) -> tuple[str, ...]:
@@ -293,6 +293,8 @@ class CarryChain:
     """Todo columns added by retired steps; a bus that never ran them still lacks them."""
     added: Mapping[str, int] = field(default_factory=dict)
     """Each step's first main-line addition, numbered oldest first."""
+    restored: Mapping[str, int] = field(default_factory=dict)
+    """When a kept reference restored a historical predecessor to the chain."""
 
     @classmethod
     def at(cls, repo: Path, revision: str) -> CarryChain:
@@ -327,13 +329,14 @@ class CarryChain:
         positions = {commit: index for index, commit in enumerate(
             git(repo, "rev-list", "--first-parent", "--reverse", revision).decode().split())}
         added = cls.added_at(repo, revision, positions)
+        restored = {}
         for name, anchor in restored_by.items():
             # A recovered predecessor enters the chain through this kept reference.
             # Its old source date does not make it an obligation of an older ledger.
             reference = git(repo, "blame", "--first-parent", "--porcelain",
                             "-L", f"{anchor.after_line},{anchor.after_line}", revision,
                             "--", f"{STEPS}/{anchor.name}.py").decode().split()[0]
-            added[name] = max(added[name], positions[reference])
+            restored[name] = max(added[name], positions[reference])
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -351,7 +354,7 @@ class CarryChain:
                 raise ValueError(f"Carry chain loops at {step.name}")
         if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
-        return cls(tuple(reversed(steps)), retired, retired_columns, added)
+        return cls(tuple(reversed(steps)), retired, retired_columns, added, restored)
 
     @staticmethod
     def added_at(repo: Path, revision: str, positions: Mapping[str, int]) -> dict[str, int]:
@@ -422,7 +425,7 @@ class CarryChain:
         done = [name in applied for name in names]
         for index, name in enumerate(names):
             if not done[index] and any(
-                later in applied and self.added[later] >= self.added[name]
+                later in applied and self.added[later] >= self.restored.get(name, self.added[name])
                 for later in names[index + 1:]
             ):
                 raise ValueError("Bus ledger skips a step that a later recorded step runs after")
