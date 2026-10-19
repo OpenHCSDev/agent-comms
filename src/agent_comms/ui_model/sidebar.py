@@ -23,16 +23,13 @@ from agent_comms.ui_model.unread import UnreadPresentation, UnobservedUnread
 
 @dataclass(frozen=True)
 class PersonUnread(ConversationPreparation):
-    """Which unread count a person shows: its own transcript while it runs natively, else the bus."""
+    """Native people keep their saved-reply count even while stopped; external people use the bus."""
 
     person: ThreadView
     snapshot: CoordinationSnapshot
 
     def native(self) -> UnreadPresentation:
-        name = self.person.thread.name
-        if self.person.status.active:
-            return UnreadPresentation.for_thread(self.snapshot, name)
-        return UnreadPresentation.for_bus(self.snapshot, name)
+        return UnreadPresentation.for_thread(self.snapshot, self.person.thread.name)
 
     def external(self) -> UnreadPresentation:
         return UnreadPresentation.for_bus(self.snapshot, self.person.thread.name)

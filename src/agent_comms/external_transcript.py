@@ -252,9 +252,12 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
         if original is None:
             yield DraftPublication()
             return
-        transcript = ExternalTranscript(root, original.owner_lookup)
+        from .registration import Registration
+        thread = Registration(root).require(original.owner_thread)
+        original.require_recorded_owner(thread)
+        transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
-            publication = TurnDraftPublication(original.owner_lookup, connection, input_id)
+            publication = TurnDraftPublication(transcript, connection, input_id)
             try:
                 yield publication
             finally:
@@ -346,7 +349,7 @@ class StoreRead(TranscriptSource):
         return self.transcript._cut(self.connection)
 
     @contextmanager
-    def draft_snapshot(self, root: Path, thread: str):
+    def draft_snapshot(self, root: Path, incarnation: ThreadIncarnation):
         yield self.connection
 
     def _records(self, where: str, parameters: tuple, *,
@@ -391,11 +394,15 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     """One sessionless thread's CLI items: published by its bridge, paged by Core."""
 
     root: Path
-    lookup: str
+    incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
     rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, DraftRow)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
+
+    @property
+    def lookup(self) -> str:
+        return self.incarnation.require_recorded().lookup
 
     @classmethod
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
@@ -462,7 +469,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
 
     def end_turn(self) -> None:
         with self.reading() as records:
-            draft = records.current_draft(self.root, self.lookup)
+            draft = records.current_draft(self.root, self.incarnation)
         draft.end_turn(self)
 
     @contextmanager
@@ -491,8 +498,8 @@ class DraftPublication:
 class TurnDraftPublication(DraftPublication, StoreWriter):
     """A native turn owns one connection; each message owns one draft identity."""
 
-    def __init__(self, lookup: str, connection: Connection, turn_id: str):
-        self.lookup = lookup
+    def __init__(self, transcript: ExternalTranscript, connection: Connection, turn_id: str):
+        self.transcript = transcript
         self.connection = connection
         self.turn_id = turn_id
 
@@ -507,11 +514,11 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
 
     def publish(self, parts: Iterable[str]) -> None:
         from .transcript_events import AssistantTranscript
-        DraftRow(self.lookup, self.turn_id, self.item_id,
+        DraftRow(self.transcript.lookup, self.turn_id, self.item_id,
                  (AssistantTranscript(''.join(parts), position=self.item_id,
                                       timestamp=self.timestamp),)).publish(self)
 
     def retire_message(self) -> None:
         with self.writing() as connection:
-            DraftRow.delete(connection, thread=self.lookup, turn_id=self.turn_id)
+            DraftRow.delete(connection, thread=self.transcript.lookup, turn_id=self.turn_id)
 

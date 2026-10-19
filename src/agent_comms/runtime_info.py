@@ -29,7 +29,6 @@ class RuntimeInfo(DeclaredFamily, affix="RuntimeInfo"):
     @abstractmethod
     def model_or(self, default: str) -> str: ...
 
-    session_name: str | None
     context_used: PiCount
     context_size: PiCount
 
@@ -41,7 +40,6 @@ class UnobservedRuntimeInfo(RuntimeInfo):
     def context_reading(self) -> ContextReading:
         return UnmeasuredContext()
 
-    session_name = None
     context_used = context_size = UnreportedCount()
 
     def model_or(self, default: str) -> str:
@@ -54,7 +52,6 @@ class AgentRuntimeInfo(RuntimeInfo):
 
     thread: str
     model: str | None = None
-    session_name: str | None = None
     context_used: PiCount = field(default_factory=UnreportedCount)
     context_size: PiCount = field(default_factory=UnreportedCount)
     timestamp: float = field(metadata={"wire_name": "ts", "wire_required": True}, kw_only=True)
