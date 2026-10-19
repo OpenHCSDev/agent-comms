@@ -19,7 +19,7 @@ from agent_comms.plan_phases import RecordPlanePhase, ReviewQueuePhase, Unplanne
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry
 from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, HuntDue, MemoryLow, PlanIdle,
-    RulesDue, StandingRule, UnownedWork)
+    MachineWork, RetiredRuntimeWork, RulesDue, StandingRule, UnownedWork)
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
@@ -343,36 +343,44 @@ def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_pa
     assert floor.line().endswith("floor nothing allocates) -> put a cleanup owner on it now")
 
 
-def test_unowned_work_is_named_and_ended_on_a_retired_runtime(commander, tmp_path, monkeypatch):
-    """Agent-comms work no registered thread holds is named with its PID and command; on a retired
-    runtime, a sibling of the current one, Core ends it; a registered thread's process is not named."""
+def test_unowned_work_is_named_and_retired_runtime_work_is_ended(commander, tmp_path, monkeypatch):
+    """The overdue loop's one process read names agent-comms work no thread holding an open order
+    runs and ends work on the runtime the install record says publication replaced; a runtime built
+    but not yet current is not ended, and violations, which every verb runs, read no process."""
     comms, _ = commander
     monkeypatch.setenv("HOME", str(tmp_path))
-    installed, retired = tmp_path / "runtimes/installed", tmp_path / "runtimes/retired"
-    for runtime in (installed, retired):
+    runtimes = {name: tmp_path / "runtimes" / name for name in ("installed", "retired", "building")}
+    for runtime in runtimes.values():
         (runtime / "bin").mkdir(parents=True)
         (runtime / "bin/python").symlink_to(sys.executable)
         (runtime / "bin/agent-comms").write_text("")
-    current = StoppedOwnerInstallation.current_pointer()
-    current.parent.mkdir(parents=True)
-    current.symlink_to(installed)
-    unowned, registered, stale = (
-        subprocess.Popen([runtime / "bin/python", "-c", "import time; time.sleep(60)"])
-        for runtime in (installed, installed, retired))
+    for pointer, runtime in ((StoppedOwnerInstallation.current_pointer(), "installed"),
+                             (StoppedOwnerInstallation.retired_pointer(), "retired")):
+        pointer.parent.mkdir(parents=True, exist_ok=True)
+        pointer.symlink_to(runtimes[runtime])
+    create(commander, "P1", deadline=time.time() + 3600)
+    children = {name: subprocess.Popen([runtimes[runtime] / "bin/python", "-c", "import time; time.sleep(60)"])
+                for name, runtime in (("unowned", "installed"), ("ordered", "installed"), ("idle", "installed"),
+                                      ("stale", "retired"), ("building", "building"))}
     try:
-        comms.registry.declare(comms.registry.new_thread(
-            "helper", frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(registered.pid)))
-        named = {rule.process.identity.pid: rule for rule in UnownedWork.violations(comms, "lead")}
-        assert unowned.pid in named and stale.pid in named and registered.pid not in named
-        assert named[unowned.pid].line() == (
-            f"UNOWNED WORK: pid {unowned.pid} ({installed / 'bin/python'} -c import time;"
-            " time.sleep(60)) runs for no registered thread or open order -> give it an owner or end it")
-        assert "retired runtime, so Core ends it" in named[stale.pid].line()
-        named[unowned.pid].enforce(comms, "lead")
-        named[stale.pid].enforce(comms, "lead")
-        assert stale.wait(timeout=10) == -signal.SIGTERM and unowned.poll() is None
+        for thread, child in (("worker", "ordered"), ("helper", "idle")):
+            comms.registry.declare(comms.registry.new_thread(
+                thread, frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(children[child].pid)))
+        assert UnownedWork.violations(comms, "lead") == RetiredRuntimeWork.violations(comms, "lead") == ()
+        lines = MachineWork.enforced(comms, "lead")
+        pid = {name: child.pid for name, child in children.items()}
+        named = {int(line.split()[3]) for line in lines if line.startswith("UNOWNED WORK: ")}
+        assert named == {pid["unowned"], pid["idle"], pid["stale"], pid["building"]}
+        assert (f"UNOWNED WORK: pid {pid['unowned']} ({runtimes['installed'] / 'bin/python'} -c import time;"
+                " time.sleep(60)) runs for no thread holding an open order -> order it to a unit or end it") in lines
+        ended = [line for line in lines if line.startswith("RETIRED RUNTIME WORK: ")]
+        assert ended == [f"RETIRED RUNTIME WORK: pid {pid['stale']} ({runtimes['retired'] / 'bin/python'} -c"
+                         f" import time; time.sleep(60)) runs on {runtimes['retired']}, which publication"
+                         " replaced -> Core ends it"]
+        assert children["stale"].wait(timeout=10) == -signal.SIGTERM
+        assert all(children[name].poll() is None for name in ("unowned", "ordered", "idle", "building"))
     finally:
-        for child in (unowned, registered, stale):
+        for child in children.values():
             child.kill()
             child.wait()
 

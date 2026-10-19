@@ -26,26 +26,7 @@ from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.restart_queue import enqueue
-from agent_comms.running_processes import ProcessTable, RunningProcess
-
-
-@dataclass(frozen=True)
-class RetiredRuntime:
-    """The runtime publication replaced: its processes, Toad views too, end after the links move,
-    except an owner waiting for its idle reload, its descendants and the publisher's ancestors."""
-
-    path: Path
-
-    def processes(self, table: ProcessTable,
-                  owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
-        publisher = table.reader()
-        return tuple(process for process in table.running.values()
-                     if process.runs_from(self.path) and process.identity not in publisher
-                     and not table.held(process, owners))
-
-    def end(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
-        table = ProcessTable.read()
-        return table.end(self.processes(table, owners))
+from agent_comms.running_processes import RetiredRuntime, RunningProcess
 
 
 @dataclass(frozen=True)
@@ -110,6 +91,8 @@ class RuntimePublication:
         retired = RetiredRuntime(current.resolve(strict=True))
         if retired.path == self.runtime.resolve():
             raise ValueError(f'Publication would retire the runtime it publishes: {self.runtime}')
+        # The install record of what publication replaced; the overdue loop ends its work.
+        replace_link(StoppedOwnerInstallation.retired_pointer(), retired.path)
         for link, target in self.links.items():
             replace_link(link, current / target.relative_to(self.runtime))
         replace_link(current, self.runtime)

@@ -107,3 +107,27 @@ class ProcessTable:
             finally:
                 os.close(descriptor)
         return tuple(process for process, _ in signalled)
+
+
+@dataclass(frozen=True)
+class RetiredRuntime:
+    """The runtime publication replaced: its processes, Toad views too, end after the links move,
+    except an owner waiting for its idle reload, its descendants and the publisher's ancestors."""
+
+    path: Path
+
+    def processes(
+        self, table: ProcessTable, owners: tuple[ProcessState, ...]
+    ) -> tuple[RunningProcess, ...]:
+        publisher = table.reader()
+        return tuple(
+            process
+            for process in table.running.values()
+            if process.runs_from(self.path)
+            and process.identity not in publisher
+            and not table.held(process, owners)
+        )
+
+    def end(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
+        table = ProcessTable.read()
+        return table.end(self.processes(table, owners))

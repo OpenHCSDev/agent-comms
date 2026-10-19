@@ -9,13 +9,14 @@ from __future__ import annotations
 import time
 from abc import abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Self
 
 from .declared_family import DeclaredFamily
 from .owner_cutover import StoppedOwnerInstallation
 from .plan_phases import PlanPhase
 from .rule_reviews import RuleReviews
-from .running_processes import ProcessTable, RunningProcess
+from .running_processes import ProcessTable, RetiredRuntime, RunningProcess
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -281,46 +282,87 @@ class DiskLow(UndatedStandingRule):
 
 
 @dataclass(frozen=True)
-class UnownedWork(UndatedStandingRule):
-    """Agent-comms work that no registered thread's process holds, itself or through an ancestor;
-    an open order's work runs under the thread holding it. Core ends work on a retired runtime,
-    a sibling of the current one, and names the rest."""
+class MachineWork(UndatedStandingRule, declared_name=None):
+    """Agent-comms work running on this machine. Only the commander's overdue loop reads it:
+    `enforced` reads the process table once and enforces each member, while `violations`, which
+    every send and order verb runs, reads no process."""
 
     table: ProcessTable
     process: RunningProcess
-    retired: bool
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        table, current = ProcessTable.read(), StoppedOwnerInstallation.current_pointer().resolve()
-        threads = comms.registry.snapshot().threads.values()
-        holders = tuple(thread.process_identity for thread in threads)
+        return ()
+
+    @classmethod
+    @abstractmethod
+    def found(cls, comms: Comms, commander: str, table: ProcessTable) -> tuple[Self, ...]: ...
+
+    @classmethod
+    def enforced(cls, comms: Comms, commander: str) -> tuple[str, ...]:
+        table = ProcessTable.read()
+        found = tuple(
+            work
+            for member in cls.members_with(cls)
+            for work in member.found(comms, commander, table)
+        )
+        for work in found:
+            work.enforce(comms, commander)
+        return tuple(work.line() for work in found)
+
+
+@dataclass(frozen=True)
+class RetiredRuntimeWork(MachineWork):
+    """Work on the runtime the install record says publication replaced; Core ends it, except an
+    owner waiting for its idle reload and that owner's descendants."""
+
+    runtime: Path
+
+    @classmethod
+    def found(cls, comms: Comms, commander: str, table: ProcessTable) -> tuple[Self, ...]:
+        record = StoppedOwnerInstallation.retired_pointer()
+        if not record.is_symlink():
+            return ()
+        retired = RetiredRuntime(record.resolve())
+        owners = tuple(
+            thread.process_identity for thread in comms.registry.snapshot().threads.values()
+        )
         return tuple(
-            cls(
-                table,
-                process,
-                any(
-                    runtime != current and runtime.parent == current.parent
-                    for runtime in process.runtimes()
-                ),
-            )
-            for process in table.running.values()
-            if process.runtimes()
-            and process.identity not in table.reader()
-            and not table.held(process, holders)
+            cls(table, process, retired.path) for process in retired.processes(table, owners)
         )
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        if self.retired:
-            self.table.end((self.process,))
+        self.table.end((self.process,))
 
     def line(self) -> str:
-        fate = (
-            "it runs on a retired runtime, so Core ends it"
-            if self.retired
-            else ("give it an owner or end it")
-        )
         return (
-            f"UNOWNED WORK: pid {self.process.identity.pid} ({self.process.command}) runs for"
-            f" no registered thread or open order -> {fate}"
+            f"RETIRED RUNTIME WORK: pid {self.process.identity.pid} ({self.process.command})"
+            f" runs on {self.runtime}, which publication replaced -> Core ends it"
+        )
+
+
+@dataclass(frozen=True)
+class UnownedWork(MachineWork):
+    """Agent-comms work that no thread holding one of the commander's open orders runs, itself or
+    through an ancestor; the commander's own work is its board's. Named only."""
+
+    @classmethod
+    def found(cls, comms: Comms, commander: str, table: ProcessTable) -> tuple[Self, ...]:
+        holders = {commander} | {
+            todo.holder for todo in cls.todos(comms, commander) if todo.pending
+        }
+        threads, reader = comms.registry.snapshot().threads, table.reader()
+        identities = tuple(threads[name].process_identity for name in holders if name in threads)
+        return tuple(
+            cls(table, process)
+            for process in table.running.values()
+            if process.runtimes()
+            and process.identity not in reader
+            and not table.held(process, identities)
+        )
+
+    def line(self) -> str:
+        return (
+            f"UNOWNED WORK: pid {self.process.identity.pid} ({self.process.command}) runs for no"
+            " thread holding an open order -> order it to a unit or end it"
         )

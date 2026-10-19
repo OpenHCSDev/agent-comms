@@ -34,7 +34,7 @@ from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
-from ..standing_rules import HuntDue, RulesDue
+from ..standing_rules import HuntDue, MachineWork, RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
@@ -670,6 +670,7 @@ def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: f
 def overdue():
     since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
     installs: list[str] = []
+    machine: tuple[str, ...] = ()  # Core enforces every pass; a line is said once while it holds
     while True:
         now = time.time()
         if missing := first_calls():
@@ -696,6 +697,10 @@ def overdue():
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
         for _ in HuntDue.broken(COMMS, ME, since):
             print(HuntVerb.due(next_hunt()), flush=True)
+        if (lines := MachineWork.enforced(COMMS, ME)) != machine:
+            for line in set(lines) - set(machine):
+                print(line, flush=True)
+            machine = lines
         since = now
         time.sleep(60)
 
