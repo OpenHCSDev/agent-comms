@@ -30,7 +30,7 @@ from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
-    CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
+    CommsOrderWorkTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
 from agent_comms.todos import (AwaitingFirstCall, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
@@ -167,19 +167,13 @@ def test_failed_check_keeps_problem_pending(commander):
     assert comms.registry.require('worker').goal.state.active
 
 
-def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(commander):
+def test_a_merged_and_checked_order_closes_its_problem_without_an_install(commander):
     comms, caller = commander
     create(commander, 'P1')
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
-    artifact = comms.root / 'installed-evidence'
-    artifact.write_text('Verified installed path')
-    CommsProblemCloseTool(problem='P1', works='The installed application now retains both queued orders through tab returns.',
-        artifact=str(artifact)).apply(comms, caller)
     closed = comms.goals.todos.get('P1')
     assert closed.assignment is None and closed.state.declared_name == 'done'
     assert closed.order.delivery.at.at > 0
-    artifact.unlink()
-    assert comms.goals.todos.get('P1') == closed
 
 
 def test_first_call_state_retains_observation_and_prior_alarm(commander):
@@ -242,7 +236,8 @@ def test_delivered_order_is_not_transferred(commander, tmp_path):
         return copied.goals.todos.apply(todo.id, AssignTodo(todo.revision, successor,
             RecordedEventTime(3000), order(copied.root, 'replacement-' + todo.id), todo.goal))
 
-    with pytest.raises(ValueError, match=f'worker already has delivered commit {commit}; worker merges it'):
+    assert delivered.state is DoneTodoState and delivered.assignment is None
+    with pytest.raises(TodoConflict):
         transfer(delivered)
     assert copied.goals.todos.get('P1') == delivered
     assert delivered.order.delivery == comms.goals.todos.get('P1').order.delivery
@@ -250,11 +245,6 @@ def test_delivered_order_is_not_transferred(commander, tmp_path):
     assert transferred.assignment.owner == 'other'
     assert transferred.assignment.previous_owners == (pending.assignment.owner_identity,)
     assert copied.goals.todos.get('P2') == transferred
-    released = copied.goals.todos.apply('P1', ReleaseTodo(delivered.revision,
-        copied.registry.require('lead').incarnation, delivered.assignment, StrikeReason(FIRED)))
-    with pytest.raises(ValueError, match=f'worker already has delivered commit {commit}; worker merges it'):
-        transfer(released)
-    assert copied.goals.todos.get('P1') == released
     assert marker.read_text() == (copied.root / 'check-calls').read_text() == 'x'
 
 
@@ -1135,27 +1125,6 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
         operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
         CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
         assert comms.goals.todos.get('P1').verdicts[-1] == operation
-
-
-def test_close_quotes_the_works_line(commander):
-    """Closing evidence must quote four consecutive words of the order's Works when run."""
-    comms, caller = commander
-    run = ApplicationOrderRun('The board shows the problem closed after the commander reopens the session')
-    CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
-        problem='P1', order=replace(order(comms.root, 'order-P1'), run=run), request='request',
-        deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P1',
-    )).apply(comms, caller)
-    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
-    artifact = comms.root / 'installed-evidence'
-    artifact.write_text('Verified installed path')
-    delivered = comms.goals.todos.get('P1')
-    with pytest.raises(ValueError, match='consecutive words of: Works when:'):
-        CommsProblemCloseTool(problem='P1', artifact=str(artifact),
-            works='The installed application kept both queued orders through tab returns.').apply(comms, caller)
-    assert comms.goals.todos.get('P1') == delivered
-    CommsProblemCloseTool(problem='P1', artifact=str(artifact),
-        works='In the installed app the board shows the problem closed, read after a restart.').apply(comms, caller)
-    assert comms.goals.todos.get('P1').state.declared_name == 'done'
 
 
 def test_delivery_that_renames_the_decision_is_refused(commander, tmp_path):

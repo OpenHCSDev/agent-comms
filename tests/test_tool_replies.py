@@ -21,7 +21,7 @@ from agent_comms.tools import (
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
     CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
-    CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool, CommsRuleReviewTool,
+    CommsRenameSelfTool, CommsRestartQueueTool, CommsRuleReviewTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
     CommsStopTool, CommsSubtaskTool, CommsTagsTool, CommsThreadTagsTool,
@@ -95,10 +95,6 @@ def scenario(comms: Comms, project, monkeypatch):
         "why": "The recorded check counted the wrong file"}, lead
     yield CommsOrderWorkTool, {"problem": "P1"}, lead
     yield CommsOrderDoneTool, {"problem": "P1", "delivery": FieldCodec.encode(OperationDelivery())}, lead
-    (comms.root / "installed-evidence").write_text("Verified installed path")
-    yield CommsProblemCloseTool, {
-        "problem": "P1", "works": "The installed application now keeps the order across returns.",
-        "artifact": str(comms.root / "installed-evidence")}, lead
     yield CommsTodoCreateTool, {"owner": "worker", "order": FieldCodec.encode(CreateProblemGoalAction(
         problem="P2", order=replace(order, id="order-P2"), request="request", deadline=RecordedEventTime(4000),
         commander="lead", repo="OpenHCSDev/agent-comms", text="Fix P2"))}, lead

@@ -9,7 +9,7 @@ import pytest
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
-    OperationDelivery, PlannedInstallDeadline, PullRequest, PullRequests, PushedProgress, UnreadProgress)
+    InstallDue, OperationDelivery, PlannedInstallDeadline, PullRequest, PullRequests, PushedProgress, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
@@ -240,32 +240,35 @@ def test_overdue_remains_announced_until_recorded(commander, commander_script):
     assert deadline_lines(script, time.time())[0].startswith("OVERDUE:")
 
 
-def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander, commander_script, monkeypatch, tmp_path):
-    """An unrecorded merge and a delivered, uninstalled order wait on the fleet's install; an
-    installed order does not. Nobody is struck, and a late install is named, not the orders."""
-    comms, caller = commander
-    script, _ = commander_script
-    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
-    unit = tmp_path / 'wt' / 'worker--P1'
-    unit.mkdir(parents=True)
-    git(unit, 'init', '-q', '-b', 'fix/p1')
-    for pid in ('P1', 'P2', 'P3'):
-        create(commander, pid, deadline=1)
-    merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
-    monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
-    for pid in ('P2', 'P3'):
-        CommsOrderDoneTool(problem=pid, delivery=OperationDelivery()).apply(comms, caller)
-    p1, p2, p3 = (comms.goals.todos.get(pid) for pid in ('P1', 'P2', 'P3'))
-    held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', 'p3.png')))
-    read = script.progress()
-    assert script.install_lines(held, read, 1000.0) == ['INSTALL not planned; waiting: P1 worker, P2 worker']
-    PlannedInstallDeadline(RecordedEventTime(2000.0)).plan(comms.root)
-    due = time.strftime('%H:%M', time.localtime(2000.0))
-    assert script.install_lines(held, read, 1000.0) == [f'INSTALL due {due}; waiting: P1 worker, P2 worker']
-    assert script.install_lines(held, read, 2001.0) == [
-        f'INSTALL LATE (due {due}), not the orders; waiting: P1 worker, P2 worker']
-    assert script.install_lines(held[2:], read, 2001.0) == []
-    assert "awaiting record" in deadline_lines(script)[0]
+def test_install_due_fires_once_the_schedule_passes_with_main_moved(commander, tmp_path):
+    """No order waits on install: InstallDue reads the bus's install schedule. A bus with no
+    recorded install is due; after an install it is due only once its time passed and main
+    moved past the installed commit."""
+    comms, _ = commander
+    upstream, installation = tmp_path / 'upstream', tmp_path / 'installation'
+    for repo in (upstream, installation):
+        repo.mkdir()
+        git(repo, 'init', '-q', '-b', 'main')
+    git(installation, 'remote', 'add', 'origin', str(upstream))
+
+    def commit(text):
+        git(upstream, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', text)
+        return git(upstream, 'rev-parse', 'HEAD')
+
+    def due():
+        return [rule.line() for rule in InstallDue.violations(comms, 'lead')]
+
+    installed = commit('installed')
+    assert due() == ['INSTALL DUE (no install of main is recorded on this bus) -> bus-upgrade '
+                     'rehearses and installs main with tools/upgrade_bus.py and posts the result '
+                     'to the commander']
+    PlannedInstallDeadline.after(installed, installation, time.time()).plan(comms.root)
+    moved = commit('merged after the install')
+    assert due() == []
+    PlannedInstallDeadline.after(installed, installation, 0.0).plan(comms.root)
+    assert len(due()) == 1 and f'main is {moved[:9]}, the bus runs {installed[:9]}' in due()[0]
+    PlannedInstallDeadline.after(moved, installation, 0.0).plan(comms.root)
+    assert due() == []
 
 
 @pytest.mark.parametrize("pid,branch,number,subject", [

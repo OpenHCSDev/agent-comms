@@ -50,6 +50,11 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     def work(self) -> str:
         return "delivered work"
 
+    def late(self, todo: Todo) -> str:
+        """The strike a late delivery earns. Work without a commit has no delivery time of its
+        own: recording it later is the commander's delay, so the OVERDUE alarm judges it."""
+        return ""
+
     async def run(self, check, *command):
         result = await BoundedRun.run(tuple(command), cwd=check.directory, timeout=120)
         if result.outcome != ExitedOutcome(0):
@@ -90,6 +95,11 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     @property
     def work(self) -> str:
         return f"delivered commit {self.delivered}"
+
+    def late(self, todo: Todo) -> str:
+        lateness = self.at.lateness(todo.deadline)
+        return (f"{todo.id} order {todo.order.id} {lateness} as {self.delivered} "
+                "(caught by Core at the delivery check)") if lateness.late() else ""
 
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
@@ -731,9 +741,6 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
 
-    def require_transfer(self, todo: Todo) -> None:
-        raise ValueError("Only an undelivered order can change owner.")
-
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
 
@@ -805,9 +812,6 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 class PendingProblemOrder(ProblemOrder):
     pending: ClassVar[bool] = True
 
-    def require_transfer(self, todo: Todo) -> None:
-        pass
-
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
@@ -817,10 +821,6 @@ class PendingProblemOrder(ProblemOrder):
 class DeliveredProblemOrder(ProblemOrder):
     delivery: OrderDelivery
     pending: ClassVar[bool] = False
-
-    def require_transfer(self, todo: Todo) -> None:
-        owner = (todo.assignment or todo.released[-1].previous).owner
-        raise ValueError(f"{owner} already has {self.delivery.work}; {owner} merges it.")
 
     def delivered(self, delivery):
         if delivery != self.delivery:
@@ -1302,6 +1302,15 @@ class DeliverTodo(CloseOrderTodo):
     def closed(self, current: Todo) -> ProblemOrder:
         return current.order.delivered(self.delivery)
 
+    def apply(self, current):
+        """A late delivery's strike is recorded in the revision that closes the order."""
+        done = super().apply(current)
+        if why := self.delivery.late(current):
+            StrikeReason(why)
+            strike = StrikeTodo(current.revision, self.actor, current.assignment, why, self.delivery.at)
+            return replace(done, strikes=(*done.strikes, strike))
+        return done
+
 
 @dataclass(frozen=True)
 class WithdrawTodo(CloseOrderTodo):
@@ -1423,7 +1432,6 @@ class Todo(TypedTable):
         return proposed
 
     def assigned(self, proposed: Assignment, traced: FileLine | None = None) -> Todo:
-        self.order.require_transfer(self)
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
