@@ -17,7 +17,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
     path = tmp_path / "native.jsonl"
     native_id = "a" * 32
     path.write_text(json.dumps({
-        "type": "message", "id": "entry", "message": {
+        "type": "message", "id": "entry", "timestamp": "2026-10-19T00:00:00Z", "message": {
             "role": "user", "inputId": native_id, "content": "private wrapper",
         },
     }) + "\n")
@@ -39,7 +39,7 @@ def test_saved_input_annotation_revokes_page_without_journal_change(tmp_path, jo
 def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(tmp_path):
     comms = wire(tmp_path / "wire")
     parent = tmp_path / "parent.jsonl"
-    parent.write_text(json.dumps({"type": "message", "message": {
+    parent.write_text(json.dumps({"type": "message", "id": "parent-1", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "parent answer"}],
     }}) + "\n")
     comms.registry.declare(comms.registry.new_thread('parent', frozenset(), str(tmp_path), session_file=str(parent)))
@@ -47,7 +47,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
     captured = comms.transcripts.capture_page_read("child")
     assert any(event.text == "parent answer" for event in captured.read().events)
     with parent.open("a") as output:
-        output.write(json.dumps({"type": "message", "message": {
+        output.write(json.dumps({"type": "message", "id": "parent-2", "timestamp": "2026-10-19T00:00:01Z", "message": {
             "role": "assistant", "content": [{"type": "text", "text": "later answer"}],
         }}) + "\n")
     assert not captured.current()
@@ -59,7 +59,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
     fresh = comms.transcripts.capture_page_read("child")
     assert any(event.text == "later answer" for event in fresh.read().events)
     child = tmp_path / "child.jsonl"
-    child.write_text(json.dumps({"type": "message", "message": {
+    child.write_text(json.dumps({"type": "message", "id": "child-1", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "child answer"}],
     }}) + "\n")
     comms.threads.attach_session((attachment_owner := comms.registry.require("child")), str(child), process=attachment_owner.process_identity)
@@ -71,7 +71,7 @@ def test_native_append_preserves_captured_cut_and_fork_source_change_revokes_it(
 def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
     comms = wire(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
-    original = json.dumps({"type": "message", "message": {
+    original = json.dumps({"type": "message", "id": "entry", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "first answer"}],
     }}) + "\n"
     replacement = original.replace("first answer", "other answer")
@@ -90,7 +90,7 @@ def test_native_rewrite_inside_captured_cut_revokes_the_read(tmp_path):
 def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, monkeypatch):
     comms = wire(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
-    path.write_text(json.dumps({"type": "message", "message": {
+    path.write_text(json.dumps({"type": "message", "id": "entry-1", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "captured answer"}],
     }}) + "\n")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
@@ -100,7 +100,7 @@ def test_native_growth_during_page_preparation_keeps_the_captured_cut(tmp_path, 
     def append_after_page(*args, **kwargs):
         page = prepare(*args, **kwargs)
         with path.open("a") as output:
-            output.write(json.dumps({"type": "message", "message": {
+            output.write(json.dumps({"type": "message", "id": "entry-2", "timestamp": "2026-10-19T00:00:01Z", "message": {
                 "role": "assistant", "content": [{"type": "text", "text": "later answer"}],
             }}) + "\n")
         return page
@@ -120,7 +120,7 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
 
     comms = wire(tmp_path / "wire")
     path = tmp_path / "native.jsonl"
-    path.write_text(json.dumps({"type": "message", "message": {
+    path.write_text(json.dumps({"type": "message", "id": "entry", "timestamp": "2026-10-19T00:00:00Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "Original retained answer"}],
     }}) + "\n")
     comms.registry.declare(comms.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(path)))
@@ -135,4 +135,4 @@ def test_thread_activity_and_annotations_do_not_replay_saved_content(tmp_path):
     assert captured.read() == original
     fresh = comms.transcripts.capture_page_read("worker")
     assert fresh.identity.same_content(captured.identity)
-    assert TranscriptSnapshotUpdate.capture(comms.transcripts, "worker").page == original
+    assert TranscriptSnapshotUpdate.capture(comms.transcripts, "worker").page == fresh.read()
