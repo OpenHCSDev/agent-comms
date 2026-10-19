@@ -1,5 +1,5 @@
 
-from ..field_codec import FieldCodec
+from ..field_codec import option
 """Forced rule review for the commander (HARD RULE: the commander cannot trust itself to remember the rules alone).
 
 The rules have one source each: the commander skill's bold-lead lines, every packaged feedback rule,
@@ -91,8 +91,8 @@ class ReviewVerb(RulesVerb):
 @dataclass(frozen=True, kw_only=True)
 class AnswerVerb(RulesVerb):
     help = "answer a drawn rule for the acting commander"
-    n: int = FieldCodec.option("n", help="the drawn rule number")
-    text: str = FieldCodec.option("text", help="how this tick obeys or breaks that rule")
+    n: int = option("n", help="the drawn rule number")
+    text: str = option("text", help="how this tick obeys or breaks that rule")
 
     def run(self) -> None:
         answer(self.n, self.text, self.who)

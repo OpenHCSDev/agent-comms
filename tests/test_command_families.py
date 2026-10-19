@@ -1,5 +1,5 @@
 
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, option
 """External contracts and adding commands without editing any consumer catalog."""
 
 import asyncio
@@ -68,7 +68,7 @@ def test_one_cli_declaration_adds_parser_decode_and_real_dispatch(tmp_path, caps
     @dataclass(frozen=True, kw_only=True)
     class ContractProbeCliCommand(CliCommand, declared_name="contract-probe"):
         help = "Test extension through declaration membership"
-        amount: int = FieldCodec.option("--amount")
+        amount: int = option("--amount")
 
         def apply(self, ctx):
             return ContractProbeResult(self.amount + 1, str(ctx.root))

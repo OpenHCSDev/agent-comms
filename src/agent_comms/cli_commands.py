@@ -33,7 +33,7 @@ from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
-from .cli_bridges.shared import ChoiceTargetField, CliBridge, DeclaredOptions, Send, TargetField, _json_object
+from .cli_bridges.shared import ChoiceTargetField, CliBridge, DeclaredOptions, Send, TargetField
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
 from .command import Command
@@ -55,7 +55,7 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .field_codec import FieldCodec, FieldPlan, PathText, WireForm
+from .field_codec import FieldCodec, FieldPlan, PathText, WireForm, option
 from .harness_install import Harness, HarnessInstalled
 from .history_result import HistoryPageResult
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
@@ -753,11 +753,11 @@ class CliCommand(
 @dataclass(frozen=True, kw_only=True)
 class CheckRootCliCommand(CliCommand, declared_name="check-root"):
     help = "Run a command against selected recent history, then remove its private root"
-    threads: tuple[str, ...] = FieldCodec.option(normalize=_tags, help="Comma-separated source thread names")
-    into: Annotated[Path, PathText] = FieldCodec.option(
+    threads: tuple[str, ...] = option(normalize=_tags, help="Comma-separated source thread names")
+    into: Annotated[Path, PathText] = option(
         help="New directory under your agent scratch directory"
     )
-    argv: tuple[str, ...] = FieldCodec.option("argv", nargs=argparse.REMAINDER,
+    argv: tuple[str, ...] = option("argv", nargs=argparse.REMAINDER,
                                  help="-- COMMAND ARGS; use {root} for the private root argument")
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -767,20 +767,20 @@ class CheckRootCliCommand(CliCommand, declared_name="check-root"):
 @dataclass(frozen=True, kw_only=True)
 class ImportingCliCommand(CliCommand):
     """Where an imported thread works and how much of its source conversation it keeps."""
-    worktree: str | None = FieldCodec.option(
+    worktree: str | None = option(
         "--worktree", help="Override the source project directory", default=None
     )
-    model: str | None = FieldCodec.option(
+    model: str | None = option(
         "--model",
         help="Target Pi provider/model; not inferred from foreign model IDs",
         default=None,
     )
-    tags: frozenset[str] = FieldCodec.option(
+    tags: frozenset[str] = option(
         "--tags", default_factory=frozenset, parser_default="", normalize=_tags
     )
-    max_messages: int = FieldCodec.option("--max-messages", default=200)
-    max_characters: int = FieldCodec.option("--max-characters", default=120000)
-    max_message_characters: int = FieldCodec.option("--max-message-characters", default=12000)
+    max_messages: int = option("--max-messages", default=200)
+    max_characters: int = option("--max-characters", default=120000)
+    max_message_characters: int = option("--max-message-characters", default=12000)
 
     def imported(self, ctx: Comms, history: History, name: str) -> ThreadImported:
         return ctx.threads.import_thread(
@@ -792,13 +792,13 @@ class ImportingCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread"):
     help = "Import a stored Claude Code, Codex or OpenCode session as a stopped thread"
-    harness: type[Harness] = FieldCodec.option("--harness", editor=ChoiceTargetField)
-    source: Annotated[Path, PathText] = FieldCodec.option(
+    harness: type[Harness] = option("--harness", editor=ChoiceTargetField)
+    source: Annotated[Path, PathText] = option(
         "--source", help="Claude Code or Codex session JSONL, OpenCode export JSON or opencode.db")
-    session_id: str | None = FieldCodec.option(
+    session_id: str | None = option(
         "--session-id", help="Required for OpenCode database imports", default=None
     )
-    name: str = FieldCodec.option("--name", help="New agent-comms thread name")
+    name: str = option("--name", help="New agent-comms thread name")
 
     def apply(self, ctx: Comms) -> CliResult:
         return self.imported(ctx, OfflineHistory.of(
@@ -808,11 +808,11 @@ class ImportThreadCliCommand(ImportingCliCommand, declared_name="import-thread")
 @dataclass(frozen=True, kw_only=True)
 class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-running-thread"):
     help = "Import a session a running Claude Code, Codex or OpenCode holds, as a stopped thread"
-    harness: type[Harness] = FieldCodec.option("--harness", editor=ChoiceTargetField)
-    thread: str = FieldCodec.option("--thread", help="The harness's own session or thread id")
-    address: str | None = FieldCodec.option(
+    harness: type[Harness] = option("--harness", editor=ChoiceTargetField)
+    thread: str = option("--thread", help="The harness's own session or thread id")
+    address: str | None = option(
         "--address", help="Codex app-server socket, or OpenCode server URL", default=None)
-    name: str = FieldCodec.option("--name", help="New agent-comms thread name")
+    name: str = option("--name", help="New agent-comms thread name")
 
     def apply(self, ctx: Comms) -> CliResult:
         directory = Path(self.worktree).expanduser() if self.worktree else Path.cwd()
@@ -822,8 +822,8 @@ class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-r
 @dataclass(frozen=True, kw_only=True)
 class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subagents"):
     help = "Import every subagent of a stored Claude Code session, each as a stopped thread"
-    session: Annotated[Path, PathText] = FieldCodec.option("--session", help="The Claude Code session JSONL")
-    prefix: str = FieldCodec.option("--prefix", default="", help="Prepended to each subagent id to name its thread")
+    session: Annotated[Path, PathText] = option("--session", help="The Claude Code session JSONL")
+    prefix: str = option("--prefix", default="", help="Prepended to each subagent id to name its thread")
 
     def apply(self, ctx: Comms) -> SubagentsImportedResult:
         return SubagentsImportedResult(tuple(
@@ -833,7 +833,7 @@ class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subag
 
 @dataclass(frozen=True, kw_only=True)
 class SendCliCommand(Send, CliCommand):
-    sender: str = FieldCodec.option("--from")
+    sender: str = option("--from")
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -846,9 +846,9 @@ class SendCliCommand(Send, CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class UserSendCliCommand(CliCommand, declared_name="user-send"):
     help = "Send as the human user to a thread (DM), #channel, or #all"
-    target: str = FieldCodec.option("--to")
-    body: str = FieldCodec.option("--body")
-    worktree: str = FieldCodec.option("--worktree", default_factory=os.getcwd)
+    target: str = option("--to")
+    body: str = option("--body")
+    worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
 
@@ -859,10 +859,10 @@ class UserSendCliCommand(CliCommand, declared_name="user-send"):
 @dataclass(frozen=True, kw_only=True)
 class ConfigureCliCommand(CliCommand, declared_name="configure"):
     help = "Set a stopped thread's model, thinking level, or service tier for its next start"
-    name: str = FieldCodec.option("--name")
-    model: str | None = FieldCodec.option("--model", default=None)
-    thinking: str | None = FieldCodec.option("--thinking", default=None)
-    service_tier: ServiceTier | None = FieldCodec.option("--service-tier", default=None)
+    name: str = option("--name")
+    model: str | None = option("--model", default=None)
+    thinking: str | None = option("--thinking", default=None)
+    service_tier: ServiceTier | None = option("--service-tier", default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
         from .errors import RelationViolationError
@@ -891,10 +891,10 @@ class ConfigureCliCommand(CliCommand, declared_name="configure"):
 @dataclass(frozen=True, kw_only=True)
 class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
     help = "Pin a checked original human message for its recipient"
-    thread: str = FieldCodec.option("thread")
-    source: MessageReference = FieldCodec.option("--source", normalize=_message_reference,
+    thread: str = option("thread")
+    source: MessageReference = option("--source", normalize=_message_reference,
                                       help="Original sequence:message_id")
-    worktree: str = FieldCodec.option("--worktree", default_factory=os.getcwd)
+    worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def original_source(self, ctx: Comms):
         return self.source
@@ -912,7 +912,7 @@ class PinConstraintCliCommand(CliCommand, declared_name="pin-constraint"):
 @dataclass(frozen=True, kw_only=True)
 class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-input-constraint"):
     help = "Pin an original human input for its recipient"
-    source: str = FieldCodec.option("--source", help="Original durable input key")
+    source: str = option("--source", help="Original durable input key")
 
     def original_source(self, ctx: Comms):
         from .input_disposition import InputDispositions
@@ -926,8 +926,8 @@ class PinInputConstraintCliCommand(PinConstraintCliCommand, declared_name="pin-i
 @dataclass(frozen=True, kw_only=True)
 class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="approve-annotations"):
     help = "Approve a pinned external classifier using original human wording and an hourly request budget"
-    per_hour: int = FieldCodec.option("--per-hour", help="Maximum classifier requests in the rolling hour")
-    segments: tuple[type[ContextSegment], ...] = FieldCodec.option("--segments", type=json.loads,
+    per_hour: int = option("--per-hour", help="Maximum classifier requests in the rolling hour")
+    segments: tuple[type[ContextSegment], ...] = option("--segments", type=json.loads,
         help="JSON list of original segment kinds permitted for disclosure")
 
     def pin_original(self, ctx: Comms, source):
@@ -938,9 +938,9 @@ class ApproveAnnotationsCliCommand(PinConstraintCliCommand, declared_name="appro
 @dataclass(frozen=True, kw_only=True)
 class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"):
     help = "Correct one original stored model answer through the human identity owner"
-    label: ModelLabel = FieldCodec.option("--label", type=json.loads)
-    answer: type[SpanAnswer] = FieldCodec.option("--answer", editor=ChoiceTargetField)
-    worktree: str = FieldCodec.option("--worktree", default_factory=os.getcwd)
+    label: ModelLabel = option("--label", type=json.loads)
+    answer: type[SpanAnswer] = option("--answer", editor=ChoiceTargetField)
+    worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
         from .coordinator import Coordination
@@ -954,10 +954,10 @@ class CorrectAnnotationCliCommand(CliCommand, declared_name="correct-annotation"
 @dataclass(frozen=True, kw_only=True)
 class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
     help = "Report human-reviewed accuracy and probability frequencies for exact annotation versions"
-    operation: Literal["calibration"] = FieldCodec.option("operation", help="calibration", editor=ChoiceTargetField)
-    question: QuestionVersion = FieldCodec.option("--question", type=json.loads,
+    operation: Literal["calibration"] = option("operation", help="calibration", editor=ChoiceTargetField)
+    question: QuestionVersion = option("--question", type=json.loads,
         help="JSON of the original question member and version digest")
-    classifier: ClassifierVersion = FieldCodec.option("--classifier", type=json.loads,
+    classifier: ClassifierVersion = option("--classifier", type=json.loads,
         help="JSON of the original classifier member and pinned release")
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -970,10 +970,10 @@ class AnnotationsCalibrationCliCommand(CliCommand, declared_name="annotations"):
 @dataclass(frozen=True, kw_only=True)
 class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constraint"):
     help = "Publish a human's exact replacement for an authored constraint"
-    thread: str = FieldCodec.option("thread")
-    source: MessageReference = FieldCodec.option("--source", normalize=_message_reference)
-    body: str = FieldCodec.option("--body")
-    worktree: str = FieldCodec.option("--worktree", default_factory=os.getcwd)
+    thread: str = option("thread")
+    source: MessageReference = option("--source", normalize=_message_reference)
+    body: str = option("--body")
+    worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskSupersession
@@ -986,9 +986,9 @@ class SupersedeConstraintCliCommand(CliCommand, declared_name="supersede-constra
 @dataclass(frozen=True, kw_only=True)
 class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
     help = "Retire a constraint by original reference, preserving its evidence"
-    thread: str = FieldCodec.option("thread")
-    source: MessageReference = FieldCodec.option("--source", normalize=_message_reference)
-    worktree: str = FieldCodec.option("--worktree", default_factory=os.getcwd)
+    thread: str = option("thread")
+    source: MessageReference = option("--source", normalize=_message_reference)
+    worktree: str = option("--worktree", default_factory=os.getcwd)
 
     def apply(self, ctx: Comms) -> CliResult:
         from .task_sources import CorrectionTaskChange, UserTaskDrop
@@ -1002,9 +1002,9 @@ class DropConstraintCliCommand(CliCommand, declared_name="drop-constraint"):
 @dataclass(frozen=True, kw_only=True)
 class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
     help = "Export current authored context from original checked sources"
-    thread: str = FieldCodec.option("thread")
-    output: str = FieldCodec.option("--output")
-    overwrite: bool = FieldCodec.option("--overwrite", default=False)
+    thread: str = option("thread")
+    output: str = option("--output")
+    overwrite: bool = option("--overwrite", default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.bus.log.retained_context(self.thread, ctx.registry).export(
@@ -1014,7 +1014,7 @@ class ExportRetainedCliCommand(CliCommand, declared_name="export-retained"):
 @dataclass(frozen=True, kw_only=True)
 class InboxCliCommand(CliCommand):
     help = "Undelivered messages for a thread"
-    thread: str = FieldCodec.option("--thread")
+    thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> CliResult:
         return InboxResult(tuple(ctx.bus.inbox(self.thread)))
@@ -1023,9 +1023,9 @@ class InboxCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class WatchCliCommand(CliCommand, declared_name="watch"):
     help = "Stream unread and arriving messages as JSON lines"
-    thread: str = FieldCodec.option("--thread")
-    after: MessageReference | None = FieldCodec.option("--after", default=None, type=json.loads, help="Exclusive original message reference already attempted by this receiver (JSON)")
-    acknowledgment: type[WatchAcknowledgment] = FieldCodec.option("--acknowledgment", default=OnReadWatchAcknowledgment, editor=ChoiceTargetField)
+    thread: str = option("--thread")
+    after: MessageReference | None = option("--after", default=None, type=json.loads, help="Exclusive original message reference already attempted by this receiver (JSON)")
+    acknowledgment: type[WatchAcknowledgment] = option("--acknowledgment", default=OnReadWatchAcknowledgment, editor=ChoiceTargetField)
 
     def apply(self, ctx: Comms) -> AsyncIterator[Message]:
         return ctx.bus.watch(self.thread, acknowledgment=self.acknowledgment, after=self.after)
@@ -1055,7 +1055,7 @@ class WatchCliCommand(CliCommand, declared_name="watch"):
 @dataclass(frozen=True, kw_only=True)
 class AckCliCommand(CliCommand):
     help = "Mark inbox delivered"
-    thread: str = FieldCodec.option("--thread")
+    thread: str = option("--thread")
 
     def apply(self, ctx: Comms) -> CliResult:
         messages = ctx.bus.inbox(self.thread)
@@ -1090,10 +1090,10 @@ class StatusCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class HistoryCliCommand(CliCommand):
     help = "Newest-first bounded history of a named target"
-    target: str = FieldCodec.option("--target", help="#channel or @peer", default=ANY_CHANNEL.name)
-    me: str | None = FieldCodec.option("--as", help="Participant, required only for DM history", default=None)
-    limit: int = FieldCodec.option("--limit", help="Maximum messages in this page", default=20)
-    before: PageCursor | None = FieldCodec.option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
+    target: str = option("--target", help="#channel or @peer", default=ANY_CHANNEL.name)
+    me: str | None = option("--as", help="Participant, required only for DM history", default=None)
+    limit: int = option("--limit", help="Maximum messages in this page", default=20)
+    before: PageCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
     def apply(self, ctx: Comms) -> HistoryPageResult:
         target = CommandTarget.named(self.target)
@@ -1106,15 +1106,15 @@ class HistoryCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
     help = "Export durable IRC/wire message history"
-    output: str = FieldCodec.option("--output", help="Destination file")
-    format: SelectableWireExportFormat = FieldCodec.option("--format", default=JsonlFormat(), editor=ChoiceTargetField)
-    everything: bool = FieldCodec.option(
+    output: str = option("--output", help="Destination file")
+    format: SelectableWireExportFormat = option("--format", default=JsonlFormat(), editor=ChoiceTargetField)
+    everything: bool = option(
         "--everything", help="Every wire message", group="scope", default=False
     )
-    channel: str | None = FieldCodec.option(
+    channel: str | None = option(
         "--channel", help="One target-owned #channel", group="scope", default=None
     )
-    dm: list[str] | None = FieldCodec.option(
+    dm: list[str] | None = option(
         "--dm",
         nargs=2,
         metavar=("FIRST", "SECOND"),
@@ -1122,13 +1122,13 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
         group="scope",
         default=None,
     )
-    full: bool = FieldCodec.option(
+    full: bool = option(
         "--full", help="Export without a size/time cap", group="limit", default=False
     )
-    max_bytes: int | None = FieldCodec.option(
+    max_bytes: int | None = option(
         "--max-bytes", help="Hard UTF-8 artifact byte ceiling", group="limit", default=None
     )
-    last: float | None = FieldCodec.option(
+    last: float | None = option(
         "--last",
         type=_duration_seconds,
         metavar="DURATION",
@@ -1136,7 +1136,7 @@ class ExportWireCliCommand(CliCommand, declared_name="export-wire"):
         group="limit",
         default=None,
     )
-    overwrite: bool = FieldCodec.option("--overwrite", help="Replace an existing output", default=False)
+    overwrite: bool = option("--overwrite", help="Replace an existing output", default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
         started_at = time.time()
@@ -1174,7 +1174,7 @@ class ChannelsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ThreadsCliCommand(CliCommand):
     help = "List threads"
-    active_only: bool = FieldCodec.option("--active-only", default=False)
+    active_only: bool = option("--active-only", default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
         return ThreadsResult(ctx.views.list_threads(active_only=self.active_only))
@@ -1183,8 +1183,8 @@ class ThreadsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ThreadCliCommand(CliCommand):
     help = "Detail for one thread"
-    name: str = FieldCodec.option("--name")
-    read: InboxRead = FieldCodec.option(
+    name: str = option("--name")
+    read: InboxRead = option(
         "--no-pending", help="Skip the inbox count for fast metadata reads",
         default_factory=CountedRead, parser_default=FieldCodec.encode(CountedRead()),
         action="store_const", const=FieldCodec.encode(UncountedRead()), normalize=dict)
@@ -1196,16 +1196,16 @@ class ThreadCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class RegisterCliCommand(CliCommand):
     help = "Register a thread"
-    name: str = FieldCodec.option("--name")
-    worktree: str = FieldCodec.option("--worktree")
-    tags: frozenset[str] = FieldCodec.option(
+    name: str = option("--name")
+    worktree: str = option("--worktree")
+    tags: frozenset[str] = option(
         "--tags", default_factory=frozenset, parser_default="", normalize=_tags
     )
-    parent: str | None = FieldCodec.option("--parent", default=None)
-    task: str | None = FieldCodec.option("--task", default=None)
-    process: ProcessState = FieldCodec.option("--pid", default_factory=NoProcess,
+    parent: str | None = option("--parent", default=None)
+    task: str | None = option("--task", default=None)
+    process: ProcessState = option("--pid", default_factory=NoProcess,
         parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
-    execution: type[ThreadExecution] = FieldCodec.option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
+    execution: type[ThreadExecution] = option("--execution", default=ExternalThreadExecution, editor=ChoiceTargetField,
                                             parser_default=FieldCodec.encode(ExternalThreadExecution))
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -1226,9 +1226,9 @@ class RegisterCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class InstallCliCommand(CliCommand):
     help = "Set up every coding harness on this machine to use this bus, with the commander skill and tools"
-    project: Annotated[Path, PathText] = FieldCodec.option("--project", default_factory=Path.cwd, parser_default=".")
-    repos: tuple[Annotated[Path, PathText], ...] = FieldCodec.option("--repos", default=(), parser_default="", normalize=_tags)
-    commander: str = FieldCodec.option("--commander", default="claude-code")
+    project: Annotated[Path, PathText] = option("--project", default_factory=Path.cwd, parser_default=".")
+    repos: tuple[Annotated[Path, PathText], ...] = option("--repos", default=(), parser_default="", normalize=_tags)
+    commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> CliResult:
         from .commander.config import CommanderConfig, Repo
@@ -1250,7 +1250,7 @@ class InstallCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class HeartbeatCliCommand(CliCommand):
     help = "Mark thread running"
-    name: str = FieldCodec.option("--name")
+    name: str = option("--name")
 
     def apply(self, ctx: Comms) -> CliResult:
         ctx.threads.heartbeat(self.name)
@@ -1260,9 +1260,9 @@ class HeartbeatCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class AttachSessionCliCommand(CliCommand, declared_name="attach-session"):
     help = "Attach a live Pi session to a registered thread"
-    name: str = FieldCodec.option("--name")
-    session_file: str = FieldCodec.option("--session-file")
-    process: ProcessState = FieldCodec.option("--pid", default_factory=NoProcess,
+    name: str = option("--name")
+    session_file: str = option("--session-file")
+    process: ProcessState = option("--pid", default_factory=NoProcess,
         parser_default=FieldCodec.encode(NoProcess()), type=ProcessIdentity.pid_argument)
 
     def apply(self, ctx: Comms) -> CliResult:
@@ -1286,7 +1286,7 @@ class SchemaReportCliCommand(CliCommand, declared_name="schema-report"):
 @dataclass(frozen=True, kw_only=True)
 class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
     help = "Commit and push a thread's uncommitted worktree changes as a checkpoint branch"
-    name: str = FieldCodec.option("--name")
+    name: str = option("--name")
 
     def apply(self, ctx: Comms) -> CliResult:
         import subprocess
@@ -1330,9 +1330,9 @@ class CheckpointCliCommand(CliCommand, declared_name="checkpoint"):
 @dataclass(frozen=True, kw_only=True)
 class ActivityCliCommand(CliCommand):
     help = "Publish current thread activity"
-    name: str = FieldCodec.option("--name")
-    state: ActivityState = FieldCodec.option("--state", editor=ChoiceTargetField)
-    detail: str = FieldCodec.option("--detail", default="")
+    name: str = option("--name")
+    state: ActivityState = option("--state", editor=ChoiceTargetField)
+    detail: str = option("--detail", default="")
 
     def apply(self, ctx: Comms) -> CliResult:
         ctx.agents.set_activity(self.name, self.state, self.detail)
@@ -1355,7 +1355,7 @@ class ThreadBoundCliCommand(ThreadCommandAvailability, CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ThreadLifecycleCliCommand(ThreadBoundCliCommand):
     multiple_targets = True
-    name: str = FieldCodec.option("--name", target_bound=True)
+    name: str = option("--name", target_bound=True)
 
     @classmethod
     def thread_binding(cls, thread):
@@ -1380,11 +1380,11 @@ class StopCliCommand(NativeOwnerCommand, OwnerLifecycleControl, ThreadLifecycleC
 @dataclass(frozen=True, kw_only=True)
 class RestartCliCommand(CliCommand):
     help = "Restart process"
-    name: str | None = FieldCodec.option(
+    name: str | None = option(
         "--name", help="One running thread (aliases supported)", group="scope", default=None,
         target_bound=True,
     )
-    all_: bool = FieldCodec.option(
+    all_: bool = option(
         "--all",
         help="All running owners; excludes stopped threads",
         group="scope",
@@ -1392,8 +1392,8 @@ class RestartCliCommand(CliCommand):
         wire_name="all",
         target_bound=True,
     )
-    agent_bin: str | None = FieldCodec.option("--agent-bin", default=None)
-    agent_args: list[str] | None = FieldCodec.option(
+    agent_bin: str | None = option("--agent-bin", default=None)
+    agent_args: list[str] | None = option(
         "--agent-args",
         default=None,
         normalize=_shell_words,
@@ -1421,7 +1421,7 @@ class RestartCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ReleaseCliCommand(CliCommand):
     help = "Voluntarily mark the calling thread stopped"
-    name: str = FieldCodec.option("--name")
+    name: str = option("--name")
 
     def apply(self, ctx: Comms) -> CliResult:
         ctx.owners.release(self.name)
@@ -1432,7 +1432,7 @@ class ReleaseCliCommand(CliCommand):
 class ArchiveCliCommand(ArchiveOwnerControl, ThreadBoundCliCommand):
     help = "Archive a stopped thread"
     multiple_targets = True
-    name: str = FieldCodec.option("--name", target_bound=True)
+    name: str = option("--name", target_bound=True)
 
     @classmethod
     def thread_binding(cls, thread):
@@ -1446,7 +1446,7 @@ class ArchiveCliCommand(ArchiveOwnerControl, ThreadBoundCliCommand):
 @dataclass(frozen=True, kw_only=True)
 class DeleteCliCommand(CliCommand, declared_name="delete"):
     help = "Permanently delete a stopped or archived thread; its bus history stays"
-    name: str = FieldCodec.option("--name")
+    name: str = option("--name")
 
     def apply(self, ctx: Comms) -> ThreadDeleted:
         return ctx.threads.delete(self.name)
@@ -1458,15 +1458,15 @@ class DeleteCliCommand(CliCommand, declared_name="delete"):
 class NewThreadCliCommand(CliCommand, declared_name="new"):
     help = "Create a new pi thread"
     spec_type: ClassVar[type[NewThreadSpec]] = NewThreadSpec
-    name: str = FieldCodec.option("--name")
-    task: str = FieldCodec.option("--task", default="", multiline=True)
-    tags: frozenset[str] | None = FieldCodec.option(
+    name: str = option("--name")
+    task: str = option("--task", default="", multiline=True)
+    tags: frozenset[str] | None = option(
         "--tags", default=None, editor_format=_tag_text, normalize=lambda value: _tags(value) if value is not None else None
     )
-    project: str = FieldCodec.option("--project", parser_default_factory=os.getcwd)
-    model: str | None = FieldCodec.option("--model", parser_default=NativeThreadDefaults.model,
+    project: str = option("--project", parser_default_factory=os.getcwd)
+    model: str | None = option("--model", parser_default=NativeThreadDefaults.model,
                         catalog=ModelConfigOption)
-    thinking_level: ThinkingLevelField = FieldCodec.option(
+    thinking_level: ThinkingLevelField = option(
         "--thinking-level", default=NativeThreadDefaults.thinking_level,
         catalog=ThinkingLevelConfigOption)
 
@@ -1488,7 +1488,7 @@ class NewThreadCliCommand(CliCommand, declared_name="new"):
 class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliCommand):
     help = "Fork a child pi thread"
     spec_type = ForkSpec
-    parent: str = FieldCodec.option("--parent", target_bound=True)
+    parent: str = option("--parent", target_bound=True)
 
     @classmethod
     def project_bindings(cls, comms, project):
@@ -1503,8 +1503,8 @@ class ForkCliCommand(NativeOwnerCommand, ThreadBoundCliCommand, NewThreadCliComm
 @dataclass(frozen=True, kw_only=True)
 class LedgerCliCommand(CliCommand):
     help = "Read or merge ledger state"
-    merge_from: str | None = FieldCodec.option("--merge-from", default=None)
-    author: str | None = FieldCodec.option("--author", default=None)
+    merge_from: str | None = option("--merge-from", default=None)
+    author: str | None = option("--author", default=None)
 
     def apply(self, ctx: Comms) -> CliResult:
         if self.merge_from is not None:
@@ -1522,7 +1522,7 @@ class LedgerCliCommand(CliCommand):
 class PollCliCommand(CliCommand):
     help = "Status snapshot: thread, inbox, ledger, peers"
     # --thread names a thread; without it the poll is the calling thread's. Both parse to records.
-    thread: PollTarget = FieldCodec.option("--thread", default_factory=CallingThreadTarget, action="store",
+    thread: PollTarget = option("--thread", default_factory=CallingThreadTarget, action="store",
         parser_default=FieldCodec.encode(CallingThreadTarget()), type=NamedThreadTarget.argument,
         normalize=dict)
 
@@ -1533,7 +1533,7 @@ class PollCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class ContextCliCommand(CliCommand):
     help = "Inspect original context contributors without sending an input"
-    thread: str = FieldCodec.option("thread")
+    thread: str = option("thread")
     @classmethod
     def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
         super().add_parser(subparsers)
@@ -1652,10 +1652,10 @@ class TurnDiffContextCliCommand(SelectedContextCliCommand, DiffContextCliCommand
 
 @dataclass(frozen=True, kw_only=True)
 class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
-    project: str = FieldCodec.option('--project', default_factory=os.getcwd)
-    channel: str | None = FieldCodec.option('--channel', default=None)
+    project: str = option('--project', default_factory=os.getcwd)
+    channel: str | None = option('--channel', default=None)
     help = 'List applicable operations and their declared parameters'
-    target: tuple[str, ...] = FieldCodec.option('--target', '--targets', nargs='+', default_factory=tuple,
+    target: tuple[str, ...] = option('--target', '--targets', nargs='+', default_factory=tuple,
         normalize=list)
 
     def apply(self, ctx: Comms) -> TargetCatalogResult:
@@ -1666,15 +1666,16 @@ class TargetActionsCliCommand(CliCommand, declared_name='target-actions'):
 
 @dataclass(frozen=True, kw_only=True)
 class TargetActionCliCommand(CliCommand, declared_name='target-action'):
-    channel: str | None = FieldCodec.option('--channel', default=None)
+    channel: str | None = option('--channel', default=None)
     help = 'Execute a declared operation against its current target'
-    project: str = FieldCodec.option('--project', default_factory=os.getcwd)
-    target: tuple[str, ...] = FieldCodec.option('--target', '--targets', nargs='+', default_factory=tuple,
+    project: str = option('--project', default_factory=os.getcwd)
+    target: tuple[str, ...] = option('--target', '--targets', nargs='+', default_factory=tuple,
         normalize=list)
-    operation: str = FieldCodec.option('--operation')
-    arguments: dict[str, Any] = FieldCodec.option('--arguments', default_factory=dict,
-                                     parser_default='{}', normalize=_json_object)
-    confirmed: bool = FieldCodec.option('--confirmed', default=False)
+    operation: str = option('--operation')
+    arguments: dict[str, Any] = option('--arguments', default_factory=dict,
+                                     parser_default='{}', normalize=lambda value: FieldCodec.decode(
+                                         dict[str, object], FieldCodec.parse(value)))
+    confirmed: bool = option('--confirmed', default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
         declaration = CliCommand.member_named(self.operation)
@@ -1694,8 +1695,8 @@ class StartCliCommand(NativeOwnerCommand, StartOwnerControl, ThreadLifecycleCliC
 @dataclass(frozen=True, kw_only=True)
 class ThreadTagsCliCommand(CliCommand, declared_name='thread-tags'):
     help = 'Edit thread tags'
-    name: str = FieldCodec.option('--name', target_bound=True)
-    tags: frozenset[str] = FieldCodec.option('--tags', normalize=_tags, editor_format=_tag_text,
+    name: str = option('--name', target_bound=True)
+    tags: frozenset[str] = option('--tags', normalize=_tags, editor_format=_tag_text,
                                 help='Complete tags, separated by commas')
 
     @classmethod
@@ -1709,7 +1710,7 @@ class ThreadTagsCliCommand(CliCommand, declared_name='thread-tags'):
 
 @dataclass(frozen=True, kw_only=True)
 class ExactTagCliCommand(CliCommand):
-    name: str = FieldCodec.option('--name', target_bound=True)
+    name: str = option('--name', target_bound=True)
 
     @classmethod
     def for_tag(cls, name: str) -> Self:
@@ -1723,7 +1724,7 @@ class ExactTagCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
     help = 'Rename channel tag'
-    new_name: str = FieldCodec.option('--to', help='New tag name')
+    new_name: str = option('--to', help='New tag name')
 
     @classmethod
     def for_tag(cls, name: str) -> Self:
@@ -1738,9 +1739,9 @@ class RenameTagCliCommand(ExactTagCliCommand, declared_name='rename-tag'):
 class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
     help = 'Remove tag, archive tagged threads, or delete tagged threads'
     multiple_targets = True
-    disposition: TagDisposition = FieldCodec.option('--disposition', default_factory=KeepThreadsTagDisposition, editor=ChoiceTargetField,
+    disposition: TagDisposition = option('--disposition', default_factory=KeepThreadsTagDisposition, editor=ChoiceTargetField,
                                         help='Choose what happens to tagged threads')
-    confirmed: bool = FieldCodec.option('--confirmed', default=False, target_bound=True)
+    confirmed: bool = option('--confirmed', default=False, target_bound=True)
 
     def confirmation(self):
         return self.disposition.confirmation(self.name)
@@ -1764,8 +1765,8 @@ class DeleteTagCliCommand(ExactTagCliCommand, declared_name='delete-tag'):
 class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
     help = 'Archive channel'
     multiple_targets = True
-    name: str = FieldCodec.option('--name', target_bound=True)
-    archived: bool = FieldCodec.option('--archived', default=True, target_bound=True)
+    name: str = option('--name', target_bound=True)
+    archived: bool = option('--archived', default=True, target_bound=True)
 
     @classmethod
     def catalog_declaration(cls):
@@ -1786,7 +1787,7 @@ class ArchiveChannelCliCommand(CliCommand, declared_name='archive-channel'):
 @dataclass(frozen=True, kw_only=True)
 class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-channel'):
     help = 'Restore archived channel'
-    archived: bool = FieldCodec.option('--archived', default=False, target_bound=True)
+    archived: bool = option('--archived', default=False, target_bound=True)
 
     @classmethod
     def catalog_declaration(cls):
@@ -1796,7 +1797,7 @@ class RestoreChannelCliCommand(ArchiveChannelCliCommand, declared_name='restore-
 @dataclass(frozen=True, kw_only=True)
 class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
     help = 'Delete saved view'
-    name: str = FieldCodec.option('--name', target_bound=True)
+    name: str = option('--name', target_bound=True)
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
@@ -1814,8 +1815,8 @@ class DeleteViewCliCommand(CliCommand, declared_name='delete-view'):
 class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
     help = 'Set channel pin'
     multiple_targets = True
-    name: str = FieldCodec.option('--name', target_bound=True)
-    pinned: bool = FieldCodec.option('--pinned', default=False, target_bound=True)
+    name: str = option('--name', target_bound=True)
+    pinned: bool = option('--pinned', default=False, target_bound=True)
 
     @classmethod
     def catalog_declaration(cls):
@@ -1832,8 +1833,8 @@ class PinChannelCliCommand(CliCommand, declared_name='pin-channel'):
 @dataclass(frozen=True, kw_only=True)
 class ChannelActivityCliCommand(CliCommand, declared_name='channel-activity'):
     help = 'Toggle member activity'
-    name: str = FieldCodec.option('--name', target_bound=True)
-    enabled: bool = FieldCodec.option('--enabled', default=False, target_bound=True)
+    name: str = option('--name', target_bound=True)
+    enabled: bool = option('--enabled', default=False, target_bound=True)
 
     @classmethod
     def channel_bindings(cls, comms, resolved: ResolvedChannel, *, snapshot, catalog):
@@ -1858,8 +1859,8 @@ class TargetEditCliCommand(TargetActionCliCommand, declared_name='target-edit'):
 class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
     help = 'Mark view read'
     multiple_targets = True
-    target: str = FieldCodec.option('--target', target_bound=True)
-    worktree: str = FieldCodec.option('--worktree', default_factory=os.getcwd, target_bound=True)
+    target: str = option('--target', target_bound=True)
+    worktree: str = option('--worktree', default_factory=os.getcwd, target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
@@ -1881,9 +1882,9 @@ class ReadTargetCliCommand(CliCommand, declared_name='read-target'):
 class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
     help = 'Toggle thread pin in channel'
     multiple_targets = True
-    name: str = FieldCodec.option('--name', target_bound=True)
-    channel: str = FieldCodec.option('--channel', target_bound=True)
-    pinned: bool = FieldCodec.option('--pinned', default=False, target_bound=True)
+    name: str = option('--name', target_bound=True)
+    channel: str = option('--channel', target_bound=True)
+    pinned: bool = option('--pinned', default=False, target_bound=True)
 
     @classmethod
     def thread_bindings(cls, comms, thread, status, channel=None, *, catalog: CatalogDocument):

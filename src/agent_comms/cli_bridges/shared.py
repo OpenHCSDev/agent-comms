@@ -40,6 +40,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms import field_codec
+from agent_comms.field_codec import FieldCodec, option
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms import messages
@@ -59,14 +60,14 @@ class Binding(TypedTable):
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         group = parser.add_argument_group('Core/CLI binding (all or none)')
-        for _, key in field_codec.FieldCodec.record_fields(cls):
+        for _, key in FieldCodec.record_fields(cls):
             group.add_argument('--' + key.replace('_', '-'))
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Binding | None:
-        values = {key: vars(arguments)[key] for _, key in field_codec.FieldCodec.record_fields(cls)
+        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
                   if vars(arguments)[key] is not None}
-        return field_codec.FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else None
+        return FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values}) if values else None
 
     @classmethod
     @contextmanager
@@ -118,7 +119,7 @@ class Options:
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
-                      for declared, key in field_codec.FieldCodec.record_fields(cls)})
+                      for declared, key in FieldCodec.record_fields(cls)})
 
 @dataclass(frozen=True)
 class MonitorEvidence(DeclaredFamily):
@@ -226,15 +227,15 @@ class DeclaredOptions:
 
     @classmethod
     def add_parser(cls, subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
-        cls.add_arguments(subparsers.add_parser(field_codec.FieldCodec.encode(cls), help=cls.help))
+        cls.add_arguments(subparsers.add_parser(FieldCodec.encode(cls), help=cls.help))
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
-        field_codec.FieldCodec.add_arguments(cls, parser)
+        FieldCodec.add_arguments(cls, parser)
 
     @classmethod
     def from_arguments(cls, args: argparse.Namespace) -> Self:
-        return field_codec.FieldCodec.decode_arguments(cls, args)
+        return FieldCodec.decode_arguments(cls, args)
 
 
 @dataclass(frozen=True)
@@ -262,10 +263,6 @@ class Operation(DeclaredOptions, ABC, Generic[OperationBridge]):
             if operation.serves(bridge):
                 offered.append(operation)
         return tuple(offered)
-
-
-def _json_object(value: str) -> dict[str, object]:
-    return field_codec.FieldCodec.decode(dict[str, object], field_codec.FieldCodec.parse(value))
 
 
 @dataclass(frozen=True)
@@ -311,7 +308,7 @@ class TargetField:
         return self.plan.constructor_required
 
     def value_schema(self) -> dict[str, object]:
-        return field_codec.FieldCodec.value_schema(self.annotation)
+        return FieldCodec.value_schema(self.annotation)
 
     def json_schema(self) -> dict[str, object]:
         return {**self.value_schema(), 'multiline': self.multiline,
@@ -358,7 +355,7 @@ class CatalogTargetField(ChoiceTargetField):
             value=decoder.encode_editor(decoder.decode(item.value))) for item in options))
 
     def value_schema(self) -> dict[str, object]:
-        return {**field_codec.FieldCodec.value_schema(self.annotation), 'configuration': field_codec.FieldCodec.encode(self.catalog)}
+        return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
 
 
 
@@ -390,14 +387,14 @@ class SuppliedReport(ChangeReport, field_codec.RecordMember, SendReport):
 @dataclass(frozen=True, kw_only=True)
 class Send(Operation):
     help = "Send to a thread (DM), #channel, or #all"
-    sender: str = field_codec.FieldCodec.option("--from", default="")
-    target: str = field_codec.FieldCodec.option("--to")
-    body: str = field_codec.FieldCodec.option("--body")
-    type: builtins.type[messages.MessageKind] = field_codec.FieldCodec.option("--type", default=messages.InfoKind,
+    sender: str = option("--from", default="")
+    target: str = option("--to")
+    body: str = option("--body")
+    type: builtins.type[messages.MessageKind] = option("--type", default=messages.InfoKind,
         choices=messages.SendableMessageKind.names(), editor=ChoiceTargetField)
-    role: builtins.type[messages.SendableRole] = field_codec.FieldCodec.option("--role", default=messages.ConversationRole)
-    report: SendReport = field_codec.FieldCodec.option("--report", default=MissingReport(),
-        help="Change report fields as a JSON object", type=field_codec.FieldCodec.parse)
+    role: builtins.type[messages.SendableRole] = option("--role", default=messages.ConversationRole)
+    report: SendReport = option("--report", default=MissingReport(),
+        help="Change report fields as a JSON object", type=FieldCodec.parse)
 
     async def execute(self, bridge: CliBridge) -> None:
         request = replace(self, sender=bridge.binding.bus)
@@ -508,8 +505,8 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
         child = await AttachedChild.start((
             str(LaunchRuntime.running().interpreter.with_name('agent-comms')),
             '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(field_codec.FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-            '--acknowledgment', field_codec.FieldCodec.encode(ExplicitWatchAcknowledgment)),
+            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
             stdio=StreamingChildStdio(input_enabled=False))
         try:
             async for item in WatchLine.stream(child):

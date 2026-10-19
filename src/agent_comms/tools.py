@@ -14,7 +14,7 @@ from pydantic import JsonValue
 
 from .progress_claims import ProgressClaim
 from .pi_vocabulary import ServiceTier, ThinkingLevel, ThinkingLevelField
-from .cli_commands import ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand, PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand, ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand, HistoryCliCommand, _json_object
+from .cli_commands import ArchiveCliCommand, CliCommand, DeleteViewCliCommand, ForkCliCommand, PinChannelCliCommand, PinThreadCliCommand, StartCliCommand, StopCliCommand, ThreadArchivedResult, ThreadCreatedResult, ThreadStoppedResult, ThreadsCliCommand, HistoryCliCommand
 from .thread_execution import (
     ArchiveOwnerControl, NativeOwnerCommand, OwnerLifecycleControl,
     StartOwnerControl, ThreadCommandAvailability,
@@ -25,7 +25,7 @@ from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, View
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError, ToolRefusedError
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec, MalformedRecord, option
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
@@ -1345,7 +1345,7 @@ class CommsArchiveTool(ArchiveOwnerControl, ToolRequest):
 @dataclass(frozen=True, kw_only=True)
 class ToolsCliCommand(CliCommand):
     help = "Emit the shared adapter tool catalog"
-    name: str | None = FieldCodec.option("--name", default=None, help="Calling thread")
+    name: str | None = option("--name", default=None, help="Calling thread")
 
     def apply(self, ctx: Comms) -> ToolCatalogResult:
         caller = ToolCaller.from_actor(self.name)
@@ -1355,13 +1355,14 @@ class ToolsCliCommand(CliCommand):
 @dataclass(frozen=True, kw_only=True)
 class InvokeCliCommand(CliCommand, declared_name="tool"):
     help = "Invoke one declared adapter tool, as --from THREAD when given"
-    caller: str | None = FieldCodec.option(
+    caller: str | None = option(
         "--from", default=None, help="Calling thread; omit for tools that need no thread"
     )
-    tool: str = FieldCodec.option("--tool")
-    arguments: dict[str, object] = FieldCodec.option(
+    tool: str = option("--tool")
+    arguments: dict[str, object] = option(
         "--arguments", help="Tool arguments as a JSON object", default_factory=dict,
-        parser_default="{}", normalize=_json_object)
+        parser_default="{}", normalize=lambda value: FieldCodec.decode(
+            dict[str, object], FieldCodec.parse(value)))
 
     def apply(self, ctx: Comms) -> dict[str, JsonValue]:
         return invoke_tool(ctx, self.tool, self.arguments,

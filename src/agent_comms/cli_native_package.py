@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from .field_codec import FieldCodec
+from .field_codec import option
 
 import argparse
 import json
@@ -45,7 +45,7 @@ class NativePackageVerb(DeclaredFamily, DeclaredOptions, Command, affix="Verb"):
 @dataclass(frozen=True, kw_only=True)
 class VerifyVerb(NativePackageVerb):
     help = "Verify a copied package against the source pin"
-    package: StoragePath = FieldCodec.option("package", help="the pi-coding-agent package directory")
+    package: StoragePath = option("package", help="the pi-coding-agent package directory")
 
     def apply(self, ctx: None = None) -> None:
         verify_native_package(self.package)
@@ -54,7 +54,7 @@ class VerifyVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class DigestVerb(NativePackageVerb):
     help = "Print a package tree's digest"
-    package: StoragePath = FieldCodec.option("package", help="the pi-coding-agent package directory")
+    package: StoragePath = option("package", help="the pi-coding-agent package directory")
 
     def apply(self, ctx: None = None) -> None:
         print(package_tree_digest(self.package))
@@ -63,7 +63,7 @@ class DigestVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class WriteManifestVerb(NativePackageVerb):
     help = "Write the source pin from a built package"
-    package: StoragePath = FieldCodec.option("package", help="the pi-coding-agent package directory")
+    package: StoragePath = option("package", help="the pi-coding-agent package directory")
 
     def apply(self, ctx: None = None) -> None:
         write_native_manifest(self.package)
@@ -72,8 +72,8 @@ class WriteManifestVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class ShareResourcesVerb(NativePackageVerb):
     help = "Share a new package's resources with the existing deployments"
-    package: StoragePath = FieldCodec.option("package", help="the new pi-coding-agent package directory")
-    deployments: StoragePath = FieldCodec.option("deployments", help="the directory holding the deployments")
+    package: StoragePath = option("package", help="the new pi-coding-agent package directory")
+    deployments: StoragePath = option("deployments", help="the directory holding the deployments")
 
     def apply(self, ctx: None = None) -> None:
         print(json.dumps(share_native_resources(self.package, self.deployments)), file=sys.stderr)
@@ -82,8 +82,8 @@ class ShareResourcesVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class InstallSourcesVerb(NativePackageVerb):
     help = "Install the declared agent-comms sources into a package"
-    package: StoragePath = FieldCodec.option("package", help="the pi-coding-agent package directory")
-    snapshot: StoragePath = FieldCodec.option("snapshot", help="the checkout the sources come from")
+    package: StoragePath = option("package", help="the pi-coding-agent package directory")
+    snapshot: StoragePath = option("snapshot", help="the checkout the sources come from")
 
     def apply(self, ctx: None = None) -> None:
         verify_native_package(self.package)
@@ -93,7 +93,7 @@ class InstallSourcesVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class EnvironmentVerb(NativePackageVerb):
     help = "Print this pin's test environment directory"
-    cache: StoragePath = FieldCodec.option(
+    cache: StoragePath = option(
         "--cache",
         default=StorageRule.native_cache,
         help="the root holding one test environment per pin",
@@ -106,7 +106,7 @@ class EnvironmentVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class PackageVerb(NativePackageVerb):
     help = "Print where this pin's built package sits under a root laid out as stack/ is"
-    root: StoragePath = FieldCodec.option("root", help="a stack directory or test environment")
+    root: StoragePath = option("root", help="a stack directory or test environment")
 
     def apply(self, ctx: None = None) -> None:
         print(pinned_package_in(self.root))
@@ -115,7 +115,7 @@ class PackageVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class BuildVerb(NativePackageVerb):
     help = "Print the directory holding this pin's built package under a root laid out as stack/ is"
-    root: StoragePath = FieldCodec.option("root", help="a stack directory or test environment")
+    root: StoragePath = option("root", help="a stack directory or test environment")
 
     def apply(self, ctx: None = None) -> None:
         print(pinned_package_in(self.root).parents[2])

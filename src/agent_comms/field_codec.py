@@ -783,6 +783,17 @@ def projected(*, view: str, name: str | None = None):
     return lambda getter: Projected(getter, view=view, name=name)
 
 
+def option(*flags: str, default: Any = MISSING, default_factory: Any = MISSING,
+           **options: object) -> Any:
+    """Attach parser/editor hints to the existing dataclass field declaration."""
+    metadata: dict[str, object] = {name: options.pop(name) for name in (
+        "group", "normalize", "wire_name", "parser_default", "parser_default_factory",
+        "multiline", "target_bound", "editor_format", "editor", "catalog",
+    ) if name in options}
+    metadata.update(flags=flags, parser_options=options)
+    return field(default=default, default_factory=default_factory, metadata=metadata)
+
+
 class FieldCodec(Sealed):
     """Family tags use their declared ``family_discriminator`` (default ``kind``); aliases
     use field(metadata={"wire_name": ...}).
@@ -915,17 +926,6 @@ class FieldCodec(Sealed):
     def decode_record(cls, target: type[T], data: object) -> T:
         """Decode declared fields without reentering the record's wire representation."""
         return cast(T, _RecordDecoder(target).decode(data))
-
-    @staticmethod
-    def option(*flags: str, default: Any = MISSING, default_factory: Any = MISSING,
-               **options: object) -> Any:
-        """Attach parser/editor hints to the existing dataclass field declaration."""
-        metadata: dict[str, object] = {name: options.pop(name) for name in (
-            "group", "normalize", "wire_name", "parser_default", "parser_default_factory",
-            "multiline", "target_bound", "editor_format", "editor", "catalog",
-        ) if name in options}
-        metadata.update(flags=flags, parser_options=options)
-        return field(default=default, default_factory=default_factory, metadata=metadata)
 
     @classmethod
     def argument_fields(cls, target: type) -> tuple[FieldPlan, ...]:
