@@ -29,7 +29,7 @@ from .native_input_record import NativeInputCommit
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
-from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
+from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -71,6 +71,14 @@ class NativeEmptyAnswer(NativeRequestFailure):  # noqa: N818 - nominal model out
 
     def __init__(self) -> None:
         super().__init__("The model finished with no text")
+
+
+class NativeInputUncommitted(NativePiUnavailable):
+    """The observed session holds no durable commit of the asked input; its turn is still pending."""
+
+    @property
+    def stop_reason(self) -> type[PendingStopReason]:
+        return PendingStopReason
 
 
 class NativePiInputNotSent(NativePiUnavailable):
@@ -346,13 +354,12 @@ class NativeContextProof(NativeContextRecord):
 
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
             header, _entries = evidence.observe()
-            if input_id not in evidence.inputs:
-                raise NativePiUnavailable("The specified input was never durably committed")
+            entry = evidence.tracked(input_id)
             with NativeContextJournal.open_evidence(session_file) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
                 if row is None:
                     raise NativePiUnavailable("The input has no assembled-context proof")
-                return row.corroborate(session_file, header, evidence.tracked(input_id))
+                return row.corroborate(session_file, header, entry)
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -1005,9 +1012,10 @@ def read_tracked_input_digest(
 
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
         evidence.observe()
-        if input_id not in evidence.inputs:
+        try:
+            return evidence.tracked(input_id).message.input_digest
+        except NativeInputUncommitted:
             return None
-        return evidence.tracked(input_id).message.input_digest
 
 
 def _verify_context(

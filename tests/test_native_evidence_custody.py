@@ -356,4 +356,4 @@ def test_an_input_check_costs_the_same_on_a_long_session_as_on_a_short_one(tmp_p
             evidence.stopped_input(f"{history + 1:032x}")
             return len(decoded), len(visited)
 
-    assert check_counts(10_000) == check_counts(10) == (1, 3)
+    assert check_counts(10_000) == check_counts(10) == (1, 2)

@@ -182,9 +182,7 @@ class NativeEvidenceRead:
 
     def __init__(self, source):
         self.source = source
-        self.entries: tuple[NativeEntry, ...] = ()
-        # Each tracked input's position in entries, indexed once as its entry is decoded.
-        self.inputs: dict[str, int] = {}
+        self._forget()
 
     def require_path(self, session_file):
         from .native_pi import NativePiUnavailable
@@ -227,14 +225,27 @@ class NativeEvidenceRead:
                 reader.close()
                 raise
 
+    def _forget(self) -> None:
+        self.entries: tuple[NativeEntry, ...] = ()
+        # Each tracked input's position in entries, indexed once as its entry is decoded.
+        self.inputs: dict[str, int] = {}
+
     def close(self):
         self.source.close()
-        self.entries = ()
-        self.inputs = {}
+        self._forget()
+
+    def position(self, input_id: str) -> int:
+        """Where the observed session committed this input; the one answer to whether it did."""
+        from .native_pi import NativeInputUncommitted
+
+        try:
+            return self.inputs[input_id]
+        except KeyError as missing:
+            raise NativeInputUncommitted("The specified input was never durably committed") from missing
 
     def tracked(self, input_id: str) -> MessageEntry:
         """The observed entry that holds this tracked input."""
-        return self.entries[self.inputs[input_id]].require_tracked_user()
+        return self.entries[self.position(input_id)].require_tracked_user()
 
     def index(self, appended: tuple[NativeEntry, ...]) -> None:
         """Add each newly decoded tracked input once, refusing a second entry for one input."""
@@ -254,13 +265,16 @@ class NativeEvidenceRead:
         A later turn, a fork or a partial tool round cannot finish this input.
         This observes the native result; it grants no input or reply replay.
         """
+        from .native_pi import NativeInputUncommitted
         from .pi_vocabulary import PendingStopReason
 
         _header, entries = self.observe()
-        if input_id not in self.inputs:
-            return PendingStopReason
-        last = self.tracked(input_id)
-        for entry in entries[self.inputs[input_id] + 1:]:
+        try:
+            start = self.position(input_id)
+        except NativeInputUncommitted as uncommitted:
+            return uncommitted.stop_reason
+        last = entries[start]
+        for entry in entries[start + 1:]:
             if entry.input_boundary:
                 break
             if entry.parent_id != last.id:
@@ -271,8 +285,7 @@ class NativeEvidenceRead:
         return PendingStopReason
 
     def _reverify(self):
-        self.entries = ()
-        self.inputs = {}
+        self._forget()
         self.source.reverify_from_start()
         return self._observe(reverified=True)
 
