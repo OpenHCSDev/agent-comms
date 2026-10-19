@@ -426,13 +426,13 @@ class UnrecognizedTransportStage(ProviderTransportStage):
 @dataclass(frozen=True)
 class ProviderDiagnosticError(PiPayload):
     message: str
+    code: int | str
     name: str | None = None
-    code: int | str | None = None
 
     @property
     def description(self) -> str:
         name = self.name or "Provider transport error"
-        return f"{name} (code {self.code})" if self.code is not None else name
+        return f"{name} (code {self.code})"
 
 
 class TransportStageText(TextRepresentation[ProviderTransportStage]):
@@ -502,14 +502,6 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     details: ProviderTransportDetails
     timestamp: int | None = None
 
-    @classmethod
-    def from_error_message(cls, message: str) -> tuple[ProviderTransportFailureDiagnostic, ...]:
-        """Decode transient close codes emitted by the native WebSocket provider."""
-        if match := re.fullmatch(r"WebSocket closed (1006|1011|1012|1013)(?:: .*)?", message):
-            return (cls(ProviderDiagnosticError(message, code=int(match[1])),
-                        ProviderTransportDetails(configured_transport="websocket")),)
-        return ()
-
     def refine_model_request_failure(self, failure):
         from .turn_failure import ProviderTransportFailed
 
@@ -530,14 +522,6 @@ class UnknownDiagnostic(PiDiagnostic):
 
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
-    @classmethod
-    def normalize_wire(cls, value):
-        data = super().normalize_wire(value)
-        data["diagnostics"] = data.get("diagnostics", []) + FieldCodec.encode(
-            ProviderTransportFailureDiagnostic.from_error_message(data.get("errorMessage") or "")
-        )
-        return data
-
     def annotation_disclosure(self):
         from .working_memory_disclosure import WithheldDisclosure
 
