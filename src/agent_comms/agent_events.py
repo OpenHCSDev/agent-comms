@@ -57,6 +57,9 @@ class AgentEvent(ABC):
     def __init__(self) -> None:
         """Concrete dataclass declarations supply their own payload constructor."""
 
+    def record_native_activity(self, activity, thread) -> None:
+        """Events without an original tool call publish no tool selector."""
+
 
 @dataclass(frozen=True)
 class GoalChanged(AgentEvent):
@@ -167,6 +170,9 @@ class ToolStart(ToolEvent):
     title: str = ""
     args: object = None
     kind: str = "other"
+
+    def record_native_activity(self, activity, thread) -> None:
+        activity.record_native_tool_call(thread, self.id)
 
     @classmethod
     def from_call(cls, call_id: str, name: str, arguments: object) -> ToolStart:

@@ -7,7 +7,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import BinaryIO, ClassVar, TypeVar, TYPE_CHECKING
+from typing import BinaryIO, ClassVar, Self, TypeVar, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
 from .field_codec import FieldCodec, MalformedRecord
@@ -54,6 +54,9 @@ class CompleteWirePrefix(WirePrefix):
 class NoCheckpoint:
     """No valid saved prefix; consumers obtain their initial projection."""
 
+    def require(self):
+        raise ValueError("A valid source checkpoint is required")
+
     def current_at(self, revision):
         return False
 
@@ -96,6 +99,9 @@ class AppendCheckpoint:
     source: FileRevision
     offset: int
     tail: str
+
+    def require(self) -> Self:
+        return self
 
     def current_at(self, revision):
         return self.source == revision

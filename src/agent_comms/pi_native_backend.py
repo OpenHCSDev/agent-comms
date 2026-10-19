@@ -33,7 +33,6 @@ from .agent_backend import (
     TurnDelivery,
 )
 from .fresh_private_session import create_fresh_private_session
-from .agent_runtime import ReadsToolActivity
 from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
@@ -77,7 +76,7 @@ PI_0_85_1_EVENT_KINDS: frozenset[str] = frozenset({
 
 
 @dataclass(frozen=True)
-class PiSessionFile(ReadsToolActivity, RuntimeLocation):
+class PiSessionFile(RuntimeLocation):
     """The native backend's stored Pi transcript."""
 
     path: str
@@ -260,7 +259,6 @@ class PiNativeBackend(
         self, thread: Thread, content: InputContent, delivery: TurnDelivery
     ) -> AsyncIterator[AgentEvent]:
         from . import backend
-        from .agent_events import ToolStart
 
         images = {"images": content.images} if content.images else {}
         package = self.comms.owners.require_private_launch().native_package
@@ -286,8 +284,7 @@ class PiNativeBackend(
             ui_request=delivery.ui_request,
             tool_mode=delivery.tool_mode,
         ):
-            if isinstance(event, ToolStart):
-                self.comms.agents.record_native_tool_call(thread, event.id)
+            event.record_native_activity(self.comms.agents, thread)
             yield event
 
     async def abort(self, owner: asyncio.Task[Any]) -> None:

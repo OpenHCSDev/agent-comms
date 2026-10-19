@@ -84,6 +84,10 @@ class RuntimeLocation(DeclaredFamily, affix="Runtime"):
         raise BackendDeclarationError('Runtime cannot select native sessions')
 
     @abstractmethod
+    def last_tool_call(self, root, incarnation):
+        """Read the newest original tool call through this runtime's own storage."""
+
+    @abstractmethod
     def history_source(self, root, incarnation): ...
 
     def imported_sources(self):

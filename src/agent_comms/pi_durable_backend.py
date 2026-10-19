@@ -13,6 +13,7 @@ from pydantic import JsonValue
 
 from .agent_backend import (
     AgentBackend,
+    BackendDeclarationError,
     CompactionOutcome,
     Compacts,
     ConfiguresModel,
@@ -50,6 +51,9 @@ class DurableDatabase(SessionFiles, RuntimeLocation):
 
     def require_forkable(self):
         raise ValueError('Durable database forking is not implemented')
+
+    def last_tool_call(self, root, incarnation):
+        raise BackendDeclarationError("Pi Durable does not serve thread turns or tool activity")
 
     def history_source(self, root, incarnation):
         return DurableTranscript(self)

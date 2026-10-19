@@ -6,12 +6,11 @@ from dataclasses import dataclass
 
 from .agent_backend import AgentBackend, FailedCompaction, RuntimeLocation
 from .external_transcript import ExternalTranscript
-from .agent_runtime import ReadsToolActivity
 from .selected_session import SelectedSession
 
 
 @dataclass(frozen=True)
-class UnstartedRuntime(ReadsToolActivity, RuntimeLocation):
+class UnstartedRuntime(RuntimeLocation):
     owner: type[AgentBackend]
     resumable = False
 

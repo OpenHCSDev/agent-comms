@@ -40,13 +40,6 @@ class ReadsHistory(ABC):
     def history(self) -> AsyncIterator[RuntimeUpdate]: ...
 
 
-class ReadsToolActivity(ABC):
-    """Answers the newest tool call from this runtime's original record owner."""
-
-    @abstractmethod
-    def last_tool_call(self, root, incarnation): ...
-
-
 class PublishesTranscript(ABC):
     """Reports the turns and items the runtime produces as it produces them."""
 

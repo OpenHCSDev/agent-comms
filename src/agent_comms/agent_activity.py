@@ -119,11 +119,8 @@ class AgentActivity:
     def record_native_tool_call(self, thread: Thread, call_id: str) -> None:
         """Index the original native record when the runtime announces its call."""
         from .native_tool_activity import NativeToolActivity
-        current = self.registry.require(thread.name)
-        if current.incarnation != thread.incarnation:
-            raise RelationViolationError("Native tool activity owner changed")
         NativeToolActivity(
-            self._wire_lock_path.parent, current.incarnation, Path(current.runtime.path)
+            self._wire_lock_path.parent, thread.incarnation, Path(thread.runtime.path)
         ).record(call_id)
 
     def set_activity(self, thread: str, state: ActivityState, detail: str = "") -> None:

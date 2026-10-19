@@ -54,9 +54,7 @@ class NativeToolActivity(AppendProjectionStore[NativeToolCheckpoint]):
     def last_tool_call(self):
         with self.source_path.open("rb") as stream:
             revision = FileRevision.from_stat(os.fstat(stream.fileno()))
-            checkpoint = self.read().validated(revision, stream)
-            if not isinstance(checkpoint, NativeToolCheckpoint):
-                raise ValueError("Native tool activity has no valid producer index")
+            checkpoint = self.read().validated(revision, stream).require()
             stream.seek(checkpoint.start)
             record = NativeRecord.read(
                 checkpoint.start, checkpoint.offset,
