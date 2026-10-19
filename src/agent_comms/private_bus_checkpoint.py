@@ -19,43 +19,39 @@ import sqlite3
 import stat
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
 from contextlib import ExitStack, closing, contextmanager, nullcontext
 from dataclasses import dataclass, field, replace
 from pathlib import Path
+from collections.abc import Iterator, Mapping
 from typing import TYPE_CHECKING, BinaryIO, ClassVar, Generic, Literal, TypeVar
 
 from .bus_source_page import AddressedPage
 from .checkpoint_seals import FinalSeal, PendingSeal, PrefixSeal, PrefixSource
 from .coordination_database import CoordinationStore
 from .coordination_errors import IdentityConflict
-from .coordination_tables.publications import PublicationIntents
 from .envelope_claim_transitions import (
-    ClaimOwner,
-    ClaimProjection,
-    ClaimTransition,
-    ClaimTransitionError,
-    ResourceClaim,
-    UnclaimedResource,
+    ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
+    ResourceClaim, UnclaimedResource,
 )
+from .coordination_tables.publications import PublicationIntents
 from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
-from .field_codec import FieldCodec, MalformedRecord
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
-from .thread_identity import ThreadIncarnation
-from .turn_context import ContextEntryManifest, RecordedContextManifest
+from .field_codec import FieldCodec, MalformedRecord
 from .typed_table import Column, ForeignKey, Index, SQLiteSchemaObject, SqlStorage, SqlValue, TypedTable
 from .wire_metadata import WireMetadata
 from .wire_record import WireRecord
+from .thread_identity import ThreadIncarnation
+from .turn_context import ContextEntryManifest, RecordedContextManifest
 
 if TYPE_CHECKING:
     from .bus_publication import CommittedDelivery
+    from .wire_log import WireLog
     from .messages import Message
+    from .retained_task_facts import ExactTaskFact
     from .registration import Registration
     from .registry_document import RegistrySnapshot
-    from .retained_task_facts import ExactTaskFact
     from .turn_context import ContextEntryReference, ContextManifest, SegmentManifest
-    from .wire_log import WireLog
 
 OriginalSource = TypeVar("OriginalSource")
 
@@ -618,9 +614,7 @@ class ClaimCommits(CheckpointTable, TypedTable):
         "sql": Column(unique=True, generated="json_extract(transition,'$.seq')"),
     })
     operation_id: str | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated=(
-            f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}"
-            ".operation_id')")),
+        "sql": Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')"),
     })
 
     @classmethod
@@ -668,9 +662,10 @@ class ResourceClaims(CheckpointTable, TypedTable):
 
     @classmethod
     def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
-        originals = ClaimCommits.select(db,
-            where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
-            parameters=(resource,))
+        originals = ClaimCommits.select(
+            db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
+            parameters=(resource,),
+        )
         return next((row.transition.claimed(resource) for row in originals), UnclaimedResource())
 
     @classmethod
