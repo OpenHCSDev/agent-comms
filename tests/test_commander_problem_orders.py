@@ -1,7 +1,10 @@
 """One unit Goal reads its independent canonical Todo orders through real tools."""
+import asyncio
 import importlib
 import json
 import os
+import re
+import shlex
 import shutil
 import sqlite3
 import subprocess
@@ -16,6 +19,7 @@ from cutover.carry import CarryChain
 from cutover.carry_todo_corrections import TodoCorrections
 
 from agent_comms.change_report import FileLine
+from agent_comms.child_process import BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
@@ -27,7 +31,7 @@ from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
 from agent_comms.tools import (CommsCorrectWordingTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
-from agent_comms.todos import (AwaitingFirstCall, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
+from agent_comms.todos import (AwaitingFirstCall, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
@@ -350,8 +354,8 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     script.send('worker', due, str(body), 'request')  # the same holder again without --clean is a send-back
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
-    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
-    sent = judge.my_messages('worker')[0]['text']
+    (link,) = sent_back.messages[-1:]
+    sent = next(m.body for m in comms.views.dm_history_page('lead', 'worker').messages if m.message_id == link.message_id)
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
     assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
 
@@ -503,6 +507,20 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
     with pytest.raises(SystemExit, match='the check printed no integer'):
         script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
     assert script.held_orders() == ()
+
+
+@pytest.mark.parametrize('printed, refused', [
+    ("printf 'no count here'", 'The order check printed no integer, so no count of 1.'),
+    ('echo 2', 'The order check printed 2, not its expected count 1.'),
+    ('echo found 1', None),
+])
+def test_a_count_check_refuses_saying_whether_it_printed_no_integer_or_the_wrong_count(tmp_path, printed, refused):
+    ran = asyncio.run(BoundedRun.run(('bash', '-c', printed), cwd=str(tmp_path), timeout=30))
+    if refused is None:
+        CountCheckResult(1).require(ran)
+    else:
+        with pytest.raises(ValueError, match=re.escape(refused)):
+            CountCheckResult(1).require(ran)
 
 
 def test_a_voided_strike_stays_readable_stops_counting_and_voids_once(commander):
@@ -839,6 +857,34 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
 
 
+def order_message(commander, problem, text):
+    """The commander's bus message, recorded as the one the order was sent in."""
+    comms, caller = commander
+    message = comms.messaging.send('lead', 'worker', text)
+    CommsTodoTool(id=problem, operation=OrderMessage(
+        comms.goals.todos.get(problem).revision, comms.registry.require('lead').incarnation, message)).apply(comms, caller)
+    return message
+
+
+def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, commander_script):
+    """The cited message's recorded order receives the verdict, whatever P-number its text names."""
+    import json
+    from pathlib import Path
+
+    comms, _ = commander
+    create(commander, 'P1')
+    create(commander, 'P2')
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    edit = dict(id='edit-1', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
+    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
+    message = order_message(commander, 'P1', 'P2 was the last order; this one repairs the existing owner')
+    judge.OkVerb(ids=(f'edit-1:{judge.Edit.from_row(**edit).code()}',), msg=message,
+                 why='The change repairs the existing canonical state owner',
+                 serves='Repair the existing owner', lines=('value = 2',)).run()
+    assert [v.tool_call_id for v in comms.goals.todos.get('P1').verdicts] == ['edit-1']
+    assert comms.goals.todos.get('P2').verdicts == ()
+
+
 def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script):
     import json
     import time
@@ -850,31 +896,34 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
     Path(judge.EDITS).write_text(''.join(json.dumps(edit) + '\n' for edit in edits))
-    judge.OkVerb(ids=tuple(f'{e["id"]}:{judge.check_code(e)}' for e in edits),
-                 why='The changes repair the existing canonical state owner',
+    message = order_message(commander, 'P1', 'P1 Repair the existing owner')
+    judge.OkVerb(ids=tuple(f'{e["id"]}:{judge.Edit.from_row(**e).code()}' for e in edits),
+                 why='The changes repair the existing canonical state owner', msg=message,
                  serves='Repair the existing owner', lines=('value = 2',)).run()
     saved = comms.goals.todos.get('P1')
     assert [v.tool_call_id for v in saved.verdicts] == ['edit-0', 'edit-1']
     assert all(isinstance(v, AcceptedVerdict) for v in saved.verdicts)
     assert not saved.strikes
-    assert importlib.reload(judge).unjudged() == []
+    assert importlib.reload(judge).Edit.unjudged() == []
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
 
 @pytest.mark.parametrize('verb', ['ok', 'back'])
-def test_judge_refuses_an_edit_without_an_open_order(commander_script, verb):
+def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script, verb):
     import json
     from pathlib import Path
 
+    comms, _ = commander
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
-    edit = dict(id='orphan-edit', thread='worker', hunks=[dict(old='value = 1', new='value = 2')])
+    edit = dict(id='orphan-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
-    fields = dict(ids=(f'{edit["id"]}:{judge.check_code(edit)}',),
-                  why='The changes repair the existing canonical state owner', lines=('value = 2',))
-    command = judge.OkVerb(**fields) if verb == 'ok' else judge.BackVerb(
-        **fields, slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
+    fields = dict(ids=(f'orphan-edit:{judge.Edit.from_row(**edit).code()}',),
+                  why='The changes repair the existing canonical state owner', lines=('value = 2',),
+                  msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner'))
+    command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
+        **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
-    with pytest.raises(SystemExit, match='edit orphan-edit.*one open order Todo'):
+    with pytest.raises(SystemExit, match=r'edit orphan-edit: .* was sent in \[\] of the open orders worker holds'):
         command.run()
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
@@ -886,13 +935,13 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     comms, _ = commander
     create(commander, 'P1')
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
-    edit = dict(id='bad-edit', thread='worker', hunks=[dict(old='value = 1', new='value = 2')])
+    edit = dict(id='bad-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
     Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
-    message = comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner')
+    message = order_message(commander, 'P1', 'P1 Repair the existing owner')
     posted = []
     monkeypatch.setattr(judge.order, 'post', lambda to, body: posted.append((to, body)) or 'sent')
     why = 'The unit copied the same state into a second writable store'
-    judge.BackVerb(ids=(f'{edit["id"]}:{judge.check_code(edit)}',), why=why, msg=message,
+    judge.BackVerb(ids=(f'bad-edit:{judge.Edit.from_row(**edit).code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
         slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
@@ -901,7 +950,7 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     assert len(saved.verdicts) == len(saved.strikes) == 1
     assert isinstance(saved.verdicts[0], SendBackVerdict)
     assert why in comms.registry.require('worker').goal.progress
-    assert judge.unjudged() == []
+    assert judge.Edit.unjudged() == []
     assert any(to == ['worker', '#comms'] for to, _ in posted)
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
@@ -935,6 +984,30 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     assert judged.strikes[0].reason == why
     revised = comms.registry.require('worker').goal
     assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+
+
+VERDICT_LINES = {
+    'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
+    'ok-unowned': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner' --no-owner proof",
+    'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
+            " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
+}
+
+
+def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander, commander_script):
+    """Every verdict member refuses a line missing any fact it declares, and its verdict reads back from the order."""
+    comms, caller = commander
+    judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
+    assert set(judge.VerdictVerb.names()) == set(VERDICT_LINES)
+    create(commander, 'P1')
+    for name, line in VERDICT_LINES.items():
+        argv = [name, *shlex.split(line)]
+        for at in [i for i, token in enumerate(argv) if token.startswith('--')]:
+            with pytest.raises(SystemExit):
+                judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
+        operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')
+        CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
+        assert comms.goals.todos.get('P1').verdicts[-1] == operation
 
 
 def test_close_quotes_the_works_line(commander):

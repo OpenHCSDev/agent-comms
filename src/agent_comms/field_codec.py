@@ -61,6 +61,11 @@ class MalformedRecord(ValueError):  # noqa: N818 - names the refused data
             raise cls(f"{subject}: {error}") from error
 
 
+def boundary_decoder[D: Callable[..., object]](decoder: D) -> D:
+    """Declares a decoder that meets absence from outside, so its None spellings are not debt."""
+    return decoder
+
+
 @dataclass(frozen=True)
 class FieldPlan:
     """One field's wire keys, checks and compiled value decoder."""
@@ -121,6 +126,7 @@ class FieldPlan:
             raise MalformedRecord(f"Missing required field {self.key}")
         return values[self.name]
 
+    @boundary_decoder
     def decoded(self, data: object) -> dict[str, object]:
         return self.decoded_using(data, self.value.decode)
 
@@ -955,6 +961,7 @@ class ValueDecoder[T](ABC):
         encoded = FieldCodec.encode(value, self.target)
         return json.dumps(encoded)
 
+    @boundary_decoder
     def decode_editor(self, value):
         return None if value is None else json.loads(value)
 
@@ -1042,6 +1049,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
+    @boundary_decoder
     def decode(self, data):
         representation = self.representation
         if data is None and not representation.accepts_null:
