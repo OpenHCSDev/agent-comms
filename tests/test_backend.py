@@ -2569,7 +2569,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             first_proc = persistent.child_state.child.proc
             second = [
@@ -2581,7 +2581,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert first[-1].ok is True and second[-1].ok is True, second
             assert persistent.child_state.child.proc is first_proc and first_proc is not None
@@ -2602,7 +2602,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert third[-1].ok is True
             assert persistent.child_state.child.proc is not first_proc
@@ -2618,7 +2618,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert proof_changed[-1].ok is True
             assert persistent.child_state.child.proc is not third_proc
@@ -2635,7 +2635,7 @@ for line in sys.stdin:
                         str(tmp_path),
                         root=Path(str(tmp_path)), session_file=str(session_file),
                         persistent_session=persistent,
-                    )
+                     session_directory=Path(str(tmp_path)))
                 ]
 
             cancelled_task = asyncio.create_task(cancelled_turn())
@@ -2655,7 +2655,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert after[-1].ok is True
             assert len(ids_file.read_text().splitlines()) == 6
@@ -2675,7 +2675,7 @@ for line in sys.stdin:
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                     send_boundary=revoked_goal,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert denied[-1].ok is False
             assert len(ids_file.read_text().splitlines()) == 6
@@ -2688,7 +2688,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert revived[-1].ok is True
             before_image_proc = persistent.child_state.child.proc
@@ -2703,7 +2703,7 @@ for line in sys.stdin:
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
                     images=(image,),
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert image_turn[-1].ok is True
             assert persistent.child_state.child.proc is before_image_proc and before_image_proc is not None
@@ -2716,7 +2716,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert failed[-1].ok is False
             assert "diagnostics withheld" in failed[-1].text
@@ -2730,7 +2730,7 @@ for line in sys.stdin:
                     str(tmp_path),
                     root=Path(str(tmp_path)), session_file=str(session_file),
                     persistent_session=persistent,
-                )
+                 session_directory=Path(str(tmp_path)))
             ]
             assert revived[-1].ok is True
             borrowed_proc = persistent.child_state.child.proc
@@ -2745,7 +2745,7 @@ for line in sys.stdin:
                         str(tmp_path),
                         root=Path(str(tmp_path)), session_file=str(session_file),
                         persistent_session=persistent,
-                    )
+                     session_directory=Path(str(tmp_path)))
                 ]
 
             active = asyncio.create_task(delayed_turn())

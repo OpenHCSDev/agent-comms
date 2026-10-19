@@ -156,7 +156,7 @@ async def test_native_late_followup_outlives_previous_settlement(monkeypatch, de
                     persistent_session=persistent,
                     finish_event=finish_event,
                     native_start=lambda *_: True,
-                ):
+                 session_directory=Path(str(root))):
                     events.append(event)
                     if isinstance(event, ae.StreamSettled):
                         finish_event.set()

@@ -44,7 +44,7 @@ from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
-                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop, Evidence)
+                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
 from .config import Commander, CommanderConfig, CommanderRole, Repo
 
@@ -178,7 +178,7 @@ def forwarders_added(diff, sources=()):
 
 
 def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
-         traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding(), evidence=()):
+         traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -307,7 +307,7 @@ def send(unit, due, body: str, clean=False, mechanical=False, reassign=None, new
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
-        strike(unit, group[0], f'sent back on {group[0]}: {verdict}', evidence=evidence)
+        strike(unit, group[0], f'sent back on {group[0]}: {verdict}', evidence=FileLine.scan(body))
 
 
 def importers(modules: set[str], check: OrderCheck) -> list[str]:
@@ -428,7 +428,7 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
 
 
 def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
-           evidence: tuple[Evidence, ...] = (), kind: type[StrikeTodo] = StrikeTodo) -> None:
+           evidence: tuple[FileLine, ...] = (), kind: type[StrikeTodo] = StrikeTodo) -> None:
     """HARD RULE: every failure goes on the public record, in plain words, damning and exact, so no
     failure stays private and none is described in words that hide what happened."""
     todo = COMMS.goals.todos.get(task)
@@ -749,39 +749,12 @@ def fire(unit: str, why: str) -> None:
         print(f'{todo.id}: released from {unit}: {why}')
 
 
-class LoadedVerb(RuledVerb):
-    """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
-
-    def gate(self) -> None:
-        super().gate()
-        if not self.fork:
-            capacity.Load.of(COMMS, ME).require()
-
-
 class OrderVerb(CommanderVerb):
     """A verb of `order`."""
 
 
-class CitedState:
-    """Derive command options from the Evidence declarations, not another kind roster."""
-
-    def __init_subclass__(cls) -> None:
-        cls.__annotations__ = {**cls.__annotations__,
-                               **{member.form.split()[0].removeprefix('--'): tuple[str, ...]
-                                  for member in Evidence.members_with(Evidence)}}
-        for member in Evidence.members_with(Evidence):
-            flag, metavar = member.form.split()
-            setattr(cls, flag.removeprefix('--'), option(
-                flag, action='append', default=(), parser_default_factory=list, metavar=metavar))
-        super().__init_subclass__()
-
-    def evidence(self) -> tuple[Evidence, ...]:
-        return tuple(member.cited(value) for member in Evidence.members_with(Evidence)
-                     for value in getattr(self, member.form.split()[0].removeprefix('--')))
-
-
 @dataclass(frozen=True, kw_only=True)
-class SendVerb(CitedState, OrderVerb, LoadedVerb):
+class SendVerb(OrderVerb, RuledVerb):
     help = "record the order in Core and send it"
     unit: str = option("unit")
     due: str = option("due", help="HH:MM local time")
@@ -797,11 +770,11 @@ class SendVerb(CitedState, OrderVerb, LoadedVerb):
     def run(self) -> None:
         send(self.unit, self.due, Path(self.body_file).read_text(), clean=self.clean,
              mechanical=self.mechanical, reassign=self.reassign, traced=self.traced,
-             replaces=self.replaces, disk=self.disk, evidence=self.evidence())
+             replaces=self.replaces, disk=self.disk)
 
 
 @dataclass(frozen=True, kw_only=True)
-class StrikeVerb(CitedState, OrderVerb, RuledVerb):
+class StrikeVerb(OrderVerb, RuledVerb):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
     why: str = option("--why")
@@ -809,7 +782,7 @@ class StrikeVerb(CitedState, OrderVerb, RuledVerb):
     caught: str = option("--caught", default=f'{ME} at review')
 
     def run(self) -> None:
-        strike(self.unit, self.pid, self.why, self.caught, evidence=self.evidence())
+        strike(self.unit, self.pid, self.why, self.caught, evidence=FileLine.scan(self.why))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -922,7 +895,7 @@ class ServeVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class SayVerb(OrderVerb, LoadedVerb):
+class SayVerb(OrderVerb, RuledVerb):
     help = "a non-order message; refused if it orders work"
     units: str = option("units", metavar="UNIT[,UNIT]")
     body_file: str = option("body_file", metavar="BODYFILE")
@@ -932,7 +905,7 @@ class SayVerb(OrderVerb, LoadedVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class ProblemVerb(OrderVerb, LoadedVerb):
+class ProblemVerb(OrderVerb, RuledVerb):
     help = "Core records the problem with its order, or nothing"
     text: str = option("text")
     to: str = option("--to")
@@ -993,7 +966,7 @@ class CloseVerb(OrderVerb, RuledVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
-class HuntVerb(OrderVerb, LoadedVerb):
+class HuntVerb(OrderVerb, RuledVerb):
     help = "a hot-path read: clean unless --sent names the order it became"
     where: str = option("where", metavar="FILE:LINE")
     why: str = option("--why")

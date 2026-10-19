@@ -21,6 +21,8 @@ if TYPE_CHECKING:
     from .native_tool_transport import ToolTransport
     from .envelope_claim_transitions import FileClaimPath
     from .storage_room import RoomReservation
+    from .registration import Registration
+    from .storage_rules import StorageEffect
 
 
 class SelectedToolDenied(ValueError):  # noqa: N818 - nominal fail-closed outcome
@@ -41,17 +43,6 @@ class CoordinationBusy(SelectedToolDenied):
         super().__init__(
             "The coordination database is busy. This tool call did not run and "
             "changed nothing; call the tool again."
-        )
-
-
-class ToolStartNotSeen(SelectedToolDenied):
-    """Pi asked to run a tool call it never reported as started; the call was not checked."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            "Pi did not report this tool call as started within "
-            f"{NativeToolCall.start_wait_seconds} s, so it was not checked. "
-            "The tool was not started; call it again."
         )
 
 
@@ -127,9 +118,6 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
     def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
         raise SelectedToolDenied("Native tool claim was already consumed; cannot replace it")
 
-    def expire(self, call: NativeToolCall) -> None:
-        """An unstarted waiter cannot change a tool slot already consumed."""
-
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         raise SelectedToolDenied("Native tool request was already consumed; outcome may be UNKNOWN")
 
@@ -143,9 +131,6 @@ class CallClaim(ABC):  # noqa: B024 - shared rejection; leaves override valid tr
 class AwaitingClaim(CallClaim):
     def refuse(self, call: NativeToolCall, refusal: CallClaim) -> None:
         call.progress.observation.refuse(call, refusal)
-
-    def expire(self, call: NativeToolCall) -> None:
-        call.progress.claim_scope = UncertainClaim()
 
     async def consume(self, call: NativeToolCall, action: Callable[[], Awaitable[None]]) -> None:
         # No retry even when the callback is cancelled or its durable fsync fails.
@@ -203,7 +188,6 @@ class NativeToolCall(ABC):
 
     call_id: str
     progress: CallProgress = field(default_factory=CallProgress, init=False, compare=False, repr=False)
-    start_wait_seconds: ClassVar[int] = 10
     declared_name: ClassVar[str]
 
     def correlate(self, candidate: NativeToolCall) -> None:
@@ -219,25 +203,16 @@ class NativeToolCall(ABC):
     def start(self) -> None:
         self.progress.observation.start(self)
 
-    async def _wait_started(self) -> None:
-        try:
-            async with asyncio.timeout(self.start_wait_seconds):
-                await self.progress.started.wait()
-        except TimeoutError as error:
-            raise ToolStartNotSeen() from error
-
     async def authorize(self, action: Callable[[], Awaitable[None]]) -> None:
         try:
-            await self._wait_started()
+            # Pi emits the start on stdout, but requests permission on a
+            # different socket. The stream consumer may still be committing
+            # earlier events when that socket arrives. Only the matching
+            # start opens this gate; elapsed time cannot settle event order.
+            # Transport retirement cancels its handlers if the stream ends.
+            await self.progress.started.wait()
             self.progress.observation.require_executing()
             await self.progress.claim_scope.consume(self, action)
-        except ToolStartNotSeen:
-            # The callback never ran. Withdraw permission, but retain the actual
-            # native observations: delayed announcement/start/error events
-            # must still reconcile this denied call in its declared round.
-            self.progress.claim_scope.expire(self)
-            self.progress.started.set()
-            raise
         except (asyncio.CancelledError, TimeoutError):
             self.progress.observation = UncertainCall()
             self.progress.claim_scope = UncertainClaim()
@@ -283,9 +258,16 @@ class CodingCall(NativeToolCall):
     def digest(self) -> str: ...
 
     @classmethod
-    def storage_effects(cls, cwd):
+    def storage_effects(cls, cwd: Path) -> tuple[StorageEffect, ...]:
         """A call without executable effects needs no room."""
         return ()
+
+    def decide_storage(self, registry: Registration, thread: str) -> tuple[StorageEffect, ...]:
+        """Judge this call's declared effects once, shared by execution and observation."""
+        effects = self.storage_effects(Path(registry.require(thread).worktree))
+        if effects:
+            registry.decide_storage(thread, effects)
+        return effects
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int

@@ -15,9 +15,9 @@ from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingR
                               UndatedStandingRule)
 from ..goals import Goal
 from ..threads import Thread
-from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo, RuntimeEvidence
+from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
 from ..turn_digests import TurnDigestRead, TurnsSince
-from . import capacity, judge
+from . import judge
 from .config import CommanderConfig, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -124,7 +124,7 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
             comms.goals.change_problem(todo.id, StrikeTodo(
                 todo.revision, comms.registry.require(commander).incarnation, held,
                 f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
-                " across two readings", evidence=(RuntimeEvidence(str(comms.root)),)), commander)
+                " across two readings", evidence=(todo.order.owner,)), commander)
         for unit in self.idle(comms, commander)[:1]:
             self.assign(comms, commander, unit)
 
@@ -148,21 +148,6 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     def enforce(self, comms: Comms, commander: str) -> None:
         self.assign(comms, commander, comms.registry.require(self.unit))
-
-
-@dataclass(frozen=True)
-class ForkNow(UndatedStandingRule):
-    """The load on the asked Comms needs more live forks than there are."""
-
-    load: capacity.Load
-
-    @classmethod
-    def violations(cls, comms: Comms, commander: str) -> tuple[ForkNow, ...]:
-        load = capacity.Load.of(comms, commander)
-        return (cls(load),) * load.short
-
-    def line(self) -> str:
-        return f"FORK NOW: {self.load}"
 
 
 @dataclass(frozen=True)
