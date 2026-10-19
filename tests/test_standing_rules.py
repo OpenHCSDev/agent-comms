@@ -395,3 +395,19 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
     assert lines(comms, module.MergeGrowth) == [
         f"GROWTH fleet/growth {big} src +41/-0 (net +41) tests +0/-0: Merge big "
         "-> justify or send back the owner with a deletion order"]
+
+
+def test_commander_backlog_over_the_limit_directs_a_second_commander(commander, monkeypatch):
+    """Unread messages to the commander over InboxBacklog's limit name the count and the oldest
+    unread and direct a second commander fork; at the limit, nothing."""
+    from agent_comms.standing_rules import InboxBacklog
+
+    comms, _ = commander
+    monkeypatch.setattr(InboxBacklog, "limit", 3)
+    first, *_ = (comms.messaging.send("worker", "lead", f"Report {n} is ready.").message for n in range(3))
+    assert lines(comms, InboxBacklog) == []
+    comms.messaging.send("worker", "lead", "Report 3 is ready.")
+    backlog, = InboxBacklog.violations(comms, "lead")
+    assert (backlog.unread, backlog.oldest.seq, backlog.began()) == (4, first.seq, first.timestamp)
+    assert backlog.line().startswith(f"INBOX BACKLOG: 4 unread (fork due over 3), oldest {first.seq} at ")
+    assert backlog.line().endswith(" -> fork a second commander now")

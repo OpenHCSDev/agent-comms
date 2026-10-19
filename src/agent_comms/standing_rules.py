@@ -18,6 +18,7 @@ from .rule_reviews import RuleReviews
 if TYPE_CHECKING:
     from .comms import Comms
     from .goals import Goal, RequestDirective
+    from .messages import Message
     from .storage_rules import MemoryUse, StorageRule
     from .todos import Todo
 
@@ -250,6 +251,31 @@ class MemoryLow(UndatedStandingRule):
             f" {self.rule.memory_gib:g} GiB); pytest temp dirs idle over"
             f" {self.rule.idle_minutes:g} min: {dirs}; test processes: {processes}"
             " -> put a cleanup owner on it now"
+        )
+
+
+@dataclass(frozen=True)
+class InboxBacklog(DatedStandingRule):
+    """Over the limit of unread messages the commander has fallen behind its inbox, since the
+    oldest of them arrived: a second commander fork is due."""
+
+    limit: ClassVar[int] = 100
+    unread: int
+    oldest: Message
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        unread = comms.bus.inbox(commander)
+        return (cls(len(unread), unread[0]),) if len(unread) > cls.limit else ()
+
+    def began(self) -> float:
+        return self.oldest.timestamp
+
+    def line(self) -> str:
+        at = time.strftime("%H:%M", time.localtime(self.oldest.timestamp))
+        return (
+            f"INBOX BACKLOG: {self.unread} unread (fork due over {self.limit}), oldest"
+            f" {self.oldest.seq} at {at} -> fork a second commander now"
         )
 
 
