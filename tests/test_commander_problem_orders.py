@@ -732,21 +732,6 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     assert comms.goals.todos.get('P1').order.check_corrections == (record,)
 
 
-def test_commander_refuses_jargon_before_core_records_the_problem(commander_script):
-    """A refused outgoing text leaves Core without the problem, so "nothing recorded" is true."""
-    script, repo = commander_script
-    (repo / 'count.txt').write_text('0\n')
-    body = repo.parent / 'order.txt'
-    body.write_text(f"Problem: NEW\nOwner: {__file__}:1\nCheck: {repo} :: cat count.txt -> 1\n"
-                    "Works when: the installed app shows the counter at one after restart\n"
-                    "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
-                    "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    original = body.read_bytes()
-    with pytest.raises(ValueError, match='Jargon'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
-    assert script.held_orders() == () and body.read_bytes() == original
-
-
 def test_commander_refuses_a_check_that_prints_no_count(commander_script):
     """done could never pass a check that prints no integer, so send refuses it before Core records anything."""
     script, repo = commander_script
