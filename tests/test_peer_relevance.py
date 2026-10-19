@@ -99,7 +99,7 @@ def test_peer_list_keeps_every_related_peer_whatever_its_name_or_the_thread_coun
     assert mentioned.relevance is GoalContactRelevance and "owner's goal" in mentioned.note
     assert all(peer.relevance.grants(Visible) for peer in peers)
     assert all(peer.relevance.grants(AlwaysListed) for peer in peers)
-    shown = json.loads(_coordination_text(comms, "owner").split("Peer state: ")[1])
+    shown = json.loads(_coordination_text(comms, "owner").split("Peer state: ")[1].splitlines()[0])
     assert shown[0]["relevance"] == "collaborator" and shown[0]["goal"] == ["Review the parser."]
 
 
@@ -145,7 +145,7 @@ def test_a_collaborators_goal_change_reaches_its_partner_as_a_typed_item_without
     shown = json.loads(_partner_activity(comms, "owner")[0].text().splitlines()[-1])
     assert shown[0]["peer"] == "partner" and shown[0]["state"] == "completed"
     # The change is read at the partner's next turn: nothing was sent and nobody was woken.
-    with comms.bus.log.checked_read() as source:
+    with comms.bus.log.opened_wire_snapshot() as source:
         assert tuple(source.public_records()) == ()
     assert comms.bus.pending_counts_all(["owner", "partner", "mate"]) == dict.fromkeys(
         ("owner", "partner", "mate"), 0

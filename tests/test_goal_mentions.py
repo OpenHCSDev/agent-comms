@@ -92,7 +92,7 @@ def test_exact_goal_mentions_are_mutual_read_only_awareness_with_provenance(
     reopened = Comms(comms.root)
     assert _rows(reopened, "peer")[0]["owner"].goal_contacts == (contact,)
     assert not comms.relationships.store.path.exists()
-    with comms.bus.log.checked_read() as source:
+    with comms.bus.log.opened_wire_snapshot() as source:
         assert tuple(source.public_records()) == ()
 
 

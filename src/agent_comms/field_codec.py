@@ -447,8 +447,9 @@ class JsonShapeFamily(WireValue):
 
     @classmethod
     def schema(cls) -> dict[str, Any]:
-        return {"anyOf": [FieldCodec.value_schema(annotation)
-                          for _, annotation in cls._json_owners.values()]}
+        alternatives = [FieldCodec.value_schema(annotation)
+                        for _, annotation in cls._json_owners.values()]
+        return {"anyOf": alternatives} if alternatives else {"not": {}}
 
     def to_wire(self):
         return self.value

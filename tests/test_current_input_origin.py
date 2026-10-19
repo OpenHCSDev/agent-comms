@@ -78,7 +78,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     comms.agents.begin_turn("beta", "held-native", "Existing original")
     agent.inputs.state("beta").inbox = asyncio.Queue()
     origin = capture(comms)
-    with comms.bus.log.checked_read() as source:
+    with comms.bus.log.opened_wire_snapshot() as source:
         before = tuple(source.public_records())
     command = QueuePromptRequest("Never replay UNKNOWN", origin=origin)
     assert decode_request(encode_request(command)) == command
@@ -88,7 +88,7 @@ async def test_original_human_followup_survives_forwarding_reservation_and_nativ
     key = "acp:" + command.input_id
     row = stored_inputs(inputs.root).lookup(key)
     assert row.origin == origin and row.source_text == command.user_text
-    with comms.bus.log.checked_read() as source:
+    with comms.bus.log.opened_wire_snapshot() as source:
         assert len(stored_inputs(inputs.root).rows) == 1 and tuple(source.public_records()) == before
     from agent_comms.turn_context import UserFollowupSegment
     queued = agent.inputs.state('beta').inbox.get_nowait()
