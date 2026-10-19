@@ -14,7 +14,7 @@ from .goal_history import GoalHistoryEntry, GoalHistoryStore
 from .maintenance_barrier import MaintenanceBarrier
 from .native_input_owner import RegistryOwner
 from .registration_change import RegistrationChange
-from .registry_document import RegistrySnapshot
+from .registry_document import RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import SharedLock, _store_lock
@@ -329,6 +329,11 @@ class Registration:
     def status(self, name: str) -> ThreadStatus:
         with self.store.reading() as document:
             return document.status(name)
+
+    def user_thread(self) -> UserThreadLookup[Thread]:
+        """The human answer from this stored revision, without copying its roster."""
+        with self.store.reading() as document:
+            return document.user_thread()
 
     def all_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:

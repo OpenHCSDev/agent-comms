@@ -5,7 +5,7 @@ from __future__ import annotations
 import math
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import Field, dataclass, field, fields, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING
@@ -94,6 +94,45 @@ class RegistryPresence(RegistryNames[Thread]):
         return self.visible_threads(DEFAULT_ROSTER)
 
 
+class UserThreadLookup[Value](ABC):
+    """The registry's human selection, including a registry with no human yet."""
+
+    @abstractmethod
+    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]: ...
+
+    @abstractmethod
+    def existing(self) -> tuple[Value, ...]: ...
+
+    @abstractmethod
+    def or_create(self, create: Callable[[], Value]) -> Value: ...
+
+
+@dataclass(frozen=True, slots=True)
+class FoundUserThread[Value](UserThreadLookup[Value]):
+    value: Value
+
+    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]:
+        return FoundUserThread(resolve(self.value))
+
+    def existing(self) -> tuple[Value, ...]:
+        return (self.value,)
+
+    def or_create(self, create: Callable[[], Value]) -> Value:
+        return self.value
+
+
+@dataclass(frozen=True, slots=True)
+class NoUserThread[Value](UserThreadLookup[Value]):
+    def map[Other](self, resolve: Callable[[Value], Other]) -> UserThreadLookup[Other]:
+        return NoUserThread()
+
+    def existing(self) -> tuple[Value, ...]:
+        return ()
+
+    def or_create(self, create: Callable[[], Value]) -> Value:
+        return create()
+
+
 class ThreadSlice[Value](ABC):
     """How one thread's part of a registry document field is cut from the wire, and
     how the field is copied. Every document field names its kind in its metadata."""
@@ -120,7 +159,7 @@ class ThreadSlice[Value](ABC):
     @staticmethod
     def required[Document: type](document: Document) -> Document:
         """Refuse, at class definition, a document field without a slice kind."""
-        for declared in fields(document):
+        for declared, _ in FieldCodec.record_fields(document):
             if not issubclass(declared.metadata.get("thread_slice", type), ThreadSlice):
                 raise TypeError(f"{document.__name__}.{declared.name} declares no thread slice")
         return document
@@ -176,12 +215,24 @@ class RegistryDocument(RegistryPresence):
         default_factory=GenerationCounter,
         metadata={"wire_name": 'admissions', "thread_slice": GenerationOf})
 
+    _human: UserThreadLookup[str] = field(init=False, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        # This answer belongs to the decoded revision. Keep the name, not an
+        # unbound Thread: store binding and later reads use the current row.
+        self._human = next((FoundUserThread(human.name)
+                            for thread in self.threads.values()
+                            for human in thread.role.human(thread)), NoUserThread())
+
+    def user_thread(self) -> UserThreadLookup[Thread]:
+        return self._human.map(self.require)
+
     def copy(self) -> RegistryDocument:
         return replace(
             self,
             **{
                 declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
-                for declared in fields(self)
+                for declared, _ in FieldCodec.record_fields(type(self))
             },
         )
 
@@ -227,8 +278,8 @@ class RegistryDocument(RegistryPresence):
         thread's declaration is neither decoded nor validated here.
         """
         try:
-            keyed = [(ThreadSlice.of(declared), FieldCodec.record_key(cls, declared.name))
-                     for declared in fields(cls)]
+            keyed = [(ThreadSlice.of(declared), key)
+                     for declared, key in FieldCodec.record_fields(cls)]
             canonical = name
             for kind, key in keyed:
                 canonical = kind.canonical(raw[key], canonical)
@@ -240,7 +291,7 @@ class RegistryDocument(RegistryPresence):
     @classmethod
     def thread_rows(cls) -> tuple[str, ...]:
         """The sections that hold one row per thread name."""
-        return tuple(declared.name for declared in fields(cls)
+        return tuple(declared.name for declared, _ in FieldCodec.record_fields(cls)
                      if ThreadSlice.of(declared) is OwnRow)
 
     @classmethod
