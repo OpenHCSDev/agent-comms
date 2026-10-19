@@ -46,7 +46,7 @@ class DisplayViewer(ABC):
     def require_name(self, snapshot) -> str: ...
 
     @abstractmethod
-    def displayed_scope(self, scope, page, basis, bus: MessageBus): ...
+    def displayed_scope(self, scope, page, basis, bus): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -66,7 +66,7 @@ class AnonymousViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         raise ValueError("Viewer metrics require a named viewer")
 
-    def displayed_scope(self, scope, page, basis, bus: MessageBus):
+    def displayed_scope(self, scope, page, basis, bus):
         return scope
 
 
@@ -100,7 +100,7 @@ class NamedViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         return snapshot.canonical_name(self.name)
 
-    def displayed_scope(self, scope, page, basis, bus: MessageBus):
+    def displayed_scope(self, scope, page, basis, bus):
         return replace(scope, displayed=bus.reads.capture(
             self.name, page.messages, basis.registry, bus.log.path,
         ))

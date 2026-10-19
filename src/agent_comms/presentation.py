@@ -42,7 +42,7 @@ from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDeli
 from .pi_counts import PiCount
 from .private_path import FileRevision
 from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
-                         NamedViewer, ReadCursor)
+                         NamedViewer)
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -70,7 +70,7 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
-    from .read_ledger import ReadDocument, ReadLedger
+    from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -462,7 +462,8 @@ class BusPresentation:
             # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
             page = ConversationMessagePageRequest(scope, bounds).read_opened(source)
-            return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self.bus))
+            displayed = basis.viewer.displayed_scope(scope, page, basis, self.bus)
+            return replace(page, display_scope=displayed)
 
     def mark_channel_read(
         self,
