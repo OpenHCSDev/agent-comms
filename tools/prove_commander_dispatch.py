@@ -185,7 +185,7 @@ class ObserveProofCommand(ProofCommand):
     def apply(self, project: Path) -> int:
         root = self.root.resolve()
         config = CommanderConfig.installed()
-        if config.root != root or config.commander != "dispatch-proof-commander":
+        if config.root != root:
             raise ValueError("Observe requires the separately configured proof commander")
         comms = Comms(root)
         commander = comms.registry.require(config.commander)
