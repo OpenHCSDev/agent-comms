@@ -21,7 +21,7 @@ from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
-from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedTable
+from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -88,39 +88,42 @@ class BusPageMetrics(TypedRow):
     human: float = field(metadata={"sql": Column(generated="MAX(0,COALESCE(MAX(CASE WHEN {human} THEN {timestamp} END),0))")})
 
 
-class BusPageIndex:
+class BusPageIndex(TypedStore):
+    filename = "bus_page_index.sqlite3"
+    rows = tuple(TypedTable.members_with(PageIndexTable))
+    schema_error = StaleBusPageIndexError
     batch_bytes = 4 * 1024 * 1024
 
     def __init__(self, bus_path: Path):
+        self.root = bus_path.parent
         self.bus_path = bus_path
-        self.path = bus_path.with_name("bus_page_index.sqlite3")
         self._resources = ExitStack()
 
     @cached_property
     def connection(self):
         with ExitStack() as resources:
-            db = resources.enter_context(closing(CoordinationStore.read_snapshot(self.path)))
-            self._schema(db)
+            db = resources.enter_context(self._attached(
+                lambda: closing(CoordinationStore.read_snapshot(self.path))))
+            if actual := self._schema(db):
+                self.require_schema(actual)
             db.execute("ROLLBACK")
             self._resources.enter_context(resources.pop_all())
             return db
 
-    @staticmethod
-    def _schema(db, *, writer: bool = False):
-        actual = SQLiteSchemaObject.read(db.execute(
-            "SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'"
-        ))
-        expected = {name: sql for table in TypedTable.members_with(PageIndexTable)
-                    for name, sql in table.schema_objects().items()}
-        if actual and SQLiteSchemaObject.differences(actual, expected):
-            if not writer:
-                raise StaleBusPageIndexError("Bus page index schema is not its declaration")
-            # Offsets derive from the bus: the writer discards a schema other
-            # than the declaration and rebuilds it under its lock.
-            for table in TypedTable.members_with(PageIndexTable):
-                table.drop(db)
-            actual = ()
-        return actual, expected
+    def _open_writer(self):
+        """Keep disposable-schema repair inside the store's WAL attachment boundary."""
+        with ExitStack() as opening:
+            db = opening.enter_context(closing(super()._open_writer()))
+            try:
+                self.require_schema(self._schema(db))
+            except StaleBusPageIndexError:
+                db.execute("BEGIN IMMEDIATE")
+                for table in self.rows:
+                    table.drop(db)
+                    table.create(db)
+                db.execute("COMMIT")
+            opening.pop_all()
+            return db
 
     def __enter__(self) -> BusPageIndex:
         return self
@@ -135,7 +138,7 @@ class BusPageIndex:
             yield False
             return
         with self.snapshot():
-            actual, _ = self._schema(self.connection)
+            actual = self._schema(self.connection)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
             yield saved is not None and saved.covers(opened)
 
@@ -181,7 +184,7 @@ class BusPageIndex:
         revision = opened.revision
         size = opened.complete_prefix.boundary
         while size:
-            with self._writing() as db:
+            with self.writing() as db:
                 saved = BusPageSource.one(db, singleton=1)
                 if saved is not None and saved.covers(opened):
                     return
@@ -209,19 +212,8 @@ class BusPageIndex:
 
     def invalidate(self) -> None:
         """Discard damaged derived coverage under the index's writer exclusion."""
-        with self._writing() as db:
+        with self.writing() as db:
             BusPageSource.delete(db, singleton=1)
-
-    @contextmanager
-    def _writing(self):
-        with closing(CoordinationStore.writer(self.path)) as db, db:
-            db.execute("PRAGMA synchronous=FULL")
-            db.execute("BEGIN IMMEDIATE")
-            actual, expected = self._schema(db, writer=True)
-            if not actual:
-                for statement in expected.values():
-                    db.execute(statement)
-            yield db
 
     def offsets(
         self,
