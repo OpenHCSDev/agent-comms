@@ -37,7 +37,7 @@ from .field_codec import (
 from .channel_targets import CommandTarget
 from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
-from .thread_identity import RecordedThreadIncarnation, StallWatcherIncarnation, ThreadIncarnation
+from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
 from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .standing_rules import UndatedStandingRule
@@ -497,10 +497,6 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The order's distance readings; progress that read no commit has none."""
         return DistanceReadings()
 
-    def advance(self, todo: Todo, ordered: float, now: float) -> Todo:
-        """Progress with no stall consequence leaves its order unchanged."""
-        return todo
-
     def stalled(self, ordered: float, now: float) -> bool:
         return False
 
@@ -548,24 +544,11 @@ class Stalling:
     @abstractmethod
     def last_move(self, ordered: float) -> float: ...
 
-    def stall_reason(self) -> str:
-        """The strike reason, with the window this class declares in ``seconds``."""
-        return f"{self.state}; no commit, push or PR change for {self.seconds // 60} minutes"
-
     def stall_at(self, ordered: float) -> float:
         return self.last_move(ordered) + self.seconds
 
     def stalled(self, ordered: float, now: float) -> bool:
         return now >= self.stall_at(ordered)
-
-    def advance(self, todo: Todo, ordered: float, now: float) -> Todo:
-        if not self.stalled(ordered, now):
-            return todo
-        owner, actor = todo.held(), StallWatcherIncarnation.watcher()
-        reason = StrikeReason(f"{owner.owner} stalled on {todo.id}: {self.stall_reason()}")
-        at = RecordedEventTime(now)
-        struck = StrikeTodo(todo.revision, actor, owner, reason.text, at).apply(todo)
-        return ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
 
     def stalled_between(self, ordered: float, since: float, now: float) -> bool:
         return since < self.stall_at(ordered) <= now
@@ -1769,8 +1752,9 @@ class AssignTodo(TodoOperation):
         self.actor.require_may_change(current)
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
-        return replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
-                       revision=current.revision + 1)
+        assigned = replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
+                           revision=current.revision + 1)
+        return self.actor.assigned(current, assigned)
 
     @property
     def actor(self) -> ThreadIncarnation:
@@ -2210,6 +2194,16 @@ class Todo(TypedTable):
             proposed = self.assignment.successor(proposed, self)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
+    def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:
+        """After assignment validation, fold its strike and release into the same row write."""
+        owner, at = self.held(), RecordedEventTime(time.time())
+        reason = StrikeReason(f"Core reassigned stalled {self.id} from {owner.owner} "
+                              f"to {assigned.held().owner}.")
+        struck = StrikeTodo(self.revision, actor, owner, reason.text, at).apply(self)
+        released = ReleaseTodo(struck.revision, actor, owner, reason, at).apply(struck)
+        return replace(assigned, strikes=struck.strikes, released=released.released,
+                       revision=released.revision + 1)
+
     def require_released_order(self, owner: ThreadIncarnation, goal_id: str) -> None:
         if self.assignment is not None and self.assignment.owned_by(owner, goal_id):
             raise TodoConflict(self)
@@ -2404,30 +2398,14 @@ class TodoStore(TypedStore):
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
 
-    def advance_stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
-        """Advance active orders; retry only rows released by this watcher, never other backlog."""
+    def stalled(self, storage: StorageRule) -> tuple[Todo, ...]:
+        """Observe active held orders without changing owners, strikes or releases."""
         held = tuple(todo for todo in self._open(
             "assignment IS NOT NULL", (), OpenTodoState) if todo.pending)
         pulls = PullRequests(held)
-        for todo in held:
-            observed_at = time.time()
-            source = ProgressSource.of(todo, storage, pulls)
-            progress = OrderProgress.from_source(source)
-            try:
-                with self.writing() as db:
-                    current = self._current(db, todo.id)
-                    current.require_result(todo)
-                    result = progress.advance(current, source.since, observed_at)
-                    if result != current:
-                        result.upsert(db)
-            except TodoConflict:
-                # A concurrent order change owns the row; observe its new assignment next pass.
-                continue
-        watcher = StallWatcherIncarnation.watcher()
-        return self._open(
-            "assignment IS NULL AND json_extract(released,'$[#-1].actor.name')=? "
-            "AND json_extract(released,'$[#-1].actor.created_at')=?",
-            (watcher.name, watcher.wire_birth), OpenTodoState)
+        return tuple(todo for todo in held
+                     if OrderProgress.from_source(source := ProgressSource.of(todo, storage, pulls))
+                     .stalled(source.since, time.time()))
 
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:

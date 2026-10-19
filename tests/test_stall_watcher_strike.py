@@ -1,14 +1,22 @@
 import asyncio
 import json
 import shutil
+import subprocess
+import sys
+from dataclasses import replace
 from contextlib import contextmanager
 from pathlib import Path
+
+import pytest
 
 from agent_comms.comms import Comms
 from agent_comms.commander import standing
 from agent_comms.commander.config import CommanderConfig
+from agent_comms.connector import Connector
+from agent_comms.connector_store import ConnectorStore
 from agent_comms.thread_identity import StallWatcherIncarnation
-from agent_comms.todos import BlockedTodoState, ChangeTodoState, ReleaseTodo, StrikeReason, StrikeTodo
+from agent_comms.todos import (BlockedTodoState, ChangeTodoState, CorrectCheckTodo,
+                              ReleaseTodo, StrikeReason, StrikeTodo, TodoConflict)
 from test_commander_problem_orders import create
 from test_standing_rules import working
 
@@ -86,13 +94,21 @@ def test_parked_units_come_from_the_existing_commander_configuration(commander, 
     assert standing.WheelSpin.idle(comms, "lead") == []
 
 
-def test_blocked_held_orders_are_not_struck_or_released(commander):
-    comms, _ = commander
+def test_blocked_held_orders_are_not_struck_or_released(commander, commander_script):
+    original, _ = commander
+    original.registry.declare(original.registry.new_thread(
+        'spare', frozenset({'comms'}), str(original.root), created_at=3.0))
     todo = create(commander, 'P1')
-    blocked = comms.goals.todos.apply('P1', ChangeTodoState(
-        todo.revision, BlockedTodoState, comms.registry.require('lead').incarnation, None))
+    blocked = original.goals.todos.apply('P1', ChangeTodoState(
+        todo.revision, BlockedTodoState, original.registry.require('lead').incarnation, None))
+    copied = original.root.with_name('blocked-copy')
+    shutil.copytree(original.root, copied)
+    comms = Comms(copied)
     standing.UnownedWheelSpin.after_stall(comms)
-    assert comms.goals.todos.get('P1') == blocked
+    with pytest.raises(TodoConflict):
+        standing.UnownedWheelSpin(blocked, 'spare').assign(
+            comms, 'lead', comms.registry.require('spare'), StallWatcherIncarnation.watcher())
+    assert comms.goals.todos.get('P1') == blocked == original.goals.todos.get('P1')
 
 
 def test_commander_released_backlog_is_not_automatically_reassigned(commander):
@@ -105,12 +121,11 @@ def test_commander_released_backlog_is_not_automatically_reassigned(commander):
     assert comms.goals.todos.get('P1') == released
 
 
-def test_watcher_release_waits_for_a_spare_without_striking_twice(commander, commander_script):
+def test_no_spare_leaves_the_old_holder_and_strikes_untouched(commander, commander_script):
     comms, _ = commander
-    create(commander, 'P1')
+    original = create(commander, 'P1')
     standing.UnownedWheelSpin.after_stall(comms)
-    waiting = comms.goals.todos.get('P1')
-    assert waiting.holder is None and len(waiting.strikes) == len(waiting.released) == 1
+    assert comms.goals.todos.get('P1') == original
     comms.registry.declare(comms.registry.new_thread("spare", frozenset({'comms'}), str(comms.root), created_at=3.0))
     working(comms, 'worker', 2.0)
     working(comms, 'spare', 3.0)
@@ -118,3 +133,72 @@ def test_watcher_release_waits_for_a_spare_without_striking_twice(commander, com
     assigned = comms.goals.todos.get('P1')
     assert assigned.holder == 'spare'
     assert len(assigned.strikes) == len(assigned.released) == 1
+
+
+def test_refused_reassignment_keeps_the_original_owner_and_strikes(commander, commander_script, tmp_path):
+    comms, _ = commander
+    todo = create(commander, 'P1')
+    comms.registry.declare(comms.registry.new_thread('spare', frozenset({'comms'}), str(comms.root), created_at=3.0))
+    working(comms, 'spare', 3.0)
+    checks = tmp_path / 'checks'
+    checks.mkdir()
+    before = comms.goals.todos.apply('P1', CorrectCheckTodo(
+        todo.revision, comms.registry.require('lead').incarnation, todo.order.check,
+        replace(todo.order.check, directory=str(checks)), 'Use this check directory for the original order.'))
+    copied = comms.root.with_name('refused-copy')
+    shutil.copytree(comms.root, copied)
+    checks.rmdir()
+    with pytest.raises(ValueError):
+        standing.UnownedWheelSpin.after_stall(Comms(copied))
+    assert Comms(copied).goals.todos.get('P1') == before == comms.goals.todos.get('P1')
+
+
+async def test_three_connector_passes_allow_real_store_maintenance_between_passes(
+        commander, commander_script, tmp_path, monkeypatch):
+    original, _ = commander
+    before = create(commander, 'P1')
+    original.registry.declare(original.registry.new_thread(
+        'spare', frozenset({'comms'}), str(original.root), created_at=3.0))
+    working(original, 'spare', 3.0)
+    copied = original.root.with_name('three-pass-copy')
+    shutil.copytree(original.root, copied)
+    connector = Connector(ConnectorStore.at(tmp_path / 'auth'), 'http://127.0.0.1:18766', copied)
+    done, receipts = asyncio.Event(), []
+    maintenance = '''
+import fcntl, os, sys
+from pathlib import Path
+from agent_comms.active_route import active_route_path
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.store_files import _store_lock
+barrier = MaintenanceBarrier(Path(sys.argv[1]) / 'registry.json')
+held = barrier.begin(MaintenanceOperator('P717 copied-root proof'))
+try:
+    with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path):
+        directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)
+        try:
+            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            print('maintenance acquired wire, registry and route locks')
+        finally:
+            os.close(directory)
+finally:
+    barrier.clear(held)
+'''
+
+    async def between(seconds):
+        run = subprocess.run([sys.executable, '-B', '-c', maintenance, str(copied)],
+                             capture_output=True, text=True, timeout=10)
+        assert run.returncode == 0, run.stderr
+        receipts.append(run.stdout.strip())
+        if len(receipts) == 3:
+            done.set()
+            await asyncio.Future()
+
+    monkeypatch.setattr(standing.asyncio, 'sleep', between)
+    async with connector.watch_orders():
+        await asyncio.wait_for(done.wait(), timeout=30)
+    after = Comms(copied).goals.todos.get('P1')
+    assert after.holder == 'spare' and len(after.strikes) == len(after.released) == 1
+    assert original.goals.todos.get('P1') == before
+    (tmp_path / 'three-pass-result.json').write_text(json.dumps({
+        'copy': str(copied), 'passes': 3, 'maintenance': receipts,
+        'holder': after.holder, 'strikes': len(after.strikes), 'original_unchanged': True}, indent=2))

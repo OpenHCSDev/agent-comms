@@ -25,7 +25,7 @@ from ..standing_rules import (
 from ..thread_identity import StallWatcherIncarnation, ThreadIncarnation
 from ..threads import Thread
 from ..todos import (
-    FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo, TodoConflict,
+    FlatTrend, OrderProgress, PullRequests, Todo,
 )
 from ..tools import CommsUnjudgedTool
 from ..turn_digests import TurnDigestRead, TurnsSince
@@ -93,7 +93,7 @@ class WheelSpin(StandingRule, declared_name=None):
     def assign(self, comms: Comms, commander: str, unit: Thread,
                assigner: ThreadIncarnation) -> None:
         """The order sent again to ``unit`` through its Goal, with the order's own text."""
-        todo = comms.goals.todos.get(self.todo.id)
+        todo = self.todo
         order = todo.order.reissued(time.time())
         comms.goals.update_goal(unit.name, OrderGoalAction(
             problem=todo.id, expected_revision=todo.revision, order=order,
@@ -129,15 +129,8 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
                 " to an idle unit")
 
     def enforce(self, comms: Comms, commander: str) -> None:
-        todo = comms.goals.todos.get(self.todo.id)
-        held = todo.held()
-        if not todo.struck_on_order(held.owner):
-            comms.goals.change_problem(todo.id, StrikeTodo(
-                todo.revision, comms.registry.require(commander).incarnation, held,
-                f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
-                " across two readings"), commander)
         for unit in self.idle(comms, commander)[:1]:
-            self.assign(comms, commander, unit, comms.registry.require(commander).incarnation)
+            self.assign(comms, commander, unit, StallWatcherIncarnation.watcher())
 
 
 @dataclass(frozen=True)
@@ -148,15 +141,16 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        return cls.paired(comms, commander,
-            comms.goals.todos.for_commander(comms.registry.require(commander).incarnation))
+        return cls.paired(comms, commander, (todo for todo in
+            comms.goals.todos.for_commander(comms.registry.require(commander).incarnation)
+            if not todo.holder))
 
     @classmethod
     def paired(cls, comms: Comms, commander: str,
                todos: Iterable[Todo]) -> tuple[UnownedWheelSpin, ...]:
-        """Each unowned pending row with the first idle unit not struck on it."""
+        """Each pending row with the first idle unit not struck on it."""
         idle, found = cls.idle(comms, commander), []
-        for todo in (todo for todo in todos if todo.pending and not todo.holder):
+        for todo in (todo for todo in todos if todo.pending):
             for unit in idle:
                 if not todo.live_strikes(unit.name):
                     idle.remove(unit)
@@ -174,16 +168,13 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     @classmethod
     def after_stall(cls, comms: Comms) -> None:
-        """Strike and release stalled orders, then assign without a commander call."""
-        released = comms.goals.todos.advance_stalled(comms.registry.storage_rule)
-        for commander in {todo.creator_identity.name for todo in released}:
-            mine = (todo for todo in released if todo.creator_identity.name == commander)
+        """Assign first: refused or unavailable replacements leave the old holder untouched."""
+        stalled = comms.goals.todos.stalled(comms.registry.storage_rule)
+        for commander in {todo.creator_identity.name for todo in stalled}:
+            mine = (todo for todo in stalled if todo.creator_identity.name == commander)
             for rule in cls.paired(comms, commander, mine):
-                try:
-                    rule.assign(comms, commander, comms.registry.require(rule.unit),
-                                StallWatcherIncarnation.watcher())
-                except TodoConflict:
-                    continue  # A concurrent order change owns the row.
+                rule.assign(comms, commander, comms.registry.require(rule.unit),
+                            StallWatcherIncarnation.watcher())
 
     @classmethod
     def watch_pass(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
@@ -195,10 +186,11 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     async def watch(cls, opened_wire: Callable[[], AbstractContextManager[Comms]]) -> None:
         """Run a pass each minute; failures go to the existing service log."""
         while True:
-            try:
-                await Coordination.run_worker(lambda: cls.watch_pass(opened_wire))
-            except Exception:
-                logging.exception("Stall watcher pass failed")
+            (outcome,) = await asyncio.gather(
+                Coordination.run_worker(lambda: cls.watch_pass(opened_wire)),
+                return_exceptions=True)
+            if isinstance(outcome, Exception):
+                logging.error("Stall watcher pass failed", exc_info=outcome)
             await asyncio.sleep(60)
 
 

@@ -95,6 +95,9 @@ class ThreadIncarnation(JsonFlagRecord, WireValue, ABC):
     def require_may_change(self, todo: Todo) -> None:
         todo.require_commander(self)
 
+    def assigned(self, previous: Todo, assigned: Todo) -> Todo:
+        return assigned
+
     def selects_lookup(self, lookup: str) -> bool:
         return False
 
@@ -227,6 +230,9 @@ class StallWatcherIncarnation(BirthlessIncarnation):
 
     def require_may_change(self, todo: Todo) -> None:
         """The Core watcher may advance stalled orders without a commander turn."""
+
+    def assigned(self, previous: Todo, assigned: Todo) -> Todo:
+        return previous.reassigned(assigned, self)
 
     @classmethod
     def watcher(cls) -> StallWatcherIncarnation:
