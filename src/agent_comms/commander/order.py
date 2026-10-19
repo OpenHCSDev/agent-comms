@@ -38,10 +38,10 @@ from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, FairText, HierarchyText, NotifiedFirstCallEvent, ObservedFirstCallEvent,
-                     OperationDelivery, PlainText, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
+from ..todos import (ApplicationOrderRun, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
                      OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
-                     WithdrawTodo, AssignTodo, OrderProgress, Todo)
+                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo)
 from . import capacity
 from .config import CommanderConfig, Repo
 
@@ -53,7 +53,7 @@ BOARD = str(CONFIG.board)
 NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain words
 B = str(CONFIG.root)
 CLI = str(CONFIG.cli)
-OUTGOING = (FairText, HierarchyText, PlainText)  # every commander text passes each one
+OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
 def refuse(text, *families):
     """Core's text families decide what the commander may write; nothing is recorded when one refuses."""

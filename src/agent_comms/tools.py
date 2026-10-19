@@ -59,7 +59,7 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
+from .todos import (CorrectCheckTodo, DirectiveText, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
                     TodoOperation)
 from .change_report import ChangeReport
@@ -1061,6 +1061,10 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
+        if self.sender in DirectiveText.senders:
+            due = tuple(rule.line() for rule in RulesDue.violations(comms, self.sender))
+            if refused := (*DirectiveText.refused(self.body), *due):
+                raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
         result = comms.messaging.send(
             self.sender, self.target, self.body, self.type, report=self.report
         )

@@ -606,6 +606,27 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
+class DefectText(BluntText):
+    """A text naming a defect in a Slop: line also says bluntly what was stupid, slop or wrong."""
+
+    @classmethod
+    def refused(cls, text: str) -> str | None:
+        return super().refused(text) if re.search(r'(?m)^Slop: ', text) else None
+
+
+class DirectiveText:
+    """What the commander and claude-ai send units: order send, order say and the connector's
+    send refuse a text failing any of these, and a connector send needs a fresh rules review."""
+
+    senders: ClassVar[frozenset[str]] = frozenset({"claude-code", "claude-ai"})
+    OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
+        FairText, HierarchyText, PlainText, OrderText, DefectText)
+
+    @classmethod
+    def refused(cls, text: str) -> tuple[str, ...]:
+        return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+
+
 class OrderRun(DeclaredFamily, affix="OrderRun"):
     label: ClassVar[str] = "Works when:"
 
