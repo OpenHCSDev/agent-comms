@@ -2,8 +2,8 @@
 import sqlite3
 from pathlib import Path
 
-from tools.cutover.backup import StoreBackup
-from tools.cutover.carry import CarryChain, CarryLedger, PreparedCarries
+from cutover.backup import StoreBackup
+from cutover.carry import CarryChain, CarryLedger, PreparedCarries
 
 
 def test_store_backup_restores_wal_rows_and_ledger(tmp_path):
