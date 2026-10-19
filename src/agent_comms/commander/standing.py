@@ -20,8 +20,6 @@ from ..turn_digests import TurnDigestRead, TurnsSince
 from . import capacity, judge
 from .config import CommanderConfig, Repo
 
-CONFIG = CommanderConfig.installed()
-
 
 @dataclass(frozen=True)
 class Detached(UndatedStandingRule):
@@ -73,7 +71,7 @@ class WheelSpin(StandingRule, declared_name=None):
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
         """Units with a native turn in the last ten minutes and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
-        excluded = held | CONFIG.parked | {commander, ""}
+        excluded = held | CommanderConfig.read_root(comms.root).parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted((thread for thread in comms.registry.all_threads().values()
                        if thread.name not in excluded
@@ -158,7 +156,7 @@ class ForkNow(UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[ForkNow, ...]:
-        load = capacity.Load.of(comms, commander)
+        load = capacity.Load.of(comms, commander, CommanderConfig.read_root(comms.root).state / 'forks')
         return (cls(load),) * load.short
 
     def line(self) -> str:
@@ -224,7 +222,7 @@ class MergeGrowth(DatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[MergeGrowth, ...]:
-        return tuple(growth for repo in CONFIG.repos for growth in cls.merges(repo) if growth.over)
+        return tuple(growth for repo in CommanderConfig.read_root(comms.root).repos for growth in cls.merges(repo) if growth.over)
 
     @property
     def over(self) -> bool:

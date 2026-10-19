@@ -764,7 +764,7 @@ class DeclaredOptions(Command):
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
+        for declared, _ in FieldCodec.record_fields(cls):
             option = CommandOption.of(declared)
             group = option.group
             owner = parser
@@ -801,7 +801,7 @@ class DeclaredOptions(Command):
     def from_namespace(cls, args: argparse.Namespace) -> Self:
         payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
         hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
+        for declared, _ in FieldCodec.record_fields(cls):
             key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
             normalize = CommandOption.of(declared).normalize
