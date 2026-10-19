@@ -13,7 +13,6 @@ from .native_tool_call import SelectedToolDenied
 from .storage_rules import WriteStorageEffect, physical_path, shell_storage_effects
 from .tool_declaration import EditCall, ReplacementEdit, ToolDeclaration, one_line
 
-
 if TYPE_CHECKING:
     from .channel_coding_tools import CodingCall, CoordinationCall, ExecutableCodingCall
 
