@@ -124,7 +124,7 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
     replacement = order(comms.root, 'replacement', 'printf 7', 7)
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P1', order=replacement,
         request='request', deadline=RecordedEventTime(3000), commander='lead',
-        expected_revision=todo.revision)).apply(comms, caller)
+        expected_revision=todo.revision, assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
     assert comms.registry.require('worker').goal.text == ProblemGoalOrder.text
     worker = comms.registry.require('worker').incarnation
     rows, rendered = comms.goals.todos.for_goal(worker, goal.id), '\n'.join(goal.instructions_for(comms.goals, worker))
@@ -1122,7 +1122,8 @@ def test_goal_stays_open_while_problems_pend(commander):
     other = comms.goals.todos.get('P3')
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P2', order=order(comms.root, 'revised'),
         request='request', deadline=RecordedEventTime(3000), commander='lead',
-        expected_revision=comms.goals.todos.get('P2').revision)).apply(comms, caller)
+        expected_revision=comms.goals.todos.get('P2').revision,
+        assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
     assert comms.goals.todos.get('P2').order.id == 'revised'
     assert comms.goals.todos.get('P3') == other
     CommsOrderDoneTool(problem='P2', order_id=comms.goals.todos.get('P2').order.id, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
@@ -1136,7 +1137,8 @@ def test_a_refused_send_leaves_the_todo_row_byte_identical(commander):
     with pytest.raises(ValueError, match='Finish or release the assigned problems'):
         CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P3', order=order(comms.root, 'resent'),
             request='request', deadline=RecordedEventTime(3000), commander='lead',
-            expected_revision=comms.goals.todos.get('P3').revision)).apply(comms, caller)
+            expected_revision=comms.goals.todos.get('P3').revision,
+            assigner=comms.registry.require('lead').incarnation)).apply(comms, caller)
     assert todo_row(comms, 'P3') == before
     assert comms.registry.require('worker').goal == goal
 
