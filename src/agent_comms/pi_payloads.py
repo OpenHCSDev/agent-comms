@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
+from .turn_failure import ProviderTransportFailed
 from .native_session_reopen import NativeSessionIdentity
 from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
 from .pi_vocabulary import (
@@ -33,6 +34,7 @@ from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
+    from .turn_phase import TurnPhase
     from .turn_usage import UsageAccount
 
 
@@ -424,15 +426,29 @@ class UnrecognizedTransportStage(ProviderTransportStage):
 
 
 @dataclass(frozen=True)
-class ProviderDiagnosticError(PiPayload):
+class ProviderDiagnosticError(PiPayload, DeclaredFamily, affix="ProviderDiagnosticError"):
     message: str
-    code: int | str
     name: str | None = None
+
+    @classmethod
+    def wire_member(cls, value: dict[str, object]) -> type[ProviderDiagnosticError]:
+        return CodedProviderDiagnosticError if "code" in value else CodelessProviderDiagnosticError
 
     @property
     def description(self) -> str:
-        name = self.name or "Provider transport error"
-        return f"{name} (code {self.code})"
+        return self.name or "Provider transport error"
+
+@dataclass(frozen=True)
+class CodelessProviderDiagnosticError(ProviderDiagnosticError):
+    """Pi reported a provider error without a code."""
+
+@dataclass(frozen=True, kw_only=True)
+class CodedProviderDiagnosticError(ProviderDiagnosticError):
+    code: int | str
+
+    @property
+    def description(self) -> str:
+        return f"{super().description} (code {self.code})"
 
 
 class TransportStageText(TextRepresentation[ProviderTransportStage]):
@@ -490,6 +506,9 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     def refine_model_request_failure(self, failure):
         return failure
 
+    def turn_phase(self, phase: TurnPhase) -> TurnPhase:
+        return phase
+
     @property
     def description(self) -> str:
         return ""
@@ -502,9 +521,11 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     details: ProviderTransportDetails
     timestamp: int | None = None
 
-    def refine_model_request_failure(self, failure):
-        from .turn_failure import ProviderTransportFailed
+    def turn_phase(self, phase: TurnPhase) -> TurnPhase:
+        from .turn_phase import FailedPhase
+        return FailedPhase(error=self.error)
 
+    def refine_model_request_failure(self, failure):
         return ProviderTransportFailed(failure.text)
 
     @property

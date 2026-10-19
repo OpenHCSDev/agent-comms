@@ -35,14 +35,11 @@ def simple_commands(command: str) -> tuple[Words, ...]:
     lexer = shlex.shlex(command, posix=True, punctuation_chars=True)
     lexer.whitespace_split = True
     commands: list[list[str]] = [[]]
-    try:
-        for word in lexer:
-            if word and set(word) <= set(';&|()'):
-                commands.append([])
-            else:
-                commands[-1].append(word)
-    except ValueError:
-        return (tuple(command.split()),)
+    for word in lexer:
+        if word and set(word) <= set(';&|()'):
+            commands.append([])
+        else:
+            commands[-1].append(word)
     return tuple(tuple(words) for words in commands if words)
 
 

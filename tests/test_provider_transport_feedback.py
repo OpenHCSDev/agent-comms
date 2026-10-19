@@ -12,7 +12,10 @@ from agent_comms.acp_failure import ACPFailure, ProviderConnectionFailure, Reque
 from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
-from agent_comms.pi_payloads import AfterMessageStreamStartStage, UnrecognizedTransportStage
+from agent_comms.pi_payloads import (
+    AfterMessageStreamStartStage, CodedProviderDiagnosticError,
+    CodelessProviderDiagnosticError, UnrecognizedTransportStage,
+)
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
 
@@ -30,6 +33,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert event.message.stop_reason is ErrorStopReason
     assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics
+    assert type(diagnostic.error) is CodedProviderDiagnosticError
     assert diagnostic.error.name == "WebSocketCloseError"
     assert diagnostic.error.code == 1011
     assert diagnostic.details.request_bytes == 159312
@@ -110,10 +114,21 @@ def test_native_1006_decodes_code_without_parsing_error_prose():
     assert isinstance(failure, RetryableProviderFailure)
 
 
-def test_native_close_without_code_fails_at_rpc_boundary():
+def test_native_close_without_code_uses_the_declared_codeless_state():
     record = observed()
     del record["message"]["diagnostics"][0]["error"]["code"]
-    with pytest.raises(ValueError, match="Missing required fields.*code"):
+    event = PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
+    diagnostic, = event.message.diagnostics
+    assert isinstance(diagnostic.error, CodelessProviderDiagnosticError)
+    assert diagnostic.error.description == "WebSocketCloseError"
+    assert "code" not in diagnostic.error.to_wire()
+
+
+@pytest.mark.parametrize("code", [None, True, {}])
+def test_present_malformed_code_is_not_treated_as_codeless(code):
+    record = observed()
+    record["message"]["diagnostics"][0]["error"]["code"] = code
+    with pytest.raises(ValueError):
         PiRpcChannel.decode_record((json.dumps(record) + "\n").encode(), strict=True)
 
 

@@ -14,6 +14,7 @@ from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .goal_management import Goals
 from .history_views import HistoryViews
+from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .messaging import Messaging
 from .owner_lifecycle import OwnerLifecycle
@@ -84,5 +85,8 @@ def client_wire(root: Path | None) -> Iterator[Comms]:
     Only the UI yields between index units.
     """
     route = resolve_comms_route(root)
+    # Refuse before borrowing a route or opening stores held by maintenance.
+    # This grants nothing: writes still check under their determining locks.
+    MaintenanceBarrier(route.root / "registry.json").assert_open_unlocked()
     with route.hold_client_route():
         yield Comms(route, projection=CompletingRouteCounts)
