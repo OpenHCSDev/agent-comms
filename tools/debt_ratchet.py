@@ -247,27 +247,6 @@ class TypeErrors(CheckedRevision):
         return {**os.environ, "MYPYPATH": os.pathsep.join((*paths, str(AUDIT_SCRIPTS)))}
 
 
-class SourceLines(Measure):
-    """Report edited lines, retaining moves across the source boundary (50% similarity)."""
-
-    @classmethod
-    def blocks(cls, delta: dict[str, int]) -> bool:
-        return False
-
-    @classmethod
-    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
-        added = removed = 0
-        records = iter(git(repo, "diff", "--no-ext-diff", "--no-textconv", "--find-renames=50%",
-                           "--numstat", "-z", base, head, "--").split(b"\0")[:-1])
-        for record in records:
-            increase, decrease, path = record.split(b"\t", 2)
-            paths = (path,) if path else (next(records), next(records))
-            if any(path.startswith(root.encode()) and path.endswith(b".py") for path in paths):
-                added += int(increase)
-                removed += int(decrease)
-        return {cls.__name__: removed}, {cls.__name__: added}
-
-
 @dataclass(frozen=True)
 class ChangedSource:
     """One head module and the new-side lines changed by its Git patch."""
