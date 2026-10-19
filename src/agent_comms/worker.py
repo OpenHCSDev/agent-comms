@@ -20,6 +20,11 @@ async def run() -> None:
     comms = wire()
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
+    async with Coordination.worker(comms.root / "coordination.sqlite3"):
+        await run_owner(comms)
+
+
+async def run_owner(comms) -> None:
     name = ThreadLaunch.current().name
     thread = await Coordination.run_worker(partial(comms.registry.require, name))
     agent = CommsAgent(
