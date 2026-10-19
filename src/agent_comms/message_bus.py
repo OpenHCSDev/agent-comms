@@ -11,13 +11,13 @@ from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import ChannelTarget, CommandTarget
+from .channel_targets import CommandTarget
 from .channels import ANY_CHANNEL
 from .errors import UnregisteredThreadError
 from .maintenance_barrier import MaintenanceBarrier
 from .historical_views import HistoryArchive
 from .message_page import (
-    NEWEST_PAGE, DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
+    DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
@@ -25,8 +25,6 @@ from .messages import Message
 from .read_basis import (
     AnonymousViewer,
     DisplayViewer,
-    ChannelDisplayScope,
-    DMDisplayScope,
     ListedDeliveries,
     DisplayBasis,
     WatchAcknowledgment,

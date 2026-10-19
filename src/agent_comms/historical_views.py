@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .locked_store import RootFile
-from .channel_targets import ChannelTarget
 from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
 from .errors import UnregisteredThreadError

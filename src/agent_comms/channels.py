@@ -8,7 +8,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from enum import StrEnum
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from .channel_targets import ChannelTarget, Tag
 from .cli_result import CliResult
@@ -17,7 +17,7 @@ from .display_order import CreatedThreadSort, ThreadSort
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
 from .messages import MembershipChange
-from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult
+from .history_result import ChannelHistoryPageResult, EverythingHistoryPageResult, HistoryPageResult
 from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActivityDisplayScope
 from .tool_result import ToolResult
 
@@ -58,7 +58,7 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     parent: str | None = None
     archived: bool = False
     any_mode: bool = False
-    history_result_type = ChannelHistoryPageResult
+    history_result_type: ClassVar[type[HistoryPageResult]] = ChannelHistoryPageResult
 
     def __post_init__(self) -> None:
         name = ChannelTarget.normalize_name(self.name)

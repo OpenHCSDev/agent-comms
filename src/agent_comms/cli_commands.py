@@ -18,7 +18,6 @@ from collections.abc import AsyncIterator, Callable, Iterator, Mapping
 from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
-from functools import partial
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, cast, get_type_hints
 
@@ -90,7 +89,6 @@ from .thread_execution import (
 from .thread_management import ForkSpec, NewThreadSpec, ThreadDeleted
 from .thread_status import ThreadStatus
 from .threads import Thread
-from .tool_caller import ToolCaller
 from .tool_result import ToolResult
 from .turn_context import (
     CodexRolloutProvenance,

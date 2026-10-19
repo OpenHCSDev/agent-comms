@@ -6,12 +6,15 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
-from .history_result import DmHistoryPageResult
+from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
+    from .catalog_document import CatalogDocument
     from .channels import Channel
+    from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DMConversation
     from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
@@ -33,7 +36,8 @@ class ResolvedChannel:
 def exact_stored_target(name: str) -> bool:
     from .channels import BuiltinChannelView
 
-    return BuiltinChannelView.member_named(name).exact_stored_target() if name in BuiltinChannelView.names() else True
+    return (BuiltinChannelView.member_named(name).exact_stored_target()
+            if name in BuiltinChannelView.names() else True)
 
 
 class CommandTarget(ABC):
@@ -77,10 +81,12 @@ class CommandTarget(ABC):
     @abstractmethod
     def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog): ...
 
-    def history_view(self, viewer, catalog, channel, direct):
+    def history_view(self, viewer: str | None, catalog: CatalogDocument,
+                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         raise ValueError("History requires a #channel or DM peer.")
 
-    def history_result(self, catalog, messages, has_older):
+    def history_result(self, catalog: CatalogDocument, messages: tuple[Message, ...],
+                       has_older: bool) -> HistoryPageResult:
         raise ValueError("History requires a #channel or DM peer.")
 
     def contexts(self, declaration, channel):
@@ -156,12 +162,14 @@ class ThreadTarget(NamedTarget):
     def require_dm_peer(self):
         return self.name
 
-    def history_view(self, viewer, catalog, channel, direct):
+    def history_view(self, viewer: str | None, catalog: CatalogDocument,
+                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         if viewer is None:
             raise ValueError("DM history requires --as <participant>.")
         return direct(viewer, self.name)
 
-    def history_result(self, catalog, messages, has_older):
+    def history_result(self, catalog: CatalogDocument, messages: tuple[Message, ...],
+                       has_older: bool) -> HistoryPageResult:
         return self.history_result_type.for_target(self.name, messages, has_older)
 
     def contexts(self, declaration, channel):
@@ -244,12 +252,14 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
-    def history_view(self, viewer, catalog, channel, direct):
+    def history_view(self, viewer: str | None, catalog: CatalogDocument,
+                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
         if viewer is not None:
             raise ValueError("--as is only valid for DM history.")
         return channel(catalog.require_channel(self.name).history_scope())
 
-    def history_result(self, catalog, messages, has_older):
+    def history_result(self, catalog: CatalogDocument, messages: tuple[Message, ...],
+                       has_older: bool) -> HistoryPageResult:
         result_type = catalog.require_channel(self.name).history_result_type
         return result_type.for_target(self.name, messages, has_older)
 
