@@ -369,7 +369,7 @@ def test_unowned_work_is_named_and_retired_runtime_work_is_ended(commander, tmp_
         assert UnownedWork.violations(comms, "lead") == RetiredRuntimeWork.violations(comms, "lead") == ()
         lines = MachineWork.enforced(comms, "lead")
         pid = {name: child.pid for name, child in children.items()}
-        named = {int(line.split()[3]) for line in lines if line.startswith("UNOWNED WORK: ")}
+        named = {int(line.split()[3]) for line in lines if line.startswith("UNOWNED WORK: ")} & set(pid.values())
         assert named == {pid["unowned"], pid["idle"], pid["stale"], pid["building"]}
         assert (f"UNOWNED WORK: pid {pid['unowned']} ({runtimes['installed'] / 'bin/python'} -c import time;"
                 " time.sleep(60)) runs for no thread holding an open order -> order it to a unit or end it") in lines

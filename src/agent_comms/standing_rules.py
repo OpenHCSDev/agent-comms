@@ -348,8 +348,9 @@ class UnownedWork(MachineWork):
 
     @classmethod
     def found(cls, comms: Comms, commander: str, table: ProcessTable) -> tuple[Self, ...]:
+        orders = cls.todos(comms, commander)
         holders = {commander} | {
-            todo.holder for todo in cls.todos(comms, commander) if todo.pending
+            todo.assignment.owner for todo in orders if todo.pending and todo.assignment
         }
         threads, reader = comms.registry.snapshot().threads, table.reader()
         identities = tuple(threads[name].process_identity for name in holders if name in threads)
