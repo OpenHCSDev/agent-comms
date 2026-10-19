@@ -251,9 +251,8 @@ class GoalHistoryStore:
                 self._set_state(row.sequence, "uncertain")
         committed = [row for row in self._rows(owner_created_at) if row.state == "committed"]
         if not committed:
-            current.project(lambda goal: self._insert(
-                owner_created_at, "baseline", "committed", NoGoal(), goal,
-            ), lambda: None)
+            for goal in current:
+                self._insert(owner_created_at, "baseline", "committed", NoGoal(), goal)
             return
         last = committed[-1].after
         if last != current:
