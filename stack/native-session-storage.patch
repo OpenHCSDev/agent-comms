@@ -2370,8 +2370,8 @@
 @@ -261,4 +252,3 @@
          const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
 -        const previous = this.sessionManager.entryStore.trackedInputMetadata(inputId)?.inputDigest
--            ?? this._nativeInputClaims.get(inputId)?.digest;
-+        const previous = this._nativeInputClaims.get(inputId)?.digest;
+-            ?? this._nativeInputClaims.get(inputId);
++        const previous = this._nativeInputClaims.get(inputId);
          if (previous !== undefined) {
 @@ -271,3 +261,3 @@
      _releaseUnqueuedNativeInput(inputId) {
