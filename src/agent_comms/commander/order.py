@@ -521,7 +521,7 @@ def done(pid, sha, screenshot='', seen='', repo=''):
             sys.exit(f'Refused: {delivered_commit} is not in {repo} HEAD.')
         delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
                                   delivered_commit=delivered_commit, evidence=evidence)
-        claim = MergedClaim(delivery.commit)
+        claim = MergedClaim(delivery.delivered)
     call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
