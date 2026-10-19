@@ -25,6 +25,7 @@ def saved_row(native_id, text, *, images=False, role="user"):
         content.append({"type": "image", "mimeType": "image/png", "data": "secret-image"})
     return {
         "type": "message",
+        "timestamp": "2026-10-19T00:00:00.000Z",
         "id": native_id[:8],
         "message": {"role": role, "inputId": native_id, "content": content},
     }
