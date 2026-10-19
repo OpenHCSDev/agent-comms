@@ -20,9 +20,9 @@ from .locked_store import LockedStore, RootFile
 
 class ChildInitiator(DeclaredFamily, affix="ChildInitiator"):
     @classmethod
-    def capture(cls, environment: dict[str, str]) -> ChildInitiator:
+    def capture(cls) -> ChildInitiator:
         try:
-            return ThreadChildInitiator(ThreadLaunch.current(environment).name)
+            return ThreadChildInitiator(ThreadLaunch.current().name)
         except CallingThreadUnavailable:
             return ApplicationChildInitiator(ProcessIdentity.capture(os.getpid()))
 
@@ -142,7 +142,7 @@ class RuntimeChildrenStore(RootFile, ChildRegistration, LockedStore[RuntimeChild
         with store.locked():
             children = store._read_unlocked()
             children.require_open()
-            yield RuntimeChildReservation(store, children, ChildInitiator.capture(dict(os.environ)))
+            yield RuntimeChildReservation(store, children, ChildInitiator.capture())
 
     def finished(self, identity: ProcessIdentity) -> None:
         self.update(lambda children: children.finished(identity))

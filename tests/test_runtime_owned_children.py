@@ -10,8 +10,10 @@ from agent_comms.runtime_children import RuntimeChildrenStore
 
 
 @pytest.fixture(autouse=True)
-def calling_thread(monkeypatch):
-    monkeypatch.setenv(ThreadLaunch.variable('name'), 'runtime-child-test')
+def calling_thread(monkeypatch, tmp_path):
+    monkeypatch.setattr(ThreadLaunch, 'current', classmethod(
+        lambda cls: ThreadLaunch('runtime-child-test', str(tmp_path))
+    ))
 
 
 def runtime_environment(prefix):
