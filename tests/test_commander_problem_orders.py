@@ -620,7 +620,7 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
 
 
 @pytest.mark.parametrize('printed, refused', [
-    ("printf 'no count here'", 'The order check printed no integer, so no count of 1.'),
+    ("printf 'no count here'", 'The order check printed no integer; cannot prove CountCheckResult(expected=1).'),
     ('echo 2', 'The order check is 1 away from CountCheckResult(expected=1).'),
     ('echo found 1', None),
 ])
