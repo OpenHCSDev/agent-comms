@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from collections import deque
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, fields, replace
 from pathlib import Path
+from functools import partial
 from typing import TYPE_CHECKING
 
 from .locked_store import RootFile
@@ -77,6 +78,16 @@ class ConversationRevision:
     stores: WireRevision
     selection: DisplayIdentity
 
+    @classmethod
+    def capture(cls, stores: WireRevision, earlier: ConversationRevision | None,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision:
+        if (earlier is not None
+                and not stores.registry_or_catalog_changed_since(earlier.stores)
+                and stores.history == earlier.stores.history
+                and not stores.changed_since(BusSourceView(), earlier.stores)):
+            return cls(stores, earlier.selection)
+        return read()
+
     def display_changed_since(self, earlier: ConversationRevision) -> bool:
         return (self.selection != earlier.selection
                 or self.stores.changed_since(BusSourceView(), earlier.stores))
@@ -91,7 +102,13 @@ class ConversationHistoryView:
         return page.selection.identity == earlier.selection.identity
 
     @classmethod
-    def revision(cls, views: HistoryViews, target: str, *, worktree: str) -> ConversationRevision:
+    def revision(cls, views: HistoryViews, target: str, earlier: ConversationRevision | None,
+                 *, worktree: str) -> ConversationRevision:
+        return ConversationRevision.capture(
+            views.revision(), earlier, partial(cls._read_revision, views, target, worktree))
+
+    @classmethod
+    def _read_revision(cls, views: HistoryViews, target: str, worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
         with views.registry.store.reading(views.bus, views.bus.log, views.channels.catalog):

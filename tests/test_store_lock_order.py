@@ -106,7 +106,7 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
 
     def observe():
         try:
-            revision = DMDisplayHistory.revision(comms.views, "peer", worktree=str(tmp_path))
+            revision = DMDisplayHistory.revision(comms.views, "peer", None, worktree=str(tmp_path))
             assert revision.selection.peer.name == "peer"
         except BaseException as error:
             failures.append(error)
