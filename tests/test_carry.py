@@ -12,16 +12,35 @@ from pathlib import Path
 import pytest
 
 import agent_comms.private_nk_entrypoint as private_nk_entrypoint
+from agent_comms.activity import Activity, ActivityLog, ActivityState
+from agent_comms.cli_bridges.shared import ThreadOutput
 from agent_comms.comms import Comms
+from agent_comms.coordination_database import CoordinationStore
+from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.maintenance_barrier import (
+    MaintenanceBarrier,
+    MaintenanceHeldError,
+    MaintenanceOperator,
+)
 from agent_comms.read_basis import Conversation, ReadCursor
 from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
 from agent_comms.registry_store import RegistryStore
+from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
-from tools.upgrade_bus import Revisions, Stack, UpgradeRefused, before_stop, bus_files, carried, carry_all
+from tools.upgrade_bus import (
+    Revisions,
+    Stack,
+    UpgradeRefused,
+    before_stop,
+    bus_files,
+    carried,
+    carry_all,
+    transcripts_held,
+)
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -436,3 +455,24 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
     assert "stopped by SIGTERM" in err and "aborted before the backup" in err
     assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
     assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+
+
+def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):
+    unit = comms.registry.declare(comms.registry.new_thread(
+        "drain-unit", frozenset({"drain"}), str(comms.root), execution=ExternalThreadExecution))
+    transcript = ExternalTranscript(comms.root, unit.incarnation)
+    output = ThreadOutput(transcript, comms.agents)
+    output.status(ActivityState.WORKING, "before the drain")
+    with transcript.writing():
+        pass
+    MaintenanceBarrier(comms.root / "registry.json").begin(MaintenanceOperator("drain-test"))
+    before = bus_files(comms.root)
+    monkeypatch.setattr(CoordinationStore, "writer_timeout", 0.1)
+    with transcripts_held(comms.root):
+        with pytest.raises(MaintenanceHeldError):
+            output.status(ActivityState.THINKING, "a hook on this checkout")
+        # A bridge started before the barrier existed writes activity without asking it.
+        ActivityLog.at(comms.root).emit(Activity.create(unit.name, ActivityState.THINKING))
+        with pytest.raises(sqlite3.OperationalError, match="locked"):
+            transcript.finish(turn_id="turn", item_id="during", events=())
+        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
