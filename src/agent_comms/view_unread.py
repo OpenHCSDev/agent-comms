@@ -3,23 +3,19 @@
 from __future__ import annotations
 
 import json
-import multiprocessing
-import os
 import sqlite3
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
-from concurrent.futures import Future, ProcessPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
-from multiprocessing.synchronize import Event
 from pathlib import Path
-from threading import RLock
+from threading import Event, RLock
 from typing import TYPE_CHECKING, ClassVar
 from weakref import WeakValueDictionary, finalize
 
 from .coordination_database import CoordinationStore, StoreBusy
 from .coordination_errors import CoordinationReadUnavailable
-from .launch_runtime import ThreadLaunch
 from .native_entries import NativeEntry
 from .native_transcript import SessionCut, reverse_records
 from .private_path import FileRevision
@@ -109,17 +105,11 @@ class ReplyRead:
     index: ReplyIndex
     revision: FileRevision
     seen: int
-    cancelled: ClassVar[Event]
 
-    @classmethod
-    def initialize_worker(cls, cancelled: Event) -> None:
-        ThreadLaunch.strip(os.environ)
-        cls.cancelled = cancelled
-
-    def prepare(self) -> ReplyIndexResult:
+    def prepare(self, cancelled: Event) -> ReplyIndexResult:
         """One independently scheduled source read; no loop over other people's files."""
         try:
-            return self.index.prepare(self.revision, self.seen, self.cancelled)
+            return self.index.prepare(self.revision, self.seen, cancelled)
         except FileNotFoundError:
             return RevisionMoved()
 
@@ -331,7 +321,9 @@ class NativeReplyPreparation(ReplyPreparation):
         if state._cleanup.alive:
             for source, read in needed.items():
                 if source not in self.readers:
-                    self.readers[source] = ReplyReading(read, state._pool.submit(read.prepare))
+                    self.readers[source] = ReplyReading(
+                        read, state._pool.submit(read.prepare, state._cancelled)
+                    )
         return self
 
     def cancel(self) -> None:
@@ -412,19 +404,14 @@ class TranscriptReadState(ThreadOwnedState):
         self._connection: sqlite3.Connection | None = None
         self._database_inode: int | None = None
         self._lock = RLock()
-        self._context = multiprocessing.get_context("spawn")
-        self._cancelled = self._context.Event()
+        self._cancelled = Event()
         self._idle = IdleReplyPreparation()
         self._preparation: ReplyPreparation = self._idle
         self._database_resources = ExitStack()
         self._resources = ExitStack()
         self._resources.callback(self._database_resources.close)
         self._resources.callback(self._source_resources.close)
-        # Constructing the executor does not start a worker; the first submit does.
-        self._pool = ProcessPoolExecutor(
-            max_workers=4, mp_context=self._context,
-            initializer=ReplyRead.initialize_worker, initargs=(self._cancelled,),
-        )
+        self._pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="reply-read")
         self._resources.callback(self._pool.shutdown, wait=True, cancel_futures=True)
         self._resources.callback(self._cancelled.set)
         # Capture the resource stack, not this state: dead roots must remain collectible.
