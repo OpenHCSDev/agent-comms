@@ -47,8 +47,9 @@ def digest_line(name: str, args: object, call: CodingCall) -> str:
     return ToolDeclaration.call_digest(name, tool, args)
 
 
-def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> None:
-    """Core judges its units and records each storage violation once."""
+def enforce_storage(registry: Registration, thread: str, call: CodingCall, record: str) -> None:
+    """Core judges its units and records each storage violation once, citing the session
+    line ``record`` that made the call."""
     if thread not in order.units() or thread not in registry:
         return
     try:
@@ -64,8 +65,7 @@ def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> No
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
     for todo in order.held_by(thread)[:1]:
         order.strike(thread, todo.id,
-                     f'{todo.id} broke the storage rule at a tool call from pid '
-                     f'{registry.require(thread).process_identity.require().pid}: {violation}; '
+                     f'{todo.id} broke the storage rule at the tool call in {record}: {violation}; '
                      'storage waste is banned outright', 'tool_watch at tool call',
                      kind=StorageStrikeTodo)
 
@@ -96,11 +96,11 @@ def follow(registry: Registration, turns: dict[str, list[str]], thread: str, pat
             continue
         for message in entry.messages:
             if message.assistant:
-                walk(registry, turns, thread, message)
+                walk(registry, turns, thread, message, f'{os.path.realpath(path)}@{at}')
 
 
 def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
-         message: PiMessage) -> None:
+         message: PiMessage, record: str) -> None:
     for call in message.tool_calls:
         name, args = call.name, call.arguments
         tool = decoded(name, args, call.id)
@@ -108,7 +108,7 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
         with open(LOG, 'a') as log:
             log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
         turns[thread].append(digest)
-        enforce_storage(registry, thread, tool)
+        enforce_storage(registry, thread, tool, record)
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.successful:

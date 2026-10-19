@@ -82,7 +82,7 @@ def scenario(comms: Comms, project, monkeypatch):
     todo = comms.goals.todos.get("P1")
     actor = comms.registry.require("lead").incarnation
     yield CommsTodoTool, {"id": "P1", "operation": FieldCodec.encode(StrikeTodo(
-        todo.revision, actor, todo.assignment, "The assigned change broke the existing resource release path during review.",
+        todo.revision, actor, todo.assignment, f"The assigned change broke the existing resource release path in {__file__} during review.",
         RecordedEventTime(500)))}, lead
     yield CommsVerdictTool, {"id": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
         todo.revision + 1, actor, todo.assignment, "toolu_1", quote="Repair the existing owner"))}, lead

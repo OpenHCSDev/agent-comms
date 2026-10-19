@@ -175,7 +175,8 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
     git("switch", "-q", "-c", "fix/p1")
     runs = tmp_path / "runs"
     check = f"echo run >> {runs}; cat left"
-    todo = create(commander, "P1", command=check, expected=0, deadline=time.time() + 3600)
+    todo = create(commander, "P1", command=check, expected=0, deadline=time.time() + 3600,
+                  directory=unit)
 
     def progress():
         return OrderProgress.read(comms.goals.todos.get("P1"), storage, PullRequests())

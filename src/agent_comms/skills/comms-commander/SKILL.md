@@ -85,7 +85,7 @@ Update the board row, move on. One line per unit touched.
 
 ## The public record
 
-- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically.
+- **Every failure goes on the record in plain words.** `order strike UNIT PID --why "..."` refuses jargon and anything under 10 words, appends to the narrative file and posts to #comms. Send-backs strike automatically. Core's `Evidence` family (todos.py) refuses a strike or send-back whose why cites no state it can check, such as a commit or a session line; a board row, goal text or another agent's account is a report, not state, and the refusal lists the kinds.
 - **Work lives on main or on a branch with a linked PR or issue.** The overdue loop lists branches ahead of main with no PR; each goes to its owner that tick.
 
 ## Orders

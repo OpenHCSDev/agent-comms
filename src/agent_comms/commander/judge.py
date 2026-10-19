@@ -249,7 +249,8 @@ class BackVerb(VerdictVerb):
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
         return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
                                todo.held(), edit_id,
-                               reason=StrikeReason(f'{todo.id} edit sent back: {self.why}; restated at {self.at}'))
+                               reason=StrikeReason(
+                                   f'{todo.id} edit sent back: {self.why}; restated at {self.at}'))
 
     def check_edits(self, edits: list[Edit]) -> None:
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):

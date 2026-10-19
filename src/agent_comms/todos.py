@@ -715,13 +715,19 @@ class DiffEvidence(Evidence):
 
 
 class TurnRecordEvidence(Evidence):
-    CITES = re.compile(r"(/\S+\.jsonl):(\d+)\b")
-    form = "a turn record /path/session.jsonl:line"
+    """A session line, cited at the byte it starts as the tool watcher reads it."""
+
+    CITES = re.compile(r"(/\S+\.jsonl)@(\d+)\b")
+    form = "a turn record /path/session.jsonl@byte"
 
     @classmethod
     def exists(cls, found: re.Match[str], repository: str) -> bool:
-        record = Path(found.group(1))
-        return record.is_file() and len(record.read_bytes().splitlines()) >= int(found.group(2))
+        record, at = Path(found.group(1)), int(found.group(2))
+        if not record.is_file() or at >= record.stat().st_size:
+            return False
+        with record.open("rb") as session:
+            session.seek(max(at - 1, 0))
+            return not at or session.read(1) == b"\n"
 
 
 class ProcessEvidence(Evidence):
@@ -731,12 +737,13 @@ class ProcessEvidence(Evidence):
     @classmethod
     def exists(cls, found: re.Match[str], repository: str) -> bool:
         with suppress(ProcessLookupError):
-            return bool(Platform.current().identity(int(found.group(1))))
+            Platform.current().identity(int(found.group(1)))
+            return True
         return False
 
 
 class RuntimeEvidence(Evidence):
-    CITES = re.compile(r"(?<![\w/.~])/[^\s:`'\"“”,;()]+")
+    CITES = re.compile(r"(?<![\w/.~])/[^\s:`'\"“”,;()]+(?![^\s:`'\"“”,;()])")
     form = "an existing runtime path"
 
     @classmethod
