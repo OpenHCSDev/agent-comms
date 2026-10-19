@@ -1,5 +1,6 @@
 """Actual saved buses and transcripts, with colliding live/source sequences."""
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 import json
 from dataclasses import replace
@@ -126,7 +127,7 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
         viewer.incarnation: {Conversation('#team'): ReadCursor(exceptions=(page.messages[1].seq,))}
     }
     assert live.bus.reads.cursor(viewer.name, snapshot) == ReadCursor()
-    assert live.bus.pending_count("bob", "#team") == 2
+    assert live.bus.pending_count("bob", CommandTarget.named("#team")) == 2
     with pytest.raises(ValueError):
         live.views.mark_historical_view_read(
             replace(

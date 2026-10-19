@@ -12,7 +12,8 @@ from acp.schema import ToolCallStart
 import agent_comms.agent_events as events
 import agent_comms.backend as backend
 from agent_comms.comms import Comms
-from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, ReplacementEdit, WriteTool
+from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
+from agent_comms.tool_declaration import ReplacementEdit
 from agent_comms.tool_declaration import ToolDeclaration, UndeclaredTool
 from delivery_owner_fixture import canonical_agent
 

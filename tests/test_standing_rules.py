@@ -22,7 +22,7 @@ from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import CleanHunt, RecordHuntTodo, Todo
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsStandingRulesTool, CommsTodoTool
 
-from test_commander_problem_orders import create
+from test_commander_problem_orders import create, native_judge_edits
 
 
 @pytest.fixture
@@ -33,7 +33,6 @@ def standing(commander, commander_script):
         importlib.reload(module)
     module = importlib.reload(importlib.import_module("agent_comms.commander.standing"))
     state = CommanderConfig.installed().state
-    (state / "activity.log").write_text("")
     return commander[0], state, module
 
 
@@ -84,20 +83,23 @@ def test_bridge_down_while_the_commander_endpoint_receives_nothing(commander, tm
 
 def test_idle_units_lists_active_units_without_an_order(commander, standing):
     comms, state, module = standing
-    (state / "activity.log").write_text("12:00:00 worker read a file\n12:00:01 lead sent\n")
+    native_judge_edits(commander, module.judge, [dict(id='recent', at=time.time(), path='a.py',
+        hunks=[dict(old='before', new='after')])])
     assert lines(comms, module.IdleUnits) == [
         "IDLE UNITS with no order: worker -> give each the top unowned row now"]
     create(commander, "P1")
     assert lines(comms, module.IdleUnits) == []
 
 
-def test_fork_now_and_unjudged_follow_the_unjudged_edits(standing):
+def test_fork_now_and_unjudged_follow_the_unjudged_edits(commander, standing):
     comms, state, module = standing
     assert lines(comms, module.ForkNow) == lines(comms, module.Unjudged) == []
-    (state / "edits.jsonl").write_text("".join(json.dumps({"id": f"e{n}", "at": 1.0, "thread": "worker", "path": "a.py", "hunks": []}) + "\n" for n in range(70)))
+    create(commander, 'P1')
+    native_judge_edits(commander, module.judge, [dict(id=f'e{n}', at=200., path='a.py',
+        hunks=[dict(old='before', new='after')]) for n in range(70)])
     assert lines(comms, module.Unjudged) == ["UNJUDGED 70 edits -> judge or fork a judge slice"]
     [fork] = lines(comms, module.ForkNow)
-    assert fork.startswith("FORK NOW: load 7 (0 open orders, 0 overdue, 70 unjudged edits) needs 1")
+    assert fork.startswith("FORK NOW: load 10 (1 open orders, 1 overdue, 70 unjudged edits) needs 1")
 
 
 def test_fork_now_reads_the_load_of_the_bus_it_is_asked_about(commander, standing, tmp_path):

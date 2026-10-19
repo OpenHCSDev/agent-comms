@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.cli import main
 
 
@@ -584,9 +585,9 @@ class TestSelectedTargetActions:
         after = completed_snapshot(comms, str(tmp_path))
         assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0
         assert after.channel_unread['#team'] == 0
-        assert comms.bus.pending_count('beta', 'alpha') == 1
+        assert comms.bus.pending_count('beta', CommandTarget.named('alpha')) == 1
         # DeliveryScope excludes beta's own membership notice from its inbox.
-        assert comms.bus.pending_count('beta', '#team') == 1
+        assert comms.bus.pending_count('beta', CommandTarget.named('#team')) == 1
 
     def test_catalog_and_execution_keep_missing_and_single_only_targets_truthful(self, tmp_path):
         from agent_comms.cli_commands import ArchiveCliCommand, CliCommand, ForkCliCommand, TargetEdit

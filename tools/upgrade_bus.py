@@ -321,9 +321,8 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
     if run("git", "-C", checkout, "status", "--porcelain", "--untracked-files=no").strip():
         raise UpgradeRefused("The checkout has local changes")
     applied = CarryLedger(root).applied()
-    # A bus from before the ledger runs every step; each leaves carried data unchanged.
     try:
-        pending = CarryChain.at(checkout, target).pending(applied or ())
+        pending = CarryChain.at(checkout, target).pending(applied)
     except ValueError as error:
         raise UpgradeRefused(str(error)) from None
     installed = Stack(checkout)

@@ -301,6 +301,10 @@ class ChannelTarget(NamedTarget):
         views.mark_channel_view_read(self.name, worktree=worktree)
 
 
+ANY_CHANNEL = ChannelTarget(BuiltinChannel.ANY.value)
+"""Every channel a reader receives: the target of an unscoped inbox or count."""
+
+
 @dataclass(frozen=True)
 class ProjectTarget(CommandTarget):
     project: str
