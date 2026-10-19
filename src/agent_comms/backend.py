@@ -216,7 +216,8 @@ class NativeSession(MroDispatch, ABC):
         self.finish_event = finish_event
         self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
-            model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
+            model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS,
+            NATIVE_STARTUP_POLICY,
         )
         self.rpc_abort_grace = rpc_abort_grace
         self.send_boundary = send_boundary
