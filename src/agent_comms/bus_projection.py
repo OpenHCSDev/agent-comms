@@ -157,7 +157,6 @@ class AppendProjectionStore(RuntimeFile, JsonDocument[Checkpoint | NoCheckpoint]
     projection is disposable, so no carry writes it.
     """
 
-    record_type: type[Checkpoint]
     fsync_parent: ClassVar[bool] = False
 
     def __init__(self, source_path: Path, path: Path):

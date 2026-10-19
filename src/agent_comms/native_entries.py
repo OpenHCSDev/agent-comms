@@ -35,7 +35,6 @@ class RecordedEntry(PiPayload):
     """Original external ancestry fields; opaque entries project this same owner."""
     id: str | None = None
     parent_id: str | None = field(default=None, metadata={"wire_name": "parentId"})
-    timestamp: Annotated[RecordedTimestamp, TimestampText]
     is_message: ClassVar[bool] = False
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
@@ -64,13 +63,7 @@ class RecordedEntry(PiPayload):
         return self
 
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        """Project one journal clock onto every display part without inventing time.
-
-        Decode it once, before splitting into message/tool/routing events; ACP
-        consumers receive Unix seconds.
-        """
-        timestamp = self.timestamp.at.timestamp()
-        return [replace(event, timestamp=timestamp) for event in self._events(context)]
+        return self._events(context)
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return [event for message in self.messages for event in message.transcript_events(context)]
@@ -85,6 +78,12 @@ class RecordedEntry(PiPayload):
 @dataclass(frozen=True, kw_only=True)
 class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
+    timestamp: Annotated[RecordedTimestamp, TimestampText]
+
+    def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+        """Only the native journal supplies an entry clock, shared by its display parts."""
+        timestamp = self.timestamp.at.timestamp()
+        return [replace(event, timestamp=timestamp) for event in self._events(context)]
 
     def imported_sources(self):
         return ()

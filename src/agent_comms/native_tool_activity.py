@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from .bus_projection import AppendCheckpoint, AppendProjectionStore
 from .native_transcript import NativeRecord, reverse_records
@@ -27,7 +28,7 @@ class NativeToolActivity(AppendProjectionStore[NativeToolCheckpoint]):
     crawl, invented timestamp, or second copy of the record's timestamp.
     """
 
-    record_type: type[NativeToolCheckpoint] = NativeToolCheckpoint
+    record_type: ClassVar[type[NativeToolCheckpoint]] = NativeToolCheckpoint
 
     def __init__(self, root: Path, incarnation: ThreadIncarnation, source: Path) -> None:
         super().__init__(
