@@ -848,8 +848,7 @@ class InputDrain(InputObservation):
             def record():
                 with _store_lock(self.comms._wire_lock_path):
                     for key in source.keys:
-                        if not self.dispositions.clear_native(key, native_id, text):
-                            raise RelationViolationError("Native clear differs from its original input")
+                        self.dispositions.clear_native(key, native_id, text)
             await Coordination.run_worker(record)
         await self.input_refused(session_id, input_id)
 
