@@ -24,12 +24,6 @@ export class EntryMetadata {
         this.inputDigest = entry.message?.inputDigest ?? null;
         this.firstKeptEntryId = entry.firstKeptEntryId ?? null;
         this.contextMessageCount = sessionEntryToContextMessages(entry).length;
-        // Statistics consume facts from the same strict scan/append that owns
-        // selectors. Reading lifetime totals must not decode history again.
-        this.usage = entry.type === 'message' ? entry.message.usage : entry.usage;
-        this.toolCallCount = this.role === 'assistant' && Array.isArray(entry.message.content)
-            ? entry.message.content.reduce((count, block) => count + (block.type === 'toolCall' ? 1 : 0), 0)
-            : 0;
         this.model = entry.type === 'model_change'
             ? { provider: entry.provider, modelId: entry.modelId }
             : this.role === 'assistant' ? { provider: entry.message.provider, modelId: entry.message.model } : null;

@@ -1445,47 +1445,37 @@
          const result = [];
          for (const entry of entries) {
              if (entry.type !== "message")
-@@ -2950,32 +2940,31 @@
+@@ -2950,32 +2940,26 @@
          let totalMessages = 0;
          let toolCalls = 0;
          const usageTotals = createUsageTotals();
 -        for (const entry of this.sessionManager.getEntries()) {
-+        const store = this.sessionManager.entryStore;
-+        store.assertCurrent();
-+        for (const entry of store.metadataEntries()) {
-             if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
-                 addUsageToTotals(usageTotals, entry.usage);
-             }
-             if (entry.type !== "message")
-                 continue;
+-            if ((entry.type === "branch_summary" || entry.type === "compaction") && entry.usage) {
+-                addUsageToTotals(usageTotals, entry.usage);
+-            }
+-            if (entry.type !== "message")
+-                continue;
++        for (const message of this.messages) {
              totalMessages++;
 -            const message = entry.message;
--            if (message.role === "user") {
-+            if (entry.role === "user") {
+             if (message.role === "user") {
                  userMessages++;
              }
--            else if (message.role === "toolResult") {
-+            else if (entry.role === "toolResult") {
+             else if (message.role === "toolResult") {
                  toolResults++;
--                if (message.usage) {
--                    addUsageToTotals(usageTotals, message.usage);
-+                if (entry.usage) {
-+                    addUsageToTotals(usageTotals, entry.usage);
+                 if (message.usage) {
+                     addUsageToTotals(usageTotals, message.usage);
                  }
              }
--            else if (message.role === "assistant") {
-+            else if (entry.role === "assistant") {
+             else if (message.role === "assistant") {
                  assistantMessages++;
--                const assistantMsg = message;
--                if (Array.isArray(assistantMsg.content)) {
--                    toolCalls += assistantMsg.content.filter((c) => c.type === "toolCall").length;
--                }
--                addUsageToTotals(usageTotals, assistantMsg.usage);
-+                toolCalls += entry.toolCallCount;
-+                addUsageToTotals(usageTotals, entry.usage);
+                 const assistantMsg = message;
+                 if (Array.isArray(assistantMsg.content)) {
+                     toolCalls += assistantMsg.content.filter((c) => c.type === "toolCall").length;
+                 }
+                 addUsageToTotals(usageTotals, assistantMsg.usage);
              }
          }
-+        store.assertCurrent();
          return {
              sessionFile: this.sessionFile,
              sessionId: this.sessionId,
@@ -2244,14 +2234,15 @@
          const stats = this.session.getSessionStats();
          const sessionName = this.sessionManager.getSessionName();
 -        const entries = this.sessionManager.getEntries();
-+        const entries = this.sessionManager.entryStore.entries();
++        const entries = this.sessionManager.entryStore.contextEntries();
          const cacheWaste = computeCacheWaste(entries, this.session.modelRuntime);
          // Cost/token totals per provider/model actually used (e.g. OpenRouter `auto`
          // resolves to a concrete responseModel). Usage without model attribution is
          // grouped separately so the breakdown reconciles with the session total.
 -        const usageBreakdown = getUsageCostBreakdown(entries);
-+        const usageBreakdown = getUsageCostBreakdown(this.sessionManager.entryStore.entries());
-         let info = `${theme.bold("Session Info")}\n\n`;
++        const usageBreakdown = getUsageCostBreakdown(this.sessionManager.entryStore.contextEntries());
+-        let info = `${theme.bold("Session Info")}\n\n`;
++        let info = `${theme.bold("Session Info — Current Context")}\n\n`;
          if (sessionName) {
              info += `${theme.fg("dim", "Name:")} ${sessionName}\n`;
 --- a/dist/modes/rpc/rpc-mode.js
@@ -2400,6 +2391,6 @@
  } | {
 --- a/dist/modes/rpc/rpc-client.d.ts
 +++ b/dist/modes/rpc/rpc-client.d.ts
-@@ -170 +170 @@
+@@ -170,1 +170,1 @@
 -    getSessionStats(): Promise<SessionStats>;
 +    getSessionStats(): Promise<Pick<SessionStats, "contextUsage">>;

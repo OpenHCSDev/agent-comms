@@ -1,5 +1,4 @@
 import type { FileEntry, SessionEntry, SessionHeader } from './session-manager.js';
-import type { Usage } from '@earendil-works/pi-ai/compat';
 
 export declare abstract class StoreAvailability {
     abstract requireOpen(): void;
@@ -27,8 +26,6 @@ export declare class EntryMetadata {
     inputDigest: string | null;
     firstKeptEntryId: string | null;
     contextMessageCount: number;
-    usage: Usage | undefined;
-    toolCallCount: number;
     model: {provider: string; modelId: string} | null;
     thinkingLevel: string | null;
     label: {targetId: string; label: string | null; timestamp: string} | null;
