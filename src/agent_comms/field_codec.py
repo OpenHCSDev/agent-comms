@@ -81,7 +81,6 @@ class FieldPlan:
     reject_null: bool
     choices: Callable[[], Iterable[str]] | None
     value: ValueDecoder[object]
-    encoder: ValueDecoder[object]
     annotation: object
     declared: Field
 
@@ -94,7 +93,7 @@ class FieldPlan:
         return (self.key,)
 
     def encode_value(self, value: object) -> object:
-        return self.encoder.encode(value)
+        return self.value.encode_value(value)
 
     def encoded(self, value, *, key=None):
         return {key or self.key: value}
@@ -737,7 +736,7 @@ class FieldCodec(Sealed):
 
     @classmethod
     def encode(cls, value: object, annotation: object = None) -> Any:
-        return compile_encoder(annotation).encode(value)
+        return compile_encoder(annotation).encode_value(value)
 
     @classmethod
     def encode_document(cls, value: object, declared: object) -> object:
@@ -982,7 +981,6 @@ class FieldCodec(Sealed):
                 reject_null=bool(field.metadata.get("wire_nonnull")),
                 choices=field.metadata.get("wire_choices"),
                 value=compile_decoder(hints[field.name]),
-                encoder=compile_encoder(hints[field.name]),
                 annotation=hints[field.name],
                 declared=field,
             )
@@ -1061,11 +1059,7 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def decode(self, data: object) -> T: ...
 
-    def for_encoding(self) -> ValueDecoder:
-        """Bind child encoders through the same declaration-owned plan family."""
-        return self
-
-    def encode(self, value: object) -> Any:
+    def encode_value(self, value: object) -> Any:
         if isinstance(value, WireValue):
             return type(value).encode(value)
         kind = type(value)
@@ -1086,15 +1080,16 @@ class ValueDecoder[T](ABC):
             return self.encode_mapping(value)
         raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
-    def encode_items(self, items) -> list[object]:
+    def encode_items(self, items: Iterable[object]) -> list[object]:
         encoder = compile_encoder(None)
-        return [encoder.encode(item) for item in items]
+        return [encoder.encode_value(item) for item in items]
 
-    def encode_mapping(self, value: dict) -> object:
+    def encode_mapping(self, value: dict[object, object]) -> object:
         encoder = compile_encoder(None)
         if all(type(key) is str for key in value):
-            return {key: encoder.encode(item) for key, item in value.items()}
-        return [[encoder.encode(key), encoder.encode(item)] for key, item in value.items()]
+            return {key: encoder.encode_value(item) for key, item in value.items()}
+        return [[encoder.encode_value(key), encoder.encode_value(item)]
+                for key, item in value.items()]
 
     def encode_fields(self, value: object) -> dict[str, object]:
         result = FieldCodec._record_plan(type(value)).encoded(value, "wire", FieldPlan.encode_value)
@@ -1209,7 +1204,7 @@ class _RepresentedDecoder(ValueDecoder[Any]):
 
     representation: type[FieldRepresentation]
     structural: ValueDecoder[object]
-    def encode(self, value: object) -> object:
+    def encode_value(self, value: object) -> object:
         return None if value is None else self.representation.encode(value)
 
     @boundary_decoder
@@ -1248,11 +1243,6 @@ class _AnyDecoder(ValueDecoder[Any], FieldRepresentation):
             return cls.validator().validate_python(value, strict=True)
         except ValueError as error:
             raise TypeError("Expected a JSON value with string keys and finite numbers") from error
-
-    def for_encoding(self) -> ValueDecoder:
-        # Any's decoder validates already-JSON input; encoding still accepts
-        # records and wire values, exactly like an unspecified annotation.
-        return _ScalarDecoder(self.target)
 
     @classmethod
     def schema(cls):
@@ -1355,13 +1345,10 @@ class _ArrayDecoder(ValueDecoder[Any]):
             raise MalformedRecord("Expected a JSON array.")
         return self.container(self.decode_items(data))
 
-    def for_encoding(self) -> ValueDecoder:
-        return type(self)(self.target, tuple(compile_encoder(item.target) for item in self.items))
-
-    def encode_items(self, items) -> list[object]:
+    def encode_items(self, items: Iterable[object]) -> list[object]:
         if not self.items:
-            return super().encode_items(items)
-        return [self.items[0].encode(item) for item in items]
+            return ValueDecoder.encode_items(self, items)
+        return [self.items[0].encode_value(item) for item in items]
 
     def decode_items(self, data):
         return (self.items[0].decode(value) for value in data)
@@ -1388,10 +1375,10 @@ class _VariadicTupleDecoder(_TupleDecoder):
     """The inherited item decoder applies to every tuple element."""
 
 class _FixedTupleDecoder(_TupleDecoder):
-    def encode_items(self, items) -> list[object]:
+    def encode_items(self, items: Iterable[object]) -> list[object]:
         if not self.items:
             return super().encode_items(items)
-        return [encoder.encode(item) for encoder, item in zip(self.items, items, strict=True)]
+        return [encoder.encode_value(item) for encoder, item in zip(self.items, items, strict=True)]
 
     def decode_items(self, data):
         if len(data) != len(self.items):
@@ -1432,14 +1419,11 @@ class _DictDecoder(ValueDecoder[Any]):
         entries = _object_entries if args[0] is str else _object_or_pair_entries
         return cls(target, compile_decoder(args[0]), compile_decoder(args[1]), entries)
 
-    def for_encoding(self) -> ValueDecoder:
-        return type(self)(self.target, compile_encoder(self.key.target),
-                          compile_encoder(self.value.target), self.entries)
-
-    def encode_mapping(self, value: dict) -> object:
+    def encode_mapping(self, value: dict[object, object]) -> object:
         if self.key.target is str:
-            return {key: self.value.encode(item) for key, item in value.items()}
-        return [[self.key.encode(key), self.value.encode(item)] for key, item in value.items()]
+            return {key: self.value.encode_value(item) for key, item in value.items()}
+        return [[self.key.encode_value(key), self.value.encode_value(item)]
+                for key, item in value.items()]
 
     def decode(self, data):
         return {self.key.decode(key): self.value.decode(value) for key, value in self.entries(data)}
@@ -1562,9 +1546,13 @@ class _EnumDecoder(_ChoiceDecoder[Any]):
             return self.target(data)
 
 @lru_cache(maxsize=None)
-def compile_encoder(annotation: object) -> ValueDecoder:
-    """Resolve encoding once through the existing annotation plan family."""
-    return compile_decoder(annotation).for_encoding()
+def compile_encoder(annotation: object) -> ValueDecoder[object]:
+    """Resolve encoding once through the existing annotation plan family.
+
+    The same plan already owns representation, fixed/variadic elements and
+    mapping keys/values; encoding does not maintain a parallel type resolver.
+    """
+    return compile_decoder(annotation)
 
 
 @overload
