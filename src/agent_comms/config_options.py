@@ -403,8 +403,10 @@ class SessionConfigOptions(ConfigOptions):
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
         await self.use_stored_settings(session_id, name)
 
-    async def observe_configuration(self, session_id: str, client: Client | SocketClient) -> None:
+    async def observe_configuration(self, session_id: str, client: Client | SocketClient | None) -> None:
         """Subscribe an ACP consumer and supply its own initial configuration."""
+        if client is None:
+            return
         self._publication_sessions.add(session_id)
         self.runtime.background(self.send_menu(client, session_id))
 

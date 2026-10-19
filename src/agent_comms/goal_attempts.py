@@ -72,8 +72,10 @@ if TYPE_CHECKING:
 class GoalAttemptError(RuntimeError):
     """A goal attempt cannot proceed as requested."""
 
+    diagnostic_text: ClassVar[str] = "Goal launch grant unavailable; explicit Retry required."
+
     def diagnostic(self) -> str:
-        return "Goal launch grant unavailable; explicit Retry required."
+        return self.diagnostic_text
 
 
 class StorageUncertainError(GoalAttemptError):
@@ -87,8 +89,7 @@ class ReservationConflictError(GoalAttemptError):
 class UnresolvedAttemptError(GoalAttemptError):
     """A blocked or in-flight attempt needs an explicit resolution."""
 
-    def diagnostic(self) -> str:
-        return "Goal attempt unresolved; inspect diagnostics before Retry."
+    diagnostic_text = "Goal attempt unresolved; inspect diagnostics before Retry."
 
 
 class MissingGoalGenerationError(GoalAttemptError, ValueError):

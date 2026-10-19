@@ -461,7 +461,7 @@ class TestHandlers:
             cwd="/wt/proj", session_id=response.session_id, mcp_servers=[]
         )
         assert second._comms.registry.status("proj").declared_name == "running"
-        assert second._comms.registry.require("proj").pid == os.getpid()
+        assert second._comms.registry.require("proj").process_identity.runs_here()
         assert facts(loaded.field_meta, CoordinationChangedUpdate)[0].thread.name == "proj"
         snapshots = [
             fact
@@ -1472,7 +1472,7 @@ class TestWireProtocol:
                 proc.kill()
                 proc.wait()
             if "proj" in comms.registry:
-                owner = comms.registry.require("proj").pid
+                owner = comms.registry.require("proj").require_process().pid
                 assert owner != proc.pid
                 assert comms.registry.require("proj").process_alive
                 comms.owners.stop("proj")
@@ -1940,7 +1940,7 @@ class TestLiveConfigSync:
             after = wired.goals.goal_snapshot("proj")
             assert after.goal == before.goal
             assert after.execution != before.execution
-            assert after.execution.wait_for[0].name == "renamed-child"
+            assert after.execution.wait_for[0].incarnation.name == "renamed-child"
             await assert_snapshot_update()
             wired.goals.update_goal(
                 "proj", ClearGoalAction(expect=GoalPrecondition(goal_id=goal.id))
