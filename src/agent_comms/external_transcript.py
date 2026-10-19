@@ -257,7 +257,7 @@ class DraftRow(TypedTable, TranscriptDraft, declared_name="external_draft"):
         original.require_recorded_owner(thread)
         transcript = ExternalTranscript(root, thread.incarnation)
         with transcript.writer_connection(check_same_thread=False) as connection:
-            publication = TurnDraftPublication(original.owner_lookup, connection, input_id)
+            publication = TurnDraftPublication(transcript, connection, input_id)
             try:
                 yield publication
             finally:
@@ -498,8 +498,8 @@ class DraftPublication:
 class TurnDraftPublication(DraftPublication, StoreWriter):
     """A native turn owns one connection; each message owns one draft identity."""
 
-    def __init__(self, lookup: str, connection: Connection, turn_id: str):
-        self.lookup = lookup
+    def __init__(self, transcript: ExternalTranscript, connection: Connection, turn_id: str):
+        self.transcript = transcript
         self.connection = connection
         self.turn_id = turn_id
 
@@ -514,11 +514,11 @@ class TurnDraftPublication(DraftPublication, StoreWriter):
 
     def publish(self, parts: Iterable[str]) -> None:
         from .transcript_events import AssistantTranscript
-        DraftRow(self.lookup, self.turn_id, self.item_id,
+        DraftRow(self.transcript.lookup, self.turn_id, self.item_id,
                  (AssistantTranscript(''.join(parts), position=self.item_id,
                                       timestamp=self.timestamp),)).publish(self)
 
     def retire_message(self) -> None:
         with self.writing() as connection:
-            DraftRow.delete(connection, thread=self.lookup, turn_id=self.turn_id)
+            DraftRow.delete(connection, thread=self.transcript.lookup, turn_id=self.turn_id)
 
