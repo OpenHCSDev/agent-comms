@@ -79,28 +79,30 @@ class Messaging:
             owner.role.require_executable(RelationViolationError(
                 "Human messages require the explicit user-message operation."
             ))
-            message = Message(
-                sender=owner.name,
-                target=target,
-                body=body,
-                type=type,
-                role=role,
-                task=task,
-                report=report,
-                answers=self._answered_by(owner, target),
-            )
-            publisher: OwnerPublisher = self.bus.publisher
-            if claims or releases:
-                committed = publisher.publish_claim_envelope(
-                    message,
-                    worktree=Path(owner.worktree),
-                    incarnation=str(owner.created_at),
-                    claims=claims,
-                    releases=releases,
+            todos = TodoStore(self.root)
+            with todos.writing() as db:
+                message = Message(
+                    sender=owner.name,
+                    target=target,
+                    body=body,
+                    type=type,
+                    role=role,
+                    task=task,
+                    report=report,
+                    answers=self._answered_by(owner, target),
                 )
-            else:
-                committed = publisher.publish_ordinary(message, origin=AgentOrigin())
-        TodoStore(self.root).correct(owner.name, committed.message_id, body)
+                publisher: OwnerPublisher = self.bus.publisher
+                if claims or releases:
+                    committed = publisher.publish_claim_envelope(
+                        message,
+                        worktree=Path(owner.worktree),
+                        incarnation=str(owner.created_at),
+                        claims=claims,
+                        releases=releases,
+                    )
+                else:
+                    committed = publisher.publish_ordinary(message, origin=AgentOrigin())
+                todos.correct(db, owner.name, committed.message_id, body)
         return committed
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
