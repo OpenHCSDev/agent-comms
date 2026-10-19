@@ -5,13 +5,15 @@ from __future__ import annotations
 import multiprocessing
 import os
 import sqlite3
-import tempfile
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from queue import Empty
+from threading import Event
 
 import pytest
 
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.diagnostics import FailureReason
 from agent_comms.field_codec import MalformedRecord
 from agent_comms.goal_attempts import (
@@ -69,11 +71,36 @@ def _die_before_ready_ack(root: str) -> None:
 
 
 @pytest.fixture
-def store() -> Iterator[GoalAttemptStore]:
-    with tempfile.TemporaryDirectory(prefix="ac-goal-ledger-", dir="/var/tmp") as base:
-        root = Path(base) / "owner"
-        root.mkdir(mode=0o700)
-        yield GoalAttemptStore.initialize(root)
+def store(tmp_path) -> Iterator[GoalAttemptStore]:
+    root = tmp_path / "owner"
+    root.mkdir(mode=0o700)
+    yield GoalAttemptStore.initialize(root)
+
+
+def test_concurrent_initialization_never_opens_an_incomplete_schema(tmp_path, monkeypatch):
+    root = tmp_path / "owner"
+    root.mkdir(mode=0o700)
+    paused, resume = Event(), Event()
+    writer = CoordinationStore.writer
+
+    def pause_first_writer(path, *args, **kwargs):
+        if not paused.is_set():
+            paused.set()
+            assert resume.wait(5)
+        return writer(path, *args, **kwargs)
+
+    monkeypatch.setattr(CoordinationStore, "writer", staticmethod(pause_first_writer))
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pending = pool.submit(GoalAttemptStore.initialize, root)
+        assert paused.wait(5)
+        try:
+            second = GoalAttemptStore.initialize(root)
+        finally:
+            resume.set()
+        first = pending.result(timeout=5)
+    original = first.create_goal("shared")
+    assert second.snapshot("shared") == original
+    assert not tuple(root.glob(".goal-attempts-init-*"))
 
 
 def test_setup_requires_explicit_owner_private_root_and_0600_db(tmp_path):

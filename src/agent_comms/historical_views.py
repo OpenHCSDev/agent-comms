@@ -437,9 +437,8 @@ class HistoryArchive(RootFile):
                     install_private_bus_checkpoint(archived, _bus_locked=True)
                     guard.commit_initial()
                     # The private stage writer supplies the source; published archives only read it.
-                    from .bus_page_index import BusPageIndex
                     with archived.opened_wire_snapshot(opening=SavedPrefixOpening()) as opened:
-                        with BusPageIndex(archived.path) as index:
+                        with archived.page_index_type(archived.path) as index:
                             index.sync(opened)
                 source = HistorySource(
                     str(stage.resolve()),

@@ -928,9 +928,13 @@ class AllChannelDisplayScope(ChannelDisplayScope):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
+        prefixes: dict[Conversation, int] = {}
+        for row in index.latest_by_conversation(self, source.boundary):
+            conversation = self.read_key(row.sender, row.target, snapshot)
+            prefixes[conversation] = max(prefixes.get(conversation, 0), row.seq)
         return DisplayBasis(viewer, snapshot.require(viewer).created_at,
-            tuple(DisplayedConversation(self.read_key(row.sender, row.target, snapshot), (), row.seq)
-                  for row in index.latest_by_conversation(self, source.boundary)),
+            tuple(DisplayedConversation(conversation, (), sequence)
+                  for conversation, sequence in prefixes.items()),
             source.bus_identity)
 
 
