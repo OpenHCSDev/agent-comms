@@ -499,7 +499,8 @@ class FailureCommitStatus(CommitStatus):
 
 
 def api_payload(method: str, endpoint: str, payload: object) -> None:
-    with tempfile.NamedTemporaryFile(mode="w", dir=REPO, prefix=".install-gate-api-") as request:
+    DEFAULT_SCRATCH.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", dir=DEFAULT_SCRATCH, prefix="api-") as request:
         json.dump(FieldCodec.encode(payload), request)
         request.flush()
         run("gh", "api", "--method", method, endpoint, "--input", request.name)

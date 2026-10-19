@@ -14,15 +14,24 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from install_gate import (
     DEFAULT_SCRATCH,
     REPO,
+    ExistingStatusChecks,
     FieldCodec,
     GateError,
     InstallSurface,
     Machine,
+    MalformedRecord,
+    MissingProtection,
+    NoStatusChecks,
+    NumberedAppIdentity,
+    ProtectionAnswer,
+    PullRequestAnswer,
+    RequiredCheck,
     RouteDocument,
     SnapshotCopy,
     affected,
@@ -214,6 +223,49 @@ class InstallGateTests(unittest.TestCase):
         self.assertEqual(selected, home / ".agent-comms")
         self.assertEqual((selected / "bus.jsonl").read_text(), "original copy\n")
         self.assertFalse(bus.exists())
+
+    def test_external_answers_are_decoded_once_and_refused_if_malformed(self):
+        answer = FieldCodec.decode(
+            PullRequestAnswer,
+            FieldCodec.parse(
+                '{"headRefOid":"head","baseRefOid":"base","isCrossRepository":false,"extra":1}'
+            ),
+        )
+        self.assertEqual((answer.head, answer.base), ("head", "base"))
+        answer.require_local()
+        with self.assertRaises(MalformedRecord):
+            FieldCodec.decode(
+                PullRequestAnswer,
+                FieldCodec.parse(
+                    '{"headRefOid":"head","baseRefOid":"base","isCrossRepository":"false"}'
+                ),
+            )
+        with self.assertRaises(MalformedRecord):
+            FieldCodec.decode(MissingProtection, FieldCodec.parse('{"status":"403"}'))
+
+    def test_protection_keeps_existing_app_constraints_and_null_has_owned_behavior(self):
+        answer = FieldCodec.decode(
+            ProtectionAnswer,
+            FieldCodec.parse(
+                '{"required_status_checks":{"strict":false,"contexts":["other"],'
+                '"checks":[{"context":"other","app_id":42}]},"unrelated":true}'
+            ),
+        )
+        expected = ExistingStatusChecks(False, (RequiredCheck("other", NumberedAppIdentity(42)),))
+        self.assertEqual(answer.required_status_checks, expected)
+        with patch("install_gate.api_payload") as publish:
+            answer.required_status_checks.require("owner/repo")
+            sent = publish.call_args.args[2]
+            self.assertEqual(sent.strict, False)
+            self.assertEqual(sent.checks[0], expected.checks[0])
+            self.assertEqual(sent.checks[1].context, "install-rehearsal")
+        missing = FieldCodec.decode(
+            ProtectionAnswer, FieldCodec.parse('{"required_status_checks":null}')
+        )
+        self.assertIsInstance(missing.required_status_checks, NoStatusChecks)
+        with patch("install_gate.api_payload") as publish:
+            missing.required_status_checks.require("owner/repo")
+            self.assertTrue(publish.call_args.args[2].strict)
 
 
 if __name__ == "__main__":

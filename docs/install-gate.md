@@ -3,6 +3,54 @@
 Owner: `pi-install-gate`. The Claude installer worker owns `tools/upgrade_bus.py`.
 Draft PR: https://github.com/OpenHCSDev/agent-comms/pull/1930. Do not merge yet.
 
+## P255 structural repair
+
+Current main was merged normally, preserving the published branch. This remains
+an unfinished draft: passing local structural checks is not two-machine install
+acceptance. P255 permits only `/home/ts/.cache/agent-scratch/pi-install-gate`,
+with a 3 GB cap together with checkouts. The older HDD proof paths below identify
+historical runs; they are not authorization to repeat those large copies now.
+Current checkout plus small local logs are below 50 MB; no environment was built.
+
+Before editing, the existing refactor-audit overlay read the production tools;
+AST reads also covered FieldCodec, MroDispatch and Core's child-process owner.
+All five relevant modules parsed under Python 3.14, with no omissions. Static
+import resolution remains conservative for dynamic imports, as described below.
+
+Owner changes across the complete gate family:
+- External GitHub, TOML and installer answers become frozen records through
+  FieldCodec. `ExternalRecord` only selects each record's declared external
+  fields; it does not decode values, invent keys or tolerate missing fields.
+- `SnapshotHome` is declared once in the standalone producer. `SnapshotCopy`
+  inherits that record and owns placing it locally. The producer streams the
+  route file unchanged; the client uses the existing ActiveRoute type.
+- Core's `Platform` launch and `ParentedProcess` now own process groups,
+  cancellation and stream retirement. The gate's `poll`/kill/optional-stream
+  cleanup is deleted rather than renamed. Running/exited outcomes remain Core
+  objects, not nullable fields in the gate.
+- SourceReferences uses existing MroDispatch handlers for Python AST classes.
+  Commands, protection-null states, machine outcomes and gate outcomes carry
+  their own behavior; consumers no longer recover it from strings or mappings.
+- Stdout and private stderr have separate owners. Installer stdout is decoded
+  once, not searched repeatedly for possible JSON objects. Missing file/read
+  results cannot pass solely because the child exits zero.
+- Only named failure types are handled. Unexpected failures still write a
+  failed result and post failure in `finally`, then propagate unchanged.
+
+Before/after production evidence: StringSubscript 37 -> 0; FamilyFlattened
+4 -> 0; TypeSwitch 1 (three arms) -> 0; NoneAbsence 3 -> 0;
+FunctionLocalImport 3 -> 0; ForeignFieldSpellings 1 -> 0. BannedVocabulary,
+StringIdentity, Ruff findings and mypy errors are also zero. No suppressions,
+checker changes, edited baselines, casts or Any annotations were introduced.
+The feature's batch Src-Budget declares its actual new production lines; it
+waives no structural finding and uses the existing sum-of-budgets mechanism.
+
+The requested `agent-comms-commander order pr P255 ...` command was attempted.
+Core chooses `/home/ts/wt/pi-install-gate--P255`, which does not exist; the
+retained branch is at `/home/ts/wt/pi-install-gate--P1`. It failed before PR
+creation. No duplicate PR or fabricated order reference was created. #1930
+continues updating in place through ordinary pushes.
+
 ## Run locally
 
 Use the installed Core interpreter, not a Python without Core's dependencies:
