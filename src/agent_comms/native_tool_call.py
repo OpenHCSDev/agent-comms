@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 
+
 if TYPE_CHECKING:
     from .pi_events import ToolExecutionEnd, ToolExecutionStart
 
@@ -260,7 +261,19 @@ class NativeToolCall(ABC):
     def claim_failed(self) -> None: ...
 
 
+@dataclass(frozen=True)
+class OwnerToolConnection:
+    """The private tool endpoint for one input, never a process setting."""
+
+    path: str
+    token: str = field(repr=False)
+
+
 class ToolTransport:
+    @property
+    def connection(self) -> OwnerToolConnection | None:
+        return None
+
     @property
     def retainable(self) -> bool:
         return True

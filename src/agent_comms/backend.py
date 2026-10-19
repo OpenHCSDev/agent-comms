@@ -52,6 +52,7 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
+from .native_tool_call import ToolTransport
 from .selected_tool_broker import SelectedToolDenied
 from .send_outcome import SendBoundary
 from .turn_context import InputContributionCoordinates
@@ -199,6 +200,7 @@ class TurnSession:
         *, startup: NativeStartup,
     ):
         self.launch = launch
+        self.tool_socket = ToolTransport()
         self.task = task
         self.finish_event = finish_event
         self.images = images
@@ -557,6 +559,7 @@ class TurnSession:
             message=self.task,
             images=self.images or None,
             context_contributions=self.context_contributions,
+            owner_tools=self.tool_socket.connection,
         )
 
     async def initialize_rpc(self) -> None:

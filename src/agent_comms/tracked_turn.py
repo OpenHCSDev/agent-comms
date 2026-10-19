@@ -6,7 +6,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
 from types import MappingProxyType
@@ -36,7 +36,7 @@ from .native_pi import (
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_startup import NativeStartup
-from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied, ToolTransport
+from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
@@ -256,7 +256,6 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         self.prompt_send_boundary = prompt_send_boundary
         self.ingress = ingress
         self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
-        self.tool_socket: ToolTransport
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
@@ -378,6 +377,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
 
     async def open_transport(self, ownership: AsyncExitStack) -> None:
         self.tool_socket = await self.selected_tool_mode.open_transport(self, ownership)
+        self.command = replace(self.command, owner_tools=self.tool_socket.connection)
 
     @property
     def active_tools(self):

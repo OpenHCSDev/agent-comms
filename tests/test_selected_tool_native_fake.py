@@ -61,8 +61,8 @@ args = {'resource':'notes.txt','contents':'new contents'}
 call = {'type':'toolCall','id':'call_1','name':'selected_claimed_write','arguments':args}
 send({'type':'message_end','message':{'role':'assistant','stopReason':'toolUse','content':[call]}})
 send({'type':'tool_execution_start','toolCallId':'call_1','toolName':'selected_claimed_write','args':args})
-sock = socket.socket(socket.AF_UNIX); sock.connect(os.environ['AGENT_COMMS_SELECTED_TOOL_SOCKET'])
-wire = {'token':os.environ['AGENT_COMMS_SELECTED_TOOL_TOKEN'],
+sock = socket.socket(socket.AF_UNIX); sock.connect(command['ownerTools']['path'])
+wire = {'token':command['ownerTools']['token'],
         'request':{'call_id':'call_1','arguments':{'resource':'notes.txt',
         'contents':'new contents' if variant != 'tamper' else 'different'}}}
 sock.sendall((json.dumps(wire)+'\\n').encode()); answer = b''

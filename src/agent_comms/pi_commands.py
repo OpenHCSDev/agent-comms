@@ -18,6 +18,7 @@ from .field_codec import FieldCodec
 from .image_inputs import ImageInput
 from .native_session_reopen import NativeSessionIdentity
 from .native_turn_context import NativeContextData
+from .native_tool_call import OwnerToolConnection
 from .pi_payloads import (
     CompactionData,
     EmptyData,
@@ -148,6 +149,9 @@ class Prompt(PiCommand):
     )
     context_contributions: tuple[InputContributionCoordinates, ...] = field(
         default=(), metadata={"wire_omit_default": True, "wire_name": "contextContributions"}
+    )
+    owner_tools: OwnerToolConnection | None = field(
+        default=None, metadata={"wire_omit_default": True, "wire_name": "ownerTools"}
     )
     streaming_behavior: Literal[None, "steer", "followUp"] = field(
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
