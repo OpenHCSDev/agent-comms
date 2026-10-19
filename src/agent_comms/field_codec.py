@@ -317,7 +317,7 @@ class SingleFieldValue(WireValue):
     @classmethod
     def from_wire(cls, data):
         entry = cls.wire_field()
-        return cls(**{entry.name: FieldCodec.decode(entry.annotation, data)})
+        return cls(**{entry.name: FieldCodec.decode_document(entry.annotation, data)})
 
     @classmethod
     def schema(cls):
@@ -325,7 +325,7 @@ class SingleFieldValue(WireValue):
 
     def to_wire(self):
         entry = self.wire_field()
-        return FieldCodec.encode(getattr(self, entry.name), entry.annotation)
+        return FieldCodec.encode_document(getattr(self, entry.name), entry.annotation)
 
 
 class SubclassUnion(DeclaredFamily, WireValue):
