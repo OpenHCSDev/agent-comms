@@ -292,8 +292,6 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                 ))
                 before = os.fstat(held.fileno())
                 NativeSessionFileRole.require(before)
-                if before.st_nlink != 1:
-                    raise NativePiUnavailable("Native proof must be private and unaliased")
                 db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
                 actual = SQLiteSchemaObject.read(
                     db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
