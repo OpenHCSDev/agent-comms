@@ -18,7 +18,7 @@ from .registry_document import RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import SharedLock, _store_lock
-from .thread_identity import GenerationCounter, TurnId
+from .thread_identity import GenerationCounter, OwnerIdentity, TurnId
 from .thread_status import (
     ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
 )
@@ -103,6 +103,18 @@ class Registration:
                     self._commit_registration(edit, edit.document.prepare_registration(
                         replace(entry.thread, process_identity=NoProcess()), NoBridgeThreadStatus(),
                         new_owner=False))
+
+    def observe_external_status(
+        self, owner: OwnerIdentity, process: ProcessIdentity, status: ThreadStatus,
+    ) -> None:
+        """An observation changes only the bridge lease it actually witnessed."""
+        with self.store.editing() as edit:
+            entry = edit.document.entry_if_present(owner.incarnation.name)
+            if entry is None or not entry.owned_by(owner, process) or not process.alive():
+                return
+            entry.thread.execution.require_external()
+            edit.document.statuses[entry.thread.name] = status.with_bridge()
+            edit.commit()
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.

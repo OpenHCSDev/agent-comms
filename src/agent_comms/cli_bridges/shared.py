@@ -283,15 +283,16 @@ class Inbox(Operation[OperationBridge]):
         # name the re-arm command once the lease lapses.
         record = WatchRecord(bridge.binding.bus, bridge.binding.root,
                              (Path(sys.argv[0]).name, *sys.argv[1:]))
-        with WatchClaim(bridge.binding.thread).held(record):
-            from agent_comms.registration import Registration
+        from agent_comms.registration import Registration
 
-            registry = await asyncio.to_thread(
-                Registration, Path(bridge.binding.root) / 'registry.json')
-            # Retry only endpoint acquisition, never the running bridge's delivery work.
-            with ExitStack() as endpoint:
-                await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
-                    registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid()))))
+        registry = await asyncio.to_thread(
+            Registration, Path(bridge.binding.root) / 'registry.json')
+        # The live claim names an already registered endpoint, never a process
+        # still waiting to attach. Retry only acquisition, not delivery work.
+        with ExitStack() as endpoint:
+            await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
+                registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid()))))
+            with WatchClaim(bridge.binding.thread).held(record):
                 async with asyncio.TaskGroup() as tasks:
                     self.start(bridge, tasks)
 

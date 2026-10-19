@@ -17,6 +17,9 @@ from agent_comms.presentation import CountedRead, ThreadView
 from agent_comms.registration import Registration
 from agent_comms.thread_status import (
     ArchivedThreadStatus,
+    CompactingThreadStatus,
+    ConnectedThreadStatus,
+    NoBridgeThreadStatus,
     DeletingThreadStatus,
     IdleThreadStatus,
     RunningThreadStatus,
@@ -24,6 +27,47 @@ from agent_comms.thread_status import (
     ThreadStatus,
 )
 from agent_comms.threads import Thread
+
+
+def test_connected_compaction_preserves_endpoint_and_presentation(tmp_path, monkeypatch):
+    from agent_comms.thread_execution import ExternalThreadExecution
+    from agent_comms_hooks.watch import WatchClaim, WatchRecord
+
+    monkeypatch.setenv('HOME', str(tmp_path))
+    comms = wire(tmp_path / 'bus')
+    registry = comms.registry
+    registry.declare(registry.new_thread(
+        'watched', frozenset(), str(tmp_path), execution=ExternalThreadExecution))
+    process = ProcessIdentity.capture(os.getpid())
+    claim = WatchClaim('session')
+    record = WatchRecord('watched', str(comms.root), ('watch',))
+    with registry.external_process('watched', process):
+        with claim.held(record):
+            original = registry.entry('watched').entry
+            watch = claim.state()
+            watch.observe_compaction(CompactingThreadStatus())
+            compacting = registry.snapshot()
+            assert compacting.statuses['watched'] == CompactingThreadStatus()
+            assert compacting.threads['watched'].process_identity == process
+            assert compacting.owner_identity('watched') == original.owner_identity
+            registry.heartbeat('watched')
+            registry.register(replace(registry.require('watched'), title='Current title'), registry.status('watched'))
+            shown = comms.views.thread_presentations(('watched',)).require('watched')
+            assert shown.summary == 'Compacting context' and shown.status.working
+            assert shown.title == 'Current title'
+            assert registry.status('watched') == CompactingThreadStatus()
+            watch.observe_compaction(ConnectedThreadStatus())
+            assert registry.status('watched') == ConnectedThreadStatus()
+            assert registry.entry('watched').entry.owner_identity == original.owner_identity
+            watch.observe_compaction(CompactingThreadStatus())
+    assert registry.status('watched') == NoBridgeThreadStatus()
+    watch.observe_compaction(CompactingThreadStatus())
+    assert registry.status('watched') == NoBridgeThreadStatus()
+    with registry.external_process('watched', process):
+        # An earlier bridge's delayed observation cannot alter the new lease,
+        # even when the process is the same and only the generation changed.
+        registry.observe_external_status(original.owner_identity, process, CompactingThreadStatus())
+        assert registry.status('watched') == ConnectedThreadStatus()
 
 
 def test_captured_owner_presentation_survives_exit_until_fresh_acquisition(tmp_path):
