@@ -17,7 +17,7 @@ MAX_PROMPT_IMAGES = 8
 class ImageInput:
     data: str
     mime_type: str = field(metadata={"wire_name": "mimeType"})
-    type: Literal["image"] = field(default="image", kw_only=True)
+    type: Literal["image"] = field(default="image", kw_only=True, metadata={"wire_required": True})
 
     def __post_init__(self) -> None:
         if self.mime_type not in IMAGE_MIME_TYPES:

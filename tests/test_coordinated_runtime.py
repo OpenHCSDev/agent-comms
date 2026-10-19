@@ -232,16 +232,9 @@ def _fake_model(*, decision: str = "FULL", fail_on: int | None = None):
         if observer is not None:
             from agent_comms.pi_events import PiEvent
 
-            await observer(
-                PiEvent.from_wire(
-                    {
-                        "type": "response",
-                        "id": "native-prompt",
-                        "command": "prompt",
-                        "success": True,
-                    }
-                )
-            )
+            from agent_comms.agent_events import PromptAccepted
+
+            await observer(PromptAccepted())
             await observer(PiEvent.from_wire({"type": "context_committed", "inputId": input_id}))
         return NativeTurnResult(
             reply,
@@ -1953,7 +1946,7 @@ async def test_native_rpc_refusal_retains_private_details_without_replay(tmp_pat
     failing, calls = _fake_model(fail_on=1)
     response = Response(
         command=Prompt,
-        id="native-prompt",
+        id="a" * 32,
         success=False,
         error="Native preflight refused: private failure detail",
     )

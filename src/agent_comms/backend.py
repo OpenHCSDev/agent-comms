@@ -557,7 +557,7 @@ class TurnSession(NativeSession):
 
     async def open_transport(self, resources: AsyncExitStack) -> None:
         self.tool_socket = await self.tool_mode.open_transport(self, resources)
-        self.command = self.make_command(owner_tools=self.tool_socket.connection)
+        self.command = self.make_command(owner_tools=self.tool_socket.connection).identified()
         del self.make_command
         self.output.sensitive = bool(self.command.images)
 

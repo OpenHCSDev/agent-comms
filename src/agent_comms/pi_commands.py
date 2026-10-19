@@ -6,7 +6,7 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
@@ -65,7 +65,11 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: str | None = field(default_factory=lambda: uuid4().hex, metadata={"wire_omit_default": True})
+    id: str | None = field(default=None, metadata={"wire_omit_default": True})
+
+    def identified(self):
+        """Retain an assigned RPC id, or assign it once before writing."""
+        return self if self.id else replace(self, id=uuid4().hex)
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -73,13 +77,14 @@ class PiCommand(DeclaredFamily):
 
     @asynccontextmanager
     async def pending_response(self, channel, writer):
-        future = channel.track(self)
+        command = self.identified()
+        future = channel.track(command)
         try:
-            writer.write(channel.command_bytes(self))
+            writer.write(channel.command_bytes(command))
             await writer.drain()
             yield future
         finally:
-            channel.pending.discard(type(self), self.id)
+            channel.pending.discard(type(command), command.id)
             future.cancel()
 
     async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
@@ -105,10 +110,9 @@ class PiCommand(DeclaredFamily):
         data = dict(value)
         kind = data.pop("type", None)
         try:
-            member = cls.member_named(kind)
+            cls.member_named(kind)
         except ValueError:
             return UnknownCommand(wire=value)
-        data.setdefault("id", None)
         return FieldCodec.decode(cls, {"kind": kind, **data})
 
     @classmethod
