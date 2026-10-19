@@ -1,0 +1,36 @@
+--- a/tests/test_plan_phases.py
++++ b/tests/test_plan_phases.py
+@@ -48,7 +48,7 @@
+         todo = create(commander, f"P{index}")
+         CommsOrderServeTool(problem=todo.id, serves=phase).apply(comms, caller)
+         todo = comms.goals.todos.get(todo.id)
+-        monkeypatch.setattr(phase, "task", task(todo))
++        monkeypatch.setattr(phase, "task", classmethod(lambda cls, value=task(todo): value))
+         todos.append(todo)
+ 
+     record_done = tuple(
+@@ -98,7 +98,7 @@
+     whole = create(commander, "P999")
+     CommsOrderServeTool(problem=whole.id, serves=StoryPhase).apply(comms, caller)
+     whole = comms.goals.todos.get(whole.id)
+-    monkeypatch.setattr(StoryPhase, "task", task(whole))
++    monkeypatch.setattr(StoryPhase, "task", classmethod(lambda cls: task(whole)))
+     assert not StoryPhase.done((subtask, whole))
+     assert StoryPhase.done((subtask, accepted(whole)))
+ 
+--- a/tests/conftest.py
++++ b/tests/conftest.py
+@@ -262,8 +262,13 @@
+     from agent_comms.goals import RequestGoalOrder
+     from agent_comms.todos import PullRequests
+     from agent_comms.tool_caller import ThreadCaller
++    from agent_comms.plan_phases import PlanPhase
++    from agent_comms.work_dispatch import UnspecifiedPhaseTask
+ 
+     monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order: ())
++    # This fixture observes board state; it never opts into production task starts.
++    for phase in PlanPhase.members_with(PlanPhase):
++        monkeypatch.setattr(phase, "task", classmethod(lambda cls: UnspecifiedPhaseTask()))
+ 
+     for created, name in enumerate(("lead", "worker"), 1):
+         comms.registry.declare(comms.registry.new_thread(name, frozenset({'comms'}), str(tmp_path), created_at=float(created)))

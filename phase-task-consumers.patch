@@ -1,0 +1,33 @@
+--- a/src/agent_comms/standing_rules.py
++++ b/src/agent_comms/standing_rules.py
+@@ -218,12 +218,12 @@
+         )
+ 
+     def enforce(self, comms: Comms, commander: str) -> None:
+-        self.phase.task.start(comms, comms.registry.require(commander), self.phase)
++        self.phase.task().start(comms, comms.registry.require(commander), self.phase)
+ 
+     def line(self) -> str:
+         return (
+             f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
+-            f" -> {self.phase.task.instruction}"
++            f" -> {self.phase.task().instruction}"
+         )
+ 
+ 
+--- a/tools/prove_commander_dispatch.py
++++ b/tools/prove_commander_dispatch.py
+@@ -94,11 +94,12 @@
+         at=RecordedEventTime(1), first_call_deadline=RecordedEventTime(121),
+         run=MechanicalOrderRun(),
+     )
+-    RecordPlanePhase.task = CheckedPhaseTask(
++    checked_task = CheckedPhaseTask(
+         problem, Repo.of(project).github,
+         "Verify rotation starts a native unit and receives its first real reply.",
+         order, deadline_seconds=300,
+     )
++    RecordPlanePhase.task = classmethod(lambda cls: checked_task)
+     from agent_comms.commander import rotate
+ 
+     print(f"ROOT {root}", flush=True)
