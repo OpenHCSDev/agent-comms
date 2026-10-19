@@ -271,7 +271,9 @@ class ConfigOptions:
             self.catalogs[member] = member(self.agent_bin, self.agent_args, self.configuration, self.package)
         return self.catalogs[member]
 
-    async def options(self, thread: CatalogSelection) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
+    async def options(
+        self, thread: CatalogSelection,
+    ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         """Describe declared choices and settings from one captured thread."""
         return [
             await self.catalog_for(member).describe(thread)
@@ -314,7 +316,10 @@ class SessionConfigOptions(ConfigOptions):
         # The model and thinking level each running turn currently uses.
         self.settings_in_use: dict[str, UseSettings] = {}
 
-    async def _publish(self, session_id: str, options: list[SessionConfigOptionSelect | SessionConfigOptionBoolean]) -> None:
+    async def _publish(
+        self, session_id: str,
+        options: list[SessionConfigOptionSelect | SessionConfigOptionBoolean],
+    ) -> None:
         """Publish within the configuration owner's acquisition lifetime."""
         update = ConfigOptionUpdate(
             session_update="config_option_update", config_options=options
@@ -410,7 +415,9 @@ class SessionConfigOptions(ConfigOptions):
                 session_update="config_option_update", config_options=options,
             ))
 
-    async def options_for_session(self, session_id: str) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
+    async def options_for_session(
+        self, session_id: str,
+    ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
         return await self.options(thread)
@@ -434,7 +441,9 @@ class SessionConfigOptions(ConfigOptions):
         await asyncio.gather(self.observer, return_exceptions=True)
         self._publication_sessions.clear()
 
-    async def publish_configuration(self, session_id: str) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
+    async def publish_configuration(
+        self, session_id: str,
+    ) -> list[SessionConfigOptionSelect | SessionConfigOptionBoolean]:
         options = await self.options_for_session(session_id)
         async with self.catalog_publish_lock:
             await self._publish(session_id, options)
