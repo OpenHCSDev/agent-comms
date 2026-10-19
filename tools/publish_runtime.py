@@ -228,7 +228,6 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
             snapshot.require_owner_process(original.identity, original.process)
 
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
-        self.carries.capture()
         request = StoppedPublication(self, stopped.handoff, self.maintenance_hold,
                                      self.carries.checkout)
         result = subprocess.run([
@@ -252,11 +251,10 @@ class StoppedPublication:
     checkout: Annotated[Path, PathText]
 
     def complete(self, wire_descriptor: int, route_descriptor: int) -> tuple[OwnerRestartResult, ...]:
-        self.handoff.require_wire(wire_descriptor)
         root = Path(self.handoff.root)
         publication = self.publication
         carries = PreparedCarries.at(self.checkout, root, publication.backup(root),
-                                    publication.published())
+                                    publication.published()).capture()
         with ExitStack() as conversion:
             conversion.callback(carries.restore_if_unpublished, publication.published, nullcontext)
             carries.apply(root)

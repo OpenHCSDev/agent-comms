@@ -448,13 +448,10 @@ class PreparedCarries(ABC):
         # is no empty snapshot whose missing ledger could mean an empty history.
         source = (destination.data_root
                   if not published and destination.path.exists() else root)
-        conversions = tuple((step, step.current(checkout))
-                            for step in chain.pending(CarryLedger(source).applied()))
-        if not conversions:
+        steps = chain.pending(CarryLedger(source).applied())
+        if not steps:
             return NoConversion(root)
-        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
-            for _, conversion in conversions for path in conversion.backup_files(root)))))
-        return PendingConversion(chain, conversions, files, destination, checkout)
+        return PendingConversion(chain, steps, destination, checkout)
 
     @abstractmethod
     def publish(self, publication, comms, intent, hold, resources, timeout: float) -> None:
@@ -538,8 +535,7 @@ class NoConversion(PreparedCarries):
 @dataclass(frozen=True)
 class PendingConversion(PreparedCarries):
     chain: CarryChain
-    conversions: tuple[tuple[Step, type[Carry]], ...]
-    files: tuple[Path, ...]
+    steps: tuple[Step, ...]
     backup: StoreBackup
     checkout: Path
 
@@ -574,13 +570,17 @@ class PendingConversion(PreparedCarries):
         return self.backup.data_root if self.backup.path.exists() else self.backup.root
 
     def capture(self) -> PreparedCarries:
-        backup = StoreBackup.take(self.backup.root, self.backup.route, self.files, self.backup.path)
+        root = self.backup.root
+        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
+            for step in self.steps for path in step.current(self.checkout).backup_files(root)))))
+        backup = StoreBackup.take(root, self.backup.route, files, self.backup.path)
         print(f'Backed up selected stores: {backup.path}', flush=True)
         return replace(self, backup=backup)
 
     def apply(self, root: Path) -> None:
         ledger = CarryLedger(root)
-        for step, conversion in self.conversions:
+        for step in self.steps:
+            conversion = step.current(self.checkout)
             result = ledger.apply(self.chain, step.name,
                 lambda conversion=conversion: conversion.carry(root, apply=True))
             print(json.dumps(result.report(step.name, True)), flush=True)
