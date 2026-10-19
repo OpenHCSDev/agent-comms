@@ -62,11 +62,9 @@ class Messaging:
             if sender not in self.registry:
                 raise UnregisteredThreadError(f"Sender {sender!r} is not registered.")
             owner = self.registry.require(sender)
-            owner.role.require_executable(
-                RelationViolationError(
-                    "Human messages require the explicit user-message operation."
-                )
-            )
+            owner.role.require_executable(RelationViolationError(
+                "Human messages require the explicit user-message operation."
+            ))
             todos = TodoStore(self.root)
             with todos.snapshot():
                 pass  # The store validates its schema before any envelope is committed.
@@ -85,7 +83,7 @@ class Messaging:
         try:
             todos.correct(owner.name, committed.message_id, body)
         except TodoConflict as error:
-            correction = CorrectionFailed(f"{error.__class__.__name__}: {error}")
+            correction = CorrectionFailed(f'{error.__class__.__name__}: {error}')
         else:
             correction = CorrectionComplete()
         return SendResult(committed, correction)
@@ -128,9 +126,8 @@ class Messaging:
         with _store_lock(self._wire_lock_path):
             return self._user_identity_under_wire_lock(worktree)
 
-    def send_user_message(
-        self, target: str, body: str, *, worktree: str, task: TaskAttachment = NoTaskAttachment()
-    ) -> Message:
+    def send_user_message(self, target: str, body: str, *, worktree: str,
+                          task: TaskAttachment = NoTaskAttachment()) -> Message:
         """Cooperative local UI send, not cryptographic same-UID authentication."""
         # The historical root write fence precedes identity creation and
         # remains held through the actual bus publication on an old root.
@@ -138,74 +135,38 @@ class Messaging:
             user = self._user_identity_under_wire_lock(worktree)
             return self._publish_user_under_wire_lock(user, target, body, task)
 
-    def pin_user_constraint(
-        self,
-        recipient: str,
-        subject: MessageReference,
-        *,
-        worktree: str,
-        scope: TaskScopeSelection = CurrentTaskScopeSelection(),
-        change: TaskChange = OriginalTaskChange(),
-    ) -> Message:
+    def pin_user_constraint(self, recipient: str, subject: MessageReference, *, worktree: str,
+                            scope: TaskScopeSelection = CurrentTaskScopeSelection(),
+                            change: TaskChange = OriginalTaskChange()) -> Message:
         """Pin a checked message as sent by the user, without replaying it or starting a turn."""
-        return self._pin_constraint(
-            recipient, subject, HumanConstraintPin, worktree=worktree, scope=scope, change=change
-        )
+        return self._pin_constraint(recipient, subject, HumanConstraintPin,
+                                    worktree=worktree, scope=scope, change=change)
 
-    def pin_input_constraint(
-        self,
-        recipient: str,
-        subject,
-        *,
-        worktree: str,
-        scope: TaskScopeSelection = CurrentTaskScopeSelection(),
-        change: TaskChange = OriginalTaskChange(),
-    ) -> Message:
+    def pin_input_constraint(self, recipient: str, subject, *, worktree: str,
+                             scope: TaskScopeSelection = CurrentTaskScopeSelection(),
+                             change: TaskChange = OriginalTaskChange()) -> Message:
         """Pin the recorded input and its author, rather than a copy of its text."""
-        return self._pin_constraint(
-            recipient,
-            subject,
-            NativeInputConstraintPin,
-            worktree=worktree,
-            scope=scope,
-            change=change,
-        )
+        return self._pin_constraint(recipient, subject, NativeInputConstraintPin,
+                                    worktree=worktree, scope=scope, change=change)
 
     def approve_annotations(self, recipient, subject, *, worktree, per_hour, segments):
         from .working_memory_policy import AnnotationDisclosureGrant
 
-        return self._pin_constraint(
-            recipient,
-            subject,
-            AnnotationDisclosureGrant,
-            worktree=worktree,
-            scope=CurrentTaskScopeSelection(),
-            change=OriginalTaskChange(),
-            per_hour=per_hour,
-            segments=segments,
-        )
+        return self._pin_constraint(recipient, subject, AnnotationDisclosureGrant,
+            worktree=worktree, scope=CurrentTaskScopeSelection(), change=OriginalTaskChange(),
+            per_hour=per_hour, segments=segments)
 
-    def _pin_constraint(
-        self, recipient, subject, declaration, *, worktree, scope, change, **declaration_options
-    ):
+    def _pin_constraint(self, recipient, subject, declaration, *, worktree, scope, change,
+                        **declaration_options):
         with guard_original_root_write(self.root), _store_lock(self._wire_lock_path):
             user = self._user_identity_under_wire_lock(worktree)
             owner = self.registry.require(recipient)
-            task = declaration(
-                scope=scope.select_human(owner),
-                subject=subject,
-                source_user=user.incarnation,
-                recipient=owner.incarnation,
-                change=change,
-                **declaration_options,
-            )
+            task = declaration(scope=scope.select_human(owner), subject=subject,
+                               source_user=user.incarnation, recipient=owner.incarnation,
+                               change=change, **declaration_options)
             return self._publish_user_under_wire_lock(
-                user,
-                owner.name,
-                "Pinned constraint from its original source",
-                task,
-                role=NoticeRole(),
-            )
+                user, owner.name, "Pinned constraint from its original source",
+                task, role=NoticeRole())
 
     def _publish_user_under_wire_lock(self, user, target, body, task, *, role=ConversationRole()):
         return self.bus.publisher.publish_ordinary(
@@ -213,7 +174,9 @@ class Messaging:
             origin=HumanOrigin(user.name, user.created_at, user.worktree),
         )
 
-    def acknowledge(self, name: str, references: Sequence[MessageReference]) -> int:
+    def acknowledge(
+        self, name: str, references: Sequence[MessageReference]
+    ) -> int:
         """Mark only the returned message references delivered.
 
         Reading the named messages takes no wire lock, like every inbox read.

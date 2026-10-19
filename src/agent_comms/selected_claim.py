@@ -22,11 +22,10 @@ from .coordination_cohort import _claim_record
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
+    ClaimOwner,
     ExistingFileClaim,
     FileClaimPath,
     WakeClaim,
-    WakeClaimOwner,
-    WakeClaims,
 )
 from .errors import RelationViolationError
 from .native_input_owner import RegistryOwner
@@ -167,7 +166,7 @@ def publish_selected_resource_claim(
     claim_scope: WakeClaim,
     owner_name: str,
     resource_path: FileClaimPath,
-) -> WakeClaimOwner:
+) -> ClaimOwner:
     """Bind one existing file claim to a live selected wake in a durable bus row.
 
     The common lock order keeps stop and coordinator settlement behind the
@@ -187,12 +186,11 @@ def publish_selected_resource_claim(
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
             existing = source.claim(resource)
-            if existing is not None:
-                if WakeClaimOwner.selected(existing, claim_scope):
-                    return existing
+            if existing is not None and existing.claim_scope == claim_scope and existing.live(registry):
+                return existing
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
-        committed = bus.publisher._publish_selected_claim_unlocked(
+        transition = bus.publisher._publish_acquisition_unlocked(
             bus_lock,
             registry,
             owner,
@@ -200,8 +198,6 @@ def publish_selected_resource_claim(
             claim_scope,
             activity=activity,
         )
-        transition = committed.claim_transition
-        assert isinstance(transition, WakeClaims)
         return transition.claimed(resource)
 
 
@@ -273,7 +269,7 @@ def write_selected_claimed_file(
     store: Coordination,
     claim_scope: WakeClaim,
     owner_name: str,
-    claimed: WakeClaimOwner,
+    claimed: ClaimOwner,
     contents: bytes,
 ) -> None:
     """Mediate one bounded existing-file replacement under *current* authority.

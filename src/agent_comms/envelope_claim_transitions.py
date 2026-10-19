@@ -12,10 +12,10 @@ from __future__ import annotations
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Annotated, ClassVar, Generic, Literal, TypeGuard, TypeVar
+from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
 
 from .coordination_errors import IdentityConflict
 from .field_codec import (
@@ -133,8 +133,30 @@ class AssignmentBinding:
             raise ClaimTransitionError("Assignment revision must be positive.")
 
 
-@dataclass(frozen=True, slots=True)
-class WakeClaim:
+@dataclass(frozen=True)
+class ClaimScope(SubclassUnion, ABC, affix=""):
+    owner_claimed_generation: int = field(metadata={"wire_name": "owner_admission_generation"})
+    operation_id: Annotated[str, Id128Text]
+    turn_id: str
+
+    def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
+        GenerationCounter.require_positive(self.owner_claimed_generation)
+        TurnId.for_registration(self.turn_id)
+
+    def belongs_to(self, attempt: AttemptRecord) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class NativeClaim(RecordMember, ClaimScope):
+    """A tool acquisition belongs to one admitted ordinary native input."""
+
+    input_id: Annotated[str, BoundedText]
+
+
+@dataclass(frozen=True)
+class WakeClaim(RecordMember, ClaimScope):
     """A selected N/K execution bound into the durable resource-claim row."""
 
     wire_root_id: str
@@ -144,12 +166,17 @@ class WakeClaim:
     wake_revision: int
     recipient_lookup: str
     execution_id: Annotated[str, BoundedText]
-    operation_id: Annotated[str, Id128Text]
-    owner_claimed_generation: int = field(metadata={"wire_name": "owner_admission_generation"})
-    turn_id: str
     participant_generation: int
     attempt_ordinal: int
     version: int = field(default=1, metadata={"wire_required": True})
+
+    def belongs_to(self, attempt: AttemptRecord) -> bool:
+        return (
+            self.execution_id == attempt.execution_id
+            and self.attempt_ordinal == attempt.attempt_ordinal
+            and self.recipient_lookup == attempt.owner_lookup
+            and self.participant_generation == attempt.owner_generation
+        )
 
     @property
     def binding(self) -> AssignmentBinding:
@@ -166,6 +193,7 @@ class WakeClaim:
         return MessageReference(self.source_seq, self.source_message_id)
 
     def __post_init__(self) -> None:
+        super().__post_init__()
         Id128Text.decode(self.wire_root_id)
         Id128Text.decode(self.recipient_lookup)
         try:
@@ -177,7 +205,6 @@ class WakeClaim:
                 self.source,
                 self.execution_id,
             )
-            GenerationCounter.require_positive(self.owner_claimed_generation)
             GenerationCounter.require_positive(self.participant_generation)
             if FieldCodec.decode(int, self.attempt_ordinal) <= 0:
                 raise ValueError("attempt ordinal must be positive")
@@ -185,7 +212,6 @@ class WakeClaim:
             raise ClaimTransitionError(
                 "Wake claim_scope version or revision is invalid."
             ) from error
-        TurnId.for_registration(self.turn_id)
         try:
             assignment = FieldCodec.decode(str, self.wake_assignment_id)
             if not assignment.startswith("cohort-v1:"):
@@ -202,9 +228,6 @@ class ClaimRelease:
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
-
-
-Claimant = TypeVar("Claimant", bound="ClaimOwner")
 
 
 @dataclass(frozen=True)
@@ -229,13 +252,13 @@ class ClaimTransition(SubclassUnion, ABC, affix=""):
     def resources(self) -> tuple[str, ...]: ...
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        """Release and manual originals consume no selected operation."""
+        """A release consumes no acquisition operation."""
 
-    @abstractmethod
-    def claimed(self, resource: str) -> ClaimOwner: ...
+    def claimed(self, resource: str) -> ClaimOwner:
+        raise ClaimTransitionError("Release originals do not acquire resources.")
 
-    @abstractmethod
-    def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection: ...
+    def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
+        return self.project(previous)
 
     @abstractmethod
     def project(self, previous: ClaimProjection) -> ClaimProjection: ...
@@ -259,10 +282,10 @@ class ClaimTransition(SubclassUnion, ABC, affix=""):
 
 
 @dataclass(frozen=True)
-class ClaimAcquisition(ClaimTransition, Generic[Claimant], ABC):
+class WakeClaims(RecordMember, ClaimTransition):
     claims: tuple[Annotated[str, ResourcePathText], ...]
-    releases: tuple[ClaimRelease, ...]
     generation: Annotated[str, Id128Text]
+    claim_scope: ClaimScope = field(metadata={"wire_name": "admission"})
 
     def __post_init__(self) -> None:
         super().__post_init__()
@@ -271,18 +294,23 @@ class ClaimAcquisition(ClaimTransition, Generic[Claimant], ABC):
 
     @property
     def resources(self) -> tuple[str, ...]:
-        return (*self.claims, *(release.resource for release in self.releases))
+        return self.claims
 
-    def owner_arguments(self) -> tuple[str, str, str, int, str]:
-        return self.owner, self.incarnation, self.generation, self.seq, self.message_id
-
-    def claimed(self, resource: str) -> Claimant:
+    def claimed(self, resource: str) -> ClaimOwner:
         if resource not in self.claims:
             raise ClaimTransitionError("Resource is not part of this acquisition.")
-        return self.owner_for(resource)
+        return ClaimOwner(
+            resource=resource,
+            **{
+                declared.name: getattr(self, declared.name)
+                for declared in fields(ClaimOwner)
+                if declared.name != "resource"
+            },
+        )
 
-    @abstractmethod
-    def owner_for(self, resource: str) -> Claimant: ...
+    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
+        if is_used(self.claim_scope.operation_id):
+            raise IdentityConflict("Claim operation was already consumed")
 
     def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
         for resource in self.claims:
@@ -291,59 +319,26 @@ class ClaimAcquisition(ClaimTransition, Generic[Claimant], ABC):
         return self.project(previous)
 
     def project(self, previous: ClaimProjection) -> ClaimProjection:
-        remaining = self.remaining(previous, self.releases)
+        remaining = self.remaining(previous, ())
         for resource in self.claims:
             remaining[resource] = self.claimed(resource)
         return ClaimProjection(self.seq, remaining)
 
 
 @dataclass(frozen=True)
-class ManualClaims(RecordMember, ClaimAcquisition["ClaimOwner"]):
-    """Already committed manual originals remain readable, never a writer input."""
-
-    def owner_for(self, resource: str) -> ClaimOwner:
-        return ManualClaimOwner(resource, *self.owner_arguments())
-
-
-@dataclass(frozen=True)
-class WakeClaims(RecordMember, ClaimAcquisition["WakeClaimOwner"]):
-    claim_scope: WakeClaim = field(metadata={"wire_name": "admission"})
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        if self.releases:
-            raise ClaimTransitionError("Selected acquisitions cannot release resources.")
-
-    def owner_for(self, resource: str) -> WakeClaimOwner:
-        return WakeClaimOwner(resource, *self.owner_arguments(), self.claim_scope)
-
-    def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
-        if is_used(self.claim_scope.operation_id):
-            raise IdentityConflict("Wake claim operation was already consumed")
-
-
-@dataclass(frozen=True)
 class ReleasedClaims(RecordMember, ClaimTransition):
     releases: tuple[ClaimRelease, ...]
-    claims: tuple[()] = ()
-    generation: Literal[None] = None
 
     @property
     def resources(self) -> tuple[str, ...]:
         return tuple(release.resource for release in self.releases)
-
-    def claimed(self, resource: str) -> ClaimOwner:
-        raise ClaimTransitionError("Release originals do not acquire resources.")
-
-    def apply(self, previous: ClaimProjection, registry: RegistrySnapshot) -> ClaimProjection:
-        return self.project(previous)
 
     def project(self, previous: ClaimProjection) -> ClaimProjection:
         return ClaimProjection(self.seq, self.remaining(previous, self.releases))
 
 
 @dataclass(frozen=True)
-class ClaimOwner(SubclassUnion, ABC, affix=""):
+class ClaimOwner:
     resource: Annotated[str, ResourcePathText]
     owner: Annotated[str, BoundedText]
     incarnation: Annotated[str, BoundedText]
@@ -354,46 +349,16 @@ class ClaimOwner(SubclassUnion, ABC, affix=""):
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
 
-    @abstractmethod
-    def live(self, registry: RegistrySnapshot) -> bool: ...
-
-    @abstractmethod
-    def belongs_to(self, attempt: AttemptRecord) -> bool: ...
-
-
-@dataclass(frozen=True)
-class ManualClaimOwner(RecordMember, ClaimOwner):
-    def live(self, registry: RegistrySnapshot) -> bool:
-        """Unscoped historical originals grant no selected execution permission."""
-        return False
-
-    def belongs_to(self, attempt: AttemptRecord) -> bool:
-        return False
-
-
-@dataclass(frozen=True)
-class WakeClaimOwner(RecordMember, ClaimOwner):
-    claim_scope: WakeClaim = field(metadata={"wire_name": "admission"})
+    claim_scope: ClaimScope = field(metadata={"wire_name": "admission"})
 
     def live(self, registry: RegistrySnapshot) -> bool:
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
         return any(
-            registry.status(thread.name).running and thread.process_alive
-            and registry.claimed_generations[thread.name] == self.claim_scope.owner_claimed_generation
+            registry.status(thread.name).active
+            and thread.process_alive
+            and registry.claimed_generations[thread.name]
+            == self.claim_scope.owner_claimed_generation
             for thread in registry.threads_for(incarnation)
-        )
-
-    @classmethod
-    def selected(cls, owner: ClaimOwner, scope: WakeClaim) -> TypeGuard[WakeClaimOwner]:
-        return isinstance(owner, cls) and owner.claim_scope == scope
-
-    def belongs_to(self, attempt: AttemptRecord) -> bool:
-        scope = self.claim_scope
-        return (
-            scope.execution_id == attempt.execution_id
-            and scope.attempt_ordinal == attempt.attempt_ordinal
-            and scope.recipient_lookup == attempt.owner_lookup
-            and scope.participant_generation == attempt.owner_generation
         )
 
 

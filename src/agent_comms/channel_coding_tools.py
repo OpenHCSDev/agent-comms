@@ -9,47 +9,49 @@ from __future__ import annotations
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from agent_comms.coordinator import Coordination
 
-from .comms import Comms
-from .envelope_claim_transitions import (
-    WakeClaim,
-    WakeClaimOwner,
-)
-from .field_codec import FieldCodec
-from .native_arguments import NativeArguments
-from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
-from .native_tool_transport import ToolTransport
-from .native_tools import NativeToolDeclaration
 from .selected_claim import (
     publish_selected_resource_claim,
     verify_selected_wake,
 )
+from .comms import Comms
+from .field_codec import FieldCodec
+from .envelope_claim_transitions import (
+    ClaimOwner,
+    FileClaimPath,
+    WakeClaim,
+)
+from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
+from .native_arguments import NativeArguments
+from .storage_room import NoRoomNeeded, RoomReservation
+from .native_tools import NativeToolDeclaration
+from .native_tool_transport import ToolTransport
 from .selected_tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
 )
-from .storage_room import NoRoomNeeded, RoomReservation
 
 
 @dataclass(frozen=True, kw_only=True)
 class CodingToolOwner(ABC):
     comms: Comms
     owner_name: str
-    claims: dict[str, WakeClaimOwner] = field(default_factory=dict)
+    claims: dict[str, ClaimOwner] = field(default_factory=dict)
     check_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False, compare=False)
 
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = registry.require(self.owner_name)
-        effects = call.storage_effects(Path(thread.worktree))
-        await asyncio.to_thread(registry.decide_storage, thread.name, effects)
+        effects = await asyncio.to_thread(call.decide_storage, registry, thread.name)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
-            return await registry.storage_rule.wait_for_room(work, thread, self.comms.root)
+            return await registry.storage_rule.wait_for_room(
+                work, thread, self.comms.root)
         return NoRoomNeeded()
 
     async def allow(self, turn, round_number: int, call: CodingCall) -> RoomReservation:
@@ -62,12 +64,12 @@ class CodingToolOwner(ABC):
             if resource is not None:
                 canonical = resource.normalized(Path(owner.worktree))
                 self.claims[canonical] = self.claim_resource(
-                    store, turn, resource, slot, self.claims.get(canonical)
-                )
+                    store, turn, resource, slot, self.claims.get(canonical))
 
         reservation = await self.reserve_room(call)
-        async with reservation.checking(), self.check_lock:
-            await Coordination.run_async(self.comms.root / "coordination.sqlite3", check)
+        async with reservation.checking():
+            async with self.check_lock:
+                await Coordination.run_async(self.comms.root / 'coordination.sqlite3', check)
         return reservation
 
     @abstractmethod
@@ -93,25 +95,18 @@ class SelectedCodingToolOwner(CodingToolOwner):
 
         with self.store.session.read():
             native = NativeRuntimeInput.one(self.store.session._connection, input_id=self.input_id)
-            if (
-                native is None
-                or assignment.assignment_id
-                not in native.execution.source_assignment_ids(
-                    self.store.session._connection, self.input_id
-                )
+            if native is None or assignment.assignment_id not in native.execution.source_assignment_ids(
+                self.store.session._connection, self.input_id
             ):
                 raise SelectedToolDenied("Tool original is absent from the reserved native batch")
-        return replace(
-            self,
-            claim_scope=replace(
-                self.claim_scope,
-                source_seq=assignment.wire_seq,
-                source_message_id=assignment.message_id,
-                wake_assignment_id=assignment.assignment_id,
-                wake_revision=assignment.revision,
-                operation_id=operation_id,
-            ),
-        )
+        return replace(self, claim_scope=replace(
+            self.claim_scope,
+            source_seq=assignment.wire_seq,
+            source_message_id=assignment.message_id,
+            wake_assignment_id=assignment.assignment_id,
+            wake_revision=assignment.revision,
+            operation_id=operation_id,
+        ))
 
     def verify(self, store, turn, snapshot):
         if self.input_id != turn.command.input_id:
@@ -120,10 +115,9 @@ class SelectedCodingToolOwner(CodingToolOwner):
         verify_selected_wake(self.comms, store, self.claim_scope, self.owner_name)
 
     def claim_resource(self, store, turn, resource, slot, prior):
-        scope = (
-            prior.claim_scope if prior is not None else replace(self.claim_scope, operation_id=slot)
-        )
+        scope = prior.claim_scope if prior is not None else replace(self.claim_scope, operation_id=slot)
         return publish_selected_resource_claim(self.comms, store, scope, self.owner_name, resource)
+
 
 
 @dataclass(frozen=True)
@@ -132,17 +126,13 @@ class CodingToolMode(NativeToolMode):
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
         declarations = NativeToolDeclaration.members_with(NativeToolDeclaration)
-        arguments = (
-            "--tools",
-            ",".join(tool.declared_name for tool in declarations),
-            *NativeToolDeclaration.extension_arguments(package),
-        )
+        arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
+                     *NativeToolDeclaration.extension_arguments(package))
         thread = self.owner.comms.registry.require(self.owner.owner_name)
         return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
 
     async def open_transport(self, turn, ownership) -> ToolTransport:
         return await CodingToolSocket.open(turn, ownership, self.owner)
-
 
 class CodingToolSocket(ToolTransport[CodingCall]):
     """Multi-call native policy on the same peer-authenticated owner transport."""
@@ -177,7 +167,7 @@ class CodingToolSocket(ToolTransport[CodingCall]):
 
     def tool_finished(self, event, input_id):
         super().tool_finished(event, input_id)
-        _, call = self.calls.require_current(event.tool_call_id, "Missing completed tool")
+        _, call = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
         task = asyncio.create_task(call.progress.finish_room())
         self.completions.add(task)
 

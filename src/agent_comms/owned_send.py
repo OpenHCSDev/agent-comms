@@ -12,8 +12,8 @@ from typing import TYPE_CHECKING
 from .channel_coding_tools import CodingToolOwner
 from .coordination_session import NativeBoundary
 from .coordinator import Coordination
-from .messages import ClaimNoticeKind
-
+from .envelope_claim_transitions import NativeClaim
+from .input_attempt import InputAlreadyCleared
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
     InputKeysCheck,
@@ -26,8 +26,7 @@ from .ordinary_turn_rules import (
 )
 from .reservation_rules import ReservationRule, ReservationViolationError
 from .routing import TurnRouting
-from .send_outcome import SendOutcome, GrantedSend, RefusedSend, AuthorityChangedSend
-from .input_attempt import InputAlreadyCleared
+from .send_outcome import AuthorityChangedSend, GrantedSend, RefusedSend, SendOutcome
 from .thread_identity import TurnId
 from .turn_input_source import (
     OriginalTurnInput,
@@ -36,7 +35,6 @@ from .turn_input_source import (
 )
 
 if TYPE_CHECKING:
-    from .comms import Comms
     from .goal_attempts import GoalAttemptStore, GoalTurnPermit
     from .goal_waits import GoalWait
     from .input_drain import InputDrain
@@ -189,23 +187,21 @@ class OwnedSend(CodingToolOwner):
             raise SelectedToolDenied(str(error)) from error
 
     def claim_resource(self, store, turn, resource, slot, prior):
-        from .store_files import _store_lock
-
-        with _store_lock(self.comms._wire_lock_path):
-            snapshot = self.comms.registry.snapshot()
+        with NativeBoundary(self.comms.bus) as boundary:
+            snapshot = boundary.registry
             self.verify(store, turn, snapshot)
             owner = snapshot.require(self.owner_name)
-            canonical = resource.normalized(Path(self.thread.worktree))
-            with self.comms.bus.log.checked_read() as source:
-                if prior is not None and source.claim(canonical) == prior:
+            canonical = resource.normalized(Path(owner.worktree))
+            metadata = boundary.bus.log.private_marker_unlocked()
+            with boundary.bus_lock.current_source(boundary.bus.log, metadata) as source:
+                if prior is not None and source.claim(canonical) == prior and prior.live(snapshot):
                     return prior
-            committed = self.comms.bus.publisher.publish_claim_envelope(
-                ClaimNoticeKind.claimed(owner),
-                worktree=Path(self.thread.worktree),
-                incarnation=str(owner.created_at),
-                claims=(resource,),
-            )
-            return committed.require_claim_transition().claimed(canonical)
+            scope = NativeClaim(owner_claimed_generation=self.claim_scope,
+                                operation_id=slot, turn_id=self.turn.value,
+                                input_id=turn.command.input_id)
+            transition = boundary.bus.publisher._publish_acquisition_unlocked(
+                boundary.bus_lock, snapshot, owner, canonical, scope, activity=boundary.activity)
+            return transition.claimed(canonical)
 
     async def release_resources(self) -> None:
         """The ordinary turn owns its acquisitions through native/tool retirement."""
