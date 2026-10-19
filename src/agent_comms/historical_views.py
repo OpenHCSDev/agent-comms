@@ -545,7 +545,7 @@ class HistoryArchive(RootFile):
             view, bounds if historical else replace(bounds, traversal=OlderTraversal())
         )
         if history.messages:
-            display = view.viewer.display_evidence(history, presentation)
+            display = view.viewer.display_evidence(history, presentation.bus, presentation.registry)
             latest = view.live_page(presentation, PageBounds(limit=1))
             return replace(
                 history,

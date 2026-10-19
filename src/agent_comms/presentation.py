@@ -462,7 +462,7 @@ class BusPresentation:
             # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
             page = ConversationMessagePageRequest(scope, bounds).read_opened(source)
-            return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self))
+            return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self.bus))
 
     def mark_channel_read(
         self,

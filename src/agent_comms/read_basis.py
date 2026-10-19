@@ -10,7 +10,8 @@ from __future__ import annotations
 import asyncio
 from abc import ABC, abstractmethod
 from bisect import bisect_left
-from collections.abc import Callable, Collection, Iterable
+from collections.abc import Callable, Collection, Iterable, Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from functools import partial
 from pathlib import Path
@@ -32,7 +33,8 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay | None: ...
+    def display_evidence(self, page: MessagePage, bus: MessageBus,
+                         registry: Registration) -> HistoricalDisplay | None: ...
 
     @abstractmethod
     def cursor(self, reads, snapshot, document) -> ReadCursor: ...
@@ -44,7 +46,7 @@ class DisplayViewer(ABC):
     def require_name(self, snapshot) -> str: ...
 
     @abstractmethod
-    def displayed_scope(self, scope, page, basis, presentation): ...
+    def displayed_scope(self, scope, page, basis, bus: MessageBus): ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +54,7 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> None:
+    def display_evidence(self, page: MessagePage, bus: MessageBus, registry: Registration) -> None:
         return None
 
     def cursor(self, reads, snapshot, document) -> ReadCursor:
@@ -64,7 +66,7 @@ class AnonymousViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         raise ValueError("Viewer metrics require a named viewer")
 
-    def displayed_scope(self, scope, page, basis, presentation):
+    def displayed_scope(self, scope, page, basis, bus: MessageBus):
         return scope
 
 
@@ -75,13 +77,14 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-    def display_evidence(self, page: MessagePage, presentation: BusPresentation) -> HistoricalDisplay:
+    def display_evidence(self, page: MessagePage, bus: MessageBus,
+                         registry: Registration) -> HistoricalDisplay:
         source = page.messages[0].source
         source.validate()
-        snapshot = presentation.registry.snapshot()
+        snapshot = registry.snapshot()
         return HistoricalDisplay(
             source,
-            presentation.bus.reads.capture(
+            bus.reads.capture(
                 self.resolve(snapshot).name, page.messages, snapshot,
                 Path(source.root) / "bus.jsonl",
                 conversation_snapshot=source.provenance,
@@ -97,9 +100,9 @@ class NamedViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         return snapshot.canonical_name(self.name)
 
-    def displayed_scope(self, scope, page, basis, presentation):
-        return replace(scope, displayed=presentation.bus.reads.capture(
-            self.name, page.messages, basis.registry, presentation.bus.log.path,
+    def displayed_scope(self, scope, page, basis, bus: MessageBus):
+        return replace(scope, displayed=bus.reads.capture(
+            self.name, page.messages, basis.registry, bus.log.path,
         ))
 
 
@@ -229,7 +232,6 @@ if TYPE_CHECKING:
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .channels import Channels
-    from .presentation import BusPresentation
     from .channels import Channel
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
