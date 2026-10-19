@@ -343,7 +343,7 @@ def test_storage_rules_report_each_threshold_on_a_scratch_root(commander, tmp_pa
     assert floor.line().endswith("floor nothing allocates) -> put a cleanup owner on it now")
 
 
-def test_unowned_work_is_named_and_retired_runtime_work_is_ended(commander, tmp_path, monkeypatch):
+def test_unowned_work_is_named_and_retired_runtime_work_is_ended(commander, commander_script, tmp_path, monkeypatch):
     """The overdue loop's one process read names agent-comms work no thread holding an open order
     runs and ends work on the runtime the install record says publication replaced; a runtime built
     but not yet current is not ended, and violations, which every verb runs, read no process."""
