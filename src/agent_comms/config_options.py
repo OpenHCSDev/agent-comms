@@ -92,9 +92,9 @@ class CatalogConfigOption(ConfigOption):
         self.agent_bin, self.agent_args = agent_bin, agent_args
         self.configuration = configuration
         self.package = package
-        self.catalogs: dict[str | None, list[CatalogChoice]] = {}
+        self.catalogs: dict[str | None, asyncio.Task[list[CatalogChoice]]] = {}
         self.auth: tuple[int, int] | None = None
-        self.lock = asyncio.Lock()
+        self.lock = asyncio.Condition()
 
     @property
     def current_auth(self) -> bool:
@@ -113,18 +113,28 @@ class CatalogConfigOption(ConfigOption):
                 # A successful empty catalogue is setup state, not a failed
                 # native process. Keep the existing unset choice reachable so
                 # the client can connect a provider before selecting a model.
-                self.catalogs[key] = await self.discover(thread)
-            return self.catalogs[key]
+                self.catalogs[key] = asyncio.create_task(self.discover(thread))
+                self.lock.notify_all()
+            catalog = self.catalogs[key]
+        return await catalog
 
-    async def display_choices(self, thread: CatalogSelection) -> list[CatalogChoice]:
-        choices = await self.choices(thread)
-        if self.current_value(thread) is None:
-            return [CatalogChoice(name="Not configured", value=None), *choices]
-        return choices
+    async def describe_held(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
+        """An attaching client waits for the owner, never starts discovery."""
+        key = self.cache_key(thread)
+        async with self.lock:
+            await self.lock.wait_for(lambda: self.current_auth and key in self.catalogs)
+            catalog = self.catalogs[key]
+        return self.describe_choices(thread, await asyncio.shield(catalog))
 
     async def describe(self, thread: CatalogSelection) -> SessionConfigOptionSelect:
-        choices = await self.display_choices(thread)
+        return self.describe_choices(thread, await self.choices(thread))
+
+    def describe_choices(
+        self, thread: CatalogSelection, choices: list[CatalogChoice],
+    ) -> SessionConfigOptionSelect:
         configured = self.current_value(thread)
+        if configured is None:
+            choices = [CatalogChoice(name="Not configured", value=None), *choices]
         try:
             self.require_value(configured, choices)
         except InvalidConfigChoice as error:
@@ -404,7 +414,8 @@ class SessionConfigOptions(ConfigOptions):
     async def options_for_session(self, session_id: str) -> list[SessionConfigOptionSelect]:
         name = self.sessions.require(session_id)
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        return await self.options(thread)
+        return [await self.catalog_for(member).describe_held(thread)
+                for member in ConfigOption.members_with(CatalogConfigOption)]
 
     def stop_observing_configuration(self, session_id: str) -> None:
         self._publication_sessions.discard(session_id)
@@ -417,6 +428,12 @@ class SessionConfigOptions(ConfigOptions):
         )
         async with aclosing(WireWatch.observations(*sources)) as observations:
             async for _ in observations:
+                for session_id, name in tuple(self.sessions.bindings.items()):
+                    if session_id in self.sessions.proxies:
+                        continue
+                    thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
+                    for member in ConfigOption.members_with(CatalogConfigOption):
+                        await self.catalog_for(member).choices(thread)
                 for session_id in tuple(self._publication_sessions):
                     await self.publish_configuration(session_id)
 

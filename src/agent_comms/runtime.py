@@ -462,10 +462,6 @@ class OwnerAttachment:
     ready: OwnerReady
     presented: dict[str, object]
 
-    def metadata(self) -> dict[str, object]:
-        """The ACP session metadata; configuration has its own publication."""
-        return self.presented
-
 
 class RuntimeProxy(RuntimeConnection):
     def __init__(self, agent: Any, session_id: str, path: Path):
@@ -483,7 +479,7 @@ class RuntimeProxy(RuntimeConnection):
     async def subscribe(self) -> dict[str, object]:
         attachment = await self._subscribe_once()
         self.task = asyncio.create_task(self.forward(attachment.reader))
-        return attachment.metadata()
+        return attachment.presented
 
     async def _subscribe_once(self) -> OwnerAttachment:
         reader, writer = await self._connect_current()
