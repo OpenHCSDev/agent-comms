@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from operator import attrgetter
 from typing import TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
@@ -11,6 +13,7 @@ from .errors import RelationViolationError
 from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
+    from .messages import Message
     from .threads import Thread
     from .registry_document import RegistrySnapshot
     from .thread_presentation import ThreadPresentation, ThreadOwnerBinding
@@ -80,6 +83,12 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
         return False
 
     @classmethod
+    def turn_start(cls, thread: Thread) -> Callable[[Message], str]:
+        """The prompt a delivered bus message begins this thread's turn with."""
+        raise RelationViolationError(
+            f"Thread {thread.name!r} declares no turn start, so no bus message can begin its turn.")
+
+    @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
         """The lifecycle a registration installs; Core launched this owner."""
         return requested
@@ -112,6 +121,11 @@ class ThreadExecution(DeclaredFamily, affix="ThreadExecution"):
 
 
 class NativeThreadExecution(ThreadExecution):
+    @classmethod
+    def turn_start(cls, thread: Thread) -> Callable[[Message], str]:
+        """Core submits the delivered message to the owner it launched as native input."""
+        return attrgetter("body")
+
     @classmethod
     def native_command_available(cls, command, status, *, process: ProcessState) -> bool:
         return command.available_for(status, process=process)
@@ -160,6 +174,13 @@ class ExternalThreadExecution(ThreadExecution):
     @classmethod
     def require_external(cls) -> None:
         pass
+
+    @classmethod
+    def turn_start(cls, thread: Thread) -> Callable[[Message], str]:
+        """The bridge watching this inbox injects each delivered message as its incoming frame."""
+        from .cli_bridges.shared import IncomingFrame
+
+        return lambda message: IncomingFrame(message).text
 
     @classmethod
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:

@@ -311,6 +311,7 @@ class RegistryDocument(RegistryPresence):
     def prepare_registration(
         self, thread: Thread, status: ThreadStatus, *, new_owner: bool
     ) -> RegistrationChange:
+        thread.execution.turn_start(thread)
         status = thread.execution.registered_status(thread, status)
         if thread.name in self.aliases:
             raise RelationViolationError(
@@ -641,7 +642,9 @@ class RegistrySnapshot(RegistryPresence, RegistryProvenance):
             indexed[lookup] = thread
         return cls(
             threads=MappingProxyType(dict(document.threads)),
-            statuses=MappingProxyType(dict(document.statuses)),
+            statuses=MappingProxyType({  # an active status stands only while its process does
+                name: document.threads[name].execution.registered_status(document.threads[name], status)
+                if status.active else status for name, status in document.statuses.items()}),
             last_seen=MappingProxyType(dict(document.last_seen)),
             aliases=MappingProxyType(dict(document.aliases)),
             owner_generations=MappingProxyType(dict(document.owners.generations)),
