@@ -250,7 +250,7 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
 def test_defect_text_without_slop_line_needs_no_label():
     """Only a text that names a defect in a Slop: line needs its label outside that line."""
     assert DefectText.found("Yes, go ahead.") == [] and DirectiveText.refused("Yes, go ahead.") == ()
-    slop = "Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
+    slop = "Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
     assert DefectText.found(slop + "\nRead the count from its owner.") == [slop]
     assert DirectiveText.refused(slop + "\nRead the count from its owner.") == (DefectText.refusal,)
     assert DefectText.found(slop + "\nThe copy at tools.py:829 is wrong.") == []
@@ -266,7 +266,7 @@ def test_a_claude_ai_directive_passes_the_commanders_wording_with_no_rules_revie
         return CommsSendTool(sender="claude-ai", target="worker", body=body).apply(comms, CALLER)
 
     for body, refusal in (
-        ("Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
+        ("Slop: IDEN-5; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1\n"
          "Read the count from its owner.", "Not blunt"),
         ("The canonical count at tools.py:829 is wrong: read it from its owner.", "Jargon"),
         ("Thanks for moving the count at tools.py:829 into its owner, that is correct.", "Soft wording"),
