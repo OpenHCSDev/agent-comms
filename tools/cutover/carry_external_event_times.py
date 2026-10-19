@@ -12,10 +12,17 @@ import json
 import re
 from collections.abc import Callable
 from contextlib import closing
-from datetime import datetime
 from pathlib import Path
 
-from agent_comms.cli_bridges.claude_protocol import ToolResult, ToolUse
+from pydantic import ValidationError
+
+from agent_comms.cli_bridges.claude_protocol import (
+    CLAUDE_RECORD,
+    AssistantRecord,
+    ToolResult,
+    ToolUse,
+    UserRecord,
+)
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalEventRow, ExternalTranscript
 from agent_comms.transcript_events import ToolEndTranscript, ToolStartTranscript
@@ -24,34 +31,35 @@ from .carry import Carried, StoreCarry
 
 TRANSCRIPTS = Path.home() / ".claude" / "projects"
 CALL = re.compile(r'"(?:id|tool_use_id)":"(toolu_\w+)"')
-# Claude's own block decoders: which saved event each block dates.
-BLOCKS: dict[str, tuple[tuple[type[ToolUse | ToolResult], str, Callable[..., str]], ...]] = {
-    ToolUse.wire_tag: ((ToolUse, ToolStartTranscript.declared_name, lambda block: block.id),),
-    ToolResult.wire_tag: (
-        (ToolResult, ToolEndTranscript.declared_name, lambda block: block.tool_use_id),
-    ),
-}
+# Claude's own block types, and which saved event each one dates.
+BLOCKS: tuple[tuple[type[ToolUse | ToolResult], str, Callable[..., str]], ...] = (
+    (ToolUse, ToolStartTranscript.declared_name, lambda block: block.id),
+    (ToolResult, ToolEndTranscript.declared_name, lambda block: block.tool_use_id),
+)
 
 
 def recorded_times(wanted: set[str]) -> dict[tuple[str, str], float]:
     """(event kind, call id) to the time its transcript line records, for the wanted calls.
-    The bridge's reader replays only a recent window, so the full file is read here."""
+    The bridge's reader replays only a recent window, so every line is decoded here with
+    the bridge's record decoder."""
     times: dict[tuple[str, str], float] = {}
     for path in TRANSCRIPTS.glob("**/*.jsonl"):
         with path.open(errors="replace") as lines:
-            for line in lines:
+            for position, line in enumerate(lines):
                 if "toolu_" not in line or not wanted.intersection(CALL.findall(line)):
                     continue
-                record = json.loads(line)
-                content = record.get("message", {}).get("content")
-                if "timestamp" not in record or not isinstance(content, list):
-                    continue  # snapshots and queue lines quote ids but time nothing
-                at = datetime.fromisoformat(record["timestamp"]).timestamp()
-                for item in (item for item in content if item["type"] in BLOCKS):
-                    for block, kind, call_of in BLOCKS[item["type"]]:
-                        call = call_of(block.model_validate(item))
-                        if call in wanted:
-                            times.setdefault((kind, call), at)
+                try:
+                    record = CLAUDE_RECORD.validate_python(
+                        {**json.loads(line), "position": position}
+                    )
+                except ValidationError:
+                    continue  # snapshots and queue lines quote call ids but are no timed record
+                if not isinstance(record, AssistantRecord | UserRecord):
+                    continue
+                for block in record.message.content:
+                    for decoded, kind, call_of in BLOCKS:
+                        if isinstance(block, decoded) and call_of(block) in wanted:
+                            times.setdefault((kind, call_of(block)), record.timestamp)
     return times
 
 
@@ -87,7 +95,7 @@ class ExternalEventTimes(StoreCarry):
                 ((kind, call, at) for (kind, call), at in times.items()),
             )
             db.execute(
-                f'UPDATE "{table}" AS t SET event=json_set(event, \'$.timestamp\','
+                f"UPDATE \"{table}\" AS t SET event=json_set(event, '$.timestamp',"
                 " (SELECT at FROM dated d WHERE d.kind=t.kind AND d.call_id=t.call_id))"
                 " WHERE timestamp IS NULL"
             )
