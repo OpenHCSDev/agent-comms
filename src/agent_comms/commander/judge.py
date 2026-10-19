@@ -24,7 +24,7 @@ from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdic
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec, option
 from ..tool_caller import ThreadCaller
-from ..tool_declaration import EditCall, EditCallFacts, ReplacementEdit, UnrecordedEditCall
+from ..tool_declaration import EditCall, ReplacementEdit
 from . import order
 from .order import CommanderVerb, RuledVerb
 
@@ -46,14 +46,14 @@ class Hunk(ReplacementEdit):
 
 
 @dataclass(frozen=True)
-class Edit(EditCallFacts):
+class Edit(EditCall):
     """The Core result row, decoded at the commander's tool boundary."""
     hunks: tuple[Hunk, ...]
 
     @classmethod
     def unjudged(cls, comms: Comms, commander: str) -> list[Edit]:
         reply = CommsUnjudgedTool.invoke(comms, {'thread': commander}, caller=ThreadCaller(commander))
-        return list(FieldCodec.decode(tuple[RecordedEdit | UnrecordedEdit, ...], reply['edits']))
+        return list(FieldCodec.decode(tuple[cls, ...], reply['edits']))
 
     def code(self) -> str:
         """Four hex digits derived from the edit's own text; shown only after its full hunks."""
@@ -69,20 +69,9 @@ class Edit(EditCallFacts):
         return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new_text.splitlines())
 
     def rendered(self) -> str:
-        stamp = self.clock()
-        return (f'--- {self.id} {stamp} {self.path}\n'
+        return (f'--- {self.id} {self.at.clock()} {self.path}\n'
                 + '\n'.join(hunk.rendered() for hunk in self.hunks)
                 + f'\n=== end {self.id} code {self.code()}')
-
-
-@dataclass(frozen=True)
-class RecordedEdit(Edit, EditCall):
-    """Commander presentation of a recorded clock, sharing Core's facts."""
-
-
-@dataclass(frozen=True)
-class UnrecordedEdit(Edit, UnrecordedEditCall):
-    """The same full edit presentation without an invented clock."""
 
 
 def show(ctx, pending: list[Edit]) -> None:

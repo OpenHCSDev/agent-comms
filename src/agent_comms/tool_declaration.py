@@ -10,7 +10,7 @@ from typing import ClassVar, Self
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord
 from .native_tool_call import SelectedToolDenied
-from .recorded_time import RecordedEventTime, UnrecordedEventTime
+from .recorded_time import EventTime
 
 
 def one_line(text: str, limit: int) -> str:
@@ -24,48 +24,13 @@ class ReplacementEdit:
 
 
 @dataclass(frozen=True)
-class EditCallFacts:
+class EditCall:
     id: str
+    at: EventTime
     thread: str
     path: str
     hunks: tuple[ReplacementEdit, ...]
     problem: str
-
-    @classmethod
-    def capture(cls, id: str, timestamp: object, thread: str, path: str,
-                hunks: tuple[ReplacementEdit, ...], problem: str) -> EditCall | UnrecordedEditCall:
-        """Decode the source clock once; an undated edit is still evidence."""
-        if timestamp is None:
-            return UnrecordedEditCall(id, thread, path, hunks, problem)
-        return EditCall(id, thread, path, hunks, problem, FieldCodec.decode(float, timestamp))
-
-    @property
-    def dated(self) -> tuple[float, ...]:
-        return ()
-
-    def clock(self) -> str:
-        return UnrecordedEventTime().clock()
-
-
-@dataclass(frozen=True)
-class EditCall(EditCallFacts):
-    at: float
-
-    def __post_init__(self) -> None:
-        RecordedEventTime(self.at)
-
-    @property
-    def dated(self) -> tuple[float, ...]:
-        return (self.at,)
-
-    def clock(self) -> str:
-        return RecordedEventTime(self.at).clock()
-
-
-@dataclass(frozen=True)
-class UnrecordedEditCall(EditCallFacts):
-    """The source never recorded this edit's clock; no float is fabricated."""
-
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
@@ -103,7 +68,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         except (MalformedRecord, SelectedToolDenied):
             return None
 
-    def edit_calls(self, call_id: str, at: object, thread: str, problem: str) -> tuple[EditCall | UnrecordedEditCall, ...]:
+    def edit_calls(self, call_id: str, at: EventTime, thread: str, problem: str) -> tuple[EditCall, ...]:
         return ()
 
     def reads(self) -> str:
