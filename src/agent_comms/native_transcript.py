@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Generator
+from collections.abc import Callable, Generator, Iterable
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
@@ -138,18 +138,22 @@ class NativeRecord:
 
     @classmethod
     def read(cls, start: int, end: int, raw: bytes):
-        # Only a record still being appended lacks its newline; a complete
-        # record that does not decode is corrupt history and raises.
-        complete = raw.endswith(b"\n")
-        entry = NativeEntry.read(raw) if complete else None
-        return cls(start, end, entry, complete)
+        # Complete corrupt records raise; an unfinished line has no entry yet.
+        if raw.endswith(b"\n"):
+            return EntryNativeRecord(start, end, NativeEntry.read(raw), True)
+        return EmptyNativeRecord(start, end, None, False)
 
     def project(self, projection):
-        """A decoded record owns whether it can produce presentation events."""
-        return projection(self) if self.entry is not None else ()
+        return ()
+
+    def contains(self, call_id: str) -> bool:
+        return False
+
+    def input_boundary(self) -> bool:
+        return False
 
     def incomplete_tail(self, through: int) -> bool:
-        return self.end == through and not self.complete and self.entry is None
+        return False
 
     @property
     def size(self) -> int:
@@ -157,23 +161,47 @@ class NativeRecord:
 
     @property
     def annotation_id(self) -> str | None:
-        entry = self.entry
-        return entry.id if entry is not None and entry.is_message else None
+        return None
 
     @property
     def events(self):
         return self.project(lambda original: original.entry.events(TranscriptProjection(position=original.start)))
 
-    def publication_producer(self) -> NativeEntry | None:
-        if not self.complete or self.entry is None:
-            raise MalformedRecord("Native publication has incomplete evidence")
+    def publication_producer(self) -> RecordedEntry | None:
+        raise MalformedRecord("Native publication has incomplete evidence")
+
+
+class EmptyNativeRecord(NativeRecord):
+    entry: None
+
+    def incomplete_tail(self, through: int) -> bool:
+        return self.end == through
+
+
+class EntryNativeRecord(NativeRecord):
+    entry: RecordedEntry
+
+    def project[Value](self, projection: Callable[[EntryNativeRecord], Iterable[Value]]) -> Iterable[Value]:
+        return projection(self)
+
+    def contains(self, call_id: str) -> bool:
+        return any(call.id == call_id for message in self.entry.messages for call in message.tool_calls)
+
+    def input_boundary(self) -> bool:
+        return self.entry.input_boundary
+
+    @property
+    def annotation_id(self) -> str | None:
+        return self.entry.id if self.entry.is_message else None
+
+    def publication_producer(self) -> RecordedEntry | None:
         if self.entry.final_reply:
             self.entry.require_entry_id()
             return self.entry
         return None
 
 
-class StoredRecord(NativeRecord):
+class StoredRecord(EntryNativeRecord):
     @property
     def size(self):
         return sum(event.text_size for event in self.events)
