@@ -15,7 +15,7 @@ import sqlite3
 import time
 import asyncio
 from abc import abstractmethod
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
 from pathlib import Path
@@ -1132,6 +1132,10 @@ class OrderVerdict(TodoOperation, declared_name=None):
     @abstractmethod
     def judged(self, current: Todo) -> Todo: ...
 
+    @property
+    @abstractmethod
+    def line(self) -> str: ...
+
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
@@ -1145,6 +1149,7 @@ class OrderVerdict(TodoOperation, declared_name=None):
 class AcceptedVerdict(OrderVerdict):
     """The tool call carries out the order clause it quotes."""
     quote: str
+    line = "Accepted"
 
     def judged(self, current: Todo) -> Todo:
         quoted = " ".join(self.quote.split())
@@ -1158,6 +1163,10 @@ class AcceptedVerdict(OrderVerdict):
 class SendBackVerdict(OrderVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
+
+    @property
+    def line(self) -> str:
+        return f"Sent back: {self.reason.text}"
 
     def judged(self, current: Todo) -> Todo:
         strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
@@ -1566,6 +1575,14 @@ class TodoStore(TypedStore):
         return self._select(
             "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
             "AND json_extract(assignment,'$.generation')=?", (owner.name, owner.created_at, goal_id))
+
+    def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
+        """Each pending problem's progress and latest verdict, as its Goal shows them."""
+        pulls = PullRequests()
+        return "\n".join(
+            " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
+                        *(verdict.line for verdict in todo.verdicts[-1:])))
+            for todo in todos if todo.pending)
 
     def holds_pending(self, owner: ThreadIncarnation) -> bool:
         """Whether a problem assigned to owner pends, under any generation; its Goal stays open."""
