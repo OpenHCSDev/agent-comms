@@ -11,7 +11,13 @@ from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text
 from .text_digest import TextDigest
 from .thread_identity import GenerationCounter, ThreadIncarnation
-from .input_origin import InputOrigin, InputProvenance, UnattributedInputOrigin
+from .input_origin import (
+    InputDelivery,
+    InputOrigin,
+    InputProvenance,
+    UnattributedInputOrigin,
+    UndeliveredInput,
+)
 
 if TYPE_CHECKING:
     from .message_reference import MessageReference
@@ -36,6 +42,39 @@ class ClearedInputState:
 class GoalInputDecision:
     goal_revision: int
     turn_id: str
+
+
+class InputTransition:
+    """What one transition did to an input: moved it to a named state, or left it where it was."""
+
+    @abstractmethod
+    def successors(self, key: str) -> dict[str, StoredInput]:
+        """The rows this transition writes under key."""
+
+    @abstractmethod
+    def require_moved(self, refusal: str) -> MovedInput: ...
+
+
+@dataclass(frozen=True)
+class MovedInput(InputTransition):
+    state: StoredInput
+
+    def successors(self, key: str) -> dict[str, StoredInput]:
+        return {key: self.state}
+
+    def require_moved(self, refusal: str) -> MovedInput:
+        return self
+
+
+@dataclass(frozen=True)
+class UnchangedInput(InputTransition):
+    state: InputAttempt
+
+    def successors(self, key: str) -> dict[str, StoredInput]:
+        return {}
+
+    def require_moved(self, refusal: str) -> MovedInput:
+        raise RelationViolationError(refusal)
 
 
 @dataclass(frozen=True)
@@ -73,21 +112,21 @@ class InputAttempt(DeclaredFamily, affix="Input"):
 
     def bind(
         self, *, claim_scope: int, turn_id: str, native_id: str, text: str
-    ) -> InputAttempt | None:
+    ) -> InputTransition:
         self.require_not_cleared()
-        return None
+        return UnchangedInput(self)
 
-    def started(self, *, turn_id: str, native_id: str, text: str) -> InputAttempt | None:
-        return None
+    def started(self, *, turn_id: str, native_id: str, text: str) -> InputTransition:
+        return UnchangedInput(self)
 
-    def finish_unbound(self) -> InputAttempt | None:
-        return None
+    def finish_unbound(self) -> InputTransition:
+        return UnchangedInput(self)
 
-    def clear_unbound(self) -> InputAttempt | None:
-        return None
+    def clear_unbound(self) -> InputTransition:
+        return UnchangedInput(self)
 
-    def clear_native(self, native_id: str, text: str) -> InputAttempt | None:
-        return None
+    def clear_native(self, native_id: str, text: str) -> InputTransition:
+        return UnchangedInput(self)
 
     def require_not_cleared(self) -> None:
         """Non-cleared states retain their existing write checks."""
@@ -102,19 +141,18 @@ class InputAttempt(DeclaredFamily, affix="Input"):
         sent_text: str,
         *,
         snapshot: RegistrySnapshot,
-    ) -> StartedInput | None:
-        return None
+    ) -> bool:
+        return False
 
-
-    def unbound_delivery(self, root_id: str) -> MessageReference | None:
+    def unbound_delivery(self, root_id: str) -> InputDelivery:
         """Explicit withdrawal never grants an automatic delivery retry."""
-        return None
+        return UndeliveredInput()
 
     def delivered_in(
         self, lease: TurnLeaseFence, root_id: str, snapshot: RegistrySnapshot
-    ) -> MessageReference | None:
+    ) -> InputDelivery:
         """The bus message this input delivered into the lease's turn."""
-        return None
+        return UndeliveredInput()
 
 
 @dataclass(frozen=True)
@@ -238,7 +276,7 @@ class StoredInput(InputAttempt):
 
 
 class RecoverableUnboundInput(StoredInput):
-    def unbound_delivery(self, root_id: str) -> MessageReference | None:
+    def unbound_delivery(self, root_id: str) -> InputDelivery:
         return self.origin.delivery_reference(root_id)
 
 
@@ -257,18 +295,18 @@ class ReservedInput(RecoverableUnboundInput):
 
     def bind(
         self, *, claim_scope: int, turn_id: str, native_id: str, text: str
-    ) -> InputAttempt | None:
+    ) -> InputTransition:
         if self.claim_scope != claim_scope:
-            return None
-        return self._transition(
+            return UnchangedInput(self)
+        return MovedInput(self._transition(
             BoundUnknownInput, turn_id=turn_id, native_id=native_id, sent_digest=TextDigest.of(text)
-        )
+        ))
 
-    def finish_unbound(self) -> NotSentInput:
-        return self._transition(NotSentInput)
+    def finish_unbound(self) -> InputTransition:
+        return MovedInput(self._transition(NotSentInput))
 
-    def clear_unbound(self) -> ClearedUnsentInput:
-        return self._transition(ClearedUnsentInput)
+    def clear_unbound(self) -> InputTransition:
+        return MovedInput(self._transition(ClearedUnsentInput))
 
 
 @dataclass(frozen=True)
@@ -297,19 +335,15 @@ class BoundUnknownInput(SentInput):
     unresolved = True
     public_status = "unknown"
 
-    def clear_native(self, native_id: str, text: str) -> ClearedNativeInput | None:
-        return (
-            self._transition(ClearedNativeInput)
-            if self.native_id == native_id and self.sent_digest.matches(text)
-            else None
-        )
+    def clear_native(self, native_id: str, text: str) -> InputTransition:
+        if self.native_id == native_id and self.sent_digest.matches(text):
+            return MovedInput(self._transition(ClearedNativeInput))
+        return UnchangedInput(self)
 
-    def started(self, *, turn_id: str, native_id: str, text: str) -> StartedInput | None:
-        return (
-            self._transition(StartedInput)
-            if self.matches_native(turn_id=turn_id, native_id=native_id, text=text)
-            else None
-        )
+    def started(self, *, turn_id: str, native_id: str, text: str) -> InputTransition:
+        if self.matches_native(turn_id=turn_id, native_id=native_id, text=text):
+            return MovedInput(self._transition(StartedInput))
+        return UnchangedInput(self)
 
 
 class ClearedUnsentInput(ClearedInputState, StoredInput):
@@ -337,10 +371,10 @@ class StartedInput(SentInput):
             and self.turn_id == lease.turn_id
         )
 
-    def delivered_in(self, lease, root_id, snapshot):
+    def delivered_in(self, lease, root_id, snapshot) -> InputDelivery:
         if self.matches_lease(lease, snapshot):
             return self.origin.delivery_reference(root_id)
-        return None
+        return UndeliveredInput()
 
     def started_for_native(
         self,
@@ -349,16 +383,15 @@ class StartedInput(SentInput):
         sent_text: str,
         *,
         snapshot: RegistrySnapshot,
-    ) -> StartedInput | None:
-        """Return this original row's recorded lease/input evidence only.
+    ) -> bool:
+        """Whether this original row's recorded lease/input evidence is this native start.
 
         Stored rows record owner name and input generation, not thread birth or process. The
         publication source independently validates the original complete lease
         and native ancestry; this acknowledgement never invents their missing proof.
         """
-        return self if self.matches_lease(lease, snapshot) and self.matches_native(
-            turn_id=lease.turn_id, native_id=native_id, text=sent_text,
-        ) else None
+        return self.matches_lease(lease, snapshot) and self.matches_native(
+            turn_id=lease.turn_id, native_id=native_id, text=sent_text)
 
 class NotSentInput(RecoverableUnboundInput):
     unresolved = True
