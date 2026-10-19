@@ -146,7 +146,7 @@ class Stack:
         return result
 
     def owners(self, root: Path, command: str, names: list[str]) -> None:
-        """Admit the captured owner set together and join every request before proceeding."""
+        """Run the captured owner set together and join every request before proceeding."""
         with ThreadPoolExecutor(max_workers=max(1, len(names))) as pool:
             list(pool.map(lambda name: self.cli(root, command, "--name", name), names))
 
