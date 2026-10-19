@@ -412,7 +412,7 @@ class VerifiedNativePackage:
     def node(self, *imports: str) -> tuple[str, ...]:
         """Node running this CLI behind the import fence, then the named dist modules."""
         modules = ("agent-comms-import-fence.mjs", *imports)
-        imported = (part for name in modules for part in ("--import", str(self.cli.with_name(name))))
+        imported = (arg for name in modules for arg in ("--import", str(self.cli.with_name(name))))
         return ("node", "--no-global-search-paths", *imported, str(self.cli))
 
     @staticmethod
