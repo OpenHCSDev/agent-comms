@@ -317,6 +317,11 @@ class ProviderQuotaFailure(ACPFailure):
     def matches(
         cls, code: int | None, detail: str, diagnostics: tuple[PiDiagnostic, ...] = ()
     ) -> bool:
+        return cls.described_by(detail)
+
+    @classmethod
+    def described_by(cls, detail: str) -> bool:
+        """The provider's own error text names an exhausted limit; its code is not needed."""
         return cls.display_pattern.search(detail) is not None
 
     @property

@@ -54,6 +54,13 @@ class UndatedStandingRule(StandingRule, declared_name=None):
         return True
 
 
+class OverdueStandingRule(
+    UndatedStandingRule, affix="", discovery_package="agent_comms.commander"
+):
+    """A rule only the commander's minute overdue loop reads: its own family, so no read of
+    the StandingRule family, and no send, ever pays for it."""
+
+
 class DatedStandingRule(StandingRule, declared_name=None):
     """A rule that says when its condition began: it is broken on the reads after that."""
 

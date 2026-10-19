@@ -34,7 +34,7 @@ from ..native_tool_call import SelectedToolDenied
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
-from ..standing_rules import HuntDue, RulesDue
+from ..standing_rules import HuntDue, OverdueStandingRule, RulesDue
 from ..tool_caller import ThreadCaller
 from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
@@ -667,6 +667,14 @@ def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: f
     return InstallDeadline.read(COMMS.root).alarm(waiting, now)
 
 
+def overdue_rules() -> list[str]:
+    """Core does what each rule only this loop reads does itself, then names it."""
+    broken = OverdueStandingRule.broken(COMMS, ME)
+    for rule in broken:
+        rule.enforce(COMMS, ME)
+    return [rule.line() for rule in broken]
+
+
 def overdue():
     since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
     installs: list[str] = []
@@ -694,6 +702,8 @@ def overdue():
                     for t in pending if t.overdue(now) and read[t.id].untouched(now)]
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
+        for line in overdue_rules():
+            print(line, flush=True)
         for _ in HuntDue.broken(COMMS, ME, since):
             print(HuntVerb.due(next_hunt()), flush=True)
         since = now

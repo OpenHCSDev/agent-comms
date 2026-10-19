@@ -398,16 +398,22 @@ def test_merge_growth_names_each_merge_over_the_limit(commander, standing, monke
 
 
 def test_dead_provider_moves_a_unit_whose_last_turn_hit_the_usage_limit(
-        commander, standing, monkeypatch):
+        commander, standing, commander_script, monkeypatch):
     from datetime import UTC, datetime
+    from uuid import uuid4
 
+    from agent_comms.child_process import ProcessIdentity
     from agent_comms.tool_caller import ThreadCaller
     comms, _, module = standing
+    script, _ = commander_script
     models = ("spent/model", "spare/model")
     monkeypatch.setattr(module, "CONFIG", module.CONFIG.model_copy(update=dict(models=models)))
     for name, reason, created in (("limited", "error", 5.0), ("healthy", "stop", 6.0)):
         working(comms, name, created)
-        comms.registry.register(replace(comms.registry.require(name), model="spent/model"))
+        turn = uuid4().hex
+        comms.registry.register(replace(comms.registry.require(name), model="spent/model",
+                                        process_identity=ProcessIdentity.capture(os.getpid())))
+        comms.agents.finish_turn(comms.agents.begin_turn(name, turn).turn_lease)
         failure = {"errorMessage": "Codex error: The usage limit has been reached"}
         answer = dict(role="assistant", provider="spent", model="model", stopReason=reason,
                       content=[], usage=dict(totalTokens=1), timestamp=time.time() * 1000,
@@ -417,10 +423,15 @@ def test_dead_provider_moves_a_unit_whose_last_turn_hit_the_usage_limit(
                                        parentId=f"{name}-input",
                                        timestamp=datetime.now(UTC).isoformat(),
                                        message=answer)) + "\n")
+        if reason == "error":
+            (comms.root / "diagnostics").mkdir(exist_ok=True)
+            (comms.root / "diagnostics" / f"{turn}.json").write_text("{}")
 
     read = CommsStandingRulesTool().apply(comms, ThreadCaller("lead"))
-    assert ("DEAD PROVIDER: limited hit the usage limit of spent/model"
-            " -> Core moved it to spare/model") in read.broken
+    assert not any(line.startswith("DEAD PROVIDER") for line in read.broken)
+    assert comms.registry.require("limited").model == "spent/model"
+    assert script.overdue_rules() == [
+        "DEAD PROVIDER: limited hit the usage limit of spent/model -> Core moved it to spare/model"]
     assert comms.registry.require("limited").model == "spare/model"
     assert comms.registry.require("healthy").model == "spent/model"
-    assert lines(comms, module.DeadProvider) == []
+    assert script.overdue_rules() == []

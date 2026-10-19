@@ -12,7 +12,7 @@ from typing import ClassVar
 from ..acp_failure import ProviderQuotaFailure
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
-from ..standing_rules import (DatedStandingRule, ReasonedStandingRule, StandingRule,
+from ..standing_rules import (DatedStandingRule, OverdueStandingRule, ReasonedStandingRule, StandingRule,
                               UndatedStandingRule)
 from ..goals import Goal
 from ..threads import Thread
@@ -246,34 +246,46 @@ class MergeGrowth(DatedStandingRule):
 
 
 @dataclass(frozen=True)
-class DeadProvider(UndatedStandingRule):
+class DeadProvider(OverdueStandingRule):
     """A unit whose latest turn ended on its provider's usage limit serves no turns while it
     stays on that model; Core moves it to the next working model the commander declares,
-    restarts its live owner and tells it."""
+    restarts its live owner and tells it.
+
+    Only units whose
+    finished turn left a terminal failure diagnostic are read, and only units on a
+    declared model: a unit on any other model is refused the move.
+    """
 
     unit: Thread
     model: str
 
     @staticmethod
+    def failed(comms: Comms, unit: Thread) -> bool:
+        """The failure diagnostic Core writes under the turn's id marks the turn failed."""
+        turn = unit.last_finished_turn_id
+        return bool(turn) and (comms.root / "diagnostics" / f"{turn}.json").is_file()
+
+    @staticmethod
     def exhausted(comms: Comms, unit: Thread, model: str) -> bool:
         turns = TurnDigestRead(comms.root, unit, LastTurns(1)).read().turns
-        return any(ProviderQuotaFailure.matches(None, error)
+        return any(ProviderQuotaFailure.described_by(error)
                    for turn in turns for error in turn.ended_in_errors_on(model))
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[DeadProvider, ...]:
-        dead = [(unit, unit.model) for unit in comms.registry.all_threads().values()
-                if unit.model and unit.name not in CONFIG.parked | {commander}
-                and cls.exhausted(comms, unit, unit.model)]
-        working = [model for model in CONFIG.models if model not in {spent for _, spent in dead}]
-        return tuple(cls(unit, cls.following(spent, working)) for unit, spent in dead if working)
+        dead = [(unit, model) for unit in comms.registry.all_threads().values()
+                for model in CONFIG.models if unit.model == model
+                and unit.name not in CONFIG.parked | {commander}
+                and cls.failed(comms, unit) and cls.exhausted(comms, unit, model)]
+        spent = {model for _, model in dead}
+        return tuple(cls(unit, working[0]) for unit, model in dead
+                     if (working := [each for each in cls.following(model) if each not in spent]))
 
     @staticmethod
-    def following(model: str, working: list[str]) -> str:
-        """The first working model declared after ``model``, wrapping to the start."""
-        at = CONFIG.models.index(model) if model in CONFIG.models else -1
-        return min(working, key=lambda each: (CONFIG.models.index(each) <= at,
-                                              CONFIG.models.index(each)))
+    def following(model: str) -> tuple[str, ...]:
+        """The declared models after ``model``, wrapping to the start."""
+        at = CONFIG.models.index(model)
+        return CONFIG.models[at + 1:] + CONFIG.models[:at]
 
     def line(self) -> str:
         return (f"DEAD PROVIDER: {self.unit.name} hit the usage limit of {self.unit.model}"
