@@ -1079,15 +1079,34 @@ class CheckPrinted(DeclaredFamily, affix="Printed"):
     def unproven(self, command: str, expected: int) -> tuple[str, ...]: ...
 
     @abstractmethod
-    def distance(self, expected: int) -> int: ...
+    def distance(self, expected: int) -> CheckPrinted: ...
+
+    @abstractmethod
+    def plus(self, amount: int) -> CheckPrinted: ...
+
+    @abstractmethod
+    def require(self, expected: object) -> None: ...
+
+    @abstractmethod
+    def project[T](self, counted: Callable[[int], T], uncounted: Callable[[], T]) -> T: ...
 
 
 @dataclass(frozen=True)
 class CountPrinted(CheckPrinted):
     count: int
 
-    def distance(self, expected: int) -> int:
-        return abs(self.count - expected)
+    def distance(self, expected: int) -> CheckPrinted:
+        return CountPrinted(abs(self.count - expected))
+
+    def plus(self, amount: int) -> CheckPrinted:
+        return CountPrinted(self.count + amount)
+
+    def require(self, expected: object) -> None:
+        if self.count:
+            raise ValueError(f"The order check is {self.count} away from {expected}.")
+
+    def project[T](self, counted: Callable[[int], T], uncounted: Callable[[], T]) -> T:
+        return counted(self.count)
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ((f"Check already prints {self.count} before any work: `{command}` proves nothing; "
@@ -1096,8 +1115,17 @@ class CountPrinted(CheckPrinted):
 
 @dataclass(frozen=True)
 class NoIntegerPrinted(CheckPrinted):
-    def distance(self, expected: int) -> int:
-        raise ValueError(f"The order check printed no integer, so no count of {expected}.")
+    def distance(self, expected: int) -> CheckPrinted:
+        return self
+
+    def plus(self, amount: int) -> CheckPrinted:
+        return self
+
+    def require(self, expected: object) -> None:
+        raise ValueError(f"The order check cannot prove {expected}: it printed no integer.")
+
+    def project[T](self, counted: Callable[[int], T], uncounted: Callable[[], T]) -> T:
+        return uncounted()
 
     def unproven(self, command: str, expected: int) -> tuple[str, ...]:
         return ("the check printed no integer; use grep -c PATTERN FILE or ... | wc -l",)
