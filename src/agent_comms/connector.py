@@ -570,6 +570,14 @@ class ServiceProcess:
         raise ValueError(f"No process listens on {LOOPBACK}:{port}")
 
     @property
+    def unit(self) -> str:
+        """The systemd user unit that runs the service, named by the last part of its cgroup."""
+        unit = Path(Path(f"/proc/{self.pid}/cgroup").read_text().split("::", 1)[1].strip()).name
+        if not unit.endswith(".service"):
+            raise ValueError(f"The connector service (pid {self.pid}) runs in {unit}, not a unit")
+        return unit
+
+    @property
     def executable(self) -> Path:
         """The interpreter the service was started as; its venv link is not resolved."""
         return Path(os.fsdecode(Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0")[0]))
@@ -577,8 +585,8 @@ class ServiceProcess:
 
 @dataclass(frozen=True, kw_only=True)
 class RoundTripVerb(ConnectorVerb):
-    """What an upgrade proves last: the running connector service runs the installed runtime,
-    and a read through its loopback endpoint answers as the same read on this bus."""
+    """Explicit qualification for a configured connector: its service runs the selected
+    runtime and its loopback read agrees with this bus. Native-only installs do not need it."""
 
     help = "Read the bus through the running connector service and compare"
     root: Annotated[Path, PathText] = option("root", help="The comms root it proves")

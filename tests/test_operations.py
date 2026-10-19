@@ -202,7 +202,7 @@ class TestThreadOps:
         ]
         assert events[2].raw_input == {"to": "child"}
         assert events[3].text == "sent"
-        row = next(row for row in wired.views.presence() if row["name"] == "transcript-thread")
+        row = next(row.to_wire() for row in wired.views.presence() if row.thread.name == "transcript-thread")
         assert row["resumable"] is True
 
     def test_thread_transcript_includes_saved_compaction_summary(self, wired, tmp_path):
@@ -246,8 +246,7 @@ class TestThreadOps:
         wired.agents.observe_runtime_info(
             "fixer", AgentInfo(model="observed/model", context_size=PiCount.from_wire(100))
         )
-        row = next(FieldCodec.project(view, "presence") for view in wired.views.who()
-                   if view.thread.name == "fixer")
+        row = next(row.to_wire() for row in wired.views.who() if row.thread.name == "fixer")
         assert row["model"] == "configured/model"
         assert (row["context_used"], row["context_size"]) == (25, 100)
         assert wired.agents.agent_info_of("fixer").context_used == PiCount.from_wire(25)
@@ -288,9 +287,8 @@ class TestThreadOps:
         rows = {
             "detail": views.thread_detail(
                 "fixer", CountedRead() if counted else UncountedRead()).to_wire(),
-            "roster": next(row for row in ([FieldCodec.project(view, "presence") for view in views.who()]
-                                         if counted else views.presence())
-                           if row["name"] == "fixer"),
+            "roster": next(row.to_wire() for row in (views.who() if counted else views.presence())
+                           if row.thread.name == "fixer"),
             **({"list": next(row.to_wire() for row in views.list_threads() if row.thread.name == "fixer")}
                if counted else {}),
         }
@@ -375,7 +373,7 @@ class TestThreadOps:
         wired.owners.stop("fixer")
         wired.threads.archive("fixer")
         assert wired.registry.status("fixer").declared_name == "archived"
-        assert not any(view.thread.name == "fixer" for view in wired.views.who())
+        assert not any(row.thread.name == "fixer" for row in wired.views.who())
         assert "fixer" not in wired.registry.active_threads()
         assert [message.body for message in list(wired.views.history_page(CommandTarget.named("fixer"), viewer="PR111").messages)] == [
             "kept after archive"

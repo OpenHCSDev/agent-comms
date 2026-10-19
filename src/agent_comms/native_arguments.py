@@ -334,10 +334,10 @@ class NativeArguments:
         return self.replace(ThinkingArgument, *selected.native_arguments(ThinkingArgument))
 
     def managed_rpc(self, package: Path) -> tuple[str, ...]:
-        """Managed sessions load the protocol extensions; ephemeral RPC does not."""
+        """Managed sessions load only the packaged extensions, never discovered copies of them."""
         from .native_tools import NativeToolDeclaration
 
-        return (*NativeToolDeclaration.extension_arguments(package), *self.rpc())
+        return ("--no-extensions", *NativeToolDeclaration.extension_arguments(package), *self.rpc())
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:

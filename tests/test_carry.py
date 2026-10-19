@@ -32,7 +32,6 @@ from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
 from agent_comms.registry_store import RegistryStore
-from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
@@ -478,6 +477,32 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     assert not thread.executing
 
 
+def test_upgrade_busy_owner_refuses_before_any_stop_or_start(tmp_path):
+    from agent_comms.maintenance_barrier import ReadyPhase
+    from agent_comms.restart_refusals import OwnerBusyRefusal
+    from tools.upgrade_bus import live
+
+    root = tmp_path / "bus"
+    Comms(root)
+    calls = []
+
+    class BusyStack(Stack):
+        def cli(self, root, *arguments):
+            calls.append(arguments)
+            return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
+
+        def require_idle(self, root, names):
+            assert names == ["worker"]
+            assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
+            raise OwnerBusyRefusal()
+
+    stack = BusyStack(REPO)
+    with pytest.raises(OwnerBusyRefusal):
+        live(REPO, root, "", "", (), stack, stack, None, "worker")
+    assert calls == [("threads",)]
+    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+
+
 LIVE_DRIVER = """
 import signal, sys
 from pathlib import Path
@@ -485,6 +510,9 @@ from upgrade_bus import Stack, live, stopped
 
 
 class Owners(Stack):
+    def require_idle(self, root, names):
+        pass
+
     def cli(self, root, *arguments):
         print(' '.join(arguments), flush=True)
         return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
@@ -533,47 +561,22 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
     assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
 
 
-@pytest.mark.parametrize("served_by,registered", [
-    ("installed", True), ("other", True), ("installed", False),
-])
-def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(
-    comms, tmp_path, monkeypatch, served_by, registered,
-):
-    """The upgrade's last step reads the bus through the running connector service over its
-    loopback endpoint. A service on another runtime than the installed one fails the upgrade
-    through its restore, and the read leaves no message behind."""
-    import site
-    import socket
+def test_failed_carry_preserves_changed_bus_and_main_under_maintenance(comms, tmp_path, monkeypatch):
     import tools.upgrade_bus as upgrade_bus
-    from agent_comms.channel_targets import CommandTarget
-    from agent_comms.channels import ANY_CHANNEL
-    from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
+    from agent_comms.maintenance_barrier import ReadyPhase
 
-    comms.registry.declare(comms.registry.new_thread("user", frozenset(), str(comms.root)))
-    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
-    if registered:
-        reviews = RuleReviews(comms.root)
-        reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
-        reviews.write("claude-ai", AnsweredRuleReviewEntry(
-            1, "This check exercises upgrade_bus.py:158 through the connector's declared caller with its required rule review."))
-    runtimes = {name: tmp_path / name / "bin/python" for name in ("installed", "other")}
-    for runtime in runtimes.values():
-        runtime.parent.mkdir(parents=True)
-        runtime.symlink_to(sys.executable)
-    with socket.socket() as probe:
-        probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]
+    datum = comms.root / "kept.txt"
+    datum.write_text("before")
+    original_inode = comms.root.stat().st_ino
+    commands = []
 
-    class Owners(Stack):
-        python = runtimes["installed"]
-
-        def environment(self, *paths):
-            environment = super().environment(*paths)
-            return {**environment, "PYTHONPATH": os.pathsep.join(
-                (environment["PYTHONPATH"], *site.getsitepackages()))}
-
+    class Installed(Stack):
         def cli(self, root, *arguments):
+            assert arguments == ("threads",)
             return {"threads": []}
+
+        def require_idle(self, root, names):
+            assert not names
 
         def relock(self):
             pass
@@ -581,58 +584,22 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(
         def prepare_native(self):
             pass
 
-        def sync(self):
-            pass
+    def failed_carry(*args):
+        datum.write_text("changed before failure")
+        raise RuntimeError("carry failed after writing")
 
-        def verify(self, root):
-            return {}
-
-    ran = upgrade_bus.run
-    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: (
-        "" if command[0] == "git" else ran(*command, **options)))
+    monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: commands.append(command))
+    monkeypatch.setattr(upgrade_bus, "carry_all", failed_carry)
     monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
-    stack = Owners(REPO, tmp_path / "home", port)
-    checkout = tmp_path / "checkout"
-    checkout.mkdir()
-    service = subprocess.Popen(
-        [runtimes[served_by], "-c", upgrade_bus.CONNECTOR, "serve", "--root", comms.root, "--port", str(port)],
-        env={**stack.environment(), "PYTHONUNBUFFERED": "1"}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-        text=True)
-    try:
-        started = ""
-        while "Running on" not in started:
-            line = service.stdout.readline()
-            assert line, started
-            started += line
-        if not registered:
-            # The service had its required caller at startup. The upgrade must
-            # still refuse if that caller is no longer registered at call time.
-            comms.registry.unregister("claude-ai")
-            comms.registry.archive("claude-ai")
-            comms.registry.begin_delete("claude-ai")
-            comms.registry.remove("claude-ai")
-        failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
-        if not registered:
-            with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
-                upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
-            assert len(list(failed)) == 1
-        elif served_by == "installed":
-            report = upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
-            assert json.loads(report["round_trip"]) == {
-                "round_trip": f"comms_channels read alike through {runtimes['installed']}"}
-            assert not list(failed)
-        else:
-            with pytest.raises(UpgradeRefused, match=f"runs {runtimes['other']}, not the installed"):
-                upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
-            assert len(list(failed)) == 1
-    finally:
-        service.terminate()
-        service.wait(timeout=30)
-    reader = Comms(comms.root)
-    assert [name for name in reader.registry.snapshot().threads
-            if list(reader.bus.inbox(name, CommandTarget.named(ANY_CHANNEL.name)))] == []
-    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+    stack = Installed(tmp_path / "checkout")
+    with pytest.raises(RuntimeError, match="carry failed after writing"):
+        upgrade_bus.live(stack.checkout, comms.root, "old", "new", (), stack, stack, None, "worker")
+    assert datum.read_text() == "changed before failure"
+    assert comms.root.stat().st_ino == original_inode
+    assert not any("reset" in command for command in commands)
+    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is not ReadyPhase
+    assert list(comms.root.parent.glob(f"{comms.root.name}.upgrade-*/bus.tar"))
 
 
 def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
