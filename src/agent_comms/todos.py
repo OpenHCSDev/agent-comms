@@ -20,6 +20,7 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
+from uuid import uuid4
 
 from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
@@ -219,25 +220,30 @@ class DistanceReading:
 
 @dataclass(frozen=True)
 class DistanceReadings:
-    """The order's last two distance readings, oldest first: its base at the order, then commits."""
-    readings: tuple[DistanceReading, ...]
+    """The order's last two distance readings, oldest first: its base at the order, then its
+    newest commit. Fewer than two read, or a last reading at done, project nothing."""
+    readings: tuple[DistanceReading, ...] = ()
+
+    @property
+    def pairs(self) -> tuple[tuple[DistanceReading, DistanceReading], ...]:
+        """The two readings velocity is taken across, while distance remains."""
+        last = self.readings[-2:]
+        return ((last[0], last[1]),) if len(last) == 2 and last[1].distance else ()
 
     def flat_since(self) -> float:
-        """When the distance stopped falling across two readings short of done; else infinity."""
-        *earlier, last = self.readings
-        flat = earlier and last.distance and last.distance >= earlier[-1].distance
-        return last.at if flat else math.inf
+        """When the distance stopped falling across the two readings; else infinity."""
+        return next((last.at for first, last in self.pairs if last.distance >= first.distance),
+                    math.inf)
 
     @property
     def projection(self) -> str:
-        """Velocity across the two readings projects the finish; done or unread work has none."""
-        *earlier, last = self.readings
-        if not earlier or not last.distance:
-            return ""
-        if last.distance >= earlier[-1].distance:
-            return f"; distance {last.distance}, not falling"
-        rate = (earlier[-1].distance - last.distance) / max(last.at - earlier[-1].at, 1.0)
-        return f"; distance {last.distance}, projected done {_clock(last.at + last.distance / rate)}"
+        """Velocity across the two readings projects the finish."""
+        for first, last in self.pairs:
+            if last.distance >= first.distance:
+                return f"; distance {last.distance}, not falling"
+            rate = (first.distance - last.distance) / max(last.at - first.at, 1.0)
+            return f"; distance {last.distance}, projected done {_clock(last.at + last.distance / rate)}"
+        return ""
 
 
 @dataclass(frozen=True)
@@ -313,7 +319,15 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     @property
     @abstractmethod
-    def line(self) -> str: ...
+    def state(self) -> str: ...
+
+    @property
+    def line(self) -> str:
+        return self.state
+
+    def flat_since(self) -> float:
+        """When the order stopped getting closer to done; infinity while it moves or is unread."""
+        return math.inf
 
     def stalled(self, ordered: float, now: float) -> bool:
         return False
@@ -363,7 +377,7 @@ class Stalling:
 class Moving(Stalling):
     """Work last moved ``at``; it stalls 15 minutes later with no commit, push or PR change."""
     at: float = field(kw_only=True)
-    readings: DistanceReadings = field(kw_only=True, compare=False)
+    readings: DistanceReadings = field(default=DistanceReadings(), kw_only=True, compare=False)
 
     def stall_at(self, ordered: float) -> float:
         return self.at + 900
@@ -803,9 +817,22 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
     line: ClassVar[str]
+    NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
+
+    def reissued(self, at: float) -> PendingProblemOrder:
+        """This order sent again at ``at`` to a new owner, its first-call window kept."""
+        raise ValueError("Only an undelivered order can change owner.")
+
+    def untouched(self, touched: Sequence[str]) -> int:
+        """The numbered edits naming a file:line where ``touched`` changed none of those files."""
+        def changed(name: str) -> bool:
+            return any(path.endswith(name.lstrip("/")) or name.endswith("/" + path)
+                       for path in touched)
+        return sum(1 for edit in self.edits
+                   if (named := self.NAMED_FILE.findall(edit)) and not any(map(changed, named)))
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)

@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.tools import CommsOrderDoneTool
-from agent_comms.todos import (CommittedProgress, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
+from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
     OperationDelivery, PlannedInstallDeadline, PullRequest, PullRequests, PushedProgress, UnreadProgress)
 
 from agent_comms.messages import InfoKind
@@ -155,6 +155,9 @@ class HeldSource:
     def commits(self, *excluded):
         commits = {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}
         yield commits[excluded]
+
+    def readings(self):
+        return DistanceReadings()
 
     def requests(self, state):
         return {'open': [PullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0, orders=('order-P1',))],

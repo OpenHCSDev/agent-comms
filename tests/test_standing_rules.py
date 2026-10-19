@@ -4,6 +4,7 @@ import os
 import shutil
 import subprocess
 import time
+from dataclasses import replace
 
 import pytest
 
