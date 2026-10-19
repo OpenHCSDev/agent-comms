@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 from .agent_activity import AgentActivity
 from .bus_activity_index import ChannelActivity
 from .channel_management import ChannelManagement
-from .channel_targets import CommandTarget
+from .channel_targets import CommandTarget, ThreadTarget
 from .read_basis import ChannelDisplayScope
 from .channels import AnyChannel, ChannelMemberIndex
 from .collaboration_ledger import CollaborationLedger
@@ -419,7 +419,7 @@ class HistoryViews:
         thread.execution.prepare_conversation(ThreadViewRead(
             self, thread, self.registry.require(viewer), checkpoint,
         ))
-        messages = self.bus.inbox(viewer, thread.name)
+        messages = self.bus.inbox(viewer, ThreadTarget(thread.name))
         self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
 
     def latest_sequence(self) -> int:

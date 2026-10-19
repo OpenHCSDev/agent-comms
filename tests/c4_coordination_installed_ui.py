@@ -1,5 +1,6 @@
 """Installed snapshot values, original notification evidences and real sidebar rows."""
 from conftest import publish_initial
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 from agent_comms.presentation import ReadThrough
 import argparse
@@ -51,7 +52,7 @@ async def main():
     human = comms.views.viewer_snapshot(str(root))
     assert set(human.threads) == {owner, 'stopped'}
     assert human.channel_unread['#team'] == 1
-    assert comms.bus.pending_count('stopped', '#team') == 1
+    assert comms.bus.pending_count('stopped', CommandTarget.named('#team')) == 1
     assert comms.views.viewer_snapshot(str(root)) == human
     original = comms.views.message_notifications_for_references((message.reference,))
     assert original[message.seq, message.message_id]
@@ -61,7 +62,7 @@ async def main():
     comms.views.mark_channel_view_read('#team', worktree=str(root),
                                       mark=ReadThrough(page.newest_seq, page.display_scope))
     assert comms.views.viewer_snapshot(str(root)).channel_unread['#team'] == 0
-    assert comms.bus.pending_count('stopped', '#team') == 1
+    assert comms.bus.pending_count('stopped', CommandTarget.named('#team')) == 1
     checks = ['full original snapshot value equality', 'original bounded reference notification windows',
               'human display acknowledgement leaves actor delivery pending']
     app = InstalledApp(project_dir=str(root))

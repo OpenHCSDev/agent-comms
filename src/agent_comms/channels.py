@@ -251,6 +251,10 @@ class AllChannel(BuiltinChannelView, declared_name="#all"):
     pass
 
 
+ANY_CHANNEL = ChannelTarget(AnyChannel.declared_name)
+"""Every channel a reader receives: the target of an unscoped inbox or count."""
+
+
 @dataclass(frozen=True, slots=True, kw_only=True)
 class SavedViewChannel(PredicateChannel, GroupedChannel, Channel):
     view: SavedView

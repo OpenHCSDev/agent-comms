@@ -7,7 +7,6 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from .channel_targets import CommandTarget
-from .channels import AnyChannel
 from .field_codec import FieldCodec
 from .message_reference import MessageReference
 from .messages import Message
@@ -189,9 +188,8 @@ class DeliveryScope(MessageDisplayScope):
     def includes(self, message: Message) -> bool:
         return self.delivers(message.sender, message.target)
 
-    def selection(self, target, snapshot, catalog) -> MessageDisplayScope:
-        selected = CommandTarget.named(AnyChannel.declared_name if target is None else target)
-        return selected.display_scope(self.actor, snapshot, catalog, DMDisplayScope)
+    def selection(self, target: CommandTarget, snapshot, catalog) -> MessageDisplayScope:
+        return target.display_scope(self.actor, snapshot, catalog, DMDisplayScope)
 
     def canonical(self, name: str) -> str:
         return self.aliases.get(name, name)

@@ -23,8 +23,8 @@ from .thread_execution import (
     StartOwnerControl, ThreadCommandAvailability,
 )
 from .channel_management import TagAction, TagDisposition, KeepThreadsTagDisposition
-from .channel_targets import ChannelTarget
-from .channels import Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
+from .channel_targets import ChannelTarget, CommandTarget
+from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
 from .errors import RelationViolationError
@@ -1171,24 +1171,21 @@ class CommsInboxTool(ToolRequest):
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
-    target: str | None = tool_field("Optional channel or peer conversation", default=None)
+    target: str = tool_field("Channel or peer conversation", default=ANY_CHANNEL.name)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxRead:
         thread = self.thread
-        target = self.target
-        if target is not None:
-            target = target.strip()
-            if not target:
-                raise ValueError("An inbox target cannot be empty.")
+        if not (target := self.target.strip()):
+            raise ValueError("An inbox target cannot be empty.")
         standby = self.standby
         review = (
             comms.goals.goal_input_review(thread, standby.goal_id, standby.wait_for)
             if standby is not None
             else None
         )
-        messages = tuple(comms.bus.inbox(thread, target))
+        messages = tuple(comms.bus.inbox(thread, CommandTarget.named(target)))
         unresolved = tuple(comms.goals.unresolved_inputs(thread))
         response = InboxRead(messages, 0, unresolved, standby_review=review)
         result_file = materialize_oversized_output(
