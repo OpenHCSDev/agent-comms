@@ -101,7 +101,7 @@ def roast(audience, thread, lines, text, fix, slop):
             + '\n'.join(f'    {l.strip()}' for l in lines)
             + f'\nThe slop: {slop.render()}'
             + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
-    print(f'roast sent to {", ".join(audience)}: ' + order.post([*audience], body))
+    print(f'roast sent to {", ".join(audience.threads)}: ' + order.post(audience, body))
 
 
 def alarm():
@@ -262,7 +262,7 @@ class BackVerb(VerdictVerb):
 
     def report(self, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
-            audience = todo.verdicts[-1].audience.targets(todo)
+            audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
             roast(audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
                     f'(strike {todo.strike_count} on {todo.id}; caught by {ME} at review): '

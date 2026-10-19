@@ -54,11 +54,12 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import RuntimeFile
-from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
 from agent_comms.store_files import _store_lock
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
+CONNECTOR = "from agent_comms.connector import main; raise SystemExit(main())"
 HOLD_TRANSCRIPTS = """import sys
 from contextlib import closing
 from agent_comms.coordination_database import CoordinationStore
@@ -187,6 +188,14 @@ class Stack:
         history = self.cli(root, "history", "--everything", "--limit", "50")
         return {"threads": len(threads), "who": len(present), "history": len(history.get("messages", ()))}
 
+    def round_trip(self, root: Path) -> str:
+        """The connector Core declares for this bus sends one message and reads it back; it
+        needs open maintenance, so it runs last."""
+        environment = {**self.environment(), "AGENT_COMMS_ROOT": str(root)}
+        output = run(self.python, "-c", CONNECTOR, "round_trip", root, cwd=self.checkout,
+                     env=environment)
+        return output.strip().splitlines()[-1]
+
 
 @dataclass
 class Revisions:
@@ -296,7 +305,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
             read = stack.verify(copy)
-        return {"steps": steps, "files": files, "read": read}
+            round_trip = stack.round_trip(copy)
+        return {"steps": steps, "files": files, "read": read, "round_trip": round_trip}
 
 
 @dataclass
@@ -426,8 +436,13 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         steps = carry_all(root, pending, staged, revisions)
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
+        maintenance.clear(held)
+        round_trip = installed.round_trip(root)
         transcripts.close()
     except BaseException as error:
+        if maintenance.read().phase is ReadyPhase:  # the round trip failed on the opened bus
+            maintenance.begin(MaintenanceOperator("upgrade-bus"))  # restore brings back ``held``
+            route_readers()
         # The failed bus keeps its hold until restore has swapped it out.
         backup.restore()
         transcripts.close()
@@ -442,10 +457,9 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
               f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
         raise
-    maintenance.clear(held)
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
-            "backup": str(backup.path)}
+            "round_trip": round_trip, "backup": str(backup.path)}
 
 
 def start(stack: Stack, root: Path, names: list[str]) -> None:
