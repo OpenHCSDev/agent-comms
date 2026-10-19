@@ -8,7 +8,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from dataclasses import Field, dataclass, field, replace
 from types import MappingProxyType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 from .child_process import NoProcess, ProcessIdentity
 from .errors import RelationViolationError, UnregisteredThreadError
@@ -232,7 +232,7 @@ class RegistryDocument(RegistryPresence):
             self,
             **{
                 declared.name: ThreadSlice.of(declared).copy(getattr(self, declared.name))
-                for declared, _ in FieldCodec.record_fields(type(self))
+                for declared, _ in FieldCodec.record_fields(cast(type, type(self)))
             },
         )
 
@@ -279,7 +279,7 @@ class RegistryDocument(RegistryPresence):
         """
         try:
             keyed = [(ThreadSlice.of(declared), key)
-                     for declared, key in FieldCodec.record_fields(cls)]
+                     for declared, key in FieldCodec.record_fields(cast(type, cls))]
             canonical = name
             for kind, key in keyed:
                 canonical = kind.canonical(raw[key], canonical)
@@ -291,7 +291,7 @@ class RegistryDocument(RegistryPresence):
     @classmethod
     def thread_rows(cls) -> tuple[str, ...]:
         """The sections that hold one row per thread name."""
-        return tuple(declared.name for declared, _ in FieldCodec.record_fields(cls)
+        return tuple(declared.name for declared, _ in FieldCodec.record_fields(cast(type, cls))
                      if ThreadSlice.of(declared) is OwnRow)
 
     @classmethod
@@ -328,14 +328,15 @@ class RegistryDocument(RegistryPresence):
                               if name not in kept[section]}
                     for section in thread_rows
                 }})
-                document = replace(changed, **{
+                reused: dict[str, Any] = {
                     section: {
                         name: (getattr(decoded, section) if name in kept[section]
                                else getattr(changed, section))[name]
                         for name in raw[section]
                     }
                     for section in thread_rows
-                })
+                }
+                document = replace(changed, **reused)
             names = set(document.threads)
             if names != set(document.statuses) or names != set(document.last_seen):
                 raise MalformedRecord("thread presence does not match declarations")
