@@ -26,7 +26,6 @@ from .order import COMMS, CommanderVerb
 
 CONFIG = CommanderConfig.installed()
 ME = CONFIG.commander
-SKILL = str(CommanderConfig.packaged_skill())
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
 # Ingrained defaults these rules exist to break; shown and answered at every review, never left to the draw.
@@ -40,7 +39,7 @@ def principles() -> list[str]:
 
 
 def rules() -> list[str]:
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(SKILL).read(), re.M)]
+    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(CommanderConfig.packaged_skill()).read(), re.M)]
     for path in [path for directory in CONFIG.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
         text = open(path).read()
         if re.search(r'^\s*type: feedback', text, re.M):
