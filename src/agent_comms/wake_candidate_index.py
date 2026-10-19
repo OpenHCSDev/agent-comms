@@ -245,7 +245,7 @@ class RebuildIndex(IndexStart):
 
 
 class FirstBuild(ResumeIndex):
-    """Admit the first maintenance batch without consulting a prior checkpoint.
+    """Start the first maintenance batch without consulting a prior checkpoint.
 
     The checkpoint state selects resume or rebuild. Schema failure happens
     before selection; malformed storage never permits discarding tables.
