@@ -49,6 +49,7 @@ from .store_files import (
     LockMode,
     SharedLock,
     StoreLock,
+    StoreLockOwner,
     StoreLockContention,
     _atomic_write_text,
     _iter_jsonl_stream,
@@ -500,7 +501,7 @@ class WireStoreLock(StoreLock):
             yield source
 
 
-class WireLog:
+class WireLog(StoreLockOwner):
     lock_rank = 1
     lock_type = WireStoreLock
     page_index_type = BusPageIndex
@@ -517,12 +518,6 @@ class WireLog:
         if index not in self._append_indexes:
             self._append_indexes.append(index)
         return index
-
-    def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
-               mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
-        """The existing canonical bus lock and durability read barrier."""
-        return _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
-                           mode=mode, contention=contention, lock_type=self.lock_type)
 
     @contextmanager
     def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
@@ -819,20 +814,20 @@ class WireLog:
         with self.certified_read() as source:
             return source.keyed_receipt(intent)
 
-    def prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...]:
+    def _prepare_append_indexes(self) -> tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...]:
         """Read registered index candidates before taking any source locks."""
         return tuple((index, index.prepare()) for index in self._append_indexes)
 
     @contextmanager
     def opened_wire_snapshot(
         self, *,
-        prepared_indexes: tuple[tuple[BusAppendIndex, AppendCheckpoint | NoCheckpoint], ...] = (),
         opening: SnapshotOpening = SequencedSnapshotOpening(),
     ):
-        """Keep one owned descriptor/cut; acquisition follows its source contract."""
+        """Capture registered indexes before opening their original source cut."""
+        prepared = self._prepare_append_indexes()
         with ExitStack() as resources:
             with opening.capture(self, resources) as opened:
-                opened.capture_append_indexes(prepared_indexes)
+                opened.capture_append_indexes(prepared)
                 yield opened
 
     def _open_snapshot_unlocked(self, resources: ExitStack, metadata: WireMetadata, through: int) -> WireSnapshot:

@@ -22,8 +22,8 @@ from agent_comms.standing_rules import (BoardDisagrees, BridgeDown, DiskLow, Hun
 from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import (CleanHunt, MergedProgress, NoCommitProgress, OpenPrProgress,
-    OrderProgress, PullRequest, PullRequests, RecordHuntTodo, StrikeReason, Todo, UnreadProgress)
+from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
+    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, RecordHuntTodo, StrikeReason, Todo, UnreadProgress)
 from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
@@ -266,6 +266,15 @@ def test_rules_due_until_every_drawn_rule_is_answered_and_fresh(commander, monke
         "RULES DUE (last rule review was 21 min ago (max 20)) -> agent-comms-commander rules review"
         " and answer the drawn rules before any order"]
 
+
+
+def test_defect_text_without_slop_line_needs_no_label():
+    """Only a text that names a defect in a Slop: line needs its label outside that line."""
+    assert DefectText.found("Yes, go ahead.") == [] and DirectiveText.refused("Yes, go ahead.") == ()
+    slop = "Slop: state; fact the count of open orders; at tools.py:829; derive delete-copy on todos.py:1"
+    assert DefectText.found(slop + "\nRead the count from its owner.") == [slop]
+    assert DirectiveText.refused(slop + "\nRead the count from its owner.") == (DefectText.refusal,)
+    assert DefectText.found(slop + "\nThe copy at tools.py:829 is wrong.") == []
 
 
 def test_a_claude_ai_directive_passes_the_commanders_directive_wording_and_review(commander, monkeypatch, tmp_path):
