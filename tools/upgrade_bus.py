@@ -319,8 +319,9 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
             read = stack.verify(copy)
-            round_trip = stack.round_trip(copy)
-        return {"steps": steps, "files": files, "read": read, "round_trip": round_trip}
+        # No round trip here: the copy's maintenance witness names the live root, and only the
+        # live bus has the connector service the round trip proves.
+        return {"steps": steps, "files": files, "read": read}
 
 
 @dataclass
