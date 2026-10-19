@@ -752,7 +752,7 @@ except FileNotFoundError: absent()
     assert BroadSwallow.count(source, "read.py") == 3
     root = Path(__file__).resolve().parents[2] / "src/agent_comms"
     assert sum(BroadSwallow.count(path.read_bytes(), str(path))
-               for path in root.rglob("*.py")) <= 30
+               for path in root.rglob("*.py")) <= 29
     before = repo.commit({"reader.py": "work()\n"})
     after = repo.commit({"reader.py": "try: work()\nexcept OSError: pass\n"})
     status, report = repo.compare(before, after)
