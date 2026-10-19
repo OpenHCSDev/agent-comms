@@ -14,6 +14,11 @@ store, timer or injection mechanism. Report what changed, what still fails and
 what you are doing next in ordinary language. Expand only when the detail helps
 Tristan make a decision.
 
+Pass explicitly captured documents and activity cuts to consumers. Do not pick
+canonical state through nullable override arguments or acquire it through a
+lower-level private API behind its existing resource owner. Name callable
+parameters for the behavior they provide, not for the document they replaced.
+
 ## Low tolerance for needless complexity
 
 Do not soften technical judgment for politeness. Tristan wants direct criticism
