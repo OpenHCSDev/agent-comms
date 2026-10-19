@@ -1,4 +1,5 @@
-"""`python -m agent_comms.native_package_cli VERB ...`: the stack scripts' native package verbs."""
+"""`python -m agent_comms.cli_native_package VERB ...`: the stack scripts' native package verbs."""
+
 from __future__ import annotations
 
 import argparse
@@ -30,7 +31,7 @@ class NativePackageVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
 
     @classmethod
     def parse(cls, argv: list[str]) -> NativePackageVerb:
-        parser = argparse.ArgumentParser(prog="agent_comms.native_package_cli", description=__doc__)
+        parser = argparse.ArgumentParser(prog="agent_comms.cli_native_package", description=__doc__)
         verbs = parser.add_subparsers(dest="command", required=True)
         for member in cls.members_with(cls):
             member.add_parser(verbs)
@@ -88,8 +89,11 @@ class InstallSourcesVerb(NativePackageVerb):
 @dataclass(frozen=True, kw_only=True)
 class EnvironmentVerb(NativePackageVerb):
     help = "Print this pin's test environment directory"
-    cache: StoragePath = option("--cache", default=StorageRule.native_cache,
-                         help="the root holding one test environment per pin")
+    cache: StoragePath = option(
+        "--cache",
+        default=StorageRule.native_cache,
+        help="the root holding one test environment per pin",
+    )
 
     def apply(self, ctx: None = None) -> None:
         print(native_environment(self.cache))
@@ -115,6 +119,6 @@ class BuildVerb(NativePackageVerb):
 
 if __name__ == "__main__":
     # The family registers its members under this module's import name, not __main__.
-    from agent_comms import native_package_cli
+    from agent_comms import cli_native_package
 
-    native_package_cli.NativePackageVerb.parse(sys.argv[1:]).apply()
+    cli_native_package.NativePackageVerb.parse(sys.argv[1:]).apply()
