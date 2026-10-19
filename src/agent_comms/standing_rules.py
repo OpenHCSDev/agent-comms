@@ -217,11 +217,35 @@ class PlanIdle(UndatedStandingRule):
             if phase.ready(todos) and not phase.ordered(todos)
         )
 
+    def enforce(self, comms: Comms, commander: str) -> None:
+        self.phase.task.start(comms, comms.registry.require(commander), self.phase)
+
     def line(self) -> str:
         return (
             f"PLAN IDLE: phase {self.phase.declared_name} ready, no open order"
-            " -> dispatch it this wake"
+            f" -> {self.phase.task.instruction}"
         )
+
+
+@dataclass(frozen=True)
+class UnownedWork(UndatedStandingRule):
+    """An unowned checked row starts a unit, even when the idle fleet is empty."""
+
+    todo: Todo
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(cls(todo) for todo in comms.goals.todos.for_commander(
+            comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
+
+    def enforce(self, comms: Comms, commander: str) -> None:
+        from .work_dispatch import WorkDispatch
+
+        WorkDispatch.reissue(comms, comms.registry.require(commander), self.todo)
+
+    def line(self) -> str:
+        return (f"UNOWNED WORK: {self.todo.id} has a checked order and no unit"
+                " -> Core starts its unit in an isolated checkout")
 
 
 @dataclass(frozen=True)

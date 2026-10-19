@@ -2419,6 +2419,8 @@ class Todo(TypedTable):
         if self.assignment is not None:
             self.assignment.require_trace(proposed.owner, traced)
             proposed = self.assignment.successor(proposed, self)
+        elif self.released:
+            self.released[-1].previous.require_trace(proposed.owner, traced)
         return replace(self, assignment=proposed, revision=self.revision + 1)
 
     def reassigned(self, assigned: Todo, actor: ThreadIncarnation) -> Todo:

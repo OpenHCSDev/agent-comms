@@ -46,3 +46,33 @@ NRA import is currently blocked by DuplicateRegistryKeyError in its detector
 registration against the installed metaclass-registry. Use refactor-audit's
 existing Package parser for the bounded AST census instead, recording omissions.
 AST results establish source sites, not live binding or runtime equivalence.
+
+Before edit: refactor-audit Package.load over all 379 production Python modules,
+zero parse omissions. Enumerated classes/bases and matching references across the
+whole package; imports, writes, comparisons and decisions in the rule/phase
+owners. Semantic consumers: tools.CommsStandingRulesTool.apply ->
+StandingRule.broken/enforce; commander.rotate.broken_rules invokes that tool;
+PlanIdle owns phase readiness attention; commander.standing.UnownedWheelSpin
+owned the competing idle-unit-only path; GoalAction subclasses and TodoStore
+own checked assignment; Registration and OwnerLifecycle own process identity
+and launch; CheckoutStorageEffect owns allocation policy. No dependency code is
+changed. Dynamic DeclaredFamily discovery and provider execution remain runtime
+obligations, not statically proven bindings.
+
+Implemented: PhaseTask.start/done, with an unspecified member that cannot invent
+an order and a checked member carrying PendingProblemOrder. PlanIdle delegates to
+its phase task. UnownedWork replaces UnownedWheelSpin and starts a dedicated unit.
+WorkDispatch checks storage, fetches main, creates the owned worktree, registers
+a stopped native thread, publishes its checked order, then calls OwnerLifecycle
+start. No fork copies, new launch codec or second task/order store.
+
+Completion uses the explicit task problem and ProblemOrder.accepted: only
+InstalledProblemOrder accepts; a withdrawn/folded/merely delivered problem does
+not complete the phase. pi-plan-claims is integrating PlanPhase.done and A2's
+corrected dependencies separately.
+
+Source trace also exposed an authority bypass: releasing an order skipped
+Assignment.require_trace on its next transfer. Todo.assigned now applies the
+same trace requirement to the released assignment history. Auto-dispatch passes
+no fabricated source trace. After two owners, missing real tracing stops that
+transfer rather than pretending the old order's source owner was newly read.
