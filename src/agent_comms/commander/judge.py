@@ -100,12 +100,13 @@ def roast(ctx, audience, thread, lines, text, fix, slop):
 
 def alarm(ctx):
     while True:
-        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(ctx.comms, ctx.commander)
+                if edit.at.before(time.time() - 300)]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
                 counts[edit.thread] = counts.get(edit.thread, 0) + 1
-            oldest = min(edit.at for edit in late)
+            oldest = min(edit.at.recorded_at("An overdue edit") for edit in late)
             print(f'UNJUDGED {len(late)} edits over 5 min (oldest {int((time.time() - oldest) / 60)} min): '
                   + ', '.join(f'{t} {n}' for t, n in counts.items()) + ' -> judge show', flush=True)
         time.sleep(60)
