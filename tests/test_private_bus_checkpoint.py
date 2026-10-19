@@ -38,7 +38,7 @@ def _root(tmp_path: Path) -> tuple[Comms, str]:
         ("Bob", {"team"}, 17003.0),
         ("outsider", {"else"}, 17004.0),
     ):
-        comms.registry.register(
+        comms.registry.declare(
             comms.registry.new_thread(name, frozenset(tags), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()), created_at=stamp)
         )
     root_id = comms.messaging.initialize_private_initial_protocol()
@@ -50,6 +50,15 @@ def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     with comms.bus.log.certified_read() as source:
         witness, captured, more = source.addressed_page(comms.bus.log, request)
     return witness, tuple(captured), more
+
+
+def test_bus_read_authority_comes_from_its_declared_lock_type(tmp_path):
+    comms, root_id = _root(tmp_path)
+    publish_initial(comms, 'sender', '#team', 'typed bus source')
+    with _store_lock(comms.bus.log.path) as generic:
+        assert generic.source is None
+    with comms.bus.log.locked() as bus:
+        assert bus.certified_read().marker.root_id == root_id
 
 
 def test_claim_barrier_reuses_the_writer_sealed_marker(tmp_path, monkeypatch):
@@ -460,7 +469,7 @@ def test_over_1000_initials_and_8mib_complete_lookup(tmp_path: Path, monkeypatch
     # source API supplies a complete-prefix+bounded-page alternative.
     with (
         pytest.raises(RelationViolationError),
-        _store_lock(comms.bus.log.path, max_bus_bytes=8 * 1024 * 1024),
+        comms.bus.log.locked(max_bus_bytes=8 * 1024 * 1024),
     ):
         pass
     with monkeypatch.context() as patch:
