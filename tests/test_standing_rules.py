@@ -150,7 +150,7 @@ def test_idle_reads_external_execution_and_requires_an_actual_recent_turn(standi
         comms.registry.declare(comms.registry.new_thread(
             name, frozenset(), str(tmp_path), execution=ExternalThreadExecution))
     comms.transcripts.external("external-working").finish(
-        turn_id="current", item_id="answer", events=(AssistantTranscript("working"),))
+        turn_id="current", item_id="answer", events=(AssistantTranscript("working", position="answer"),))
     names = [thread.name for thread in module.WheelSpin.idle(comms, "lead")]
     assert "external-working" in names
     assert "external-empty" not in names and "worker" not in names
