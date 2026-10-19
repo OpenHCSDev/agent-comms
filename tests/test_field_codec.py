@@ -15,6 +15,79 @@ from agent_comms.messages import (
 )
 
 
+def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
+    from agent_comms.field_codec import DeclaredFieldPlan
+
+    class ProbePlan(DeclaredFieldPlan):
+        metadata_flag = "wire_registry_probe"
+
+        def omitted(self, value):
+            return value == "omit" or super().omitted(value)
+
+    @dataclass
+    class Record:
+        value: str = field(metadata={"wire_registry_probe": True})
+
+    assert isinstance(FieldCodec.field_plan(Record, "value"), ProbePlan)
+    assert FieldCodec.encode(Record("omit")) == {}
+    assert FieldCodec.encode(Record("kept")) == {"value": "kept"}
+    assert FieldCodec.decode(Record, {"value": "kept"}) == Record("kept")
+
+
+def test_field_plan_refuses_an_unclaimed_representation():
+    from agent_comms.field_codec import FieldPlan
+
+    class UnclaimedPath(PathText):
+        field_plan = FieldPlan  # The base has no registered field claim.
+
+    @dataclass
+    class Record:
+        value: Annotated[Path, UnclaimedPath]
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
+
+
+def test_field_plan_refuses_unrelated_claims_instead_of_ordering_flags():
+    @dataclass
+    class Record:
+        value: str | None = field(metadata={"wire_context": True, "wire_absent_none": True})
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.field_plan(Record, "value")
+
+
+def test_wire_absence_is_none_without_running_the_constructor_factory():
+    created = []
+
+    def fresh():
+        created.append("created")
+        return "constructed-id"
+
+    @dataclass
+    class Record:
+        id: str | None = field(default_factory=fresh, metadata={"wire_absent_none": True})
+
+    record = Record()
+    assert created == ["created"]
+    assert FieldCodec.encode(record) == {"id": "constructed-id"}
+    plan = FieldCodec.field_plan(Record, "id")
+    for raw in ({}, {"id": None}):
+        for decoded in (
+            FieldCodec.decode(Record, raw),
+            FieldCodec.decode_bound(Record, raw),
+            FieldCodec.decode_selected(Record, raw, {}, fields=("id",)),
+        ):
+            assert decoded.id is None
+            assert FieldCodec.encode(decoded) == {}
+            assert FieldCodec.project(decoded, "status") == {}
+        assert plan.read(raw) is None
+    assert created == ["created"]
+    with pytest.raises(ValueError):
+        FieldCodec.decode(Record, {"id": 3})
+    assert created == ["created"]
+
+
 def test_json_shape_schema_uses_the_same_member_annotations_as_decode():
     class SchemaShape(DeclaredFamily, JsonShapeFamily, affix="SchemaShape"):
         pass

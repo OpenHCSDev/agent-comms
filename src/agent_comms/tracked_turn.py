@@ -385,11 +385,6 @@ class TrackedTurnSession(TurnSession):
         await self.native_session.close()
 
 
-
-    async def apply_native_event(self, event):
-        await self.dispatch(event)
-        return ()
-
     async def next_event(self) -> pi.PiEvent:
         try:
             while True:
@@ -488,8 +483,9 @@ class TrackedTurnSession(TurnSession):
         self.ensure_input_forwarding()
 
     @handles(pi.MessageStart)
-    async def message_start(self, event: pi.MessageStart) -> None:
+    async def message_start(self, event: pi.MessageStart):
         await event.message.tracked_start(self, event)
+        return self.DISCARD
 
     async def later_input_started(self, event: pi.MessageStart) -> None:
         matched, input_id = self.inputs.mark_started(self, event)
@@ -505,9 +501,10 @@ class TrackedTurnSession(TurnSession):
             self.context_commit = ObservedNativeCommit(event)
 
     @handles(pi.MessageUpdate)
-    async def message_update(self, event: pi.MessageUpdate) -> None:
+    async def message_update(self, event: pi.MessageUpdate):
         if event.assistant_message_event is not None:
             await self.dispatch(event.assistant_message_event)
+        return self.DISCARD
 
     async def assistant_started(self) -> None:
         self.draft_written_at = 0.0
@@ -525,8 +522,9 @@ class TrackedTurnSession(TurnSession):
             self.draft_written_at = now
 
     @handles(pi.MessageEnd)
-    async def message_end(self, event: pi.MessageEnd) -> None:
+    async def message_end(self, event: pi.MessageEnd):
         await event.message.tracked_end(self)
+        return self.DISCARD
 
     def accept_tool_round(self, message):
         super().accept_tool_round(message)
@@ -539,8 +537,9 @@ class TrackedTurnSession(TurnSession):
         self.terminal = self.terminal.append(message.authoritative_text)
 
     @handles(pi.NativeRetryEnd)
-    async def native_retry_finished(self, event: pi.NativeRetryEnd) -> None:
+    async def native_retry_finished(self, event: pi.NativeRetryEnd):
         event.outcome.finish_request(self)
+        return self.DISCARD
 
     async def context_proof(self) -> NativeContextProof:
         if not self.prompt_state.acknowledged:
@@ -560,11 +559,12 @@ class TrackedTurnSession(TurnSession):
 
 
     @handles(pi.AgentSettled)
-    async def settled(self, event: pi.AgentSettled) -> None:
+    async def settled(self, event: pi.AgentSettled):
         # Pi runs an input it was handed before settling; the turn ends after that run.
         if event.settles(self) and self.inputs.all_written_started:
             with self.startup.measurements.operation("native_agent_settled"):
                 self.finished = True
+        return self.DISCARD
 
     async def result(self) -> NativeTurnResult:
         with self.startup.measurements.operation("native_terminal_result"):

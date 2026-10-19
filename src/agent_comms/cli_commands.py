@@ -37,6 +37,7 @@ from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
+from .history_result import HistoryPageResult
 from .send_result import SendResult
 from .maintenance_barrier import MaintenanceHeldError
 from .command import Command
@@ -607,10 +608,7 @@ class AcknowledgedResult(CliResult):
 
 @dataclass(frozen=True)
 class WhoResult(CliResult):
-    who: tuple[ThreadView, ...]
-
-    def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+    who: tuple[Annotated[ThreadView, WireForm], ...]
 
 
 @dataclass(frozen=True)
@@ -633,10 +631,7 @@ class ChannelsResult(CliResult):
 
 @dataclass(frozen=True)
 class ThreadsResult(CliResult):
-    threads: tuple[ThreadRecord, ...]
-
-    def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+    threads: tuple[Annotated[ThreadRecord, WireForm], ...]
 
 
 @dataclass(frozen=True)
@@ -1311,7 +1306,7 @@ class HistoryCliCommand(CliCommand):
     limit: int = option("--limit", help="Maximum messages in this page", default=20)
     before: PageCursor | None = option("--before", help="Exclusive older-page cursor (JSON)", type=json.loads, default=None)
 
-    def apply(self, ctx: Comms) -> CliResult:
+    def apply(self, ctx: Comms) -> HistoryPageResult:
         target = CommandTarget.named(self.target)
         traversal = self.before.older() if self.before is not None else OlderTraversal()
         bounds = PageBounds(traversal, self.limit)

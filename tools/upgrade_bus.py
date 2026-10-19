@@ -19,9 +19,9 @@ A live run then stops the running agent owners with the installed CLI, backs
 the bus up (tar plus a hash of every file), moves the checkout,
 relocks and syncs its stack, prepares native Pi, carries the bus, reads it
 back, and starts only the owners it stopped. A failure after the backup
-restores the bus, the route, the checkout and its stack, and restarts those
-owners. Nothing is sent and no input is replayed: owners start by the normal
-start path, which never replays uncertain inputs.
+keeps maintenance held and preserves the bus, checkout and backup for forward
+repair. It never resets live main or replaces a possibly changed bus. Nothing
+is sent and no input is replayed: owners start by the normal start path.
 """
 from __future__ import annotations
 
@@ -49,7 +49,6 @@ from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
-from agent_comms.connector import PORT, ServiceProcess
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
@@ -59,7 +58,6 @@ from agent_comms.todos import PlannedInstallDeadline
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
-CONNECTOR = "from agent_comms.connector import main; raise SystemExit(main())"
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 
@@ -88,7 +86,6 @@ class Stack:
 
     checkout: Path
     home: Path = Path.home()
-    connector_port: int = PORT
 
     @property
     def python(self) -> Path:
@@ -146,33 +143,20 @@ class Stack:
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
 
+    def require_idle(self, root: Path, names: list[str]) -> None:
+        """The installed lifecycle reads its own turn records before any stop."""
+        run(self.python, "-c",
+            "import sys; from pathlib import Path; from agent_comms.comms import wire; "
+            "comms=wire(Path(sys.argv[1])); snapshot=comms.registry.snapshot(); "
+            "[comms.owners.require_restart_idle(snapshot.require(name)) for name in sys.argv[2:]]",
+            root, *names, cwd=self.checkout, env=self.environment())
+
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
         history = self.cli(root, "history", "--limit", "50")  # #any: every channel
-        return {"threads": len(threads), "who": len(present),
+        return {"threads": len(threads), "who": len(present["who"]),
                 "history": len(history[EverythingHistoryPageResult.messages_key])}
-
-    def restart_connector(self, patience: int = 30) -> None:
-        """The service keeps the code it loaded at start, so it restarts onto this checkout."""
-        try:
-            unit = ServiceProcess.listening(self.connector_port).unit
-            run("systemctl", "--user", "restart", unit)
-        except ValueError as error:
-            raise UpgradeRefused(str(error)) from error
-        for _ in range(patience):
-            with suppress(ValueError):
-                ServiceProcess.listening(self.connector_port)
-                return
-            time.sleep(1)
-        raise UpgradeRefused(f"The connector service did not listen again within {patience}s")
-
-    def round_trip(self, root: Path) -> str:
-        """The running connector service, on this stack's Python, reads this bus as the bus
-        reads itself; it needs open maintenance, so it runs last."""
-        output = run(self.python, "-c", CONNECTOR, "round_trip", root, self.python,
-                     "--port", str(self.connector_port), cwd=self.checkout, env=self.environment())
-        return output.strip().splitlines()[-1]
 
 
 @dataclass
@@ -280,8 +264,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
             read = stack.verify(copy)
-        # No round trip here: the copy's maintenance witness names the live root, and only the
-        # live bus has the connector service the round trip proves.
+        # Optional connector qualification belongs to its own round_trip command;
+        # a native-only bus must not acquire a fabricated director to update.
         return {"steps": steps, "files": files, "read": read}
 
 
@@ -403,6 +387,11 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(root / "registry.json")
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
+    try:
+        installed.require_idle(root, running)
+    except BaseException:
+        maintenance.clear(held)
+        raise
     lock = installed.lock
     transcripts = ExitStack()
     try:
@@ -428,31 +417,19 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
         maintenance.clear(held)
-        installed.restart_connector()
-        round_trip = installed.round_trip(root)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
-        maintenance.read().phase.hold_restore(maintenance, MaintenanceOperator("upgrade-bus"),
-                                              route_readers)
-        # The failed bus keeps its hold until restore has swapped it out.
-        backup.restore()
+        state = maintenance.read()
+        state.phase.hold_for(maintenance, state, MaintenanceOperator("upgrade-bus"))
         transcripts.close()
-        run("git", "-C", checkout, "reset", "--keep", "-q", current)
-        if (backup.path / "uv.lock").exists():
-            shutil.copy2(backup.path / "uv.lock", lock)
-        installed.sync()
-        installed.prepare_native()
-        maintenance.clear(held)
-        start(installed, root, running)
-        with suppress(UpgradeRefused):  # back onto the restored code, if it was restarted
-            installed.restart_connector()
-        print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
-              f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
+        print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
+              f"maintenance held, checkout and bus preserved; backup: {backup.path}",
+              file=sys.stderr)
         raise
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
-            "round_trip": round_trip, "backup": str(backup.path)}
+            "backup": str(backup.path)}
 
 
 def start(stack: Stack, root: Path, names: list[str]) -> None:

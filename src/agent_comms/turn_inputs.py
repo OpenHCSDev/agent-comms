@@ -81,7 +81,7 @@ class InputForwarding:
 
     async def write(self, session: TurnSession, *written: commands.PiCommand) -> None:
         for command in written:
-            session.stdin.write(session.native.reader.encode(command.identified()))
+            session.stdin.write(session.native.reader.encode(command))
         await session.stdin.drain()
 
     async def queued(self, input_ids: tuple[InputId, ...]) -> tuple[str, ...]:
