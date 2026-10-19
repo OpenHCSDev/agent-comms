@@ -25,7 +25,7 @@ from .acp_extension import (
     PromptCancelledUpdate,
     encode_updates,
 )
-from .context_reading import ContextUsage
+from .context_reading import ContextUsage, UnmeasuredContext
 from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
@@ -154,6 +154,21 @@ class AcpEventConsumer(MroDispatch):
         await self.client.session_update(
             session_id=self.session_id,
             update=UsageUpdate(session_update="usage_update", used=usage.used, size=usage.size),
+        )
+
+    @handles(UnmeasuredContext)
+    async def on_unmeasured_context(self, _reading: UnmeasuredContext) -> None:
+        """Publish the canonical typed reading; never leave the client's old usage silently."""
+        thread_name = self.agent.sessions.require(self.session_id)
+        configuration = await Coordination.run_worker(partial(
+            self.agent.comms.configuration.answer, thread_name,
+        ))
+        await self.client.session_update(
+            session_id=self.session_id,
+            update=SessionInfoUpdate(
+                session_update="session_info_update",
+                field_meta=encode_updates(configuration),
+            ),
         )
 
     @handles(events.CompactionEvent)
