@@ -33,7 +33,7 @@ from .envelope_claim_transitions import (
     ClaimOwner, ClaimProjection, ClaimTransition, ClaimTransitionError,
 )
 from .coordination_tables.publications import PublicationIntents
-from .errors import HumanClaimBlockedError, RelationViolationError
+from .errors import BusPrefixUnavailableError, HumanClaimBlockedError, RelationViolationError
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
 from .field_codec import FieldCodec, MalformedRecord
@@ -65,10 +65,6 @@ class CapturedWireSource[OriginalSource, Value = OriginalSource]:
     pointer: WireSourcePointer[OriginalSource]
     raw: bytes
     value: Value
-
-
-class BusPrefixUnavailableError(RelationViolationError):
-    """No sealed bus prefix is available; a sender must not rebuild history."""
 
 
 @dataclass(frozen=True)
@@ -1195,7 +1191,7 @@ def _directory_sync(path: Path) -> None:
 
 def _connect(path: Path, *, readonly: bool = False) -> sqlite3.Connection:
     if path.is_symlink() or not path.exists():
-        raise RelationViolationError("Private bus checkpoint is missing or redirected.")
+        raise BusPrefixUnavailableError("Private bus checkpoint is missing or redirected.")
     info = path.lstat()
     if (
         not stat.S_ISREG(info.st_mode)

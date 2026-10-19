@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import BusPrefixUnavailableError, RelationViolationError
 from .field_codec import Id128Text, Sha256Text
 from .private_path import FileRevision
 
@@ -66,7 +66,10 @@ class CheckpointSeal(DeclaredFamily, affix="Seal"):
         path: Path,
         saved: PrefixWitness,
         info: os.stat_result,
-    ) -> PrefixWitness: ...
+    ) -> PrefixWitness:
+        from .private_bus_checkpoint import _rebuild_checkpoint_unlocked
+
+        return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, self)
 
     @abstractmethod
     def recovery_end(self, info: os.stat_result) -> int: ...
@@ -95,8 +98,6 @@ class FinalSeal(CheckpointSeal):
         return cls(1, FileRevision.from_stat(db_path.stat()), witness.seal())
 
     def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
-        from .private_bus_checkpoint import BusPrefixUnavailableError
-
         if self.witness != saved.seal() or self.db_revision != FileRevision.from_stat(db_path.stat()):
             raise BusPrefixUnavailableError(
                 "Private bus checkpoint index seal changed or is pending.")
@@ -110,12 +111,10 @@ class FinalSeal(CheckpointSeal):
         saved: PrefixWitness,
         info: os.stat_result,
     ) -> PrefixWitness:
-        from .private_bus_checkpoint import _rebuild_checkpoint_unlocked
-
         self.check_final(saved, path)
         if saved.revision == FileRevision.from_stat(info):
             return saved
-        return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, self)
+        return super().recover(bus, marker, db, path, saved, info)
 
     def recovery_end(self, info: os.stat_result) -> int:
         return info.st_size
@@ -149,16 +148,14 @@ class PendingSeal(CheckpointSeal):
         saved: PrefixWitness,
         info: os.stat_result,
     ) -> PrefixWitness:
-        from .private_bus_checkpoint import _rebuild_checkpoint_unlocked
-
         if (
             saved.seal() not in (self.prior, self.expected)
-            or self.expected.revision.identity != FileRevision.from_stat(info).identity
-            or self.expected.revision.size > info.st_size
+            or not self.expected.revision.holds_cut(
+                FileRevision.from_stat(info), self.expected.revision.size)
             or self.prior.root_id != marker.root_id
         ):
-            raise RelationViolationError("Private bus checkpoint pending intent is inconsistent.")
-        return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, self)
+            raise BusPrefixUnavailableError("Private bus checkpoint pending intent is inconsistent.")
+        return super().recover(bus, marker, db, path, saved, info)
 
     def recovery_end(self, info: os.stat_result) -> int:
         return self.expected.revision.size

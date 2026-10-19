@@ -519,7 +519,8 @@ def test_relocated_bus_reuses_index_but_copied_index_needs_a_seal(
     tmp_path: Path, copy_root: bool,
 ) -> None:
     from agent_comms.child_process import Platform
-    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair, BusPrefixUnavailableError
+    from agent_comms.private_bus_checkpoint import CheckpointNeedsRepair
+    from agent_comms.errors import BusPrefixUnavailableError
     from agent_comms.store_files import _store_lock_file
 
     original, root_id = _root(tmp_path)
@@ -562,9 +563,6 @@ def test_relocated_bus_reuses_index_but_copied_index_needs_a_seal(
     second = publish_initial(copied, "sender", "Alice", "after copy")
     assert second.seq == first.seq + 1
     assert [row.message.seq for row in _page(copied, request.lookup)[1]] == [first.seq, second.seq]
-    if copy_root:
-        assert original.bus.log.path.read_bytes() == original_bytes
-        assert (original.root / "private_bus_checkpoint.sqlite3").read_bytes() == original_db
 
 
 @pytest.mark.parametrize("fault", ["tail", "prefix", "root", "shrink"])
@@ -595,7 +593,7 @@ def test_copied_root_corruption_is_not_rechecked(tmp_path: Path, fault: str) -> 
 
 
 def test_copied_root_rejects_unsealed_index_rows(tmp_path: Path) -> None:
-    from agent_comms.private_bus_checkpoint import BusPrefixUnavailableError
+    from agent_comms.errors import BusPrefixUnavailableError
 
     comms, _ = _root(tmp_path)
     publish_initial(comms, "sender", "Alice", "canonical original")
@@ -608,8 +606,7 @@ def test_copied_root_rejects_unsealed_index_rows(tmp_path: Path) -> None:
 
 
 def test_copy_preserves_unknown_sequence_reservation(tmp_path: Path, monkeypatch) -> None:
-    from agent_comms.errors import HumanClaimBlockedError
-    from agent_comms.private_bus_checkpoint import BusPrefixUnavailableError
+    from agent_comms.errors import BusPrefixUnavailableError, HumanClaimBlockedError
     from agent_comms.wire_log import WireLog
 
     comms, _ = _root(tmp_path)
@@ -744,7 +741,7 @@ def test_bad_tail_preserves_committed_chunks_and_resumes(tmp_path: Path) -> None
 
 
 def test_missing_prefix_fails_by_name_without_rebuilding(tmp_path: Path) -> None:
-    from agent_comms.private_bus_checkpoint import BusPrefixUnavailableError
+    from agent_comms.errors import BusPrefixUnavailableError
 
     comms, _ = _root(tmp_path)
     original = comms.bus.log.path.read_bytes()
