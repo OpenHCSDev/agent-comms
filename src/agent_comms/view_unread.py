@@ -392,12 +392,6 @@ class IdleReplyPreparation(ReplyPreparation):
             needed, state._pool.submit(ReplyIndexBatch.prepare, state._resume.order(needed))
         )
 
-    def read_counts(
-        self, state: TranscriptReadState, viewer: str,
-        document: ReadDocument,
-    ) -> TranscriptUnread:
-        return super().read_counts(state, viewer, document)
-
 
 @dataclass
 class NativeReplyPreparation(ReplyPreparation):
