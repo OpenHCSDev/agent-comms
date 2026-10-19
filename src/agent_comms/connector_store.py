@@ -81,7 +81,7 @@ class ConnectorGrants:
 
 
 @dataclass(frozen=True, slots=True)
-class ConnectorStore(RootFile, LockedStore[ConnectorGrants]):
+class ConnectorStore(RootFile, LockedStore[ConnectorGrants], lock_rank=9):
     filename: ClassVar[str] = "grants.json"
 
     @classmethod
