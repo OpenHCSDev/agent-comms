@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
-from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage, pinned_native_package
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
@@ -107,12 +107,9 @@ class NativePiPromptRejected(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .private_nk_entrypoint import PrivateNkLaunch
+    from .private_nk_entrypoint import RootLaunch
 
-    launch = PrivateNkLaunch.derive()
-    if launch is None:
-        raise NativePiUnavailable("Native owner backend requires a configured private route")
-    package = launch.validate()
+    package = RootLaunch.derive().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
         package, tuple(sys.argv[1:]), Path.cwd(), environment,
@@ -469,15 +466,9 @@ class NativePiRpcLaunch:
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        from .private_nk_entrypoint import PrivateNkLaunch
+        from .private_nk_entrypoint import RootLaunch
 
-        route = PrivateNkLaunch.derive(root)
-        if route is not None:
-            package = route.validate()
-        elif Path(shutil.which(command) or command).resolve() == (MANIFEST.parent / "bin/pi-native").resolve():
-            package = VerifiedNativePackage.acquire(pinned_native_package())
-        else:
-            raise NativePiUnavailable("Native owner requires a configured pinned package")
+        package = RootLaunch.derive(root).package_for(command)
         cls._command_selection(command, runtime, package)
         return package
 

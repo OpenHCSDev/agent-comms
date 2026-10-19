@@ -26,7 +26,7 @@ from agent_comms.comms import Comms, wire
 from agent_comms.coordination_cohort import accept_delivery_cohort
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 from agent_comms.coordinator import Coordination
-from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+from agent_comms.private_nk_entrypoint import PrivateNkLaunch, RootLaunch, SharedRootLaunch
 from agent_comms.threads import Thread
 from test_native_prompt_binding import _root
 from test_native_prompt_binding import tmp_path as private_root_fixture
@@ -54,11 +54,11 @@ def test_owner_installed_route_selects_same_private_root_for_cli_and_acp(tmp_pat
     assert routed.root == root
     pinned = PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(declared_native_package))
     assert routed.owners.launch_authority == pinned
-    assert PrivateNkLaunch.derive() == pinned
+    assert RootLaunch.derive() == pinned
     legacy = tmp_path / "explicit-legacy"
     monkeypatch.setenv("AGENT_COMMS_ROOT", str(legacy))
     assert wire().root == legacy
-    assert PrivateNkLaunch.derive() is None
+    assert RootLaunch.derive() == SharedRootLaunch(legacy)
 
 
 def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, monkeypatch, native_runtime_package):
@@ -72,7 +72,10 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
     monkeypatch.setattr(private_nk_entrypoint, "pinned_native_package", lambda: package)
     for name in ("AGENT_COMMS_ROOT",):
         monkeypatch.delenv(name, raising=False)
-    assert wire(tmp_path / "public").owners.launch_authority is None
+    shared = wire(tmp_path / "public").owners
+    assert shared.launch_authority == SharedRootLaunch(tmp_path / "public")
+    with pytest.raises(PublicationActivationBlocked, match="requires a private bus root"):
+        shared.require_private_launch()
 
     comms = wire(root)
     assert comms.owners.launch_authority == PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(package))
@@ -116,7 +119,7 @@ def test_headless_start_derives_launch_from_marker_and_installation(tmp_path, mo
         assert result.pid == launched[0].pid
         assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
         # The child derives from its root exactly what the parent derived.
-        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(package))
+        assert RootLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == PrivateNkLaunch(root, root_id, VerifiedNativePackage.acquire(package))
     finally:
         for child in launched:
             child.stop_sync()
@@ -152,7 +155,7 @@ def test_default_route_owner_start_inherits_exact_private_launch_pin(tmp_path, m
         assert comms.registry.require("resumable").process_identity == launched[0].identity
         assert captured[0]["AGENT_COMMS_ROOT"] == str(root)
         # The child derives the same launch from the root it is handed.
-        assert PrivateNkLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == comms.owners.launch_authority
+        assert RootLaunch.derive(Path(captured[0]["AGENT_COMMS_ROOT"])) == comms.owners.launch_authority
     finally:
         for child in launched:
             child.stop_sync()
@@ -174,7 +177,7 @@ def test_publish_route_selects_private_root_and_refuses_replacement(tmp_path, mo
     assert route_file.stat().st_mode & 0o777 == 0o600
     assert active_route.read_active_route() == route
     assert wire().root == root
-    assert PrivateNkLaunch.derive().validated_root == root
+    assert RootLaunch.derive().validated_root == root
     original = route_file.read_bytes()
     with pytest.raises(ValueError, match="already installed"):
         active_route.publish_active_route(route)
@@ -327,7 +330,7 @@ def test_invalid_active_route_fails_closed(tmp_path, monkeypatch, capsys):
     with pytest.raises(ValueError, match="invalid JSON"):
         wire()
     with pytest.raises(ValueError, match="invalid JSON"):
-        PrivateNkLaunch.derive()
+        RootLaunch.derive()
     assert cli.main(["threads"]) == 1
     assert "invalid JSON" in json.loads(capsys.readouterr().out)["error"]
 

@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import os
 import shlex
-import shutil
 from abc import ABC, abstractmethod
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import closing, contextmanager, suppress
@@ -18,7 +17,6 @@ from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, Pr
 from .turn_lease import NoTurnRecord
 from .cli_result import CliResult
 from .tool_result import ToolResult
-from .coordination_errors import PublicationActivationBlocked
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier

@@ -294,7 +294,7 @@ class SessionConfigOptions(ConfigOptions):
             agent_bin,
             agent_args,
             replace(RestartEnvironment.inherit(os.environ), root=str(comms.root)),
-            comms.owners.require_private_launch().native_package,
+            comms.owners.launch_authority.package_for(agent_bin),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects
         self.catalog_publish_lock = asyncio.Lock()

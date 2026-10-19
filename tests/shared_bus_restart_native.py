@@ -583,7 +583,7 @@ async def configured_mixed_routes(arguments):
 async def retained_owner():
     """Original installed ACP owner with an explicit saved SelectedExecution."""
     from agent_comms.coordinated_runtime import SelectedExecution
-    from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+    from agent_comms.private_nk_entrypoint import RootLaunch
     from agent_comms.native_source_cursor import NativeSourceCursor
     import traceback
     original_advance = NativeSourceCursor._advance_proven
@@ -599,7 +599,7 @@ async def retained_owner():
                          'result':'original_completed'}), flush=True)
         return value
     NativeSourceCursor._advance_proven = observe_advance
-    launch = PrivateNkLaunch.derive(Path(os.environ['AGENT_COMMS_ROOT']))
+    launch = RootLaunch.derive(Path(os.environ['AGENT_COMMS_ROOT'])).require_private()
     launch.validate()
     service = Comms(launch.validated_root)
     name = os.environ['AGENT_COMMS_THREAD']

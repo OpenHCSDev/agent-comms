@@ -76,6 +76,11 @@ class RootLaunch(ABC):
                      session_id: str) -> CursorScope:
         """The cursor scope this process may publish for ``thread_name``."""
 
+    @abstractmethod
+    async def cursor_metadata(self, publication: CursorPublication, thread_name: str,
+                              session_id: str) -> tuple:
+        """The trusted cursor metadata a session publishes."""
+
 
 @dataclass(frozen=True, slots=True)
 class SharedRootLaunch(RootLaunch):
@@ -104,7 +109,8 @@ class SharedRootLaunch(RootLaunch):
         from .native_package import MANIFEST
         from .native_pi import NativePiUnavailable
 
-        if Path(shutil.which(command) or command).resolve() != (MANIFEST.parent / "bin/pi-native").resolve():
+        stack_launcher = MANIFEST.parent / "bin/pi-native"
+        if Path(shutil.which(command) or command).resolve() != stack_launcher.resolve():
             raise NativePiUnavailable("Native owner requires a configured pinned package")
         return VerifiedNativePackage.acquire(pinned_native_package())
 
@@ -112,6 +118,9 @@ class SharedRootLaunch(RootLaunch):
         from .cursor_publication import NoCursorScope
 
         return NoCursorScope()
+
+    async def cursor_metadata(self, publication, thread_name, session_id):
+        return ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +173,9 @@ class PrivateNkLaunch(RootLaunch):
 
     def cursor_scope(self, publication, thread_name, session_id):
         return publication.live_scope(self.wire_root_id, thread_name, session_id)
+
+    async def cursor_metadata(self, publication, thread_name, session_id):
+        return await publication.observed_metadata(thread_name, session_id)
 
     @classmethod
     def installed(cls, root: Path, wire_root_id: str) -> PrivateNkLaunch:
