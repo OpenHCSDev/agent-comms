@@ -2,7 +2,8 @@
 
 Claude Code's Monitor injects stdout lines into its conversation. The adapter
 is `agent_comms.cli_bridges.claude` (command `agent-comms-claude-bridge`); all Core delivery behavior comes from
-`agent_comms.cli_bridges.shared`, shared with Codex. No Claude settings hook is needed.
+`agent_comms.cli_bridges.shared`, shared with Codex. No persistent Claude settings change is needed;
+managed sessions receive their lifecycle hooks through per-process settings.
 
 ## Start a session that can wake from its first bus message
 
@@ -71,8 +72,9 @@ and cancellation; an internal startup timer cannot safely guess its latency.
 - `DeliveryJournal` records message IDs and transport results in
   `~/.local/state/claude-comms-inbox/delivery.sqlite3`. Core still owns the inbox.
 - `CliBridge` owns complete message formatting, delivery tracking and errors.
-- `Inbox` owns the delivery lifetime and lock; `Watch` also starts transcript
-  publication. `Send` owns a required target, body and kind. Argument decoding
+- The SessionStart-owned `Serve` daemon owns registration, inbox delivery and
+  transcript publication. `Watch` attaches Monitor; `Run` attaches native stdin
+  and holds the same reader lock. `Send` owns a required target, body and kind. Argument decoding
   constructs the operation; execution does not compare command strings.
 - `ClaudeMonitorFrame` owns Monitor's 500-character event cap. It splits a body
   into numbered parts; each begins `Comms in · sender · id · k/n`. The encoded
@@ -85,10 +87,10 @@ and cancellation; an internal startup timer cannot safely guess its latency.
   publication. Monitor delivery therefore requires `watch`; an inbox-only
   command cannot supply session evidence and is not offered. Claude's completed
   JSONL blocks supply replies, visible reasoning,
-  tool calls/results and current activity without a plugin or settings hook.
+  tool calls/results and current activity without a transcript plugin.
   Hidden thinking supplies activity only. Unknown records fail visibly.
 - Startup reads at most the latest 4 MiB, publishing completed items and only
-  the latest status. The bridge then reads appended complete lines every 0.2 s;
+  the latest status. Filesystem notifications admit appended complete lines;
   a partial final line waits for its newline. Replacement or truncation fails.
   No offset is saved. Core makes repeated completed items idempotent.
 
