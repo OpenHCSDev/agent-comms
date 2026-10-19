@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import json
 import re
+import subprocess
 import time
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -20,10 +21,12 @@ from agent_comms.commander.config import Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import OrderCheck
-from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.todos import (ApplicationOrderRun, Assignment, AwaitingFirstCall,
     MechanicalOrderRun, NoGoalReference, ObservedFirstCall, OrderMessage,
-    PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, TodoStore, WithdrawTodo)
+    PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, TodoStore, WithdrawTodo,
+    Todo, OpenTodoState, UnorderedProblemOrder, LocatedProblemFinding, MergedProblemOrder,
+    HuntRecord, CleanHunt, OrderedHunt)
 
 
 @dataclass(frozen=True)
@@ -64,7 +67,7 @@ class RtsOrder:
 
 
 def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
-    names = ('deadlines.json', 'problems.json', 'strikes.jsonl', 'sent.jsonl')
+    names = ('deadlines.json', 'problems.json', 'strikes.jsonl', 'sent.jsonl', 'hunts.jsonl')
     source = {name: (rts / name).read_bytes() for name in names}
     deadlines = json.loads(source['deadlines.json'])
     problems = json.loads(source['problems.json'])
@@ -89,6 +92,13 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
     if missing:
         print(json.dumps({'orders_missing_problem_rows': missing}, indent=2))
         raise ValueError('The commander must restore the missing problem rows before transfer')
+    finding_repos = {}
+    for pid in sorted(problems.keys() - selected.keys()):
+        location = FileLine.from_wire(problems[pid]['where'])
+        try:
+            finding_repos[pid] = Repo.of(Path(location.path).parent).github
+        except subprocess.CalledProcessError as error:
+            raise ValueError(f'{pid}: cannot read repository from recorded path {location.path}') from error
     comms = Comms(root)
     actor = comms.registry.require('claude-code')
     store = TodoStore(root)
@@ -143,7 +153,8 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
         # Historical strikes include former holders; replaying StrikeTodo.apply would
         # wrongly require those holders to be the current assignment. Restore their
         # actual Core records, together, through the record's own SQLite codec.
-        restored = replace(current, strikes=history, revision=current.revision + 1)
+        recorded_order = order.copy_as(MergedProblemOrder, commit=merged[pid]) if pid in merged else order
+        restored = replace(current, order=recorded_order, strikes=history, revision=current.revision + 1)
         with store.writing() as db:
             restored.upsert(db)
         recorded = store.get(pid)
@@ -151,11 +162,37 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
                 or recorded.order.id != old.msg or recorded.strikes != history):
             raise ValueError(f'{pid}: transferred Core row differs')
         report['board_orders'].append(f'{pid} {recorded.holder} {old.due} {recorded.order.id}')
+    for pid, repo in finding_repos.items():
+        problem = problems[pid]
+        location = FileLine.from_wire(problem['where'])
+        finding = Todo(id=pid, repo=repo, text=problem['text'], creator=actor.name,
+            creator_created=actor.created_at, state=OpenTodoState, revision=1,
+            goal=NoGoalReference(), assignment=None,
+            order=UnorderedProblemOrder(finding=LocatedProblemFinding(location)),
+            deadline=UnrecordedEventTime())
+        if pid in existing:
+            previous = store.get(pid)
+            finding = replace(finding, revision=previous.revision + 1,
+                              strikes=previous.strikes, released=previous.released)
+        with store.writing() as db:
+            finding.upsert(db)
+    hunts = [json.loads(line) for line in source['hunts.jsonl'].splitlines() if line]
+    for index, raw in enumerate(hunts):
+        fields = dict(where=FileLine.from_wire(raw['where']), why=raw['why'],
+                      at=RecordedEventTime(raw['at']))
+        hunt = OrderedHunt(**fields, sent=raw['sent']) if raw['sent'] else CleanHunt(**fields)
+        # Restore historical records; do not rerun a historical source-file
+        # existence check or pretend that an old order is still current.
+        with store.writing() as db:
+            HuntRecord(id=f'rts-hunt:{index}', commander=actor.incarnation, hunt=hunt).upsert(db)
+    report['finding_repositories'] = finding_repos
+    report['hunts'] = len(hunts)
+    report['merged_without_delivery_claim'] = len(merged)
     if any((rts / name).read_bytes() != data for name, data in source.items()):
         raise ValueError('RTS changed during transfer; destination is not ready for installation')
     if retire:
         for name in ('order.py', 'judge.py', 'rotate.py', 'tool_watch.py', 'shift_after_window.py',
-                     'deadlines.json', 'problems.json', 'strikes.jsonl'):
+                     'deadlines.json', 'problems.json', 'strikes.jsonl', 'hunts.jsonl', 'sent.jsonl'):
             (rts / name).rename(rts / (name + '.retired-p707'))
     print(json.dumps(report, indent=2))
     return 0

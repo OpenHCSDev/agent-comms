@@ -1069,6 +1069,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return tuple(line.removeprefix(cls.pull_request_label).strip()
                      for line in body.splitlines() if line.startswith(cls.pull_request_label))
 
+    def board_order(self, todo: Todo) -> str:
+        return f'{" ".join(self.finding.instructions())} | unassigned | - | -'
+
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
 
@@ -1145,6 +1148,11 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     deletes: OrderDeletion = field(
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
+
+    def board_order(self, todo: Todo) -> str:
+        owner = todo.holder or f'unassigned: released from {todo.released[-1].previous.owner}: {todo.released[-1].reason.text}'
+        return (f'{self.owner.to_wire()} | {owner} | {self.id} | '
+                f'{time.strftime("%H:%M", time.localtime(todo.deadline.recorded_at("An order deadline")))}')
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -1236,15 +1244,8 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
                          "its order has none.")
 
-    def require_close(self):
-        raise ValueError("Closing requires recorded installed application evidence.")
-
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         raise ValueError("Only an undelivered order can be withdrawn.")
-
-    def withdrawals(self, todo: Todo) -> tuple[str, ...]:
-        """How this order retired its problem without delivery, as the record and board say."""
-        return ()
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         """The order waiting on the fleet's install to record it working."""
@@ -1282,14 +1283,26 @@ class PendingProblemOrder(CheckedProblemOrder):
 @dataclass(frozen=True, kw_only=True)
 class DroppedProblemOrder(UnorderedProblemOrder, CheckedProblemOrder):
     replacing_message: str
-    pending: ClassVar[bool] = False
     line: ClassVar[str] = "Dropped for a newer order"
+
+
+@dataclass(frozen=True, kw_only=True)
+class MergedProblemOrder(CheckedProblemOrder):
+    """A recorded merge is not proof that the order's delivery check passed."""
+    commit: str
+    line: ClassVar[str] = "Merged, delivery check unverified"
+
+    def __post_init__(self):
+        super().__post_init__()
+        GitCommitText.decode(self.commit)
+
+    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+        return (todo,)
 
 
 @dataclass(frozen=True, kw_only=True)
 class DeliveredProblemOrder(CheckedProblemOrder):
     delivery: OrderDelivery
-    pending: ClassVar[bool] = False
     line: ClassVar[str] = "Delivered, waiting on install"
 
     def require_transfer(self, todo: Todo) -> None:
@@ -1956,18 +1969,18 @@ class Todo(TypedTable):
     text: str
     creator: str
     creator_created: float
-    state: type[TodoState]
-    revision: int = field(metadata={"sql": Column(check="revision>0")})
+    state: type[TodoState] = field(metadata={"creation_exclude": True})
+    revision: int = field(metadata={"sql": Column(check="revision>0"), "creation_exclude": True})
     goal: GoalReference = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
-    assignment: Assignment | None
+    assignment: Assignment | None = field(metadata={"creation_exclude": True})
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
-    strikes: tuple[StrikeTodo, ...] = ()
-    voided: tuple[VoidStrikeTodo, ...] = ()
-    released: tuple[ReleaseTodo, ...] = ()
-    verdicts: tuple[OrderVerdict, ...] = ()
-    corrections: tuple[WordingCorrection, ...] = ()
-    messages: tuple[OrderMessage, ...] = ()
+    strikes: tuple[StrikeTodo, ...] = field(default=(), metadata={"creation_exclude": True})
+    voided: tuple[VoidStrikeTodo, ...] = field(default=(), metadata={"creation_exclude": True})
+    released: tuple[ReleaseTodo, ...] = field(default=(), metadata={"creation_exclude": True})
+    verdicts: tuple[OrderVerdict, ...] = field(default=(), metadata={"creation_exclude": True})
+    corrections: tuple[WordingCorrection, ...] = field(default=(), metadata={"creation_exclude": True})
+    messages: tuple[OrderMessage, ...] = field(default=(), metadata={"creation_exclude": True})
 
     @property
     def pending(self):
@@ -2079,19 +2092,8 @@ class Todo(TypedTable):
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
-        self.require_result(
-            replace(
-                self,
-                id=proposed.id,
-                repo=proposed.repo,
-                text=proposed.text,
-                creator=proposed.creator,
-                creator_created=proposed.creator_created,
-                goal=proposed.goal,
-                deadline=proposed.deadline,
-                order=proposed.order,
-            )
-        )
+        if FieldCodec.project(self, "creation") != FieldCodec.project(proposed, "creation"):
+            raise TodoConflict(self)
 
 
 def _text(value: str, label: str, limit: int) -> str:
