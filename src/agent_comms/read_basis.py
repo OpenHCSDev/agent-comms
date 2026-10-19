@@ -10,14 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 from abc import ABC, abstractmethod
-<<<<<<< HEAD
 from bisect import bisect_left, bisect_right
-from collections.abc import Callable, Collection, Iterable, Mapping
-=======
-from bisect import bisect_left
-from collections.abc import Callable, Collection, Iterable, Iterator
+from collections.abc import Callable, Collection, Iterable, Iterator, Mapping
 from contextlib import contextmanager
->>>>>>> origin/main
 from dataclasses import dataclass, field, replace
 from functools import partial
 from itertools import product
@@ -42,13 +37,7 @@ class DisplayViewer(ABC):
     def resolve(self, snapshot: RegistryProvenance) -> DisplayViewer: ...
 
     @abstractmethod
-<<<<<<< HEAD
     def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay | None: ...
-=======
-    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
-                              registry: Registration) -> MessagePage:
-        """The historical page carrying what this viewer was shown, read from the bus."""
->>>>>>> origin/main
 
     @abstractmethod
     def cursor(self, reads, snapshot, document, source) -> ReadCursor: ...
@@ -60,11 +49,7 @@ class DisplayViewer(ABC):
     def require_name(self, snapshot) -> str: ...
 
     @abstractmethod
-<<<<<<< HEAD
     def read_page(self, scope, bounds, basis, source) -> MessagePage: ...
-=======
-    def displayed_scope(self, scope, page, basis, bus): ...
->>>>>>> origin/main
 
 
 @dataclass(frozen=True, slots=True)
@@ -72,14 +57,8 @@ class AnonymousViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> AnonymousViewer:
         return self
 
-<<<<<<< HEAD
     def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> None:
         return None
-=======
-    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
-                              registry: Registration) -> MessagePage:
-        return page
->>>>>>> origin/main
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return ReadCursor()
@@ -90,13 +69,8 @@ class AnonymousViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         raise ValueError("Viewer metrics require a named viewer")
 
-<<<<<<< HEAD
     def read_page(self, scope, bounds, basis, source) -> MessagePage:
         return replace(bounds.conversation(scope).read_opened(source), display_scope=scope)
-=======
-    def displayed_scope(self, scope, page, basis, bus):
-        return scope
->>>>>>> origin/main
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,27 +80,11 @@ class NamedViewer(DisplayViewer):
     def resolve(self, snapshot: RegistryProvenance) -> NamedViewer:
         return type(self)(snapshot.canonical_name(self.name))
 
-<<<<<<< HEAD
     def display_evidence(self, page, presentation, historical, source, index, document, snapshot) -> HistoricalDisplay:
         historical.validate()
         return HistoricalDisplay(historical, presentation.bus.reads.capture_indexed(
             self.resolve(snapshot).name, page.messages, snapshot, source, index,
             conversation_snapshot=historical.provenance, document=document))
-=======
-    def with_display_evidence(self, page: MessagePage, bus: MessageBus,
-                              registry: Registration) -> MessagePage:
-        source = page.messages[0].source
-        source.validate()
-        snapshot = registry.snapshot()
-        return replace(page, historical_display=HistoricalDisplay(
-            source,
-            bus.reads.capture(
-                self.resolve(snapshot).name, page.messages, snapshot,
-                Path(source.root) / "bus.jsonl",
-                conversation_snapshot=source.provenance,
-            ),
-        ))
->>>>>>> origin/main
 
     def cursor(self, reads, snapshot, document, source) -> ReadCursor:
         return document.cursor(self.name, snapshot, source)
@@ -137,18 +95,11 @@ class NamedViewer(DisplayViewer):
     def require_name(self, snapshot) -> str:
         return snapshot.canonical_name(self.name)
 
-<<<<<<< HEAD
     def read_page(self, scope, bounds, basis, source) -> MessagePage:
         result = bounds.conversation(scope).displayed(
             basis.reads, basis.document, self.name, basis.registry, basis.registry, source,
         )
         return replace(result.page, display_scope=replace(scope, displayed=result.displayed))
-=======
-    def displayed_scope(self, scope, page, basis, bus):
-        return replace(scope, displayed=bus.reads.capture(
-            self.name, page.messages, basis.registry, bus.log.path,
-        ))
->>>>>>> origin/main
 
 
 class DisplaySelection(ABC):
@@ -299,13 +250,9 @@ if TYPE_CHECKING:
     from .bus_page_index import BusPageIndex, BusPageRow
     from .channels import TagChannel
     from .historical_views import HistoryArchive, HistorySource
-<<<<<<< HEAD
-=======
     from .catalog_document import CatalogDocument
     from .catalog_store import ChannelCatalog
     from .channels import Channels
-    from .channels import Channel
->>>>>>> origin/main
     from .message_bus import MessageBus
     from .message_page import MessagePage, PageBounds
     from .messages import Message
@@ -910,7 +857,6 @@ class ChannelDisplayScope(MessageDisplayScope):
         return self.displayed
 
     def includes(self, message: Message) -> bool:
-<<<<<<< HEAD
         return message.target in self.targets
 
 
@@ -971,16 +917,6 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
                 or any(name in self.participant_names
                        for name in CommandTarget.named(message.target).direct_names)
                 or any(mention.thread in self.participant_names for mention in message.mentions))
-=======
-        if self.targets is None or message.target in self.targets:
-            return True
-        if not self.any_mode:
-            return False
-        return (
-            message.sender in self.participant_names
-            or any(name in self.participant_names for name in CommandTarget.named(message.target).direct_names)
-            or any(mention.thread in self.participant_names for mention in message.mentions)
-        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -990,8 +926,11 @@ class CapturedSelection:
     registry: RegistrySnapshot
     catalog: CatalogDocument
     viewer: DisplayViewer
-    seen: ReadCursor
+    reads: ReadLedger
     document: ReadDocument
+
+    def seen(self, source) -> ReadCursor:
+        return self.viewer.cursor(self.reads, self.registry, self.document, source)
 
     @classmethod
     def capture(
@@ -999,7 +938,7 @@ class CapturedSelection:
         reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
     ) -> CapturedSelection:
         viewer = viewer.resolve(snapshot)
-        return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
+        return cls(snapshot, catalog, viewer, reads, document)
 
     @classmethod
     @contextmanager
@@ -1026,7 +965,7 @@ class CapturedSelection:
     @property
     def scopes(self) -> tuple[ChannelDisplayScope, ...]:
         return tuple(
-            ChannelDisplayScope.capture(channel, self.registry)
+            channel.display_scope(self.registry)
             for channel in self.channels.values()
         )
 
@@ -1039,5 +978,4 @@ class CapturedSelection:
 
     def scope(self, target: str) -> ChannelDisplayScope:
         channel = self.catalog.require_channel(target, self.registry.threads)
-        return ChannelDisplayScope.capture(channel, self.registry)
->>>>>>> origin/main
+        return channel.display_scope(self.registry)

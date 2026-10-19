@@ -348,71 +348,6 @@ class SentMessageOutcome(MessageNotification):
     message: Message = field(kw_only=True)
 
 
-<<<<<<< HEAD
-@dataclass(frozen=True, slots=True)
-class DisplaySelection:
-    """One captured registry/catalog/read basis for local human presentation."""
-
-    registry: RegistrySnapshot
-    catalog: CatalogDocument
-    viewer: DisplayViewer
-    reads: ReadLedger
-    document: ReadDocument
-
-    def seen(self, source) -> ReadCursor:
-        return self.viewer.cursor(self.reads, self.registry, self.document, source)
-
-    @classmethod
-    def capture(
-        cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-        reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
-    ) -> DisplaySelection:
-        viewer = viewer.resolve(snapshot)
-        return cls(snapshot, catalog, viewer, reads, document)
-
-    @classmethod
-    @contextmanager
-    def reading(
-        cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: DisplayViewer,
-    ) -> Iterator[DisplaySelection]:
-        """Borrow the original identity resources and read the ledger once.
-
-        Finish reading the ledger before yielding: painted acknowledgement may
-        write that same ledger while identity and membership remain acquired.
-        """
-        with registry.store.reading() as document, catalog.reading() as channels:
-            with reads.reading() as read_document:
-                selected = cls.capture(
-                    document.snapshot(), channels, reads, read_document, viewer
-                )
-            yield selected
-
-    @property
-    def channels(self) -> Channels:
-        return self.catalog.views(self.registry.threads)
-
-    @property
-    def scopes(self) -> tuple[ChannelDisplayScope, ...]:
-        return tuple(
-            channel.display_scope(self.registry)
-            for channel in self.channels.values()
-        )
-
-    @property
-    def viewer_names(self) -> frozenset[str]:
-        return self.viewer.names(self.registry)
-
-    def require_viewer(self) -> str:
-        return self.viewer.require_name(self.registry)
-
-    def scope(self, target: str) -> ChannelDisplayScope:
-        channel = self.catalog.require_channel(target, self.registry.threads)
-        return channel.display_scope(self.registry)
-
-
-=======
->>>>>>> origin/main
 class ChannelReadMark(ABC):
     """A read request carries its own source cut and displayed-message selection."""
 
@@ -523,13 +458,7 @@ class BusPresentation:
                     scope = basis.scope(target.name)
             # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
-<<<<<<< HEAD
             return basis.viewer.read_page(scope, bounds, basis, source)
-=======
-            page = ConversationMessagePageRequest(scope, bounds).read_opened(source)
-            displayed = basis.viewer.displayed_scope(scope, page, basis, self.bus)
-            return replace(page, display_scope=displayed)
->>>>>>> origin/main
 
     def mark_channel_read(
         self,
