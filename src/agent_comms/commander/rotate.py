@@ -13,7 +13,7 @@ def broken_rules(commander, after=0.0):
     return read.broken
 
 
-def owed_orders(commander) -> dict[str, list[Todo]]:
+def owed_orders(commander: order.Commander) -> dict[str, list[Todo]]:
     """Each unit's open orders."""
     owed: dict[str, list[Todo]] = {}
     for todo in commander.held_orders():

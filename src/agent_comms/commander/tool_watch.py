@@ -8,6 +8,7 @@ from ..pi_payloads import PiMessage, TextContent
 from ..tool_declaration import one_line
 from ..registration import Registration
 from ..todos import StorageStrikeTodo
+from .order import Commander
 
 def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""
@@ -15,7 +16,7 @@ def thread_names(registry: Registration) -> dict[str, str]:
             if thread.session_file}
 
 
-def enforce_storage(commander, thread: str, call: CodingCall) -> None:
+def enforce_storage(commander: Commander, thread: str, call: CodingCall) -> None:
     """Core judges its units and records each storage violation once."""
     registry = commander.comms.registry
     if thread not in commander.units() or thread not in registry:
@@ -43,7 +44,7 @@ def emit(turns, thread, final=''):
     print('\n'.join(lines)[:3000], flush=True)
 
 
-def follow(commander, turns: dict[str, list[str]], thread: str, data: bytes) -> None:
+def follow(commander: Commander, turns: dict[str, list[str]], thread: str, data: bytes) -> None:
     for line in data.splitlines(keepends=True):
         entry = NativeEntry.read(line)
         for message in entry.messages:
@@ -51,7 +52,7 @@ def follow(commander, turns: dict[str, list[str]], thread: str, data: bytes) -> 
                 walk(commander, turns, thread, message)
 
 
-def walk(commander, turns: dict[str, list[str]], thread: str,
+def walk(commander: Commander, turns: dict[str, list[str]], thread: str,
          message: PiMessage) -> None:
     for pi_call in message.tool_calls:
         coding_call = CodingCall.decode(pi_call.id, pi_call.name, pi_call.arguments)

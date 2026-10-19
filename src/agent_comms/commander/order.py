@@ -31,6 +31,7 @@ from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
+from ..field_codec import boundary_decoder
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
@@ -149,12 +150,31 @@ def replied(latest: Message | None) -> str:
     return f'; REPLIED {at} [{latest.message_id}]: {" ".join(latest.body.split())[:160]} -- read it before pushing'
 
 
-class Commander(CommanderConfig):
-    """One command's configuration and opened bus; nothing is resolved at import."""
+class HuntPlace:
+    def prompt(self) -> str:
+        return HuntDue.text
+
+    def __str__(self) -> str:
+        return 'No changed production file on origin/main.'
+
+
+@dataclass(frozen=True)
+class ChangedHuntPlace(HuntPlace):
+    file: str
+
+    def prompt(self) -> str:
+        return HuntVerb.due(self.file)
+
+    def __str__(self) -> str:
+        return self.file
+
+
+class CommanderContext(CommanderConfig):
+    """The selected root's bus and canonical reads, shared by command families."""
 
     _comms: Comms = PrivateAttr()
 
-    def model_post_init(self, context) -> None:
+    def model_post_init(self, context: object) -> None:
         self._comms = Comms(self.root)
 
     @property
@@ -162,45 +182,32 @@ class Commander(CommanderConfig):
         return self._comms
 
     def post(self, audience: VerdictAudience, body: str) -> str:
-        """Send one message its caller refused with OUTGOING; judge reads it from bus history.
-
-        One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
-        """
         target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
         return self.call(CommsSendTool(sender=self.commander, target=target, body=body,
                                   audience=audience.threads)).id
 
-
     def call(self, tool):
-        """Every order write is one Core tool request made as the commander's thread."""
         return ThreadCaller(self.commander).invoke(tool, self.comms)
 
-
     def todos(self):
-        """The problems this commander created; Core's Todo store is their one owner."""
         return self.comms.goals.todos.for_commander(self.comms.registry.require(self.commander).incarnation)
 
-
     def held_orders(self) -> tuple[Todo, ...]:
-        """This commander's open orders that a unit holds."""
         return self.comms.goals.todos.held_for_commander(self.comms.registry.require(self.commander).incarnation)
 
-
     def held_by(self, unit: str) -> tuple[Todo, ...]:
-        """This commander's open orders held by one unit."""
         return self.comms.goals.todos.held_by(self.comms.registry.require(self.commander).incarnation, unit)
-
 
     def units(self) -> frozenset[str]:
         return self.comms.goals.todos.units(self.comms.registry.require(self.commander).incarnation)
 
-
     def progress(self) -> dict[str, OrderProgress]:
-        """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
         listed: TodoList = self.call(CommsTodoListTool())
         return listed.progress
 
 
+class Commander(CommanderContext):
+    @boundary_decoder
     def send(self, unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
              traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
         """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
@@ -333,7 +340,6 @@ class Commander(CommanderConfig):
             verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
             self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
 
-
     def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
         """The other configured repos whose `from agent_comms` imports name a module, unless the
         check reads them."""
@@ -343,7 +349,6 @@ class Commander(CommanderConfig):
                 and str(repo.checkout) not in check.command
                 and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
                                     str(repo.checkout / repo.source)]).returncode == 0]
-
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
         """Core replaces a wrong check of an open order. The new check must already pass on main, so a
@@ -370,7 +375,6 @@ class Commander(CommanderConfig):
         self.call(CommsOrderCheckTool(problem=pid, check=check, why=why))
         print(f'{pid}: order {todo.order.id} now checks `{check.command}`')
 
-
     def say(self, units, body_file):
         body = open(body_file).read()
         # Numbered edits or a report line are an order: it needs a deadline, so it goes through send.
@@ -379,7 +383,6 @@ class Commander(CommanderConfig):
         refuse(body, *OUTGOING)
         Slop.from_order(body)
         print(self.post(VerdictAudience(tuple(units.split(','))), body.rstrip()))
-
 
     def problem(self, text, unit, due, order_file, where, disk=False):
         """A problem is born owned: Core records it with its order in one step, or not at all."""
@@ -397,7 +400,6 @@ class Commander(CommanderConfig):
         self.write_board()
         print(pid)
 
-
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
@@ -405,10 +407,8 @@ class Commander(CommanderConfig):
         self.write_board()
         print(f'{pid} closed')
 
-
     def last_activity(self, unit):
         return ExternalTranscript(self.comms.root, self.comms.registry.require(unit).incarnation).last_tool_call()
-
 
     def write_board(self):
         lines = ['# Fleet board', '',
@@ -431,7 +431,6 @@ class Commander(CommanderConfig):
                   *(f'- {line}' for t in history for line in t.order.withdrawals(t))]
         open(self.board, 'w').write('\n'.join(lines) + '\n')
 
-
     def on_record(self, line: str, recorded: str, audience: VerdictAudience) -> None:
         """Put one line on the public record: the narrative file, then its audience.
 
@@ -449,7 +448,6 @@ class Commander(CommanderConfig):
             print(f'{recorded} recorded, but the post failed ({failed}). '
                   'Repost with order.post; do not record it again.', file=sys.stderr)
             raise
-
 
     def strike(self, unit: str, task: str, why: str, caught: str = 'review', *,
                kind: type[StrikeTodo] = StrikeTodo) -> None:
@@ -481,7 +479,6 @@ class Commander(CommanderConfig):
                 f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
         print(f'{unit}: {n} strike(s) on {todo.id}' + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
-
 
     def done(self, pid, sha, screenshot='', seen='', repo=''):
         """Core runs the delivery's check at its checked commit and strikes a late delivered commit
@@ -526,7 +523,6 @@ class Commander(CommanderConfig):
             self.posted(unit, delivered_todo, late)
         print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
 
-
     def first_calls(self, held, activity):
         missing = []
         for todo in held:
@@ -543,7 +539,6 @@ class Commander(CommanderConfig):
                 missing.append(f'{unit} (order {order.id}, sent {hhmm(order.at)})')
         return missing
 
-
     def hunt(self, where, why, sent):
         """Record the commander's source read, whether or not it became an order."""
         path, _, line = where.rpartition(':')
@@ -556,12 +551,10 @@ class Commander(CommanderConfig):
             OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
         print(f'hunt recorded: {where} -> {sent or "clean"}')
 
-
     def hunts(self):
         return self.comms.goals.todos.hunts_for_commander(self.comms.registry.require(self.commander).incarnation)
 
-
-    def next_hunt(self):
+    def next_hunt(self) -> HuntPlace:
         """Least-recently hunted file among the most-churned production files on origin/main."""
         hunted = {}
         for h in self.hunts():
@@ -576,8 +569,7 @@ class Commander(CommanderConfig):
                 if os.path.exists(full) and f.endswith('.py'):
                     churn[full] = churn.get(full, 0) + 1
             candidates += sorted(churn, key=churn.get, reverse=True)[:15]
-        return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
-
+        return ChangedHuntPlace(min(candidates, key=lambda f: hunted.get(f, 0))) if candidates else HuntPlace()
 
     def reply(self, unit: str, since: float) -> Message | None:
         """The unit's newest message to me after ``since`` in the recent bus window."""
@@ -585,7 +577,6 @@ class Commander(CommanderConfig):
             return next((message for message in source.newest_messages()
                          if message.sender == unit and message.timestamp > since
                          and message.target in (self.commander, '#comms')), None)
-
 
     def deadline_lines(self, pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
         """Every past-due unrecorded order alarms with its state until recorded.
@@ -605,12 +596,10 @@ class Commander(CommanderConfig):
                  'push or merge unfinished work now')
         return [alarm] * bool(late) + stalled
 
-
     def install_lines(self, held: tuple[Todo, ...], read: dict[str, OrderProgress], now: float) -> list[str]:
         """One INSTALL line naming every held order that waits on the fleet's install."""
         waiting = [f'{w.id} {w.holder}' for t in held for w in t.order.waiting_on_install(t, read)]
         return InstallDeadline.read(self.comms.root).alarm(waiting, now)
-
 
     def overdue(self):
         since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
@@ -641,11 +630,11 @@ class Commander(CommanderConfig):
             if idle_prs:
                 print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
             for _ in HuntDue.broken(self.comms, self.commander, since):
-                print(HuntVerb.due(self.next_hunt()), flush=True)
+                print(self.next_hunt().prompt(), flush=True)
             since = now
             time.sleep(60)
 
-
+    @boundary_decoder
     def unstrike(self, task: str, why: str, at: str | None = None) -> None:
         """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
         todo = self.comms.goals.todos.get(task)
@@ -663,7 +652,6 @@ class Commander(CommanderConfig):
         self.on_record(line, 'Void', VerdictAudience.of(unit, todo.goal))
         print(f'{unit}: {n} strike(s) on {task}')
 
-
     def due(self, pid: str, at: str, why: str) -> None:
         """Core moves a held order's deadline, its assignment unchanged; the reason goes on record."""
         todo = self.comms.goals.todos.get(pid)
@@ -680,7 +668,7 @@ class Commander(CommanderConfig):
                   VerdictAudience.of(todo.held().owner, todo.goal))
         print(f'{pid}: due {hhmm(moved)}')
 
-
+    @boundary_decoder
     def withdraw(self, pid: str, why: str, superseded_by: str | None = None) -> None:
         """Core retires an undelivered order sent in error.
 
@@ -689,7 +677,7 @@ class Commander(CommanderConfig):
         todo.order.require_withdrawal()
         refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
         self.call(CommsTodoTool(id=pid, operation=WithdrawTodo(
-            todo.revision, self.comms.registry.require(self.commander).incarnation, todo.assignment, why,
+            todo.revision, self.comms.registry.require(self.commander).incarnation, todo.held(), why,
             superseded_by)))
         unit = todo.held().owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
@@ -699,7 +687,6 @@ class Commander(CommanderConfig):
              f'Withdrawn: {withdrawal}. Stop that work; it counts against no one.')
         self.write_board()
         print(withdrawal)
-
 
     def fire(self, unit: str, why: str) -> None:
         """Core releases every open problem the unit holds in one call; orders and strikes stay."""

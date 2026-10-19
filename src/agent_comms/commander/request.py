@@ -19,7 +19,7 @@ from ..todos import Todo
 from .order import Commander, CommanderVerb, RuledVerb, hhmm
 
 
-def open_requests(commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
+def open_requests(commander: Commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
     thread = commander.comms.registry.require(commander.commander)
     return tuple(request for goal in thread.goal.active()
@@ -65,5 +65,5 @@ class RequestListVerb(RequestVerb, declared_name="list"):
                 print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
 
 
-def main(a, commander):
+def main(a: list[str], commander: Commander) -> None:
     RequestVerb.parse(a, __doc__).apply(commander)

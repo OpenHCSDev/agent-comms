@@ -46,12 +46,12 @@ def rules() -> list[str]:
     return found
 
 
-def record(commander, who: str, entry: RuleReviewEntry) -> None:
+def record(commander: Commander, who: str, entry: RuleReviewEntry) -> None:
     read: StandingRulesRead = ThreadCaller(who).invoke(CommsRuleReviewTool(entry=entry), commander.comms)
     print('\n'.join(read.broken) or 'review complete; commander actions allowed')
 
 
-def review(commander, who: str):
+def review(commander: Commander, who: str) -> None:
     every = rules()
     for i, r in enumerate(every, 1):
         print(f'{i:3}. {r}')
@@ -70,7 +70,7 @@ def review(commander, who: str):
         print(f'  {n}. {r}')
 
 
-def answer(commander, n: int, text: str, who: str):
+def answer(commander: Commander, n: int, text: str, who: str) -> None:
     record(commander, who, AnsweredRuleReviewEntry(n, text))
 
 
