@@ -527,7 +527,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
 
         return WithheldDisclosure()
 
-    def tracked_end(self, session) -> None:
+    async def tracked_end(self, session) -> None:
         """Non-assistant messages cannot supply a tracked final response."""
 
     async def tracked_start(self, session, event) -> None:
@@ -643,9 +643,10 @@ class AssistantMessage(PiMessage):
     async def tracked_start(self, session, event) -> None:
         await session.assistant_started()
 
-    def tracked_end(self, session) -> None:
+    async def tracked_end(self, session) -> None:
+        from .coordinator import Coordination
         self.stop_reason.tracked(session, self)
-        session.draft_publication.retire_message()
+        await Coordination.run_worker(session.draft_publication.retire_message)
 
     @property
     def authoritative_text(self) -> str:
