@@ -73,7 +73,8 @@ def main() -> None:
     )
     with (root / "source.jsonl").open("w") as stream:
         for kind in ("user", "assistant"):
-            event.update(type=kind, uuid=kind, message=dict(role=kind, content=f"Scratch {kind}"))
+            content = [dict(type="text", text=f"Scratch {kind}")]
+            event.update(type=kind, uuid=kind, message=dict(role=kind, content=content))
             print(json.dumps(event), file=stream)
     comms.registry.register(declaration(root, "sentinel"), StoppedThreadStatus())
     reading = ObserveSidebar(str(root), True, False).observation()
