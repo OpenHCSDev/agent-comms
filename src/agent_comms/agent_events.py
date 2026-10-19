@@ -76,6 +76,11 @@ class ContextObserved(AgentEvent):
     context: NativeContextManifestData
 
 
+@dataclass(frozen=True)
+class PromptAccepted(AgentEvent):
+    """The command's matching successful response acknowledged this turn's prompt."""
+
+
 class InputStarted(AgentEvent):
     @abstractmethod
     def captured(self, inputs: InputDrain, session_id: str) -> StartedInput: ...

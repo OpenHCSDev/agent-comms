@@ -6,7 +6,7 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterable, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, Literal
 from uuid import uuid4
@@ -65,7 +65,7 @@ class PiCommand(DeclaredFamily):
     strict_response: ClassVar[bool] = False
     # The answering child appends to its own session file (a retained child stays current).
     writes_session: ClassVar[bool] = False
-    id: str | None = field(default=None, metadata={"wire_omit_default": True})
+    id: str | None = field(default_factory=lambda: uuid4().hex, metadata={"wire_omit_default": True})
 
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
@@ -73,14 +73,13 @@ class PiCommand(DeclaredFamily):
 
     @asynccontextmanager
     async def pending_response(self, channel, writer):
-        command = replace(self, id=self.id or uuid4().hex)
-        future = channel.track(command)
+        future = channel.track(self)
         try:
-            writer.write(channel.command_bytes(command))
+            writer.write(channel.command_bytes(self))
             await writer.drain()
             yield future
         finally:
-            channel.pending.discard(type(command), command.id)
+            channel.pending.discard(type(self), self.id)
             future.cancel()
 
     async def exchange(self, channel, writer, *, strict=False, max_bytes=None, on_event=lambda event: None):
@@ -109,11 +108,8 @@ class PiCommand(DeclaredFamily):
             member = cls.member_named(kind)
         except ValueError:
             return UnknownCommand(wire=value)
-        return FieldCodec.decode(cls, {"kind": kind, **member.decode_parameters(data)})
-
-    @classmethod
-    def decode_parameters(cls, data):
-        return data
+        data.setdefault("id", None)
+        return FieldCodec.decode(cls, {"kind": kind, **data})
 
     @classmethod
     def response_owner(cls, name: str) -> type[PiCommand]:
@@ -155,46 +151,19 @@ class Prompt(PiCommand):
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )
 
-    def to_rpc(self):
-        data = super().to_rpc()
-        if self.images is not None:
-            data["images"] = [image.to_rpc() for image in self.images]
-        return data
-
-    @classmethod
-    def decode_parameters(cls, data):
-        if data.get("images") is not None:
-            images = data["images"]
-            if not isinstance(images, list) or any(
-                not isinstance(image, dict) or image.get("type") != "image" for image in images
-            ):
-                raise ValueError("Expected native image inputs")
-            data = {
-                **data,
-                "images": [
-                    {key: value for key, value in image.items() if key != "type"}
-                    for image in images
-                ],
-            }
-        return data
-
     @classmethod
     def on_response(
         cls, response: Response, session: TurnSession
     ) -> Iterable[events.AgentEvent]:
-        if response.id == session.prompt_id:
+        if response.id == session.command.id:
             session.watchdog.progress()
             if response.success:
                 session.prompt_state = session.prompt_state.acknowledge(response)
                 session.watchdog.prompt_accepted = True
                 session.watchdog.phase = phases.ModelWaitPhase()
+                yield events.PromptAccepted()
             else:
-                error = session.output.error(str(response.error or "Prompt was rejected"))
-                yield session.watchdog.state(
-                    "failed", "prompt_rejected", 0, phase=phases.ShutdownPhase()
-                )
-                yield error
-                session.finished = True
+                yield from session.reject_prompt(response)
                 return
         else:
             session.inputs.acknowledge(response)

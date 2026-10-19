@@ -6,6 +6,7 @@ import base64
 import binascii
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
+from typing import Literal
 
 IMAGE_MIME_TYPES = frozenset({"image/png", "image/jpeg", "image/gif", "image/webp"})
 MAX_IMAGE_BYTES = 4 * 1024 * 1024
@@ -16,6 +17,7 @@ MAX_PROMPT_IMAGES = 8
 class ImageInput:
     data: str
     mime_type: str = field(metadata={"wire_name": "mimeType"})
+    type: Literal["image"] = field(default="image", kw_only=True)
 
     def __post_init__(self) -> None:
         if self.mime_type not in IMAGE_MIME_TYPES:
@@ -34,9 +36,6 @@ class ImageInput:
     @property
     def size(self) -> int:
         return len(self.data) * 3 // 4 - (len(self.data) - len(self.data.rstrip("=")))
-
-    def to_rpc(self) -> dict[str, str]:
-        return {"type": "image", "data": self.data, "mimeType": self.mime_type}
 
 
 def prompt_images(blocks: Sequence[object]) -> tuple[ImageInput, ...]:
