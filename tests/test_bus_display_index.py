@@ -17,11 +17,12 @@ from agent_comms.wire_metadata import WireMetadata
 
 @contextmanager
 def opened(path, *indexes):
-    prepared = tuple((index, index.prepare()) for index in indexes)
     path.chmod(0o600)
     log = WireLog(path)
+    for index in indexes:
+        log.register_append_index(index)
     log.write_metadata_unlocked(WireMetadata(last_seq=2, claimed_after_seq=2, writer_protocol_version=1, wire_root_id="0" * 32))
-    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening(), prepared_indexes=prepared) as source:
+    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         yield source
 
 
@@ -107,6 +108,20 @@ def test_activity_uses_the_same_complete_line_cut(tmp_path):
     with opened(path, index) as source:
         assert index.snapshot(source) == initial
         assert source.complete_prefix.boundary == len(first) < source.boundary
+
+
+def test_reopened_activity_restores_saved_prefix_without_decoding_it(tmp_path, monkeypatch):
+    path = tmp_path / "bus.jsonl"
+    path.write_bytes(row(1))
+    with opened(path, index := BusActivityIndex(path)) as source:
+        initial = index.snapshot(source)
+
+    def unexpected_prefix(*args, **kwargs):
+        pytest.fail("An unchanged bus must not decode the saved prefix again")
+
+    monkeypatch.setattr(Message, "from_wire", unexpected_prefix)
+    with opened(path, reopened := BusActivityIndex(path)) as source:
+        assert reopened.snapshot(source) == initial
 
 
 @pytest.mark.parametrize("index_type,index_args,read_args", [
