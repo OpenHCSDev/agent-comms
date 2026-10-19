@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from agent_comms.channel_coding_tools import ArgumentRefusal, CodingCall
+from agent_comms.native_tool_call import ArgumentRefusal, CodingCall
 from agent_comms.comms import Comms
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
@@ -21,7 +21,7 @@ from delivery_owner_fixture import canonical_agent, reply_turn_finished
 def test_pi_optional_nulls_are_omitted_by_the_existing_codec(name, arguments, encoded):
     call = CodingCall.decode("optional-null", name, arguments)
     assert call.allowed_claim() is None
-    assert call.tool.arguments == encoded
+    assert call.arguments == encoded
 
 
 @pytest.mark.parametrize("request_first", [False, True])

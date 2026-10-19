@@ -8,12 +8,10 @@ Shell is not a filesystem sandbox; shell work must respect the injected claims.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Never
 
 from agent_comms.coordinator import Coordination
 
@@ -22,143 +20,20 @@ from .selected_claim import (
     verify_selected_wake,
 )
 from .comms import Comms
-from .field_codec import FieldCodec, MalformedRecord
+from .field_codec import FieldCodec
 from .envelope_claim_transitions import (
     ClaimOwner,
     FileClaimPath,
     WakeClaim,
 )
-from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
+from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_arguments import NativeArguments
-from .native_tools import NativeExecutableTool
+from .native_tools import NativeToolDeclaration
 from .native_tool_transport import ToolTransport
-from .tool_declaration import ToolDeclaration, one_line
 from .selected_tool_broker import (
     consume_selected_slot,
-    record_selected_terminal,
     verify_sent_full_input,
 )
-
-
-@dataclass
-class CodingCall(NativeToolCall):
-    @abstractmethod
-    def allowed_claim(self) -> FileClaimPath | None: ...
-
-    @abstractmethod
-    def digest(self) -> str: ...
-
-    def decide_storage(self, registry, thread: str) -> None:
-        """A call without executable effects has nothing to decide."""
-
-    def storage_violation(self, registry, thread: str) -> str | None:
-        try:
-            self.decide_storage(registry, thread)
-        except SelectedToolDenied as denied:
-            return str(denied)
-        return None
-
-    def commit_terminal(
-        self, is_error: bool, directory: Path, input_id: str, round_number: int
-    ) -> None:
-        slot = self.slot(input_id, round_number)
-        record_selected_terminal(directory, slot, slot)
-
-    def claim_failed(self) -> None:
-        # A denied ordinary tool may report an error and let Pi explain it. The
-        # consumed call cannot be retried; this grants no mutation authority.
-        pass
-
-    @classmethod
-    def decode(cls, call_id: object, name: object, arguments: object) -> CodingCall:
-        if (
-            type(call_id) is not str
-            or not call_id
-            or len(call_id) > 256
-            or type(name) is not str
-        ):
-            raise SelectedToolDenied("Malformed native coding call identity")
-        try:
-            return NativeExecutableTool.from_call(name, arguments, call_id=call_id)
-        except MalformedRecord as error:
-            return RefusedCodingCall(call_id, name, arguments, str(error))
-
-    def slot(self, input_id: str, round_number: int) -> str:
-        identity = f"{input_id}\0{round_number}\0{self.call_id}"
-        return hashlib.sha256(identity.encode()).hexdigest()[:32]
-
-
-@dataclass
-class ExecutableCodingCall(CodingCall):
-    tool: NativeExecutableTool | type[NativeExecutableTool]
-
-    @property
-    def name(self) -> str:
-        return self.tool.declared_name
-
-    def allowed_claim(self) -> FileClaimPath | None:
-        return self.tool.claim
-
-    def digest(self) -> str:
-        return self.tool.digest()
-
-    def decide_storage(self, registry, thread: str) -> None:
-        worktree = Path(registry.require(thread).worktree)
-        registry.decide_storage(thread, self.tool.storage_effects(worktree))
-
-
-@dataclass
-class ArgumentRefusal(UncertainClaim):
-    refusal: RefusedCodingCall
-
-    async def consume(
-        self, call: NativeToolCall, action: Callable[[], Awaitable[None]],
-    ) -> None:
-        raise SelectedToolDenied(self.refusal.reason)
-
-
-@dataclass
-class RefusedCodingCall(CodingCall):
-    """Invalid arguments cannot execute, but still own real start/error events."""
-
-    tool_name: str
-    arguments: object
-    reason: str
-
-    def __post_init__(self) -> None:
-        self.claim_scope = ArgumentRefusal(self)
-
-    @property
-    def name(self) -> str:
-        return self.tool_name
-
-    def allowed_claim(self) -> Never:
-        raise SelectedToolDenied(self.reason)
-
-    def digest(self) -> str:
-        return f'REFUSED {self.name}: {one_line(self.reason, 200)}'
-
-    def correlate(self, candidate: NativeToolCall) -> None:
-        self.reject_correlated(candidate)
-
-    def reject_correlated(self, existing: NativeToolCall) -> None:
-        # Pi may normalize arguments before its socket arrives. Whichever
-        # arrives first keeps the same lifecycle object, never permission.
-        if (self.call_id, self.name) != (existing.call_id, existing.name):
-            raise SelectedToolDenied("Refused coding call identity changed")
-        existing.claim_scope.refuse(existing, self.claim_scope)
-
-
-@dataclass
-class CoordinationCall(ExecutableCodingCall):
-    """The declaration executes through Core; raw arguments still own exact call matching."""
-
-    tool: type[NativeExecutableTool]
-    arguments: dict[str, object]
-
-    def digest(self) -> str:
-        # Coordination arguments belong to the request executor, not this watcher.
-        return ToolDeclaration.call_digest(self.name, None, self.arguments)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -240,9 +115,9 @@ class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        declarations = NativeExecutableTool.members_with(NativeExecutableTool)
+        declarations = NativeToolDeclaration.members_with(NativeToolDeclaration)
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
-                     *NativeExecutableTool.extension_arguments(package))
+                     *NativeToolDeclaration.extension_arguments(package))
         thread = self.owner.comms.registry.require(self.owner.owner_name)
         return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
 

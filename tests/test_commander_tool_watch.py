@@ -5,7 +5,7 @@ import collections
 import importlib
 import json
 
-from agent_comms.channel_coding_tools import CodingCall
+from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.todos import StorageStrikeTodo
 from test_commander_problem_orders import create

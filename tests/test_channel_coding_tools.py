@@ -7,7 +7,8 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agent_comms.channel_coding_tools import CodingCall, CodingToolSocket
+from agent_comms.native_tool_call import CodingCall
+from agent_comms.channel_coding_tools import CodingToolSocket
 from agent_comms.comms import Comms
 from agent_comms.envelope_claim_transitions import (
     ClaimConflict,
@@ -66,13 +67,13 @@ def test_create_claim_preserves_physical_paths_without_aliases(tmp_path):
 def test_coding_names_and_argument_types_come_from_declarations():
     assert set(CodingTool.names()) == {"read", "bash", "edit", "write"}
     call = CodingCall.decode("call", "write", {"path": "x", "content": "value"})
-    assert isinstance(call.tool.claim, WritableFileClaim)
+    assert isinstance(call.claim, WritableFileClaim)
     with pytest.raises((TypeError, ValueError)):
         CodingCall.decode("call", "write", {"path": True, "content": "v"}).allowed_claim()
     # Pi's full tool schema stays authoritative, including its current edits[]
     # representation; only the mutation path is decoded by the claim policy.
     args = {"path": "x", "edits": [{"oldText": "a", "newText": "b"}]}
-    assert CodingCall.decode("edit", "edit", args).tool.arguments == args
+    assert CodingCall.decode("edit", "edit", args).arguments == args
     with pytest.raises(ValueError):
         CodingCall.decode("call", "forged", {}).allowed_claim()
 
@@ -95,7 +96,7 @@ def test_coding_names_and_argument_types_come_from_declarations():
 def test_pi_argument_records_reject_bad_shapes_without_claiming(name, arguments):
     from agent_comms.native_tool_call import SelectedToolDenied
 
-    from agent_comms.channel_coding_tools import RefusedCodingCall
+    from agent_comms.native_tool_call import RefusedCodingCall
 
     call = CodingCall.decode("bad-argument-shape", name, arguments)
     assert isinstance(call, RefusedCodingCall)
@@ -157,8 +158,8 @@ def test_pi_argument_fields_own_roundtrip_and_display(name, arguments, title):
     from agent_comms.agent_events import ToolStart
 
     call = CodingCall.decode("typed-argument-shape", name, arguments)
-    assert "arguments" not in {item.name for item in fields(call.tool)}
-    assert call.tool.arguments == arguments
+    assert "arguments" not in {item.name for item in fields(call)}
+    assert call.arguments == arguments
     assert ToolStart.from_call("typed", name, arguments).title == title
 
 

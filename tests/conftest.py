@@ -134,9 +134,9 @@ def declared_native_package(tmp_path, monkeypatch):
     package = deployment / "node_modules/@earendil-works/pi-coding-agent"
     (package / "dist").mkdir(parents=True)
     (package / "dist/cli.js").write_text("// This fixture never starts Node.\n")
-    from agent_comms.native_tools import NativeExecutableTool
+    from agent_comms.native_tools import NativeToolDeclaration
 
-    for tool in NativeExecutableTool.members_with(NativeExecutableTool):
+    for tool in NativeToolDeclaration.members_with(NativeToolDeclaration):
         extension = tool.native_extension(package)
         extension.parent.mkdir(parents=True, exist_ok=True)
         extension.write_text("// Construction-only native tool extension.\n")
