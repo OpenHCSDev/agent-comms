@@ -62,7 +62,8 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
         check.result.require(result)
         return result.stdout.decode(errors="replace").strip()
 
-    async def verified(self, check: OrderCheck, deletes: OrderDeletion) -> tuple[OrderDelivery, str]:
+    async def verified(self, check: OrderCheck,
+                       deletes: OrderDeletion) -> tuple[OrderDelivery, str]:
         """The order's check and every count its deletion declares run on the delivered source;
         with the delivery comes what the order's check printed, never what a report says."""
         printed = await self.passed(check)
@@ -1550,7 +1551,8 @@ class DeliverTodo(TodoOperation):
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        delivery, printed = asyncio.run(self.delivery.verified(current.order.check, current.order.deletes))
+        verified = self.delivery.verified(current.order.check, current.order.deletes)
+        delivery, printed = asyncio.run(verified)
         return replace(self, delivery=delivery, printed=printed)
 
     def apply(self, current):
