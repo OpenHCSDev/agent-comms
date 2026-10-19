@@ -20,7 +20,7 @@ from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
 from .private_path import FileRevision
-from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
+from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, MessageDisplayScope, ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
@@ -273,12 +273,13 @@ class BusPageIndex(TypedStore):
                                  descending=True, limit=1)
         return rows[0] if rows else None
 
-    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
+    def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
+                               *, through: int) -> list[LatestConversation]:
         predicate, parameters = scope.index_predicate
         return LatestConversation.read(self.connection.execute(
             f'SELECT target, sender, MAX(seq) AS seq '
-            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND ({predicate}) '
-            f'GROUP BY target, sender', (before_offset, *parameters),
+            f'FROM "{BusPageRow.declared_name}" WHERE offset<? AND seq<=? AND ({predicate}) '
+            f'GROUP BY target, sender', (before_offset, through, *parameters),
         ))
 
     def proved_read_prefix(self, scope: ChannelDisplayScope | DMDisplayScope, previous: ConversationCursor,
@@ -323,7 +324,8 @@ class EmptyBusPageIndex(BusPageIndex):
     def latest_target(self, target: str, before_offset: int) -> BusPageRow | None:
         return None
 
-    def latest_by_conversation(self, scope: ChannelDisplayScope, before_offset: int) -> list[LatestConversation]:
+    def latest_by_conversation(self, scope: MessageDisplayScope, before_offset: int,
+                               *, through: int) -> list[LatestConversation]:
         return []
 
     def display_snapshot(self, scopes, boundary):
