@@ -340,6 +340,47 @@ async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
     assert not p.effects
 
 
+async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
+    p = policy
+    closed = []
+    reply = p.socket._reply
+
+    async def observe_reply(reader, writer):
+        close = writer.close
+
+        def close_once():
+            closed.append(writer)
+            close()
+
+        monkeypatch.setattr(writer, "close", close_once)
+        return await reply(reader, writer)
+
+    monkeypatch.setattr(p.socket, "_reply", observe_reply)
+    p.announce()
+    p.start()
+    p.socket.expected_pid = os.getpid()
+    await p.socket.start()
+    try:
+        reader, writer = await asyncio.open_unix_connection(str(p.socket.address))
+        try:
+            writer.write(p.raw())
+            await writer.drain()
+            assert json.loads(await reader.readline()) == {"ok": True}
+            assert await reader.read() == b""
+        finally:
+            writer.close()
+            await writer.wait_closed()
+        async with asyncio.timeout(2):
+            while p.socket._handlers:
+                await asyncio.sleep(0)
+        assert len(closed) == 1 and p.effects == ["one"]
+        p.end()
+        p.socket.assert_complete()
+    finally:
+        await p.socket.close()
+    assert len(closed) == 1
+
+
 async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
     tmp_path.chmod(0o700)
     observed = []

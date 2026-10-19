@@ -243,7 +243,8 @@ async def test_tool_error_while_check_waits_cannot_receive_late_permission(tmp_p
 
 
 @pytest.mark.asyncio
-async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog):
+@pytest.mark.parametrize("refused", [False, True])
+async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog, refused):
     """The live owner logged two tracebacks when Pi gave up on a slow tool check."""
     import asyncio
     import os
@@ -254,15 +255,17 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog)
         input_id = secrets.token_hex(16)
 
         async def allow(self, turn, round_number, call):
+            from agent_comms.native_tool_call import SelectedToolDenied
+
             answered.set()
+            if refused:
+                raise SelectedToolDenied("Original owner refusal")
             return NoRoomNeeded()
 
     tmp_path.chmod(0o700)
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), Owner())
     socket.turn = object()
     socket.expected_pid = os.getpid()
-    unhandled = []
-    asyncio.get_running_loop().set_exception_handler(lambda _loop, context: unhandled.append(context))
     await socket.start()
     try:
         call = ("slow", "read", {"path": "a"})
@@ -281,8 +284,11 @@ async def test_child_that_stopped_waiting_is_logged_not_raised(tmp_path, caplog)
                 await asyncio.sleep(0.01)
     finally:
         await socket.close()
-    assert not unhandled
-    assert "stopped waiting for a tool check before its answer (allowed)" in caplog.text
+    assert "Unhandled exception" not in caplog.text
+    answer = "refused" if refused else "allowed"
+    warnings = [record for record in caplog.records if record.name == "agent_comms.native_tool_transport"]
+    assert len(warnings) == 1
+    assert f"stopped waiting for a tool check before its answer ({answer})" in caplog.text
 
 
 @pytest.mark.asyncio
