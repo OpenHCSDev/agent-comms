@@ -77,7 +77,7 @@ class Goals:
         actor = self.registry.require(commander).incarnation
         store: TodoStore = self.todos
         with _store_lock(self._wire_lock_path):
-            return store.fire(unit, actor, reason)
+            return store.fire(self.registry.require(unit).incarnation, actor, reason)
 
     def open_goal_store(self) -> GoalAttemptStore:
         if self.goal_store is None:

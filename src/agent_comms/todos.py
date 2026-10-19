@@ -1729,6 +1729,9 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
 
+    def follow(self, store: TodoStore, db: sqlite3.Connection, before: Todo, after: Todo) -> None:
+        """Record additional order effects inside this command's original transaction."""
+
 
 @dataclass(frozen=True)
 class AssignTodo(TodoOperation):
@@ -1768,6 +1771,11 @@ class StrikeTodo(TodoOperation):
         if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
             return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
+
+    def follow(self, store: TodoStore, db: sqlite3.Connection, before: Todo, after: Todo) -> None:
+        if after.struck_out(self.previous.owner):
+            FireTodo.release_held(store, db, self.previous.owner_identity, self.actor,
+                                  StrikeReason(self.reason), self.at)
 
     def repeats(self, recorded: StrikeTodo) -> bool:
         return False
@@ -1819,6 +1827,10 @@ class OrderVerdict(TodoOperation, declared_name=None):
         _text(self.tool_call_id, "Judged tool call ID", 200)
         judged = self.judged(current)
         return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
+
+    def follow(self, store: TodoStore, db: sqlite3.Connection, before: Todo, after: Todo) -> None:
+        for strike in after.strikes[len(before.strikes):]:
+            strike.follow(store, db, before, after)
 
 
 @dataclass(frozen=True)
@@ -1938,6 +1950,29 @@ class ReleaseTodo(TodoOperation):
         current.require_assignment(self.previous)
         return replace(current, assignment=None, released=(*current.released, self),
                        revision=current.revision + 1)
+
+
+@dataclass(frozen=True)
+class FireTodo(ReleaseTodo):
+    """One firing releases the unit's open orders from this commander in the same write."""
+
+    def follow(self, store: TodoStore, db: sqlite3.Connection, before: Todo, after: Todo) -> None:
+        self.release_held(store, db, self.previous.owner_identity, self.actor, self.reason, self.at)
+
+    @classmethod
+    def release_held(cls, store: TodoStore, db: sqlite3.Connection,
+                     unit: ThreadIncarnation, actor: ThreadIncarnation,
+                     reason: StrikeReason, at: EventTime) -> tuple[Todo, ...]:
+        unit.require_recorded()
+        held = tuple(todo for todo in store._rows(db,
+            "json_extract(assignment,'$.owner')=? AND json_extract(assignment,'$.owner_created')=? "
+            "AND creator=? AND creator_created=?",
+            (unit.name, unit.wire_birth, actor.name, actor.wire_birth)) if todo.state.open)
+        released = tuple(cls(todo.revision, actor, todo.held(), reason, at).apply(todo)
+                         for todo in held)
+        for todo in released:
+            todo.upsert(db)
+        return released
 
 
 @dataclass(frozen=True)
@@ -2473,6 +2508,7 @@ class TodoStore(TypedStore):
             if result == current:
                 return current
             result.upsert(db)
+            command.follow(self, db, current, result)
             return self._current(db, todo_id)
 
     def correct(self, unit: str, message_id: str, text: str) -> tuple[Todo, ...]:
@@ -2488,20 +2524,14 @@ class TodoStore(TypedStore):
                 todo.upsert(db)
             return corrected
 
-    def fire(self, unit: str, actor: ThreadIncarnation, reason: StrikeReason) -> tuple[Todo, ...]:
-        """Release every open problem the unit holds from this commander in one write; each
-        records the same reason, and its order and strikes stay."""
+    def fire(self, unit: ThreadIncarnation, actor: ThreadIncarnation,
+             reason: StrikeReason) -> tuple[Todo, ...]:
+        """Release this unit's open problems from the commander, retaining every original order."""
         with self.writing() as db:
-            held = tuple((todo, assignment) for todo in self._rows(
-                db, "json_extract(assignment,'$.owner')=? AND creator=? AND creator_created=?",
-                (unit, actor.name, actor.wire_birth))
-                if todo.state.open and (assignment := todo.assignment))
-            if not held:
-                raise TodoError(f"{unit} holds no open problem.")
-            released = tuple(ReleaseTodo(todo.revision, actor, assignment, reason).apply(todo)
-                             for todo, assignment in held)
-            for todo in released:
-                todo.upsert(db)
+            released = FireTodo.release_held(self, db, unit, actor, reason,
+                                             EventTime.capture(time.time()))
+            if not released:
+                raise TodoError(f"{unit.name} holds no open problem.")
             return released
 
     def assign(
