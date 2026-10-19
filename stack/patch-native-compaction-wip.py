@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Carry the agent's stated work-in-progress lines verbatim into compaction.
 
-The three-line format is declared once, here: WORK_IN_PROGRESS_MARKERS names
-the three markers in order, and the coordination instruction
-(src/agent_comms/instructions/coordination.md) states the same three markers
-to the agent; tests/test_work_in_progress_carry.py pins the two together.
+The coordination instruction declares the ordered markers. This patch reads
+that declaration to build its compaction reader; it owns no copied marker list.
 Pi's one compaction engine runs for manual /compact, the threshold and
 overflow recovery through the same _runDefaultCompaction; this patch makes
 its result carry the agent's latest statement verbatim at the top of the
@@ -13,10 +11,17 @@ own worktree at compaction start, so a stale statement cannot hide real
 uncommitted changes. Run after patch-native-compaction-brief.py.
 """
 
+import re
 import sys
 from pathlib import Path
 
-WORK_IN_PROGRESS_MARKERS = ("Now", "Uncommitted", "Next")
+INSTRUCTION = Path(__file__).resolve().parents[1] / "src/agent_comms/instructions/coordination.md"
+WORK_IN_PROGRESS_MARKERS = re.search(
+    r"^`([A-Za-z]+):`[^\n]*\n"
+    r"`([A-Za-z]+):`[^\n]*\n"
+    r"`([A-Za-z]+):`[^\n]*(?=\n|$)",
+    INSTRUCTION.read_text(), re.M,
+).groups()
 
 # The declared triple as one line pattern; the same source text is valid as a
 # Python regular expression and as the body of a JavaScript regex literal.
