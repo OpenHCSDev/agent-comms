@@ -895,6 +895,8 @@ class WireLog(StoreLockOwner):
 
     def _sync_page_index_unlocked(self, mode: LockMode) -> None:
         """Lend readers only indexed cuts; missing or stale coverage needs a writer."""
+        if ObservedPath.at(self.path).shows_no_bus():
+            return
         with ExitStack() as resources:
             opened = self._open_snapshot_unlocked(resources, self.private_marker_unlocked(), 0)
             if not opened.complete_prefix.boundary:
