@@ -11,7 +11,6 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from inspect import isabstract
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
@@ -172,13 +171,6 @@ class LockedStore(StoreLockOwner, JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
-    lock_rank: ClassVar[int]
-
-    def __init_subclass__(cls, **kwargs):
-        super(LockedStore, cls).__init_subclass__(**kwargs)
-        rank = vars(cls).get("lock_rank")
-        if not isabstract(cls) and rank is None:
-            raise TypeError(f"{cls.__name__} must declare its own lock_rank")
 
     @contextmanager
     def reading(self, *sources, blocking: bool = True) -> Iterator[T]:
