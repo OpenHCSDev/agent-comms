@@ -30,7 +30,7 @@ from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
 )
 from .channel_targets import CommandTarget
-from .goals import CountCheckResult, OrderCheck, ProblemGoalOrder
+from .goals import CheckedCommit, CountCheckResult, OrderCheck, ProblemGoalOrder
 from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .threads import Thread
@@ -38,7 +38,7 @@ from .typed_table import Column, Index, JsonStorage, TypedStore, TypedTable
 from .standing_rules import UndatedStandingRule
 from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
-from .work_branches import WorkBranches
+from .work_branches import WorkBranchError, WorkBranches
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -358,7 +358,7 @@ class PullRequests:
              "--jq", '.data | map_values(.nodes)'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
-            raise ValueError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
+            raise WorkBranchError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
         rows = FieldCodec.decode(dict[str, tuple[ListedPullRequest, ...]],
                                  FieldCodec.parse(listed.stdout))
         for alias, candidate in aliases.items():
@@ -368,6 +368,19 @@ class PullRequests:
 
 def _clock(at: float) -> str:
     return time.strftime("%H:%M", time.localtime(at))
+
+
+@dataclass(frozen=True)
+class ProgressPoint:
+    """A revision and its time in the order's progress; Git rows use committer time."""
+    sha: str
+    at: float
+    format: ClassVar[str] = "%H %ct"
+
+    @classmethod
+    def listed(cls, line: str) -> ProgressPoint:
+        sha, at = line.split()
+        return cls(sha, float(at))
 
 
 @dataclass(frozen=True)
@@ -436,10 +449,15 @@ class UnreadTrend(DistanceTrend):
 
 @dataclass(frozen=True)
 class ProgressSource:
-    """What an order's progress is read from: its unit's checkout and the repository's PRs."""
+    """The repository's PR facts, extended by local evidence only while a checkout is available."""
     todo: Todo
     checkout: Path
     pulls: PullRequests
+
+    @staticmethod
+    def at(todo: Todo, checkout: Path, pulls: PullRequests) -> ProgressSource:
+        return (LocalProgressSource(todo, checkout, pulls) if checkout.is_dir()
+                else ProgressSource(todo, checkout, pulls))
 
     @property
     def since(self) -> float:
@@ -450,34 +468,37 @@ class ProgressSource:
         return [pr for pr in self.pulls.listed(self.todo.repo, state, self.todo.order)
                 if pr.updated_at >= self.since]
 
-    def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
+    def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
+        """A remote source makes no claim about unpublished local commits."""
+        return iter(())
+
+    def readings(self) -> DistanceReadings:
+        return DistanceReadings()
+
+
+class LocalProgressSource(ProgressSource):
+    """An available checkout supplies the local commit and distance evidence."""
+
+    def commits(self, *excluded: str) -> Iterator[ProgressPoint]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
         after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since={after}",
-             "--format=%H %ct", "HEAD", "--not", *excluded),
-            capture_output=True, text=True, timeout=30)
-        for line in log.stdout.splitlines() if not log.returncode else ():
-            sha, at = line.split()
-            yield sha, float(at)
+        log = self.git("log", "-1", f"--since={after}", f"--format={ProgressPoint.format}",
+                       "HEAD", "--not", *excluded)
+        return (ProgressPoint.listed(line) for line in log.splitlines())
 
     def git(self, *args: str) -> str:
-        run = subprocess.run(("git", "-C", str(self.checkout), *args),
-                             capture_output=True, text=True, timeout=60)
-        if run.returncode:
-            raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
-        return run.stdout
+        return CheckedCommit.git(str(self.checkout), *args)
 
     def readings(self) -> DistanceReadings:
         """The order's base, then each branch commit since the order; the last two are read."""
         base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
         after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
-        commits = [(sha, float(at)) for sha, at in (line.split() for line in reversed(self.git(
-            "log", "--first-parent", f"--since={after}", "--format=%H %ct", "HEAD",
-            "--not", base).splitlines()))]
-        points = [(base, self.since), *commits][-2:]
-        return DistanceReadings(
-            tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points))
+        commits = [ProgressPoint.listed(line) for line in reversed(self.git(
+            "log", "--first-parent", f"--since={after}", f"--format={ProgressPoint.format}",
+            "HEAD", "--not", base).splitlines())]
+        points = [ProgressPoint(base, self.since), *commits][-2:]
+        return DistanceReadings(tuple(
+            DistanceReading(point.at, self.distance(base, point.sha)) for point in points))
 
     def distance(self, base: str, sha: str) -> int:
         """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
@@ -499,12 +520,12 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """The first found member by its declared precedence; with none found, no commit yet."""
         owner = todo.holder
         assert owner, "Only a held order has progress."
-        source = ProgressSource(todo, storage.order_checkout(owner, todo.id), pulls)
+        source = ProgressSource.at(todo, storage.order_checkout(owner, todo.id), pulls)
         members = sorted(cls.members_with(FoundProgress), key=lambda member: member.precedence)
         try:
             return next((progress for member in members for progress in member.found(source)),
                         NoCommitProgress())
-        except subprocess.TimeoutExpired as unread:
+        except (WorkBranchError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
     @property
@@ -606,8 +627,8 @@ class CommittedProgress(Moving, FoundProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha[:9], at=at, readings=source.readings())
-                for sha, at in source.commits("--remotes"))
+        return (cls(commit.sha[:9], at=commit.at, readings=source.readings())
+                for commit in source.commits("--remotes"))
 
     @property
     def state(self) -> str:
@@ -621,8 +642,8 @@ class PushedProgress(CommittedProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha[:9], at=at, readings=source.readings())
-                for sha, at in source.commits("origin/HEAD"))
+        return (cls(commit.sha[:9], at=commit.at, readings=source.readings())
+                for commit in source.commits("origin/HEAD"))
 
     @property
     def state(self) -> str:

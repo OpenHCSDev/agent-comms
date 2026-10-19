@@ -44,7 +44,7 @@ def cli(caller, tool):
         raise RuntimeError(result.stderr or result.stdout)
     with RECEIPT.open("a") as output:
         output.write(result.stdout)
-    return json.loads(result.stdout)
+    return result.stdout
 
 
 def setup():
