@@ -47,8 +47,7 @@ class CodingToolOwner(ABC):
     async def reserve_room(self, call: CodingCall) -> RoomReservation:
         registry = self.comms.registry
         thread = registry.require(self.owner_name)
-        effects = call.storage_effects(Path(thread.worktree))
-        await asyncio.to_thread(registry.decide_storage, thread.name, effects)
+        effects = await asyncio.to_thread(call.decide_storage, registry, thread.name)
         work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
         if work:
             return await registry.storage_rule.wait_for_room(
