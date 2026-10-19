@@ -5,7 +5,6 @@ from .carry import Carried, Carry
 
 
 class DisplayCounts(Carry):
-    after = "carry_external_pages"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

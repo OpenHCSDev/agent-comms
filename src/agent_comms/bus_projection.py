@@ -174,7 +174,7 @@ class AppendProjectionStore(RuntimeFile, JsonDocument[Checkpoint | NoCheckpoint]
     def _unreadable(self, error: Exception) -> NoCheckpoint:
         return self.empty()  # Disposable index: rebuilt from its source.
 
-    def _replace_unlocked(self, text: str) -> None:
+    def _write_unlocked(self, text: str) -> None:
         _atomic_write_text(self.path, text, fsync_parent=self.fsync_parent)
 
     def write(self, record: Checkpoint) -> None:

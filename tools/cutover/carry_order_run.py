@@ -42,7 +42,6 @@ def declared_run(body: str) -> OrderRun:
 class OrderRuns(carry.TodoRows):
     """Saved problem orders gain their declared closing run; no other stored field changes."""
 
-    after = "carry_todo_corrections"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

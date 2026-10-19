@@ -36,7 +36,6 @@ def revision_free(command: str) -> str:
 class CheckRevisions(carry.TodoRows):
     """Each open order's check line drops the checkout that chose its revision."""
 
-    after = "carry_problem_goal_prose"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

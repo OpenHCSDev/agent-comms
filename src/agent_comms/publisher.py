@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
@@ -48,7 +49,7 @@ from .private_bus_checkpoint import (
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
-from .store_files import _store_lock
+from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
@@ -248,7 +249,7 @@ class InitialWrites(PrivateWrites):
                 self._initialize_private_protocol_unlocked()
             return self._publish_initial_cohort_unlocked(bus_lock, message, origin=origin, activity=activity)
 
-    def initialize_private_protocol(self) -> str:
+    def initialize_private_protocol(self, *, history: Sequence[Message] = ()) -> str:
         """Marker issuer for a NEW, isolated bus root only.
 
         Existing unmarked logs require an explicit offline rewrite. This issuer
@@ -256,10 +257,21 @@ class InitialWrites(PrivateWrites):
         """
         self.log.path.parent.mkdir(parents=True, exist_ok=True)
         with self.log.locked():
-            return self._initialize_private_protocol_unlocked()
+            return self._initialize_private_protocol_unlocked(history=history)
 
-    def _initialize_private_protocol_unlocked(self) -> str:
+    def _initialize_private_protocol_unlocked(self, *, history: Sequence[Message] = ()) -> str:
         self.log.require_fresh_private_root_unlocked()
+        # Selected public history precedes this root's first writable sequence. It is
+        # display content, never a copied delivery or permission to run old input.
+        previous = 0
+        rows = []
+        for message in history:
+            if message.seq <= previous:
+                raise ValueError("Initial history must have ascending unique sequences")
+            previous = message.seq
+            rows.append(json.dumps(message.to_wire(), ensure_ascii=False) + "\n")
+        if rows:
+            _atomic_write_text(self.log.path, "".join(rows), fsync_parent=True)
 
         # The public marker must never advertise a root whose runtime cannot wake.
         with Coordination(str(self.log.path.parent / "coordination.sqlite3")) as store:
@@ -276,7 +288,8 @@ class InitialWrites(PrivateWrites):
             guard.create_pending()
             self.log.write_metadata_unlocked(
                 WireMetadata(
-                    last_seq=0,
+                    last_seq=previous,
+                    claimed_after_seq=previous,
                     writer_protocol_version=1,
                     wire_root_id=root_id,
                     claim_envelopes_version=1,

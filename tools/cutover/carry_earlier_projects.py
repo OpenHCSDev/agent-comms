@@ -14,7 +14,6 @@ from .carry import Carried, Carry
 
 
 class EarlierProjects(Carry):
-    after = "carry_catalog_tags"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

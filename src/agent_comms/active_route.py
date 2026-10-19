@@ -40,12 +40,6 @@ class CommsRoute(ABC):
     def observe_root(self) -> Path:
         return self.root.resolve()
 
-    def require_current_writer(self, path: Path) -> None:
-        """The published root cannot be changed by another runtime or branch source."""
-        if path.resolve().is_relative_to(self.root.resolve()):
-            from .owner_cutover import StoppedOwnerInstallation
-            StoppedOwnerInstallation.require_current_writer()
-
     def launch(self) -> RootLaunch:
         """This root's launch, decoded from its marker and this installation's pin."""
         return RootLaunch.derive(self)

@@ -105,11 +105,11 @@ class Messaging:
         with self.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 
-    def initialize_private_initial_protocol(self) -> str:
-        """Initialize the private protocol on a fresh owner-only root."""
+    def initialize_private_initial_protocol(self, *, history: Sequence[Message] = ()) -> str:
+        """Initialize a fresh root; selected public history grants no delivery."""
         publisher: InitialWrites = self.bus.publisher
         with _store_lock(self._wire_lock_path):
-            return publisher.initialize_private_protocol()
+            return publisher.initialize_private_protocol(history=history)
 
     def _user_identity_under_wire_lock(self, worktree: str) -> Thread:
         """Choose the durable USER identity while the caller holds the wire lock."""
@@ -197,5 +197,6 @@ class Messaging:
         return basis.message_count
 
     def acknowledge_through(self, name: str, sequence: int) -> None:
-        with _store_lock(self._wire_lock_path):
-            self.bus.mark_delivered_through(self.registry.require(name).name, sequence)
+        # The bus owns capture under its read lock and the ledger validates that
+        # source. Nesting an exclusive wire hold deadlocks its snapshot reader.
+        self.bus.mark_delivered_through(self.registry.require(name).name, sequence)
