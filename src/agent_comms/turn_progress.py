@@ -289,9 +289,9 @@ class TurnProgress(events.AgentEventConsumer):
         self.comms.agents.recover_completed_turn(self.turn_lease, self.thread.backend)
         return tuple(published)
 
-    def publish_checkpoint(self) -> tuple[SendResult, ...]:
+    def publish_checkpoint(self, terminal: events.Done) -> tuple[SendResult, ...]:
         """Close terminal publication and its original read before ACP delivery."""
-        if self.result is not None and self.result.ok:
+        if terminal.ok:
             return self.publish_success()
         else:
             # Streamed chunks were provisional. A failed or missing terminal
@@ -313,7 +313,7 @@ class TurnProgress(events.AgentEventConsumer):
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
-                    f"{prefix}: {self.result.text}",
+                    f"{prefix}: {terminal.text}",
                     AlertKind,
                     role=NoticeRole(),
                 ))
@@ -324,7 +324,7 @@ class TurnProgress(events.AgentEventConsumer):
             await self.consume(events.Done(text="Native turn ended without a result", ok=False))
         # Cancellation must join original sends, their annotation and the
         # checkpoint before OwnedTurn can settle or release its lease.
-        await self.report_sends(await Coordination.run_worker(self.publish_checkpoint))
+        await self.report_sends(await Coordination.run_worker(partial(self.publish_checkpoint, self.result)))
         checkpoint = await Coordination.run_worker(partial(
             self.comms.transcripts.transcript_checkpoint, self.thread_name))
         await self.runtime.session_update(
