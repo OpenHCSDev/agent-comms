@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from .package_resources import resource
 from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
@@ -33,14 +34,9 @@ class NativePackageError(ValueError):
 
 
 def _resource_root() -> Path:
-    module = Path(__file__).resolve()
-    # A checkout owns its resources in stack/, even if build artifacts exist
-    # beside the source. Only an installed package owns _native resources.
-    if module.parent.name == "agent_comms" and module.parent.parent.name == "src":
-        return module.parents[2] / "stack"
-    packaged = module.with_name("_native")
-    if packaged.is_dir():
-        return packaged
+    root = resource("stack", "_native")
+    if root.is_dir():
+        return root
     raise NativePackageError("Installed native package resources are unavailable")
 
 

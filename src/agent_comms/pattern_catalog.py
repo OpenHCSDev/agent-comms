@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
+from .package_resources import resource
+
 
 @dataclass(frozen=True)
 class FactKind:
@@ -36,21 +38,22 @@ class PatternCatalog:
     @cache
     def pinned(cls) -> PatternCatalog:
         """The catalog this checkout pins under external/, or the copy its wheel carries."""
-        module = Path(__file__).resolve()
-        if module.parent.name == "agent_comms" and module.parent.parent.name == "src":
-            return cls.read(module.parents[2] / "external/refactor-audit/references/patterns")
-        return cls.read(module.with_name("_catalog"))
+        return cls.read(resource("external/refactor-audit/references/patterns", "_catalog"))
 
     @classmethod
     def read(cls, root: Path) -> PatternCatalog:
         section = (root / "README.md").read_text().split("\n## Fact kinds\n", 1)[1]
-        kinds = {found[1]: FactKind(found[1], found[2])
-                 for found in cls.KIND.finditer(section.split("\n## ", 1)[0])}
+        kinds = {
+            found[1]: FactKind(found[1], found[2])
+            for found in cls.KIND.finditer(section.split("\n## ", 1)[0])
+        }
         patterns = {}
         for path in sorted(root.glob("*.md")):
             for found in cls.ENTRY.finditer(path.read_text()):
                 if found[3] not in kinds:
-                    raise ValueError(f"{path}: {found[1]} declares no fact kind of {root / 'README.md'}")
+                    raise ValueError(
+                        f"{path}: {found[1]} declares no fact kind of {root / 'README.md'}"
+                    )
                 patterns[found[1]] = Pattern(found[1], found[2], kinds[found[3]])
         return cls(root, patterns)
 
