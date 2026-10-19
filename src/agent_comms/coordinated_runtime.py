@@ -35,6 +35,7 @@ from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
 from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
+from .turn_failure import RetryableProviderFailure
 
 
 class SessionSetupFailed(ValueError):
@@ -57,7 +58,7 @@ class IndependentExecution(NativeExecution):
 
 @dataclass(kw_only=True)
 class SelectedExecution(NativeExecution):
-    max_attempts: ClassVar[int] = 3
+    max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
 
     root: Path
     wire_root_id: str

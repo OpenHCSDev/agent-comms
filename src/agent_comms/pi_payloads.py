@@ -502,6 +502,16 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     details: ProviderTransportDetails
     timestamp: int | None = None
 
+    @classmethod
+    def from_error_message(cls, message: object) -> tuple[ProviderTransportFailureDiagnostic, ...]:
+        """Decode transient close codes emitted by the native WebSocket provider."""
+        if isinstance(message, str) and (
+            match := re.fullmatch(r"WebSocket closed (1006|1011|1012|1013)(?:: .*)?", message)
+        ):
+            return (cls(ProviderDiagnosticError(message, code=int(match[1])),
+                        ProviderTransportDetails(configured_transport="websocket")),)
+        return ()
+
     def refine_model_request_failure(self, failure):
         from .turn_failure import ProviderTransportFailed
 
@@ -522,6 +532,15 @@ class UnknownDiagnostic(PiDiagnostic):
 
 @dataclass(frozen=True)
 class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
+    @classmethod
+    def normalize_wire(cls, value):
+        data = super().normalize_wire(value)
+        if data.get("diagnostics", []) == []:
+            data["diagnostics"] = FieldCodec.encode(
+                ProviderTransportFailureDiagnostic.from_error_message(data.get("errorMessage"))
+            )
+        return data
+
     def annotation_disclosure(self):
         from .working_memory_disclosure import WithheldDisclosure
 
