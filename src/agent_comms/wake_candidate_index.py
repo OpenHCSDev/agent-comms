@@ -43,9 +43,6 @@ class CheckpointState(ABC):
     @abstractmethod
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint: ...
 
-    def first_build(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
-        return self.require_source(source, root_id)
-
 
 @dataclass(frozen=True)
 class NoCheckpoint(CheckpointState):
@@ -54,9 +51,6 @@ class NoCheckpoint(CheckpointState):
 
     def require_fresh(self, request: CandidateQuery) -> CandidateCheckpoint:
         raise ProjectionUnavailableError("candidate projection is stale or unrelated")
-
-    def first_build(self, source: WireSnapshot, root_id: str) -> CandidateCheckpoint:
-        return CandidateCheckpoint.initial(root_id, source.revision)
 
 
 class CandidateTable:
@@ -178,6 +172,11 @@ class _ReplayBatch:
 
 
 class IndexStart(ABC):
+    def for_source(self, checkpoint: CheckpointState, source: WireSnapshot,
+                   root_id: str) -> IndexStart:
+        """Strict resume and explicit rebuild retain their selected policy."""
+        return self
+
     @abstractmethod
     def start(self, checkpoint: CheckpointState, source: WireSnapshot,
               root_id: str) -> CandidateCheckpoint: ...
@@ -209,10 +208,25 @@ class RebuildIndex(IndexStart):
         db.execute(f'DELETE FROM "{CandidateResponseKey.declared_name}"')
 
 
-class FirstBuild(IndexStart):
-    def start(self, checkpoint: CheckpointState, source: WireSnapshot,
-              root_id: str) -> CandidateCheckpoint:
-        return checkpoint.first_build(source, root_id)
+class FirstBuild(ResumeIndex):
+    """Maintenance starts a first build for each verified replacement source.
+
+    Pages and strict resume still refuse it. Schema failure happens before this
+    selection; a malformed store is not permission to discard arbitrary tables.
+    """
+
+    def for_source(self, checkpoint: CheckpointState, source: WireSnapshot,
+                   root_id: str) -> IndexStart:
+        try:
+            checkpoint.require_source(source, root_id)
+        except ProjectionRebuildRequiredError:
+            return RebuildIndex()
+        return self
+
+    def prior_bytes(self, index: WakeCandidateIndex, hint: CommittedAppendHint) -> int:
+        # Validate/adopt under maintain's captured source and revision check,
+        # never short-circuit using a checkpoint from a superseded inode.
+        return 0
 
 
 class WakeCandidateIndex(TypedStore):
@@ -342,6 +356,7 @@ class WakeCandidateIndex(TypedStore):
                     # TypedStore installs schema atomically. Capture the stored
                     # row, then close the SQL connection before reading or decoding.
                     recorded = CandidateCheckpoint.current(db)
+                start = start.for_source(recorded, source, root_id)
                 checkpoint = start.start(recorded, source, root_id)
                 batch = self._replay_prefix(
                     source, checkpoint.byte_offset, checkpoint.last_seq,
@@ -407,9 +422,10 @@ class WakeCandidateIndex(TypedStore):
         """Replay at most ONE bounded batch after a durable append notification.
 
         Run outside publisher locks and off its latency path. An absent
-        derived index may be explicitly bootstrapped in bounded batches; an
-        mismatched schema, missing checkpoint, changed/truncated source or corrupt
-        WAL never gets an implicit rebuild. If ``caught_up`` is false and
+        derived index may be explicitly bootstrapped in bounded batches; a
+        mismatched schema or corrupt WAL never gets an implicit rebuild.
+        FirstBuild explicitly adopts a verified changed/truncated source;
+        strict ResumeIndex refuses it. If ``caught_up`` is false and
         ``more_source_bytes`` is true, a deferred worker may schedule another
         finite batch. Pages remain unavailable for required high-water until
         the index catches up. This
