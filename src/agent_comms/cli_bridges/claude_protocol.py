@@ -23,7 +23,7 @@ from pydantic import (
 
 from agent_comms.activity import ActivityState
 from agent_comms.agent_backend import InputId
-from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import OpenWire, TaggedWire, WireHeader, WireModel
 from agent_comms.runtime_updates import (
     ActiveItem,
     FinishedItem,
@@ -122,7 +122,7 @@ class ClaudeInputFrame(IncomingFrame):
         )
 
 
-class ClaudeOutput(TaggedWire):
+class ClaudeOutput(OpenWire):
     """The SDK stream's external tag is decoded once; variants own its effect."""
 
     __registry_config__ = TaggedWire.family_registry()
@@ -141,32 +141,10 @@ class ClaudeUserOutput(ClaudeOutput):
         await writer.drain()
 
 
-class ClaudeAssistantOutput(ClaudeOutput):
-    wire_tag = "assistant"
+class ForeignClaudeOutput(ClaudeOutput):
+    """Other SDK output is displayed without confirming input delivery."""
 
-
-class ClaudeSystemOutput(ClaudeOutput):
-    wire_tag = "system"
-
-
-class ClaudeResultOutput(ClaudeOutput):
-    wire_tag = "result"
-
-
-class ClaudeToolProgressOutput(ClaudeOutput):
-    wire_tag = "tool_progress"
-
-
-class ClaudeToolSummaryOutput(ClaudeOutput):
-    wire_tag = "tool_use_summary"
-
-
-class ClaudeAuthOutput(ClaudeOutput):
-    wire_tag = "auth_status"
-
-
-class ClaudeRateLimitOutput(ClaudeOutput):
-    wire_tag = "rate_limit_event"
+    wire_tag = "foreign"
 
 
 CLAUDE_OUTPUT = TypeAdapter(ClaudeOutput.declared_union())

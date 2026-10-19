@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from agent_comms.thread_status import ThreadStatus
+    from agent_comms_hooks.session import SessionHook
 
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
@@ -30,7 +31,7 @@ class WatchRecord:
     command: Sequence[str]
 
     def __post_init__(self) -> None:
-        object.__setattr__(self, 'command', tuple(self.command))
+        object.__setattr__(self, "command", tuple(self.command))
 
 
 @dataclass(frozen=True)
@@ -45,22 +46,22 @@ class WatchClaim:
     @property
     def socket_path(self) -> Path:
         # sockaddr_un is short. Keep the locator derived from the session claim.
-        return self.path.with_name(self.path.stem[:32] + '.sock')
+        return self.path.with_name(self.path.stem[:32] + ".sock")
 
     @property
     def reader_path(self) -> Path:
-        return self.path.with_suffix('.reader.lock')
+        return self.path.with_suffix(".reader.lock")
 
     @contextmanager
     def launching(self) -> Iterator[None]:
         self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with self.path.with_suffix('.launch.lock').open('a') as lock:
+        with self.path.with_suffix(".launch.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             yield
 
     @contextmanager
     def reader_held(self) -> Iterator[None]:
-        with self.reader_path.open('a') as lock:
+        with self.reader_path.open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             yield
 
@@ -76,13 +77,7 @@ class WatchClaim:
 
     def enrol(self, record: WatchRecord) -> None:
         with self.launching():
-            current = self.state()
-            if isinstance(current, LiveWatch):
-                if current.record != record:
-                    raise ValueError('This session is already bound to another bridge command')
-                return
-            with self.held(record):
-                pass
+            self.state().enrol(self, record)
 
     @contextmanager
     def held(self, record: WatchRecord) -> Iterator[None]:
@@ -110,6 +105,16 @@ class WatchClaim:
 
 
 class WatchState:
+    def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
+        with claim.held(record):
+            pass
+
+    def start_session(self, hook: SessionHook) -> None:
+        """A session without a recorded bridge never acquires one from a hook."""
+
+    def end_session(self, hook: SessionHook) -> None:
+        """An absent or lapsed bridge has nothing to stop."""
+
     def observe_compaction(self, status: ThreadStatus) -> None:
         """An absent watch never acquires bridge presence from a hook."""
 
@@ -126,37 +131,56 @@ class RecordedWatch(WatchState):
     claim: WatchClaim
     record: WatchRecord
 
+    def start_session(self, hook: SessionHook) -> None:
+        hook.start_recorded(self)
+
+    def require_launch(self, error: OSError) -> None:
+        """A lapsed record may launch its bridge once under the launch lock."""
+
     def report_warning(self, event: str, warning: str) -> None:
-        context = {'hookEventName': event, 'additionalContext': warning}
-        print(json.dumps({'hookSpecificOutput': context}))
+        context = {"hookEventName": event, "additionalContext": warning}
+        print(json.dumps({"hookSpecificOutput": context}))
 
 
 class LiveWatch(RecordedWatch):
+    def enrol(self, claim: WatchClaim, record: WatchRecord) -> None:
+        if self.record != record:
+            raise ValueError("This session is already bound to another bridge command")
+
+    def require_launch(self, error: OSError) -> None:
+        raise RuntimeError(
+            "An older watch still owns this session. Stop that Monitor once, then connect."
+        ) from error
+
+    def end_session(self, hook: SessionHook) -> None:
+        hook.end_recorded(self)
+
     def report(self, event: str) -> None:
         if not self.claim.has_reader():
-            self.report_warning(event,
-                f'agent-comms: the session bridge for {self.record.bus} is connected, but no '
-                f'Monitor reader is running. Delivery is paused. Attach Monitor now: '
-                f'{shlex.join(self.record.command)}')
+            self.report_warning(
+                event,
+                f"agent-comms: the session bridge for {self.record.bus} is connected, but no "
+                f"Monitor reader is running. Delivery is paused. Attach Monitor now: "
+                f"{shlex.join(self.record.command)}",
+            )
 
     def observe_compaction(self, status: ThreadStatus) -> None:
         # Hooks on every prompt keep their stdlib-only import path. Only an
         # actual compaction observation needs the registry transaction owner.
         from agent_comms.registration import Registration
 
-        registry = Registration(Path(self.record.root) / 'registry.json')
+        registry = Registration(Path(self.record.root) / "registry.json")
         original = registry.entry(self.record.bus).entry
         # The watch must still be the one read before importing Core. Its claim
         # is held inside its registered endpoint lifetime; the transaction then
         # fences that exact incarnation, generation and process, not a name.
         if self.claim.state() == self:
             registry.observe_external_status(
-                original.owner_identity, original.thread.require_process(), status)
-
+                original.owner_identity, original.thread.require_process(), status
+            )
 
 
 class LapsedWatch(RecordedWatch):
-
     @property
     def warning(self) -> str:
         bus = self.record.bus

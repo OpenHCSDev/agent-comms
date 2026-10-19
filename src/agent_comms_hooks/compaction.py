@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import ClassVar
 
+from agent_comms.thread_status import CompactingThreadStatus, ConnectedThreadStatus
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram, HookValue
 from agent_comms_hooks.watch import WatchClaim
 
@@ -30,6 +31,8 @@ class AfterCompaction(ClaudeHookProgram):
 
 
 class SessionSource(HookValue):
+    name: ClassVar[str]
+
     @classmethod
     def decode(cls, value: object) -> SessionSource:
         for member in cls.__subclasses__():
@@ -49,8 +52,6 @@ class CompactedSource(SessionSource):
     name: ClassVar[str] = "compact"
 
     def observe(self, claim: WatchClaim) -> None:
-        from agent_comms.thread_status import ConnectedThreadStatus
-
         claim.state().observe_compaction(ConnectedThreadStatus())
 
 
@@ -61,8 +62,6 @@ class SessionStartHook(ClaudeHook):
 
 def starting() -> None:
     hook = ClaudeHook.read()
-    from agent_comms.thread_status import CompactingThreadStatus
-
     WatchClaim(hook.session_id).state().observe_compaction(CompactingThreadStatus())
 
 

@@ -254,10 +254,11 @@ class Run(Operation[ClaudeBridge]):
             stdio=stdio,
         )
         try:
-            output = stdio.output(child.process)
-            async with asyncio.TaskGroup() as tasks:
-                tasks.create_task(self.attached(child, output, claim))
-                tasks.create_task(self.exited(child))
+            with claim.reader_held():
+                output = stdio.output(child.process)
+                async with asyncio.TaskGroup() as tasks:
+                    tasks.create_task(self.attached(child, output, claim))
+                    tasks.create_task(self.exited(child))
         finally:
             await child.stop()
 

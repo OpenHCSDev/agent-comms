@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
 import os
-import time
+from contextlib import aclosing
 from dataclasses import dataclass
 
+from agent_comms.child_process import ParentedProcess, ProcessIdentity
+from agent_comms.cli_bridges.monitor import EndSession, VerifySession
+from agent_comms.cli_bridges.shared import Serve
+from agent_comms.field_codec import FieldCodec
+from agent_comms.wire_watch import WatchSource, WireWatch
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram, PythonHookCommand
-from agent_comms_hooks.watch import LiveWatch, RecordedWatch, WatchClaim
+from agent_comms_hooks.watch import RecordedWatch, WatchClaim
 
 
 @dataclass(frozen=True)
@@ -18,73 +25,68 @@ class SessionHook(ClaudeHook):
     def current(cls, session: str, transcript: str) -> SessionHook:
         return cls(session_id=session, hook_event_name="SessionStart", transcript_path=transcript)
 
-    def owner(self):
-        from agent_comms.child_process import ProcessIdentity
-
+    def owner(self) -> ProcessIdentity:
         if os.environ.get("CLAUDE_CODE_SESSION_ID") != self.session_id:
             raise ValueError("Claude hook session and CLAUDE_CODE_SESSION_ID disagree")
         owner = ProcessIdentity.capture(int(os.environ["CLAUDE_PID"]))
         owner.require_ancestor_of(os.getpid())
         return owner
 
+    async def ready(self, request: VerifySession, claim: WatchClaim) -> None:
+        async with (
+            asyncio.timeout(30),
+            aclosing(
+                WireWatch.observations(WatchSource.modified_file(claim.socket_path))
+            ) as changes,
+        ):
+            async for _ in changes:
+                try:
+                    await asyncio.to_thread(request.exchange, claim)
+                except FileNotFoundError, ConnectionRefusedError:
+                    continue
+                return
+
     def start(self) -> None:
         claim = WatchClaim(self.session_id)
-        if not isinstance(claim.state(), RecordedWatch):
-            return
-        import json
-
-        from agent_comms.child_process import ParentedProcess
-        from agent_comms.cli_bridges.monitor import VerifySession
-        from agent_comms.cli_bridges.shared import Serve
-        from agent_comms.field_codec import FieldCodec
-
-        owner = self.owner()
-        request = VerifySession(owner=owner)
         with claim.launching():
-            state = claim.state()
-            if not isinstance(state, RecordedWatch):
-                return
-            try:
-                request.exchange(claim)
-                return
-            except FileNotFoundError, ConnectionRefusedError:
-                if isinstance(state, LiveWatch):
-                    raise RuntimeError(
-                        "An older watch still owns this session. Stop that Monitor once, then connect."
-                    )
-            command = (
-                state.record.command[0],
-                Serve.__name__.lower(),
-                *state.record.command[2:],
-                "--owner",
-                json.dumps(FieldCodec.encode_record(owner)),
-                "--transcript",
-                self.transcript_path,
-            )
-            log = claim.path.with_suffix(".log")
-            with log.open("ab") as output:
-                child = ParentedProcess.launch(command, env=dict(os.environ), output=output)
-            deadline = time.monotonic() + 30
-            while child.alive and time.monotonic() < deadline:
-                try:
-                    request.exchange(claim)
-                    return
-                except FileNotFoundError, ConnectionRefusedError:
-                    time.sleep(0.05)
+            claim.state().start_session(self)
+
+    def start_recorded(self, state: RecordedWatch) -> None:
+        owner = self.owner()
+        request = VerifySession.model_validate(dict(owner=owner))
+        try:
+            request.exchange(state.claim)
+            return
+        except (FileNotFoundError, ConnectionRefusedError) as error:
+            state.require_launch(error)
+        command = (
+            state.record.command[0],
+            Serve.__name__.lower(),
+            *state.record.command[2:],
+            "--owner",
+            json.dumps(FieldCodec.encode_record(owner)),
+            "--transcript",
+            self.transcript_path,
+        )
+        log = state.claim.path.with_suffix(".log")
+        with log.open("ab") as output:
+            child = ParentedProcess.launch(command, env=dict(os.environ), output=output)
+        try:
+            asyncio.run(self.ready(request, state.claim))
+        except TimeoutError as error:
             raise RuntimeError(
-                f"Session bridge startup not observed (PID {child.pid}); inspect {log}. No launch retry."
-            )
+                f"Session bridge startup not observed (PID {child.pid}); inspect {log}. "
+                "No launch retry."
+            ) from error
 
     def end(self) -> None:
-        claim = WatchClaim(self.session_id)
-        if not isinstance(claim.state(), LiveWatch):
-            return
-        from agent_comms.cli_bridges.monitor import EndSession
+        WatchClaim(self.session_id).state().end_session(self)
 
+    def end_recorded(self, state: RecordedWatch) -> None:
         try:
-            EndSession(owner=self.owner()).exchange(claim)
+            EndSession.model_validate(dict(owner=self.owner())).exchange(state.claim)
         except FileNotFoundError, ConnectionRefusedError:
-            pass
+            return
 
 
 def started() -> None:
