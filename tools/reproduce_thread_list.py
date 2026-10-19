@@ -54,7 +54,7 @@ def main():
     source.write_text('\n'.join(json.dumps({
         'type': kind, 'uuid': str(index), 'timestamp': '2026-10-19T00:00:00Z',
         'cwd': str(root), 'sessionId': 'proof', 'promptId': 'p-1', 'origin': {'kind': 'human'},
-        'message': {'role': kind, 'content': text if kind == 'user' else [{'type': 'text', 'text': text}]},
+        'message': {'role': kind, 'content': [{'type': 'text', 'text': text}]},
     }) for index, (kind, text) in enumerate((('user', 'Scratch source input'),
                                           ('assistant', 'Scratch source reply')))) + '\n')
     comms.registry.register(Thread('sentinel', frozenset({'proof'}), str(root),

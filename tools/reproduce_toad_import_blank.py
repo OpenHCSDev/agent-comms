@@ -10,6 +10,7 @@ import time
 from threading import Event
 
 from agent_comms.comms import Comms
+from agent_comms.launch_runtime import ThreadLaunch
 from agent_comms.thread_status import StoppedThreadStatus
 
 
@@ -35,10 +36,9 @@ def main():
     source.write_text('\n'.join(json.dumps({
         'type': kind, 'uuid': str(index), 'timestamp': '2026-10-19T00:00:00Z',
         'cwd': str(directory), 'sessionId': 'proof', 'promptId': 'p-1', 'origin': {'kind': 'human'},
-        'message': {'content': text if kind == 'user' else [{'type': 'text', 'text': text}]},
+        'message': {'content': [{'type': 'text', 'text': text}]},
     }) for index, (kind, text) in enumerate((('user', 'Scratch input'), ('assistant', 'Scratch reply')))) + '\n')
-    environment = {key: value for key, value in os.environ.items() if not key.startswith('PI_')
-                   and key not in ('AGENT_COMMS_MANAGED', 'AGENT_COMMS_THREAD')}
+    environment = ThreadLaunch.strip(dict(os.environ))
     environment.update(AGENT_COMMS_ROOT=str(root), XDG_STATE_HOME=str(directory / 'state'),
                        XDG_CONFIG_HOME=str(directory / 'config'))
     processes = []

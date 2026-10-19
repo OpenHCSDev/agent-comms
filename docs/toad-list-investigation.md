@@ -69,6 +69,58 @@ NRA's latest ModuleSyntaxIndex could not load with the stack's newer
 metaclass-registry; its existing 3.12 environment cannot parse default type
 parameters. The working refactor-audit parser uses the project's Python 3.14.
 
+## Branch verification
+
+```text
+PYTHONPATH=src timeout 180 python -X faulthandler tools/reproduce_thread_list.py \
+  /home/ts/.cache/agent-scratch/pi-toad-list/import-branch --seconds 120 --imports
+elapsed=120.136s reads=904 empty=0 errors=0 writes=4157 writer_exit=0 imports=True
+```
+
+The writer imports 85 actual two-message Claude transcripts, then republishes
+registry rows while Toad's actual SidebarReading runs. The standalone process
+raises for no observations, any empty/error result or a failed writer. Main
+cannot complete this loop: it blocks during the first import. Both original
+faulthandler stacks were captured at 15 s; timeout bounded the run. There was no
+successful empty registry read to paste. The physical screen is the blank-list
+witness, not a fabricated empty read.
+
+Physical st/Xvfb comparison, same installed Toad, changing Core source selection:
+
+```text
+main t=15.000s importer_exit=None registry=87
+  Channels: + New Session; no channel or thread rows
+main t=25.209s importer_exit=-15 registry=87  [scratch importer terminated]
+  #any 0/86; imported; sentinel-84; sentinel-83; ...
+branch t=15.000s importer_exit=0 registry=87
+  #any 0/86; imported; sentinel-84; sentinel-83; ...
+branch t=25.331s importer_exit=0 registry=87
+  same populated sidebar
+```
+
+The branch CLI reports two imported messages, zero omitted or truncated. Original
+physical screens are retained under `ui-main-acp` / `ui-branch`. This demonstrates
+an import-induced startup/reopening blank, not previously painted rows erased.
+No provider/model input was sent and the production installation was not changed.
+
+After merging current main normally, focused checks under `timeout 300`, Python
+`-X faulthandler`, and one pytest worker passed: 12 tests, including the real
+independent importer/sidebar process, registry revisions and snapshot lifetime.
+The broader five-file check completed with 53 passed / 5 failed. Failures remain:
+malformed Claude-line skip expectation, removed Thread.pid, a model-change fixture
+missing timestamp, changed checkpoint error wording, and NoReadNotice compared to
+an empty string. These are not acceptance evidence; the import owner received its
+three relevant failures. No test expectations were weakened. The stack Python
+has no pytest; tests used the shared Core Python. The broad command inherited
+eight workers from project defaults; the final check explicitly used one worker
+and owned scratch.
+
+The source ratchet runs as its own command. Its first run identified the actual
+20-line source growth and literal environment/kind comparisons in diagnostic
+tools. Those now use the existing ThreadLaunch environment owner and the external
+format's uniform content-block form, without spelling switches. The source budget
+accounts for shared capture/acknowledgement lifetimes, not structural exceptions.
+
 ## Evidence custody
 
 Small disposable scratch: `/home/ts/.cache/agent-scratch/pi-toad-list`, owned only
