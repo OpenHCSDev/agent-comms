@@ -128,10 +128,12 @@ def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_
 
 
 def test_a_bus_that_ran_a_retired_step_plans_the_kept_steps_after_it(tmp_path):
-    """The live shape: steps retired after a bus ran them, and a newer step placed before one it ran."""
+    """The live shape: steps retired after a bus ran them, and a newer step placed
+    before one it ran."""
     repo = Repository(tmp_path)
     repo.commit({"carry_pages": step_source(None)})
-    repo.commit({"carry_index": step_source("carry_pages"), "carry_run": step_source("carry_index")})
+    repo.commit({"carry_index": step_source("carry_pages"),
+                 "carry_run": step_source("carry_index")})
     repo.commit({"carry_messages": step_source("carry_run")})
     repo.commit({"carry_index": None, "carry_messages": step_source("carry_pages"),
                  "carry_run": step_source("carry_messages")})
