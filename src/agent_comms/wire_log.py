@@ -47,6 +47,7 @@ from .private_bus_checkpoint import RecordedContextManifestSources
 from .store_files import (
     ExclusiveLock,
     LockMode,
+    LockOwner,
     SharedLock,
     StoreLock,
     StoreLockContention,
@@ -500,7 +501,7 @@ class WireStoreLock(StoreLock):
             yield source
 
 
-class WireLog:
+class WireLog(LockOwner):
     lock_rank = 1
     lock_type = WireStoreLock
     page_index_type = BusPageIndex

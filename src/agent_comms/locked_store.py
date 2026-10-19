@@ -15,7 +15,7 @@ from inspect import isabstract
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
-from .store_files import ExclusiveLock, LockMode, SharedLock, StoreLock, _store_lock
+from .store_files import ExclusiveLock, LockMode, LockOwner, SharedLock, StoreLock, _store_lock
 
 T = TypeVar("T")
 
@@ -168,12 +168,10 @@ class RuntimeFile(RootFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(JsonDocument[T]):
+class LockedStore(LockOwner, JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
-    lock_rank: ClassVar[int]
-    lock_type: ClassVar[type[StoreLock]] = StoreLock
 
     def __init_subclass__(cls, **kwargs):
         super(LockedStore, cls).__init_subclass__(**kwargs)
