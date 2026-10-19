@@ -1,16 +1,21 @@
 """The claude.ai connector: OAuth in front of an MCP transport over the ToolRequest family."""
 
 import base64
+import fcntl
 import hashlib
+import os
 import secrets
 import shutil
 import json
+import time
+from contextlib import ExitStack
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
+from agent_comms.active_route import active_route_path
 from agent_comms.comms import Comms
 from agent_comms.connector import (
     CALLER,
@@ -21,6 +26,10 @@ from agent_comms.connector import (
     RevokeVerb,
 )
 from agent_comms.connector_store import ConnectorStore
+from agent_comms.maintenance_barrier import (
+    InstallingPhase, MaintenanceBarrier, MaintenanceOperator, PausedPhase,
+)
+from agent_comms.store_files import _store_lock
 from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
 from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 
@@ -278,6 +287,50 @@ async def test_a_call_returns_what_the_tool_returns_in_process(client, store, ro
     in_process = invoke_tool(Comms(root), "comms_threads", {}, caller=CALLER)
     assert called["result"]["structuredContent"] == in_process
     assert [thread["name"] for thread in in_process["threads"]] == ["claude-ai", "worker"]
+
+
+@pytest.mark.parametrize("phases", [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
+async def test_maintenance_refuses_before_locked_stores_on_a_copied_bus(
+    comms, tmp_path, phases, monkeypatch,
+):
+    for name in ("worker", "claude-ai"):
+        comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(comms.root)))
+    original = comms.messaging.send("worker", "claude-ai", "Ready for your message").message
+    copied_root = tmp_path / ".agent-comms"
+    shutil.copytree(comms.root, copied_root)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    store = ConnectorStore.at(tmp_path / "copy-auth")
+    connector = Connector(store, "http://127.0.0.1:18766", copied_root)
+    before = (copied_root / "bus.jsonl").read_bytes()
+    async with TestClient(TestServer(connector.application())) as reader:
+        headers = {"Authorization": f"Bearer {await approved_token(reader, store)}"}
+        barrier = MaintenanceBarrier(copied_root / "registry.json")
+        held = barrier.begin(MaintenanceOperator("connector-refusal-proof"))
+        for phase in phases:
+            held = barrier.advance(held, phase)
+        with _store_lock(barrier.wire_path), _store_lock(barrier.registry_path), ExitStack() as locks:
+            directory = os.open(active_route_path().parent, os.O_RDONLY | os.O_DIRECTORY)
+            locks.callback(os.close, directory)
+            fcntl.flock(directory, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            started = time.monotonic()
+            response = await reader.post("/mcp", headers=headers, timeout=2, json={
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "comms_send", "arguments": {
+                    "from": "claude-ai", "to": "worker", "body": "Please read this message"}},
+            })
+            reply = await response.json()
+            elapsed = time.monotonic() - started
+            assert elapsed < 1, (elapsed, reply)
+            assert response.status == 200
+            result = reply["result"]
+            assert result["isError"] is True
+            refusal = json.loads(result["content"][0]["text"])
+            assert refusal == {
+                "type": "held", "error": "Maintenance holds ingress: the bus is under maintenance"}
+            assert barrier.current_unlocked() == held
+            assert (copied_root / "bus.jsonl").read_bytes() == before
+    assert comms.bus.log.latest_sequence() == original.seq
+    assert comms.owners.maintenance.read().turn_pending is False
 
 
 async def test_a_revoked_token_is_refused(client, store):

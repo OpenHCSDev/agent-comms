@@ -70,7 +70,7 @@ class UserMessage(MessageInfo):
 
     def present(self, part: Part) -> tuple[RuntimeUpdate, ...]:
         # Wire history owns incoming bus messages; the live view never echoes them as CLI output.
-        return part.prompted()
+        return part.prompted(self)
 
 
 class AssistantMessage(MessageInfo):
@@ -109,8 +109,8 @@ class Part(TaggedWire, ABC):
     @abstractmethod
     def present(self, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]: ...
 
-    def prompted(self) -> tuple[RuntimeUpdate, ...]:
-        """This part in a user's message, kept for history only."""
+    def prompted(self, message: UserMessage) -> tuple[RuntimeUpdate, ...]:
+        """This part in a user's recorded message, kept for history only."""
         return ()
 
     def summarized(self) -> tuple[RuntimeUpdate, ...]:
@@ -130,9 +130,12 @@ class TextualPart(Part, ABC):
     activity: ClassVar[ActivityState]
     detail: ClassVar[str]
 
+    def timestamp(self, message: MessageInfo) -> float:
+        return (self.time.start if self.time is not None else message.time.created) / 1000
+
     def accumulator(self, message: MessageInfo) -> TextDraft:
-        started_at = RecordedEventTime((self.time.start if self.time is not None else message.time.created) / 1000)
-        return TextDraft.from_parts(self.event_type, (self.text,), started_at, self.id)
+        return TextDraft.from_parts(self.event_type, (self.text,),
+                                    RecordedEventTime(self.timestamp(message)), self.id)
 
     def finished(self, message: MessageInfo) -> bool:
         return super().finished(message) or (self.time is not None and self.time.end is not None)
@@ -153,8 +156,8 @@ class TextPart(TextualPart):
     def matches(self, session: str, text: str) -> bool:
         return self.sessionID == session and self.text == text
 
-    def prompted(self) -> tuple[RuntimeUpdate, ...]:
-        return (HiddenItem((UserTranscript(self.text, position=self.id),)),)
+    def prompted(self, message: UserMessage) -> tuple[RuntimeUpdate, ...]:
+        return (HiddenItem((UserTranscript(self.text, position=self.id, timestamp=self.timestamp(message)),)),)
 
     def summarized(self) -> tuple[RuntimeUpdate, ...]:
         return (Summarized(self.text),)
@@ -215,8 +218,7 @@ class EndedTool(ToolState, ABC):
     def result(self) -> str: ...
 
     def present(self, part: ToolPart, message: AssistantMessage) -> tuple[RuntimeUpdate, ...]:
-        event_time = RecordedEventTime(self.time.start / 1000)
-        events = tuple(event_time.stamp(event) for event in self.call(part).finished(self.result, self.ok, part.id))
+        events = self.call(part).finished(self.result, self.ok, part.id, self.time.start / 1000)
         return (CompletedItem(message.id, part.id, events),)
 
 
@@ -264,9 +266,10 @@ class FilePart(StructuralPart):
     filename: str = ''
     mime: str = ''
 
-    def prompted(self) -> tuple[RuntimeUpdate, ...]:
+    def prompted(self, message: UserMessage) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice('Attachment contents are not imported; source references are retained.'),
-                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]', position=self.id),)))
+                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]',
+                                              position=self.id, timestamp=message.time.created / 1000),)))
 
 
 class AgentPart(StructuralPart):
