@@ -12,7 +12,7 @@ from agent_comms.acp import CommsAgent
 from agent_comms.acp_failure import RequestFailure
 from agent_comms.acp_extension import InputFailedUpdate, RequestFailedUpdate, decode_updates
 from agent_comms.turn_runner import TurnRunner
-from stored_inputs import stored_inputs
+from stored_inputs import sent_text, stored_inputs
 
 
 @pytest.fixture
@@ -180,7 +180,7 @@ async def test_uncaught_failure_feedback_once_even_after_done(prepared_owner, mo
         assert "Open diagnostic" in errors[-1].failure.detail
     assert native.session.read_bytes() == original
     assert native.provider.posts == 0  # Preparation/fault must not send or replay input.
-    assert not owner._comms.registry.require(session).active_turn.executing
+    assert not owner._comms.registry.require(session).executing
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
 
@@ -217,9 +217,9 @@ async def test_actual_provider_failure_reports_started_input_once_without_retry(
     with NativeEntry.open_evidence(native.session) as evidence:
         evidence.observe()
         assert tuple(evidence.inputs) == (original.native_id,)
-        assert evidence.tracked(original.native_id).message.text == original.sent_text
-    assert original.sent_text.endswith("Actual failed input")
-    assert not owner._comms.registry.require(session).active_turn.executing
+        assert evidence.tracked(original.native_id).message.text == sent_text(native, original)
+    assert sent_text(native, original).endswith("Actual failed input")
+    assert not owner._comms.registry.require(session).executing
     assert not owner.turns.turn_tasks and not owner.turns.turn_state(session).active.phase.busy
     assert not any(state.inbox for state in owner.inputs.drained.values())
 
