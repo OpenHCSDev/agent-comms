@@ -318,8 +318,8 @@ def test_a_store_compares_by_its_rows_and_not_by_its_companion_files(tmp_path):
 
 
 def todos_before_order_runs(root: Path, scratch: Path) -> None:
-    """A todo store as the first pending todo step found it: its order declares no run (before
-    P511), and it lacks only the messages column; corrections/releases/verdicts are already carried."""
+    """A todo store as the live bus held it: its order declares no run (before P511), and it
+    lacks the verdicts, corrections and messages columns; releases are already carried."""
     lead = thread("lead", scratch, 1)
     todo = TodoStore(scratch).create("one", "OpenHCSDev/agent-comms", "Repair the thread list",
         creator=lead, owner=lead, generation="one", deadline=RecordedEventTime(1000),
@@ -328,7 +328,8 @@ def todos_before_order_runs(root: Path, scratch: Path) -> None:
         db.execute(Todo.schema_objects()[Todo.declared_name])
         todo.upsert(db)
         db.execute("""UPDATE todo SET "order" = json_remove("order", '$.run')""")
-        db.execute("ALTER TABLE todo DROP COLUMN messages")
+        for column in ("messages", "corrections", "verdicts"):
+            db.execute(f"ALTER TABLE todo DROP COLUMN {column}")
         db.commit()
 
 
