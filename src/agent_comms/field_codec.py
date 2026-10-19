@@ -861,6 +861,19 @@ class FieldCodec(Sealed):
         return cast(T, _RecordDecoder(target).decode(data))
 
     @classmethod
+    def decode_arguments(
+        cls, target: type[T], arguments: object,
+        convert: Callable[[Field[object], object, object], object],
+    ) -> T:
+        """Decode argparse's raw record once through the declaring fields."""
+        raw = vars(arguments)
+        hints = cls._types(target)
+        return cls.decode_record(target, {
+            key: convert(declared, hints[declared.name], raw[key])
+            for declared, key in cls.record_fields(target)
+        })
+
+    @classmethod
     def decode_selected(cls, target: type[T], data: object, selections, *, fields: tuple[str, ...]) -> T:
         """Decode selected mapping keys by their declaring record and field, not wire shape."""
         return cast(T, _RecordDecoder(target).decode_selected(data, selections, fields=fields))

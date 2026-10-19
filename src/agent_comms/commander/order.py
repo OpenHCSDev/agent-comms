@@ -688,7 +688,7 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
         for member in cls.members_with(cls):
             member.add_parser(verbs)
         args = parser.parse_args(argv)
-        return cls.member_named(args.command).from_namespace(args)
+        return cls.member_named(args.command).from_arguments(args)
 
 
 class RuledVerb(CommanderVerb):

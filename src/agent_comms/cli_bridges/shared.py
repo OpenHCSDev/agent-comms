@@ -10,17 +10,29 @@ import signal
 import sys
 import traceback
 from abc import ABC, abstractmethod
+from collections.abc import Callable, Mapping
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import MISSING, Field as DataclassField, dataclass, field, fields, replace
+from dataclasses import MISSING, dataclass, field, fields, replace
+from dataclasses import Field as DataclassField
 from functools import cached_property, partial
 from pathlib import Path
-from typing import Any, Callable, ClassVar, Generic, Literal, Mapping, Self, TypeVar, cast, get_type_hints
+from typing import (
+    Any,
+    ClassVar,
+    Generic,
+    Literal,
+    Self,
+    TypeVar,
+    cast,
+    get_type_hints,
+)
 
 from acp.schema import SessionConfigSelectOption
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
 
 from agent_comms.agent_runtime import DeliversInput, ExternalRuntime, PublishesTranscript
+from agent_comms.change_report import ChangeReport
 from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
 from agent_comms.cli_protocol import (
     DeliveredOutcome,
@@ -32,18 +44,29 @@ from agent_comms.cli_protocol import (
     WatchLine,
     raise_child_exit,
 )
-from agent_comms.comms import Comms
 from agent_comms.command import Command
+from agent_comms.comms import Comms
 from agent_comms.config_options import CatalogConfigOption, CatalogSelection, ConfigOptions
-from agent_comms.change_report import ChangeReport
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec, compile_decoder
+from agent_comms.field_codec import (
+    FieldCodec,
+    NullMember,
+    RecordMember,
+    SubclassUnion,
+    compile_decoder,
+)
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import (Message, MessageKind, SendableMessageKind,
-    SendableRole, ConversationRole, InfoKind)
+from agent_comms.messages import (
+    ConversationRole,
+    InfoKind,
+    Message,
+    MessageKind,
+    SendableMessageKind,
+    SendableRole,
+)
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -115,7 +138,7 @@ class Options:
             command = commands.add_parser(operation.__name__.lower(), parents=[common])
             operation.add_arguments(command)
             command.set_defaults(operation=operation)
-        arguments = parser.parse_args()
+        arguments = parser.parse_args(namespace=SendArguments())
         arguments.operation = arguments.operation.from_arguments(arguments)
         arguments.binding = arguments.operation.binding(arguments)
         return cls(**{declared.name: vars(arguments)[key]
@@ -256,16 +279,8 @@ class Operation(ABC, Generic[OperationBridge]):
         return tuple(offered)
 
 
-def _json_object(value: str) -> dict[str, Any]:
-    result = json.loads(value)
-    if not isinstance(result, dict):
-        raise ValueError("--arguments must be a JSON object")
-    return result
-
-
-def _report_fields(value: str | None) -> dict[str, Any] | None:
-    """The report JSON stays a raw object; its declared record decodes once."""
-    return None if value is None else _json_object(value)
+def _json_object(value: str) -> dict[str, object]:
+    return FieldCodec.decode(dict[str, object], FieldCodec.parse(value))
 
 
 @dataclass(frozen=True)
@@ -375,6 +390,12 @@ class CommandOption:
     def of(declaration: DataclassField) -> CommandOption:
         return declaration.metadata[CommandOption]
 
+    @staticmethod
+    def argument_payload(declaration: DataclassField[object], annotation: object, value: object) -> object:
+        normalize = CommandOption.of(declaration).normalize
+        return (normalize(value) if normalize is not None
+                else compile_decoder(annotation).argument_payload(value))
+
     def argument_flags(self, declaration: DataclassField) -> tuple[str, ...]:
         """The declared flags; a field that declares none is the option its own name spells."""
         return self.flags or ("--" + declaration.name.replace("_", "-"),)
@@ -458,16 +479,37 @@ class DeclaredOptions(Command):
             owner.add_argument(*flags, **options)
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> Self:
-        payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
-        hints = get_type_hints(cls, include_extras=True)
-        for declared in fields(cls):
-            key = FieldCodec.wire_key(declared)
-            value = getattr(args, key)
-            normalize = CommandOption.of(declared).normalize
-            payload[key] = (normalize(value) if normalize is not None
-                            else compile_decoder(hints[declared.name]).argument_payload(value))
-        return cls.from_payload(payload)
+    def from_arguments(cls, args: argparse.Namespace) -> Self:
+        return FieldCodec.decode_arguments(cls, args, CommandOption.argument_payload)
+
+
+class SendArguments(argparse.Namespace):
+    """Raw send fields declared for argparse; Send owns their decoded values."""
+    sender: str
+    target: str
+    body: str
+    type: str
+    role: str
+    report: object
+    command: str
+
+
+class SendReport(SubclassUnion, affix=""):
+    @abstractmethod
+    def send(self, ctx: Comms, request: Send) -> SendResult: ...
+
+
+class MissingReport(NullMember, SendReport):
+    def send(self, ctx: Comms, request: Send) -> SendResult:
+        return ctx.messaging.send(request.sender, request.target, request.body,
+                                  request.type, role=request.role())
+
+
+@dataclass(frozen=True)
+class SuppliedReport(ChangeReport, RecordMember, SendReport):
+    def send(self, ctx: Comms, request: Send) -> SendResult:
+        return ctx.messaging.send(request.sender, request.target, request.body,
+                                  request.type, role=request.role(), report=self)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -476,16 +518,20 @@ class Send(DeclaredOptions, Operation):
     sender: str = option("--from", default="")
     target: str = option("--to")
     body: str = option("--body")
-    kind: type[MessageKind] = option("--type", wire_name="type", default=InfoKind,
+    type: type[MessageKind] = option("--type", default=InfoKind,
         choices=SendableMessageKind.names(), editor=ChoiceTargetField)
     role: type[SendableRole] = option("--role", default=ConversationRole)
-    report: dict[str, Any] | None = option("--report", default=None,
-        help="Change report fields as a JSON object", normalize=_report_fields)
+    report: SendReport = option("--report", default=MissingReport(),
+        help="Change report fields as a JSON object", type=FieldCodec.parse)
+
+    @classmethod
+    def from_arguments(cls, args: argparse.Namespace) -> Self:
+        return FieldCodec.decode_record(cls, dict(
+            sender=args.sender, target=args.target, body=args.body,
+            type=args.type, role=args.role, report=args.report))
 
     def apply(self, ctx: Comms) -> SendResult:
-        return ctx.messaging.send(self.sender, self.target, self.body, self.kind,
-            role=self.role(), report=None if self.report is None
-            else FieldCodec.decode(ChangeReport, self.report))
+        return self.report.send(ctx, self)
 
     async def execute(self, bridge: CliBridge) -> None:
         await bridge.show_sent(await asyncio.to_thread(

@@ -14,38 +14,40 @@ import re
 import shlex
 import time
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from collections.abc import AsyncIterator, Iterator, Mapping
 from contextlib import aclosing
-from dataclasses import MISSING, Field, dataclass, field, fields, replace
+from dataclasses import Field, dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, cast, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, get_type_hints
 
 from acp.exceptions import RequestError
 
 from .active_route import ActiveRoute, replace_unreadable_active_route
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
-from .change_report import ChangeReport
-from .check_root import CheckRoot
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel
-from .channels import ANY_CHANNEL
-from .channels import Channel
+from .channels import ANY_CHANNEL, Channel
+from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
-from .cli_bridges.shared import (CliBridge, CommandOption, DeclaredOptions, Send,
-    TargetField, ChoiceTargetField, CatalogTargetField, option, _json_object)
+from .cli_bridges.shared import (
+    ChoiceTargetField,
+    CliBridge,
+    CommandOption,
+    DeclaredOptions,
+    Send,
+    TargetField,
+    _json_object,
+    option,
+)
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
-from .history_result import HistoryPageResult
-from .send_result import SendResult
-from .maintenance_barrier import MaintenanceHeldError
 from .command import Command
 from .comms import Comms
 from .config_options import (
-    CatalogSelection,
     ConfigOptions,
     ModelConfigOption,
     ThinkingLevelConfigOption,
@@ -63,22 +65,27 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
-from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .harness_install import Harness, HarnessInstalled
+from .history_result import HistoryPageResult
+from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import MessageReference
-from .page_traversal import OlderTraversal, PageCursor
-from .messages import ConversationRole, InfoKind, Message, MessageKind, SendableMessageKind, SendableRole
+from .messages import (
+    Message,
+)
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .page_traversal import OlderTraversal, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
+from .send_result import SendResult
 from .shared_ledger import LedgerDocument
 from .thread_execution import (
     ArchiveOwnerControl,
@@ -1552,7 +1559,7 @@ class ContextCliCommand(CliCommand):
         parser.add_argument("--imported", action="store_true")
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> ContextCliCommand:
+    def from_arguments(cls, args: argparse.Namespace) -> ContextCliCommand:
         if args.imported:
             if "turn" in vars(args) or args.diff:
                 raise ValueError("--imported cannot be combined with --turn or --diff")
