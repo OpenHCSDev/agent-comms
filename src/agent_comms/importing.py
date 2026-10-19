@@ -154,19 +154,19 @@ class ImportBuffer:
 
     def add(self, events: Iterable[TranscriptEvent]) -> None:
         for event in events:
-            message = event.imported()
-            if message is None or not message.body.strip():
-                continue
-            self.seen += 1
-            message.remember(self)
-            message = message.bounded(self.limits)
-            self.truncated += int(message.truncated)
-            self.messages.append(message)
-            self.characters += len(message.body)
-            while len(self.messages) > self.limits.messages or self.characters > self.limits.characters:
-                removed = self.messages.popleft()
-                self.characters -= len(removed.body)
-                self.truncated -= int(removed.truncated)
+            event.import_to(self.append)
+
+    def append(self, message: ImportedMessage) -> None:
+        self.seen += 1
+        message.remember(self)
+        message = message.bounded(self.limits)
+        self.truncated += int(message.truncated)
+        self.messages.append(message)
+        self.characters += len(message.body)
+        while len(self.messages) > self.limits.messages or self.characters > self.limits.characters:
+            removed = self.messages.popleft()
+            self.characters -= len(removed.body)
+            self.truncated -= int(removed.truncated)
 
     def summarize(self, text: str) -> None:
         """A compaction replaced everything before it; only messages after it remain context."""

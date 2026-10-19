@@ -18,6 +18,7 @@ from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, Timesta
 from .importing import ImportedSessionMetadata
 from .pi_payloads import PiMessage, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
+from .recorded_time import GeneratedTimestamp
 from .routing import TurnRouting
 from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
@@ -181,12 +182,11 @@ class ImportedSessionWriter:
     def import_events(self, events: Iterable[TranscriptEvent]) -> None:
         """The source already normalized records; preserve its conversation and clock."""
         for event in events:
-            message = event.imported()
-            if message is None or not message.body.strip():
-                continue
-            if event.timestamp is None:
-                raise ValueError("Copied conversation event has no original timestamp")
-            self.append(message, datetime.fromtimestamp(event.timestamp, UTC))
+            event.import_to(lambda message: self.append_recorded(event, message))
+
+    def append_recorded(self, event: TranscriptEvent, message: ImportedMessage) -> None:
+        at = GeneratedTimestamp.decode(event.timestamp).recorded_at("Copied conversation")
+        self.append(message, datetime.fromtimestamp(at, UTC))
 
 
 class NativeHeaderState(ABC):
