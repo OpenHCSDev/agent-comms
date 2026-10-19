@@ -13,7 +13,8 @@ from agent_comms.input_attempt import StartedInput
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_events import MessageEnd
 from agent_comms.pi_payloads import (
-    AfterMessageStreamStartStage, CodelessProviderDiagnosticError, UnrecognizedTransportStage,
+    AfterMessageStreamStartStage, CodedProviderDiagnosticError,
+    CodelessProviderDiagnosticError, UnrecognizedTransportStage,
 )
 from agent_comms.pi_rpc import PiRpcChannel
 from agent_comms.pi_vocabulary import ErrorStopReason
@@ -32,6 +33,7 @@ def test_observed_native_failure_preserves_stage_and_no_content_assumptions():
     assert event.message.stop_reason is ErrorStopReason
     assert event.message.usage.total_tokens == PiCount.from_wire(0)
     (diagnostic,) = event.message.diagnostics
+    assert type(diagnostic.error) is CodedProviderDiagnosticError
     assert diagnostic.error.name == "WebSocketCloseError"
     assert diagnostic.error.code == 1011
     assert diagnostic.details.request_bytes == 159312
