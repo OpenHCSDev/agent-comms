@@ -30,10 +30,17 @@ export declare class SystemLayerSegment {
     replaced(content: string): SystemLayerSegment;
     sourceFile(): {kind: 'file'; path: string; sha256: string} | undefined;
 }
+export interface OwnerToolConnection {
+    request(payload: Record<string, unknown>, maxRequest: number, maxResponse: number,
+            unavailable: string): Promise<{ok?: boolean; error?: string}>;
+}
+export interface OwnerToolEndpoint { path: string; token: string; }
 export declare class NativeInputClaim {
     readonly digest: string;
+    readonly ownerTools: OwnerToolConnection;
+    requireOwnerTools(value?: OwnerToolEndpoint): void;
     private readonly contributions;
-    static capture(digest: string, request: {text: string; images?: readonly unknown[] | null}, contributions?: readonly InputContributionCoordinates[]): NativeInputClaim;
+    static capture(digest: string, request: {text: string; images?: readonly unknown[] | null}, contributions?: readonly InputContributionCoordinates[], ownerTools?: OwnerToolEndpoint): NativeInputClaim;
     observe(message: unknown, native: unknown, journal: unknown): NativeContextSegmentManifest[];
 }
 export interface NativeContextManifest {

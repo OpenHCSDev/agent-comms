@@ -20,6 +20,7 @@ from agent_comms.coordinated_runtime_schema import install_native_runtime_schema
 from agent_comms.coordinator import Coordination
 from agent_comms.envelope_claim_transitions import WakeClaim
 from agent_comms.native_tool_call import DuplicateToolCallIdentity, SelectedToolDenied
+from agent_comms.selected_actions import NoSelectedTools
 from agent_comms.selected_session import SelectedSession
 from agent_comms.pi_events import ToolExecutionEnd, ToolExecutionStart
 from agent_comms.pi_payloads import ToolCallContent
@@ -36,12 +37,13 @@ async def test_provider_call_id_is_scoped_to_its_tool_round(tmp_path: Path) -> N
     class Owner:
         input_id = secrets.token_hex(16)
 
-        async def allow(self, round_number, call) -> None:
-            pass
+        async def allow(self, turn, round_number, call) -> None:
+            assert turn is self
 
     tmp_path.chmod(0o700)
     owner = Owner()
     socket = CodingToolSocket(tmp_path, secrets.token_hex(32), owner)
+    socket.turn = owner
     first_arguments = {"path": "one"}
     socket.announce((ToolCallContent(id="reused", name="read", arguments=first_arguments),))
     socket.tool_started(
@@ -116,8 +118,14 @@ def test_pre_turn_intent_is_distinct_from_owner_bound_mode() -> None:
 def test_default_off_and_packaged_extension_selection(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, selected_model, *, native_runtime_package) -> None:
     tmp_path.chmod(0o700)
     sessions = tmp_path / "sessions"
+    with pytest.raises(TypeError, match="selected_tool_mode"):
+        native_pi.NativePiRpcLaunch.tracked(
+            native_runtime_package, root=tmp_path, worktree=tmp_path,
+            session=SelectedSession(sessions), model=selected_model,
+        )
     default = native_pi.NativePiRpcLaunch.tracked(
-        native_runtime_package, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions), model=selected_model
+        native_runtime_package, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
+        model=selected_model, selected_tool_mode=NoSelectedTools(),
     )
     assert "--no-tools" in default.argv and "--no-builtin-tools" not in default.argv
     assert "-e" not in default.argv
@@ -133,14 +141,12 @@ def test_default_off_and_packaged_extension_selection(tmp_path: Path, monkeypatc
     assert "--no-builtin-tools" in selected.argv
     assert selected.argv[selected.argv.index("--tools") + 1] == "selected_claimed_write"
     extension = Path(selected.argv[selected.argv.index("-e") + 1])
-    assert extension == packaged
+    assert extension == native_runtime_package.path / "dist/selected_claimed_write.mjs"
+    assert broker.selected_extension(tmp_path) == packaged
     assert not (sessions / "selected-claim-extension.mjs").exists()
-    extension.write_text("evil changed extension", encoding="utf-8")
+    packaged.write_text("evil changed extension", encoding="utf-8")
     with pytest.raises(SelectedToolDenied, match="reviewed"):
-        native_pi.NativePiRpcLaunch.tracked(
-            native_runtime_package, root=tmp_path, worktree=tmp_path, session=SelectedSession(sessions),
-            model=selected_model, selected_tool_mode=mode
-        )
+        broker.selected_extension(tmp_path)
     with pytest.raises(AttributeError, match="launch_arguments"):
         native_pi.NativePiRpcLaunch.tracked(
             native_runtime_package,
@@ -422,15 +428,12 @@ async def test_shipped_javascript_tool_uses_authenticated_owner_socket(tmp_path)
             "--input-type=module",
             "--eval",
             f"""import register from {json.dumps(extension.as_uri())};
+import {{OwnerToolConnection}} from {json.dumps(extension.with_name('owner_tool_socket.mjs').as_uri())};
 let tool;
 register({{registerTool(value) {{tool = value}}}});
-await tool.execute('paired', {json.dumps(arguments)}, new AbortController().signal);
+await tool.execute('paired', {json.dumps(arguments)}, new AbortController().signal, undefined,
+    {{ownerTools: OwnerToolConnection.capture({json.dumps({'path': str(socket.address), 'token': token})})}});
 """,
-            env={
-                **os.environ,
-                "AGENT_COMMS_SELECTED_TOOL_SOCKET": str(socket.address),
-                "AGENT_COMMS_SELECTED_TOOL_TOKEN": token,
-            },
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

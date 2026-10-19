@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 import agent_comms.pi_commands as commands
-from agent_comms.backend import TurnSession
+from agent_comms.native_session_prepare import NativeSessionPreparation
 from agent_comms.native_startup import NativeStartup
 from agent_comms.native_attestation import KnownSessionAttestation, ObservedAttestation
 from agent_comms.native_pi import NativePiRpcLaunch
@@ -30,8 +30,8 @@ class InspectionFork(commands.MutatesSession, commands.PiCommand):
 
 @pytest.mark.parametrize("success", [True, False])
 def test_new_command_capabilities_guard_identity_without_backend_dispatch_edits(success):
-    session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+    session = NativeSessionPreparation(
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})),
         native_session=PersistentPiSession(), startup=NativeStartup(Path.cwd()),
     )
     session.native = SimpleNamespace(

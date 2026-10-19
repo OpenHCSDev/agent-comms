@@ -19,6 +19,7 @@ import asyncio
 import json
 import secrets
 import unicodedata
+from abc import ABC, abstractmethod
 from collections.abc import (
     AsyncGenerator,
     AsyncIterator,
@@ -52,6 +53,9 @@ from .native_startup import NATIVE_STARTUP_POLICY, NativeStartup
 from .pi_rpc import PiRpcChannel
 from .prompt_state import UnwrittenPrompt
 from .request_progress import NO_REQUEST_OBSERVER, RequestObserver, RequestProgress
+from .native_tool_call import NativeToolMode
+from .native_tool_transport import ToolTransport
+from .mro_dispatch import MroDispatch, handles
 from .selected_tool_broker import SelectedToolDenied
 from .send_outcome import SendBoundary
 from .turn_context import InputContributionCoordinates
@@ -117,6 +121,7 @@ async def stream_agent_events(
     ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
     context_contributions: tuple[InputContributionCoordinates, ...] = (),
     request_observer: RequestObserver = NO_REQUEST_OBSERVER,
+    tool_mode: NativeToolMode,
 ) -> AsyncIterator[events.AgentEvent]:
     """Run the backend; native completion ends with a ``done`` event.
 
@@ -150,11 +155,14 @@ async def stream_agent_events(
                 async with aclosing(
                     TurnSession(
                         launch,
-                        task,
+                        partial(commands.Prompt,
+                            id=f"agent-comms-prompt-{secrets.token_hex(16)}",
+                            input_id=Id128Text.mint(), message=task, images=tuple(images) or None,
+                            context_contributions=context_contributions,
+                        ),
+                        tool_mode=tool_mode,
                         steering_queue=steering_queue,
                         finish_event=finish_event,
-                        images=images,
-                        context_contributions=context_contributions,
                         model_wait=model_wait,
                         rpc_abort_grace=rpc_abort_grace,
                         send_boundary=send_boundary,
@@ -173,19 +181,21 @@ async def stream_agent_events(
             await terminate_task_process(owner)
 
 
-class TurnSession:
-    """One Pi turn: checks input, tracks native identity and results, and owns the child."""
+class NativeSession(MroDispatch, ABC):
+    """Shared child acquisition, attestation, observation and retirement."""
 
-    active: ClassVar[dict[asyncio.Task[Any], TurnSession]] = {}
-    prompt_type = UnwrittenPrompt
+    active: ClassVar[dict[asyncio.Task[Any], NativeSession]] = {}
+
+    @property
+    @abstractmethod
+    def prompt_type(self):
+        """Each concrete native operation declares whether it sends input."""
 
     def __init__(
         self,
         launch: NativePiRpcLaunch,
-        task: str,
         steering_queue: TurnInbox | None = None,
         finish_event: asyncio.Event | None = None,
-        images: Sequence[ImageInput] = (),
         model_wait: TurnWait = DEFAULT_MODEL_WAIT,
         rpc_abort_grace: float = RPC_ABORT_GRACE_SECONDS,
         send_boundary: SendBoundary | None = None,
@@ -194,15 +204,12 @@ class TurnSession:
         persistent_session: PersistentPiSession | None = None,
         native_session: PersistentPiSession | None = None,
         ui_request: Callable[[pi.DialogUiRequest], Awaitable[pi.ExtensionUiChoice]] | None = None,
-        context_contributions: tuple[InputContributionCoordinates, ...] = (),
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         *, startup: NativeStartup,
     ):
         self.launch = launch
-        self.task = task
+        self.tool_socket: ToolTransport
         self.finish_event = finish_event
-        self.images = images
-        self.context_contributions = context_contributions
         self.request_observer = request_observer
         self.watchdog = ProgressWatchdog(
             model_wait, PROMPT_START_TIMEOUT_SECONDS, CAPABILITY_PREFLIGHT_TIMEOUT_SECONDS
@@ -224,8 +231,16 @@ class TurnSession:
         self.prompt_state = self.prompt_type()
         self.stats = StatsRequest()
         self.usage = UsageAccount()
-        self.output = TurnOutput(sensitive=bool(images))
+        self.output = TurnOutput()
         self.rejected_signal = asyncio.Event()
+
+    @property
+    def active_tools(self):
+        return self.tool_socket.active_tools
+
+    def accept_tool_round(self, message):
+        self.tool_socket.announce(message.content)
+        return True
 
     @property
     def has_start_listener(self):
@@ -269,16 +284,12 @@ class TurnSession:
         self.request_observer(progress, self.native.proc.identity)
 
     async def apply_native_event(self, event) -> tuple[events.AgentEvent, ...]:
+        await self.dispatch(event)
         return tuple([update async for update in event.apply(self)])
 
     @property
     def accepts_output(self):
         return self.native.attestation.trustworthy
-
-    def matches_original_input(self, message):
-        return self.inputs.permits_interaction and message.matches_input(
-            self.task, self.original_input_id
-        )
 
     def committable_message(self, text):
         return self.started_input and self.accepts_output and self.output.matches_message(text)
@@ -293,46 +304,6 @@ class TurnSession:
             matched, identity = self.inputs.mark_started(self, event)
             if matched:
                 self.started_during_abort.append(identity)
-
-    async def accept_user_message(self, message, event):
-        """Own the original/follow-up input effect across all decoded user messages."""
-        if self.prompt_state.awaiting_start and self.matches_original_input(message):
-            if not self.notify_input_started(None, self.original_input_id, self.task):
-                self.inputs.uncertain = True
-                self.output.record_failure(
-                    failures.InputMissing("Pi input start did not match the durable attempt.")
-                )
-                await self.abort_stalled_rpc()
-                self.finished = True
-                return
-            self.prompt_state = self.prompt_state.start(event)
-            if self.has_start_listener:
-                yield events.OriginalInputStarted()
-            self.ensure_input_forwarding()
-        elif self.started_input:
-            matched, input_id = self.inputs.mark_started(self, event)
-            if matched:
-                yield events.FollowingInputStarted(id=input_id)
-            else:
-                self.inputs.uncertain = True
-                self.output.final_assistant_stop = False
-                self.output.record_failure(
-                    failures.FollowupUnrecognized(
-                        "Pi RPC saw an unrecognized follow-up user message start."
-                    )
-                )
-                await self.abort_stalled_rpc()
-                self.finished = True
-                return
-        else:
-            self.inputs.uncertain = True
-            self.output.final_assistant_stop = False
-            self.output.record_failure(
-                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
-            )
-            await self.abort_stalled_rpc()
-            self.finished = True
-            return
 
     def permits_live_status(self) -> bool:
         """Only tracked, live input may publish an informational package acknowledgement."""
@@ -377,7 +348,7 @@ class TurnSession:
         )
 
     async def open_transport(self, resources: AsyncExitStack) -> None:
-        """The turn's resource stack closes the backend's launch resources."""
+        self.tool_socket = await ToolTransport.open(self, resources)
 
     @contextmanager
     def native_acquisition(self):
@@ -400,6 +371,7 @@ class TurnSession:
                 with self.startup.measurements.operation("open_transport"):
                     await self.open_transport(transport)
                 native = await self.open_native(reuse=reuse)
+                self.tool_socket.bind_process(native.proc.pid)
                 native.transport = transport.pop_all()
         self.owner = asyncio.current_task()
         if self.owner is not None:
@@ -424,7 +396,6 @@ class TurnSession:
                     resources, reuse=self.persistent_session is not None
                 )
                 async with self.native.failures():
-                    self.prepare_launch()
                     self.output.sensitive |= self.native.sensitive_diagnostics
                     if self.native.proc.stdin is not None:
                         try:
@@ -542,23 +513,6 @@ class TurnSession:
         """Pi compacted after an overflow and re-sends the same request."""
         self.output.request_retried()
 
-    @property
-    def prompt_id(self):
-        return self.command.id
-
-    @property
-    def original_input_id(self):
-        return self.command.input_id
-
-    def prepare_launch(self) -> None:
-        self.command = commands.Prompt(
-            id=f"agent-comms-prompt-{secrets.token_hex(16)}",
-            input_id=Id128Text.mint(),
-            message=self.task,
-            images=self.images or None,
-            context_contributions=self.context_contributions,
-        )
-
     async def initialize_rpc(self) -> None:
         self.explicit_interrupt = False
         self.rejected_commands: list[events.AgentEvent] = []
@@ -567,10 +521,10 @@ class TurnSession:
         self.active_session_file = self.launch.session.session_file
         self.settlement_count = 0
         self.watchdog.reading()
-        self.active_tools: set[str] = set()
         self.started_during_abort: list[str | None] = []
 
     async def retain_or_close(self) -> None:
+        self.tool_socket.assert_complete()
         await self.native.finish_input()
         identity = self.native.attestation.identity
         if (
@@ -593,3 +547,87 @@ class TurnSession:
 
     def finish_result(self) -> Iterable[events.AgentEvent]:
         yield from self.output.done(self, self.error_text)
+
+
+class TurnSession(NativeSession):
+    """A native input adds its declared tools and constructs its connected command."""
+
+    prompt_type = UnwrittenPrompt
+
+    def __init__(self, launch, make_command: Callable[..., commands.Prompt], *,
+                 tool_mode: NativeToolMode, **options):
+        super().__init__(launch, **options)
+        self.tool_mode = tool_mode
+        self.make_command = make_command
+
+    async def open_transport(self, resources: AsyncExitStack) -> None:
+        self.tool_socket = await self.tool_mode.open_transport(self, resources)
+        self.command = self.make_command(owner_tools=self.tool_socket.connection)
+        del self.make_command
+        self.output.sensitive = bool(self.command.images)
+
+    async def context_proof(self):
+        if not self.started_input or not self.accepts_output:
+            raise SelectedToolDenied("Native tool has no started input")
+
+    @handles(pi.ToolExecutionStart)
+    async def tool_started(self, event):
+        await self.context_proof()
+        self.tool_socket.tool_started(event)
+
+    @handles(pi.ToolExecutionEnd)
+    async def tool_finished(self, event):
+        self.tool_socket.tool_finished(event, self.command.input_id)
+
+    @property
+    def prompt_id(self):
+        return self.command.id
+
+    @property
+    def original_input_id(self):
+        return self.command.input_id
+
+    def matches_original_input(self, message):
+        return self.inputs.permits_interaction and message.matches_input(
+            self.command.message, self.original_input_id
+        )
+
+    async def accept_user_message(self, message, event):
+        """Own the original/follow-up input effect across all decoded user messages."""
+        if self.prompt_state.awaiting_start and self.matches_original_input(message):
+            if not self.notify_input_started(None, self.original_input_id, self.command.message):
+                self.inputs.uncertain = True
+                self.output.record_failure(
+                    failures.InputMissing("Pi input start did not match the durable attempt.")
+                )
+                await self.abort_stalled_rpc()
+                self.finished = True
+                return
+            self.prompt_state = self.prompt_state.start(event)
+            if self.has_start_listener:
+                yield events.OriginalInputStarted()
+            self.ensure_input_forwarding()
+        elif self.started_input:
+            matched, input_id = self.inputs.mark_started(self, event)
+            if matched:
+                yield events.FollowingInputStarted(id=input_id)
+            else:
+                self.inputs.uncertain = True
+                self.output.final_assistant_stop = False
+                self.output.record_failure(
+                    failures.FollowupUnrecognized(
+                        "Pi RPC saw an unrecognized follow-up user message start."
+                    )
+                )
+                await self.abort_stalled_rpc()
+                self.finished = True
+                return
+        else:
+            self.inputs.uncertain = True
+            self.output.final_assistant_stop = False
+            self.output.record_failure(
+                failures.InputMissing("Pi RPC run ended without this prompt's user message start.")
+            )
+            await self.abort_stalled_rpc()
+            self.finished = True
+            return
