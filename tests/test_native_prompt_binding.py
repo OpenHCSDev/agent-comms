@@ -169,7 +169,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         if fresh:
             session_file = session_dir / f"{input_id}.jsonl"
             session_file.write_text(
-                json.dumps({"type": "session", "id": "isolated-session"}) + "\n"
+                json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "isolated-session"}) + "\n"
             )
             session_file.chmod(0o600)
         assert session_file is not None
@@ -183,7 +183,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
 
         await asyncio.to_thread(authorized)
         if fresh:
-            entries = [{"type": "session", "id": "isolated-session"}]
+            entries = [{"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "isolated-session"}]
             proof_rows = []
         else:
             entries = [json.loads(line) for line in session_file.read_text().splitlines()]
@@ -195,7 +195,7 @@ def _fake_model(*, decision: str = "FULL", digest_override: str | None = None):
         digest = digest_override or native_request_digest(prompt)
         entries.append(
             {
-                "type": "message",
+                "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
                 "id": entry_id,
                 "message": {"role": "user", "inputId": input_id, "inputDigest": digest},
             }

@@ -51,8 +51,8 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
     session = _evidence(tmp_path)
     restored_input = "d" * 32
     restored = b"".join(json.dumps(row).encode() + b"\n" for row in (
-        {"type": "session", "id": "restored", "version": 3},
-        {"type": "message", "id": "restored-entry", "message": {
+        {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "restored", "version": 3},
+        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "restored-entry", "message": {
             "role": "user", "inputId": restored_input, "inputDigest": "e" * 64,
             "content": [{"type": "text", "text": "restored sou"}],
         }},
@@ -117,7 +117,7 @@ def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatc
         assert len(decoded) == 2
         with session.open("a") as output:
             output.write(
-                json.dumps({"type": "compaction", "id": "new", "summary": "append"}) + "\n"
+                json.dumps({"type": "compaction", "timestamp": "2026-10-01T00:00:00.000Z", "id": "new", "summary": "append"}) + "\n"
             )
         evidence.observe()
         assert len(decoded) == 3
@@ -128,7 +128,7 @@ def test_acquired_source_observes_new_context_generation(tmp_path):
     with NativeEntry.open_evidence(session) as evidence:
         original = NativeContextProof.read_evidence(session, INPUT_ID, evidence=evidence)
         with session.open("a") as output:
-            output.write(json.dumps({"type": "compaction", "id": "new", "summary": "observed append"}) + "\n")
+            output.write(json.dumps({"type": "compaction", "timestamp": "2026-10-01T00:00:00.000Z", "id": "new", "summary": "observed append"}) + "\n")
         write_proof_rows(session, [{
             "schema": 2, "type": "context_committed", "sessionId": "sid",
             "inputId": INPUT_ID, "sessionEntryId": "entry",
@@ -195,7 +195,7 @@ def test_byte_snapshot_rechecks_original_prefix_after_decoding(tmp_path, operati
         assert next(rows)["type"] == "session"
         if operation == "append":
             with session.open("a") as output:
-                output.write(json.dumps({"type": "compaction", "id": "new", "summary": "next snapshot"}) + "\n")
+                output.write(json.dumps({"type": "compaction", "timestamp": "2026-10-01T00:00:00.000Z", "id": "new", "summary": "next snapshot"}) + "\n")
             assert len(tuple(rows)) == 1
             assert tuple(source.rows())[0]["id"] == "new"
         else:
@@ -335,7 +335,7 @@ def test_an_input_check_costs_the_same_on_a_long_session_as_on_a_short_one(tmp_p
     monkeypatch.setattr(MessageEntry, "tracked_user", property(lambda self: visited.append(self) or tracked.fget(self)))
 
     def user(number):
-        return json.dumps({"type": "message", "id": f"e{number}", "message": {
+        return json.dumps({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": f"e{number}", "message": {
             "role": "user", "inputId": f"{number:032x}", "inputDigest": "b" * 64,
             "content": [{"type": "text", "text": "one input"}]}}).encode() + b"\n"
 
@@ -343,7 +343,7 @@ def test_an_input_check_costs_the_same_on_a_long_session_as_on_a_short_one(tmp_p
         sessions = tmp_path / f"history-{history}"
         sessions.mkdir(mode=0o700)
         session = sessions / "s.jsonl"
-        session.write_bytes(json.dumps({"type": "session", "id": "sid", "version": 3}).encode() + b"\n"
+        session.write_bytes(json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid", "version": 3}).encode() + b"\n"
                             + b"".join(user(number) for number in range(1, history + 1)))
         session.chmod(0o600)
         with NativeEntry.open_evidence(session) as evidence:

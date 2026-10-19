@@ -51,9 +51,9 @@ def _evidence(tmp_path: Path) -> Path:
     sessions.mkdir(mode=0o700)
     session = sessions / "test.jsonl"
     entries = [
-        {"type": "session", "id": "sid", "version": 3},
+        {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid", "version": 3},
         {
-            "type": "message",
+            "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
             "id": "entry",
             "message": {
                 "role": "user",
@@ -479,9 +479,9 @@ send({'type':'agent_settled'})
     original = AttachedChild.start
 
     async def launch(*_argv, **kwargs):
-        entry = {"type": "message", "id": "entry",
+        entry = {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "entry",
                  "message": {"role": "user", "inputId": INPUT_ID, "inputDigest": "b" * 64}}
-        session_file.write_text(json.dumps({"type": "session", "id": "sid"}) + "\n" + json.dumps(entry) + "\n")
+        session_file.write_text(json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid"}) + "\n" + json.dumps(entry) + "\n")
         write_proof_rows(session_file, [proof])
         session_file.chmod(0o600)
         child = await original(

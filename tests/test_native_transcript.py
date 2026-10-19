@@ -54,7 +54,7 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
     entry = NativeEntry.read(
         encoded(
             {
-                "type": "message",
+                "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
                 "id": "input",
                 "message": {
                     "role": "user",
@@ -83,7 +83,7 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
         b"".join(
             encoded(
                 {
-                    "type": "message",
+                    "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
                     "message": {
                         "role": "assistant",
                         "content": [{"type": "text", "text": str(i)}],
@@ -118,10 +118,10 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
 
 def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     path = tmp_path / "session.jsonl"
-    extension = {"type": "plugin-note", "custom": {"future": True}}
+    extension = {"type": "plugin-note", "timestamp": "2026-10-01T00:00:00.000Z", "custom": {"future": True}}
     path.write_bytes(
         encoded(extension)
-        + encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
+        + encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
         + b'{"type":"message","message":'
     )
     reader = NativeTranscript(path)
@@ -137,7 +137,7 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
 
 
 @pytest.mark.parametrize("raw, error, match", [
-    (encoded({"type": "message", "message": {"role": "assistant", "content": 42}}),
+    (encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": 42}}),
      ValueError, r"^Expected a JSON array\.$"),
     (b'{"type":"message"\n', json.JSONDecodeError,
      r"^Expecting ',' delimiter: line 2 column 1 \(char 18\)$"),
@@ -179,7 +179,7 @@ def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
     bodies = ["before", "λ" * (300 * 1024), "after"]
     path.write_bytes(
         b"".join(
-            encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": body}]}})
+            encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": [{"type": "text", "text": body}]}})
             for body in bodies
         )
     )
@@ -212,11 +212,11 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
         store.participants.register(lookup, thread.name, thread.name, committed=True)
     path = tmp_path / "session.jsonl"
     path.write_bytes(b"".join(encoded(row) for row in (
-        {"type": "session", "id": "source", "version": 3},
-        {"type": "message", "id": "user", "message": {
+        {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "source", "version": 3},
+        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "user", "message": {
             "role": "user", "content": [{"type": "text", "text": "request"}],
             "inputId": "a" * 32, "inputDigest": "b" * 64}},
-        {"type": "message", "id": "reply", "parentId": "user", "message": {
+        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "reply", "parentId": "user", "message": {
             "role": "assistant", "content": [{"type": "text", "text": "answer"}],
             "stopReason": "stop"}},
     )))
