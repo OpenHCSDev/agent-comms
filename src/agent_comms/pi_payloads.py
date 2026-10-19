@@ -75,6 +75,7 @@ def project_array(value, target):
 
 class PiPayload:
     wire_tag: ClassVar[str | None] = None
+    opaque: ClassVar[bool] = False
     strict_fields: ClassVar[bool] = False
 
     @classmethod
@@ -85,8 +86,6 @@ class PiPayload:
         data = {}
         if issubclass(cls, DeclaredFamily):
             member = cls.wire_member(value)
-            if member.opaque:
-                return {"kind": member.declared_name, "payload": value}
             data["kind"] = member.declared_name
         declared = FieldCodec.record_fields(member)
         names = {key for _, key in declared}
@@ -97,6 +96,9 @@ class PiPayload:
             # Native null means omitted where the declaration names its not-reported member.
             if key in value and not (value[key] is None and isinstance(f.default, PiPayload)):
                 data[key] = member.normalize_field(hints[f.name], key, value[key], value)
+        if member.opaque:
+            # An opaque member keeps the whole record beside the fields it declares.
+            data.update(payload=value)
         return data
 
     @classmethod
@@ -122,8 +124,6 @@ class PiPayload:
 
 @dataclass(frozen=True)
 class ProviderRetryOutcome(PiPayload, DeclaredFamily, affix="ProviderRetry"):
-    opaque = False
-
     @classmethod
     def wire_member(cls, value):
         try:
@@ -276,7 +276,6 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
         return []
 
     wire_tag = "type"
-    opaque: ClassVar[bool] = False
     text: ClassVar[str] = ""
     tool_round_allowed: ClassVar[bool] = False
 
@@ -471,7 +470,6 @@ class ProviderTransportDetails(PiPayload):
 @dataclass(frozen=True)
 class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     wire_tag = "type"
-    opaque = False
     provider_connection_failure: ClassVar[bool] = False
 
     @classmethod
@@ -544,7 +542,6 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
         return []
 
     wire_tag = "role"
-    opaque: ClassVar[bool] = False
     assistant: ClassVar[bool] = False
     user: ClassVar[bool] = False
     final_reply: ClassVar[bool] = False
@@ -618,7 +615,6 @@ class AbsentMessage(PiMessage):
 
 @dataclass(frozen=True)
 class AssistantMessage(PiMessage):
-
     def annotation_disclosure(self):
         from .working_memory_disclosure import PublicInstructionDisclosure
 
@@ -790,7 +786,6 @@ class UnknownMessage(PiMessage):
 @dataclass(frozen=True)
 class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     wire_tag = "type"
-    opaque: ClassVar[bool] = False
     progress: ClassVar[bool] = False
     response_progress: ClassVar[bool] = False
 
@@ -869,7 +864,6 @@ class UnknownDelta(PiDelta):
 @dataclass(frozen=True)
 class PiModel(PiPayload, DeclaredFamily, affix="Model"):
     wire_tag = None
-    opaque: ClassVar[bool] = False
     display_name: ClassVar[str | None] = None
     context_window: ClassVar[PiCount] = UnreportedCount()
 
@@ -936,7 +930,6 @@ class PiContextUsage(PiPayload):
 @dataclass(frozen=True)
 class PiResponseData(PiPayload, DeclaredFamily, affix="Data"):
     wire_tag = None
-    opaque: ClassVar[bool] = False
 
     @property
     def session_busy(self) -> bool:
@@ -1102,7 +1095,6 @@ class UnknownData(PiResponseData):
 @dataclass(frozen=True)
 class PiToolResult(PiPayload, DeclaredFamily, affix="ToolResult"):
     wire_tag = None
-    opaque: ClassVar[bool] = False
 
     @classmethod
     def normalize_wire(cls, value):
@@ -1179,7 +1171,6 @@ class NativeEditDetails(PiPayload):
 @dataclass(frozen=True)
 class NativeToolDetails(PiPayload, DeclaredFamily, affix="ToolDetails"):
     """Decode the original owned result once; other extension details stay opaque."""
-    opaque: ClassVar[bool] = False
     wire_tag = "agentCommsKind"
 
     @classmethod
