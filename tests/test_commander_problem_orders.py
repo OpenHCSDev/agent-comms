@@ -288,9 +288,10 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     with pytest.raises(ValueError, match='no origin branch'):
         CommsOrderDoneTool(problem='P1', order_id=comms.goals.todos.get('P1').order.id, delivery=CommitDelivery(commit=merge, delivered_commit=delivered), claims=working(comms)).apply(comms, caller)
     git('update-ref', 'refs/remotes/origin/work', delivered)
-    script.done('P1', merge, delivered)
+    script.done('P1', delivered, seen=working(comms)[0].screenshot)
     met = comms.goals.todos.get('P1')
-    assert (met.order.delivery.delivered, met.order.delivery.at) == (delivered, RecordedEventTime(1000))
+    assert (met.order.delivery.commit, met.order.delivery.delivered, met.order.delivery.at) == (
+        merge, delivered, RecordedEventTime(1000))
     assert script.struck(met, 'worker') == 0
 
     git('checkout', '-q', '-b', 'side', delivered)
@@ -303,7 +304,9 @@ def test_lateness_reads_the_delivered_commit_not_the_checked_merge(commander, co
     git('update-ref', 'refs/remotes/origin/main', late)
     with pytest.raises(ValueError, match='not in the checked commit'):
         CommsOrderDoneTool(problem='P2', order_id=comms.goals.todos.get('P2').order.id, delivery=CommitDelivery(commit=late, delivered_commit=side), claims=working(comms)).apply(comms, caller)
-    script.done('P2', late, late)
+    with pytest.raises(SystemExit, match='not in .* HEAD'):
+        script.done('P2', side, seen=working(comms)[0].screenshot)
+    script.done('P2', late, seen=working(comms)[0].screenshot)
     struck = comms.goals.todos.get('P2')
     assert script.struck(struck, 'worker') == 1 and late in struck.strikes[-1].reason
 
@@ -325,7 +328,7 @@ def test_a_late_delivery_reads_its_lateness_to_the_second(commander, commander_s
         git('commit', '-q', '--allow-empty', '-m', f'{pid} delivered', at=at)
         delivered = git('rev-parse', 'HEAD')
         git('update-ref', 'refs/remotes/origin/main', delivered)
-        script.done(pid, delivered, delivered)
+        script.done(pid, delivered, seen=working(comms)[0].screenshot)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 0
     (strike,) = comms.goals.todos.get('P2').strikes
     assert strike.reason.startswith(f'P2 order order-P2 late by 35 s: due {clock(2000)}, '
@@ -385,7 +388,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    script.send('worker', due, str(body))  # the same holder again without --clean is a send-back
+    script.send('worker', due, str(body), replaces=created.messages[-1].message_id)  # without --clean is a send-back
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
@@ -399,7 +402,7 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     (repo / 'count.txt').write_text('1\n')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'fix')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
-    script.done('P1', git('rev-parse', 'HEAD'), git('rev-parse', 'HEAD'))
+    script.done('P1', git('rev-parse', 'HEAD'), seen=working(comms)[0].screenshot)
     assert not comms.goals.todos.get('P1').pending
 
     artifact = repo.parent / 'seen.png'
@@ -434,9 +437,9 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     body = order_body(repo)
     problem(script, body)
     script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
-    script.send('worker', '23:59', body)
+    script.send('worker', '23:59', body, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', body)
+    script.send('worker', '23:59', body, replaces=comms.goals.todos.get('P1').messages[-1].message_id)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
 
@@ -521,7 +524,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
     fixed = git('rev-parse', 'HEAD')
     with pytest.raises(ValueError, match='printed 0, not its expected count 1'):
-        script.done('P1', fixed, fixed)
+        script.done('P1', fixed, seen=working(comms)[0].screenshot)
     script.correct_check('P1', corrected, why)
     current = comms.goals.todos.get('P1')
     assert (current.order.id, current.assignment, current.deadline, current.strikes) == (
@@ -529,7 +532,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
     [record] = current.order.check_corrections
     assert (record.previous, record.check, record.reason) == (
         sent.order.check, OrderCheck(str(repo), 'cat count.txt', CountCheckResult(1)), why)
-    script.done('P1', fixed, fixed)
+    script.done('P1', fixed, seen=working(comms)[0].screenshot)
     assert not comms.goals.todos.get('P1').pending
     assert comms.goals.todos.get('P1').order.check_corrections == (record,)
 
