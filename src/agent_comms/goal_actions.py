@@ -12,7 +12,6 @@ from .change_report import FileLine
 from .child_process import ProcessIdentity
 from .command import Command
 from .declared_family import DeclaredFamily
-from .progress_claims import ProgressClaim
 from .errors import RelationViolationError
 from .goal_mentions import bind_goal_mentions
 from .goal_states import (
@@ -36,6 +35,7 @@ from .goals import (
     RequestGoalOrder,
     UnorderedGoalOrder,
 )
+from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .threads import Thread
 from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation

@@ -34,8 +34,10 @@ class ProgressClaim(DeclaredFamily, affix="Claim"):
     def require_claimed(cls, claims: tuple[ProgressClaim, ...], report: str) -> None:
         """A done or delivered report stands only on an attached claim, never on its prose."""
         if not claims:
-            raise ValueError(f"A {report} report needs a claim with its artifact: merged (a commit "
-                             "on origin), installed (a recorded check) or working (a screenshot).")
+            raise ValueError(
+                f"A {report} report needs a claim with its artifact: merged (a commit "
+                "on origin), installed (a recorded check) or working (a screenshot)."
+            )
 
 
 @dataclass(frozen=True)
@@ -48,7 +50,10 @@ class MergedClaim(ProgressClaim):
         command = ["git", "-C", str(worktree), "branch", "--remotes", "--contains", self.commit]
         try:
             listed = subprocess.run(
-                [*command, "--list", "origin/*"], capture_output=True, text=True, timeout=self.timeout
+                [*command, "--list", "origin/*"],
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
             )
         except subprocess.TimeoutExpired as expired:
             raise ValueError(
