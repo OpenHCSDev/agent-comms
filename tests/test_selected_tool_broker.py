@@ -409,7 +409,7 @@ async def test_shipped_javascript_tool_uses_authenticated_owner_socket(tmp_path)
     tmp_path = tmp_path / ("persistent-session-" * 8)
     tmp_path.mkdir(mode=0o700)
     assert len(os.fsencode(tmp_path)) > 108
-    input_id, token = secrets.token_hex(16), secrets.token_hex(32)
+    input_id = secrets.token_hex(16)
     target = tmp_path / "notes.txt"
     target.write_text("before")
 
@@ -436,7 +436,7 @@ let tool;
 register({{registerTool(value) {{tool = value}}}});
 await new Promise(resolve => process.stdin.once('data', resolve));
 await tool.execute('paired', {json.dumps(arguments)}, new AbortController().signal, undefined,
-    {{ownerTools: OwnerToolConnection.capture({json.dumps({'path': str(unbound.listener.address), 'token': token})})}});
+    {{ownerTools: OwnerToolConnection.capture({json.dumps({'path': str(unbound.listener.address), 'token': unbound.listener.token})})}});
 """,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
