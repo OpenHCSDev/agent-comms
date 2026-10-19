@@ -1,8 +1,9 @@
 """Commander load and forks (HARD RULE: as soon as the commander is overwhelmed it forks; a structural reflex).
 
 Load is measured from the files the fleet already writes, never from how the commander feels:
-each open order counts 1, each overdue order 2 more, and every 10 unjudged edits 1. One commander
-carries PER_COMMANDER load. Forks register by passing `--fork NAME` to order, which touches
+each open order counts 1 and each overdue order 2 more. Any unjudged edits together count as
+one PER_COMMANDER slice of judging work; no edits count as zero. One commander carries
+PER_COMMANDER load. Forks register by passing `--fork NAME` to order, which touches
 forks/NAME.beat; a beat younger than BEAT_AGE is a live fork. While load needs more forks than are
 live, order refuses the main commander's actions and rotate prints FORK NOW, so the only
 way forward is forking a slice.
@@ -49,8 +50,13 @@ class Load:
                    CommsUnjudgedTool.count(comms, commander), tuple(live_forks()))
 
     @property
-    def total(self) -> float:
-        return self.owed + 2 * self.overdue + self.unjudged / 10
+    def judging_load(self) -> int:
+        """The whole unjudged backlog is one commander's slice, regardless of its length."""
+        return PER_COMMANDER if self.unjudged else 0
+
+    @property
+    def total(self) -> int:
+        return self.owed + 2 * self.overdue + self.judging_load
 
     @property
     def needed(self) -> int:
@@ -63,7 +69,8 @@ class Load:
 
     def __str__(self) -> str:
         return (f'load {self.total:.0f} ({self.owed} open orders, {self.overdue} overdue, '
-                f'{self.unjudged} unjudged edits) needs {self.needed} live fork(s), '
+                f'{self.unjudged} unjudged edits: {self.judging_load} judging load) '
+                f'needs {self.needed} live fork(s), '
                 f'{len(self.forks)} live {list(self.forks)}; fork a slice now (each fork passes --fork NAME to order)')
 
     def require(self) -> None:
