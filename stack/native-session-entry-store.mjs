@@ -1,5 +1,5 @@
 /** Native session history storage. JSONL is authority; SQLite contains rebuildable selectors only. */
-import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, statSync } from 'node:fs';
+import { closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync, rmSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -42,19 +42,6 @@ export class EntryMetadata {
         this.thinkingLevel = entry.type === 'thinking_level_change' ? entry.thinkingLevel : null;
         this.label = EntryMetadata.labelFor(entry);
     }
-    treeNode(store) {
-        const meta = this;
-        const node = {children: [], label: undefined, labelTimestamp: undefined};
-        Object.defineProperties(node, {
-            metadata: {value: meta},
-            entry: {enumerable: true, configurable: true, get() {
-                const entry = store.get(meta.id);
-                Object.defineProperty(this, 'entry', {value: entry, enumerable: true});
-                return entry;
-            }},
-        });
-        return node;
-    }
     static labelFor(entry) {
         return entry.type === 'label' ? { targetId: entry.targetId, label: entry.label ?? null, timestamp: entry.timestamp } : null;
     }
@@ -62,9 +49,32 @@ export class EntryMetadata {
     get liveLabel() { return EntryMetadata.liveLabel(this.label); }
     static fromIndex(row) {
         if (!row) return undefined;
-        const meta = Object.assign(Object.create(EntryMetadata.prototype), JSON.parse(row.selectors));
+        const meta = Object.setPrototypeOf(JSON.parse(row.selectors), EntryMetadata.prototype);
         Object.defineProperty(meta, 'parentSequence', {value: row.parent_sequence});
         return meta;
+    }
+}
+
+/** The existing SDK tree node owns only its demanded entry and derived child view. */
+class SessionTreeNode {
+    #store;
+    #metadata;
+    constructor(store, metadata) {
+        this.#store = store;
+        this.#metadata = metadata;
+        this.children = [];
+        this.label = undefined;
+        this.labelTimestamp = undefined;
+    }
+    get metadata() { return this.#metadata; }
+    get entry() {
+        const entry = this.#store.get(this.#metadata.id);
+        Object.defineProperty(this, 'entry', {value: entry, enumerable: true});
+        return entry;
+    }
+    toJSON() {
+        return {entry: this.entry, children: this.children,
+            label: this.label, labelTimestamp: this.labelTimestamp};
     }
 }
 
@@ -145,17 +155,17 @@ export class EntryStore {
     *entries() { for (const meta of this.chronologicalMetadata()) yield this.get(meta.id); }
     tree() {
         // Source sequence locates output nodes; IDs stay with the metadata index.
-        const nodes = [], labels = [], roots = [];
+        const nodes = new Map(), labels = [], roots = [];
         for (const meta of this.chronologicalMetadata()) {
-            const node = meta.treeNode(this);
-            nodes[meta.sequence] = node;
-            const parent = meta.parentId === null ? undefined : nodes[meta.parentSequence];
+            const node = new SessionTreeNode(this, meta);
+            nodes.set(meta.sequence, node);
+            const parent = meta.parentId === null ? undefined : nodes.get(meta.parentSequence);
             if (meta.parentId === null || parent === node || !parent) roots.push(node);
             else parent.children.push(node);
             if (meta.label) labels.push(meta.label);
         }
         for (const declared of labels) {
-            const node = nodes[this.metadata(declared.targetId)?.sequence];
+            const node = nodes.get(this.metadata(declared.targetId)?.sequence);
             if (!node) continue;
             const label = EntryMetadata.liveLabel(declared);
             node.label = label?.label;
@@ -361,6 +371,8 @@ export class DiskEntryStore extends EntryStore {
         const info = lstatSync(directory);
         if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o077))
             throw new Error('Native metadata index directory is not private');
+        for (const suffix of ['', '-wal', '-shm'])
+            rmSync(join(directory, 'entries-v2.sqlite' + suffix), {force: true});
         const index = join(directory, 'entries-v3.sqlite');
         try { closeSync(openSync(index, 'ax', 0o600)); }
         catch (error) { if (error.code !== 'EEXIST') throw error; }

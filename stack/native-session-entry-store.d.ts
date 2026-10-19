@@ -23,7 +23,6 @@ export declare class EntryMetadata {
     type: SessionEntry['type'];
     timestamp: string;
     readonly parentSequence?: number;
-    treeNode(store: EntryStore): SessionTreeNode & {readonly metadata: EntryMetadata};
     sequence: number;
     offset: number;
     length: number;
