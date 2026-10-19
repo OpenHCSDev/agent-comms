@@ -335,7 +335,7 @@ class ProgressSource:
         try:
             return next((progress for member in members for progress in member.found(self)),
                         NoCommitProgress())
-        except subprocess.TimeoutExpired as unread:
+        except (ValueError, subprocess.TimeoutExpired) as unread:
             return UnreadProgress(str(unread))
 
     def requests(self, state: str) -> list[PullRequest]:
@@ -360,6 +360,10 @@ class ProgressSource:
         if run.returncode:
             raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
         return run.stdout
+
+    def latest_commit(self) -> str:
+        """The checkout's latest actual commit, even when it predates this order."""
+        return self.git("log", "-1", "--format=%h %s").strip()
 
     def readings(self) -> DistanceReadings:
         """The order's base, then each branch commit since the order; the last two are read."""

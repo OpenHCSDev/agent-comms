@@ -16,15 +16,20 @@ from agent_comms.notification_progress import FailedProgress
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.revision_views import CommanderView
 from agent_comms.thread_identity import ThreadIncarnation
-from agent_comms.todos import OrderProgress, PullRequests, StatusProgressSource, Todo, UnreadProgress
+from agent_comms.todos import OrderProgress, PullRequests, StatusProgressSource, Todo
 from agent_comms.turn_digests import LastTurns, ThreadTurns
 from agent_comms.ui_model.observation import (
-    InterestRequest, Observation, ObservationRequest, Observed,
-    StoredRead, UnreadableHistory,
+    InterestRequest,
+    Observation,
+    ObservationRequest,
+    Observed,
+    StoredRead,
+    UnreadableHistory,
 )
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
     from agent_comms.comms import Comms
     from agent_comms.ui_model.observation import ObservationService, ObservationStep
 
@@ -52,11 +57,13 @@ class CardDetail:
 class OpenCardDetail(CardDetail):
     orders: tuple[CommanderOrder, ...]
     turns: ThreadTurns
+    latest_commits: tuple[str, ...]
 
     @property
     def text(self) -> str:
-        lines = [order.todo.order.instructions(order.todo) + "\nLatest work: " + order.progress.state
-                 for order in self.orders]
+        lines = [order.todo.order.instructions(order.todo)
+                 + "\nLatest work: " + order.progress.state for order in self.orders]
+        lines.append("Latest checkout commits:\n" + "\n".join(self.latest_commits))
         lines.append("Recent turns (newest first):")
         for turn in self.turns.turns:
             excerpts = tuple(' '.join(imported.body.split())[:240]
@@ -117,7 +124,8 @@ class FailedDeliveryAlarmSource(CommanderAlarmSource):
         presentation = comms.views.thread_presentations((commander.name,)).require(commander.name)
         return tuple(CommanderAlarm(
             f"RECORDED FAILED DELIVERY to {notice.recipient}: {notice.label}")
-            for notice in presentation.sent_notifications if isinstance(notice.state, FailedProgress))
+            for notice in presentation.sent_notifications
+            if isinstance(notice.state, FailedProgress))
 
 
 @dataclass(frozen=True)
@@ -138,19 +146,28 @@ class CommanderModel:
         grouped: dict[ThreadIncarnation, list[CommanderOrder]] = {}
         for todo in todos:
             unit = todo.held().owner_identity
-            try:
-                progress = StatusProgressSource(
-                    todo, storage.order_checkout(unit.name, todo.id), pulls).progress()
-            except ValueError as error:
-                progress = UnreadProgress(str(error))
+            progress = StatusProgressSource(
+                todo, storage.order_checkout(unit.name, todo.id), pulls).progress()
             grouped.setdefault(unit, []).append(CommanderOrder(todo, progress, todo.overdue(now)))
         cards = []
         for unit, orders in grouped.items():
             if comms.registry.require(unit.name).incarnation != unit:
-                raise ValueError(f"Order holder {unit.name} changed incarnation; refresh its assignment.")
+                raise ValueError(
+                    f"Order holder {unit.name} changed incarnation; refresh its assignment.")
             current = tuple(orders)
-            detail = (OpenCardDetail(current, comms.transcripts.turns(unit.name, LastTurns(3)))
-                      if unit in request.expanded else CardDetail())
+            detail: CardDetail = CardDetail()
+            if unit in request.expanded:
+                commits = []
+                for order in current:
+                    source = StatusProgressSource(order.todo, storage.order_checkout(
+                        unit.name, order.todo.id), pulls)
+                    try:
+                        commit = source.latest_commit()
+                    except ValueError as error:
+                        commit = f"unavailable: {error}"
+                    commits.append(f"{order.todo.id}: {commit}")
+                detail = OpenCardDetail(current, comms.transcripts.turns(unit.name, LastTurns(3)),
+                                        tuple(commits))
             cards.append(UnitCard(unit, current, detail))
         orders = tuple(order for card in cards for order in card.orders)
         alarms = tuple(alarm for source in CommanderAlarmSource.members_with(CommanderAlarmSource)
