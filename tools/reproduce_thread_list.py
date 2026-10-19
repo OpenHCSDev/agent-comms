@@ -59,8 +59,7 @@ def main():
                                           ('assistant', 'Scratch source reply')))) + '\n')
     comms.registry.register(Thread('sentinel', frozenset({'proof'}), str(root),
         storage_roots=StorageRoots(root / 'scratch' / 'sentinel')), StoppedThreadStatus())
-    request = ObserveSidebar(str(root), True, False)
-    reading = request.observation()
+    reading = ObserveSidebar(str(root), True, False).observation()
     stop, ready, counts = mp.Event(), mp.Event(), mp.Queue()
     process = mp.Process(target=writer, args=(root, stop, ready, counts, args.imports, args.dump_after))
     process.start()
