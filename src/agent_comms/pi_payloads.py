@@ -34,6 +34,7 @@ from .send_result import CorrectionResult, CorrectionUnreported
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
     from .turn_usage import UsageAccount
+    from .turn_phase import TurnPhase
 
 
 def wire_field(name: str, default=None):
@@ -490,7 +491,7 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     def refine_model_request_failure(self, failure):
         return failure
 
-    def turn_phase(self, phase):
+    def turn_phase(self, phase: TurnPhase) -> TurnPhase:
         return phase
 
     @property
@@ -505,7 +506,7 @@ class ProviderTransportFailureDiagnostic(PiDiagnostic):
     details: ProviderTransportDetails
     timestamp: int | None = None
 
-    def turn_phase(self, phase):
+    def turn_phase(self, phase: TurnPhase) -> TurnPhase:
         return phase.failed(self.error)
 
     def refine_model_request_failure(self, failure):

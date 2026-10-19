@@ -10,6 +10,8 @@ from .activity import Activity, ActivityState, ObservedActivity
 from .pi_payloads import ProviderDiagnosticError
 if TYPE_CHECKING:
     from . import pi_events as pi
+    from .agent_activity import AgentActivity
+    from .turn_lease import TurnLeaseFence
 
 
 class StallExempt:
@@ -125,7 +127,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def failed(self, error: ProviderDiagnosticError) -> TurnPhase:
         return FailedPhase(error=error)
 
-    def phase_effects(self, agents, lease) -> None:
+    def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
         pass
 
 
@@ -153,7 +155,7 @@ class IdlePhase(ActivityWord, TurnPhase):
     activity_state = ActivityState.IDLE
     label = "Ready"
 
-    def phase_effects(self, agents, lease) -> None:
+    def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
         agents.finish_turn(lease)
 
 

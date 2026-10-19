@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from functools import partial
 from pathlib import Path
@@ -267,7 +267,10 @@ class AgentActivity:
                 raise
             return RegistryOwner(thread=leased, claimed_generation=lease.claimed_generation)
 
-    def _turn_phase_effects(self, lease, phase, transition) -> tuple[TurnState, ...]:
+    def _turn_phase_effects(
+        self, lease: TurnLeaseFence, phase: TurnPhase,
+        transition: Callable[[TurnLeaseFence, TurnPhase], tuple[TurnState, ...]],
+    ) -> tuple[TurnState, ...]:
         with _store_lock(self._wire_lock_path, mode=SharedLock()):
             effects = transition(lease, phase)
         for state in effects:
