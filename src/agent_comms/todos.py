@@ -1365,7 +1365,7 @@ class OrderedHunt(Hunt):
 @dataclass(frozen=True)
 class HuntRecord(TypedTable):
     id: str = field(metadata={"sql": Column(primary_key=True)})
-    commander: ThreadIncarnation
+    commander: ThreadIncarnation = field(metadata={"sql": Column(index=True)})
     hunt: Hunt
 
 
@@ -1684,11 +1684,10 @@ class PeerAcceptedVerdict(AcceptedVerdict):
 
     def prepare(self, goals, current):
         with goals.bus.log.opened_wire_snapshot() as source:
-            messages = [message for message, _ in source.public_records()
-                        if message.message_id == self.peer]
-        if len(messages) != 1:
-            raise ValueError("The peer order message is absent from retained history.")
-        message, = messages
+            message = next((message for message in source.newest_messages()
+                            if message.message_id == self.peer), None)
+        if message is None:
+            raise ValueError("The peer order message is absent from recent retained history.")
         if (message.sender == self.actor.name or
                 (message.target != current.holder and
                  current.holder not in {mention.name for mention in message.mentions})):
@@ -2122,8 +2121,7 @@ class TodoStore(TypedStore):
 
     def hunts_for_commander(self, commander: ThreadIncarnation) -> tuple[Hunt, ...]:
         with self.snapshot() as db:
-            return tuple(record.hunt for record in HuntRecord.select(db)
-                         if record.commander == commander)
+            return tuple(record.hunt for record in HuntRecord.select(db, commander=commander))
 
     def resolve_order(self, commander: ThreadIncarnation, unit: str, message: str) -> Todo:
         found = [t for t in self.held_by(commander, unit)

@@ -31,6 +31,7 @@ from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..goals import CheckPrinted, OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
+from ..messages import Message
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
@@ -479,7 +480,13 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
-def done(pid, sha, delivered=None, screenshot='', seen='', repo=''):
+def revision(repo: str, ref: str) -> str:
+    """Resolve a supplied Git revision once at the command boundary."""
+    return subprocess.check_output(
+        ['git', '-C', repo, 'rev-parse', '--verify', f'{ref}^{{commit}}'], text=True).strip()
+
+
+def done(pid, sha, screenshot='', seen='', repo=''):
     """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
@@ -502,17 +509,26 @@ def done(pid, sha, delivered=None, screenshot='', seen='', repo=''):
         COMMS.registry.storage_rule.require_quota(thread)
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
+    todo.order.run.require_artifact(seen or screenshot)
     evidence = FileDeliveryEvidence(seen or screenshot) if seen or screenshot else NoDeliveryEvidence()
-    delivery = (OperationDelivery(evidence=evidence) if operation else
-                CommitDelivery(commit=sha, delivered_commit=delivered or sha, evidence=evidence))
-    claim = WorkingClaim(seen or screenshot) if operation else MergedClaim(delivered or sha)
+    if operation:
+        delivery = OperationDelivery(evidence=evidence)
+        claim = WorkingClaim(evidence.artifact())
+    else:
+        delivered_commit = revision(repo, sha)
+        if subprocess.run(['git', '-C', repo, 'merge-base', '--is-ancestor',
+                           delivered_commit, 'HEAD']).returncode:
+            sys.exit(f'Refused: {delivered_commit} is not in {repo} HEAD.')
+        delivery = CommitDelivery(commit=revision(repo, 'HEAD'),
+                                  delivered_commit=delivered_commit, evidence=evidence)
+        claim = MergedClaim(delivery.commit)
     call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
     if not operation and lateness.late():
-        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered}')
+        strike(unit, pid, f'{pid} order {todo.order.id} {lateness} as {delivered_commit}')
         return
-    print(f'{unit}: order {todo.order.id} met as {delivered or sha}')
+    print(f'{unit}: order {todo.order.id} met as {sha}')
 
 
 ACTIVITY = f'{RTS}/activity.log'
@@ -577,31 +593,20 @@ def next_hunt():
     return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
 
 
-def reply(unit: str, since: float) -> dict | None:
-    """The unit's latest message to me after ``since``, or None."""
-    if not os.path.exists(f'{B}/bus.jsonl'):
-        return None
-    with open(f'{B}/bus.jsonl', 'rb') as f:
-        f.seek(start := max(0, os.path.getsize(f.name) - 3_000_000))
-        lines = f.read().splitlines()[bool(start):]
-    latest = None
-    for line in lines:
-        try:
-            m = json.loads(line)
-        except ValueError:
-            continue
-        to = str(m.get('to'))
-        if m.get('from') == unit and float(m.get('ts', 0)) > since and (ME in to or '#comms' in to):
-            latest = m
-    return latest
+def reply(unit: str, since: float) -> Message | None:
+    """The unit's newest message to me after ``since`` in the recent bus window."""
+    with COMMS.bus.log.opened_wire_snapshot() as source:
+        return next((message for message in source.newest_messages()
+                     if message.sender == unit and message.timestamp > since
+                     and message.target in (ME, '#comms')), None)
 
 
-def replied(latest: dict | None) -> str:
+def replied(latest: Message | None) -> str:
     """The reply an overdue alarm is read against."""
     if latest is None:
         return '; no reply since the order'
-    at = time.strftime('%H:%M', time.localtime(float(latest['ts'])))
-    return f'; REPLIED {at} [{latest["id"]}]: {" ".join(str(latest.get("text")).split())[:160]} -- read it before pushing'
+    at = time.strftime('%H:%M', time.localtime(latest.timestamp))
+    return f'; REPLIED {at} [{latest.message_id}]: {" ".join(latest.body.split())[:160]} -- read it before pushing'
 
 
 def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
@@ -888,9 +893,7 @@ class DoneVerb(OrderVerb, RuledVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
     unit: str = option("unit", metavar="UNIT")
     message: str = option("message", metavar="ORDER")
-    sha: str = option("--sha", help="the checked commit (the check runs on it) or op")
-    delivered: str | None = option("--delivered", default=None, metavar="SHA",
-                                   help="the unit's pushed ancestor of --sha; lateness reads its time")
+    sha: str = option("--sha", help="the delivered commit in --repo HEAD, or op")
     screenshot: str = option("--screenshot", default="", metavar="PATH",
                              help="for an op: the screenshot the working claim stands on")
 
@@ -899,7 +902,7 @@ class DoneVerb(OrderVerb, RuledVerb):
 
     def run(self) -> None:
         todo = COMMS.goals.todos.resolve_order(COMMS.registry.require(ME).incarnation, self.unit, self.message)
-        done(todo.id, self.sha, self.delivered, self.screenshot, self.seen, self.repo)
+        done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
 
 
 @dataclass(frozen=True, kw_only=True)

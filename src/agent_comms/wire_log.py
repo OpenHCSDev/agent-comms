@@ -149,6 +149,16 @@ class WireSnapshot(ObservedPath):
             raise ValueError("tail byte limit must be nonnegative")
         return self._tail_bytes(max_bytes)
 
+    def newest_messages(self, max_bytes: int = 3_000_000) -> Iterator[Message]:
+        """Newest complete messages in this byte window, stopping when the reader stops."""
+        data, start = self.tail_bytes(max_bytes)
+        lines = data.splitlines(keepends=True)
+        if start and lines:
+            lines.pop(0)
+        for line in reversed(lines):
+            if line.endswith(b"\n") and line.strip():
+                yield from self.messages(json.loads(line))
+
     @staticmethod
     def messages(record: Mapping) -> tuple[Message, ...]:
         from .errors import StoredHistoryUnreadable
