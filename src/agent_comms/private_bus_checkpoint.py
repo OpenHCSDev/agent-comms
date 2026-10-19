@@ -67,7 +67,7 @@ class CapturedWireSource[OriginalSource, Value = OriginalSource]:
     value: Value
 
 
-class BusPrefixUnavailable(RelationViolationError):
+class BusPrefixUnavailableError(RelationViolationError):
     """No sealed bus prefix is available; a sender must not rebuild history."""
 
 
@@ -98,11 +98,12 @@ class PrefixWitness(PrefixSeal):
     def require_source(self, marker: WireMetadata, info: os.stat_result, stream: BinaryIO) -> None:
         """Check the sealed cut; moving the source does not discard its index."""
         if self.root_id != marker.root_id or info.st_size < self.offset:
-            raise BusPrefixUnavailable("Private bus checkpoint root/size changed.")
+            raise BusPrefixUnavailableError("Private bus checkpoint root/size changed.")
         if _tail(stream, self.offset) != self.tail:
-            raise BusPrefixUnavailable("Private bus checkpoint prefix tail changed.")
+            raise BusPrefixUnavailableError("Private bus checkpoint prefix tail changed.")
         if self.through_seq > marker.last_seq:
-            raise BusPrefixUnavailable("Private bus checkpoint exceeds the durable sequence marker.")
+            raise BusPrefixUnavailableError(
+                "Private bus checkpoint exceeds the durable sequence marker.")
 
     def require_append(self, marker: WireMetadata, info: os.stat_result,
                        offset: int, sequence: int) -> None:
@@ -1115,10 +1116,10 @@ class CheckedPrefix(CheckpointTable, TypedTable, declared_name="prefix_certifica
         try:
             row = cls.one(db, singleton=1)
             if row is None:
-                raise BusPrefixUnavailable("Private bus checkpoint prefix record is missing.")
+                raise BusPrefixUnavailableError("Private bus checkpoint prefix record is missing.")
             return row.witness()
         except MalformedRecord as error:
-            raise BusPrefixUnavailable("Private bus checkpoint identity is malformed.") from error
+            raise BusPrefixUnavailableError("Private bus checkpoint identity is malformed.") from error
 
     def witness(self) -> PrefixWitness:
         with MalformedRecord.refusing("Invalid checked prefix record"):
@@ -1222,7 +1223,7 @@ def _saved(db: sqlite3.Connection) -> PrefixWitness:
         db.execute("SELECT name,sql FROM sqlite_master WHERE sql IS NOT NULL")
     )
     if SQLiteSchemaObject.differences(actual, schema):
-        raise BusPrefixUnavailable("Private bus checkpoint schema is unavailable.")
+        raise BusPrefixUnavailableError("Private bus checkpoint schema is unavailable.")
     return CheckedPrefix.read_witness(db)
 
 
@@ -1285,7 +1286,7 @@ def _rebuild_checkpoint_unlocked(
     """Resume the index at its sealed cut, committing each verified tail chunk."""
     saved = _saved(db)
     if saved.offset == 0 and saved.digest != _SEED.hex():
-        raise BusPrefixUnavailable("Private bus has no proved empty prefix.")
+        raise BusPrefixUnavailableError("Private bus has no proved empty prefix.")
     digest = bytes.fromhex(saved.digest)
     last_seq = saved.through_seq
     additions: list[tuple[int, bytes, WireRecord]] = []

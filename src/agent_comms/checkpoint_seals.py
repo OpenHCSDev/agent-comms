@@ -95,8 +95,11 @@ class FinalSeal(CheckpointSeal):
         return cls(1, FileRevision.from_stat(db_path.stat()), witness.seal())
 
     def check_final(self, saved: PrefixWitness, db_path: Path) -> None:
+        from .private_bus_checkpoint import BusPrefixUnavailableError
+
         if self.witness != saved.seal() or self.db_revision != FileRevision.from_stat(db_path.stat()):
-            raise RelationViolationError("Private bus checkpoint index seal changed or is pending.")
+            raise BusPrefixUnavailableError(
+                "Private bus checkpoint index seal changed or is pending.")
 
     def recover(
         self,
