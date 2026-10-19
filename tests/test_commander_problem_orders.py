@@ -1215,3 +1215,42 @@ def test_send_guard_refuses_a_raw_send_only_to_the_commanders_units(commander, c
     assert '"deny"' in guarded('user', 'worker')
     for target in ('user', 'claude-ai', 'desktop-claude-code'):
         assert guarded(target) == ''
+
+
+@pytest.mark.parametrize('command, kind', [
+    ('bash ~/code/toad/relink.sh', 'install'),
+    ('uv tool install --force .', 'install'),
+    ('PYTHONPATH=src python tools/upgrade_bus.py --root ~/.agent-comms', 'maintenance'),
+    ('systemctl --user restart agent-comms-connector.service', 'connector restart'),
+    ('cd repo && python tools/cutover/carry_todo_messages.py --root r', 'carry'),
+])
+def test_tactical_refused_from_the_commander_session_only(commander, commander_script, monkeypatch, capsys,
+                                                          command, kind):
+    """lead's registered process runs in Claude session s1: tactical work run there is refused with
+    the order to send its owner; the same command from another session, and an order whose body
+    names the command, pass."""
+    import io, os, subprocess
+    from dataclasses import replace
+    from agent_comms.child_process import ProcessIdentity
+    from agent_comms.commander import send_guard
+    comms, _ = commander
+    process = subprocess.Popen(['sleep', '60'], env={**os.environ, 'CLAUDE_CODE_SESSION_ID': 's1'})
+    try:
+        comms.registry.declare(replace(comms.registry.require('lead'),
+                                       process_identity=ProcessIdentity.capture(process.pid)))
+
+        def guarded(command, session):
+            hook = {'session_id': session, 'tool_input': {'command': command}}
+            monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps(hook)))
+            send_guard.main([])
+            return capsys.readouterr().out
+
+        refused = json.loads(guarded(command, 's1'))['hookSpecificOutput']
+        assert refused['permissionDecision'] == 'deny'
+        assert f"{kind.capitalize()} is bus-upgrade's work" in refused['permissionDecisionReason']
+        assert 'order send --to bus-upgrade' in refused['permissionDecisionReason']
+        assert guarded(command, 's2') == ''
+        assert guarded(f'agent-comms-commander order send --to bus-upgrade --body "run {command}"', 's1') == ''
+    finally:
+        process.kill()
+        process.wait()
