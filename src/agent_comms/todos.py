@@ -732,12 +732,17 @@ class OrderText(OrderWords):
     refusal = "Soft wording {1}: state the edit, do not ask."
 
 
-class BluntText(OrderWords):
-    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
+class BluntWords:
+    """The words that name witnessed incompetence, and the refusal a text lacking them gets."""
 
-    REFUSED = re.compile(r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
-                         r"worthless|broke|broken|pointless|waste)\b", re.I)
-    refusal = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+    REFUSED: ClassVar[re.Pattern] = re.compile(
+        r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
+        r"worthless|broke|broken|pointless|waste)\b", re.I)
+    refusal: ClassVar[str] = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+
+
+class BluntText(BluntWords, OrderWords):
+    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
 
     @staticmethod
     def refuses(found: list[str]) -> bool:
@@ -777,16 +782,15 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
-class DefectText(OrderWords):
+class DefectText(BluntWords, OrderWords):
     """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
     a text naming no defect needs no label."""
 
     SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
-    REFUSED, refusal = BluntText.REFUSED, BluntText.refusal  # the label is BluntText's own
 
     @classmethod
     def found(cls, text: str) -> list[str]:
-        return [] if BluntText.found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
+        return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
 class DirectiveText:
