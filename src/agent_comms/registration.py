@@ -2,7 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .cli_bridges.shared import IncomingFrame
+    from .messages import Message
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -63,6 +68,17 @@ class SeveralProjectThreads(ProjectThreadSelection):
     threads: tuple[Thread, ...]
 
 
+@dataclass(frozen=True)
+class RegisteredInput:
+    """An external process's input capability, retained for its registration lifetime."""
+
+    frame: type[IncomingFrame]
+    send: Callable[[str, bytes], Awaitable[None]]
+
+    async def turn_start(self, message: Message) -> None:
+        await self.frame(message).turn_start(self.send)
+
+
 class Registration:
     """Own registration transactions; never borrow a Comms or facade's state."""
 
@@ -103,6 +119,13 @@ class Registration:
                     self._commit_registration(edit, edit.document.prepare_registration(
                         replace(entry.thread, process_identity=NoProcess()), NoBridgeThreadStatus(),
                         new_owner=False))
+
+    @contextmanager
+    def external_input(self, name: str, process: ProcessIdentity,
+                       frame: type[IncomingFrame], send: Callable[[str, bytes], Awaitable[None]]):
+        """Keep the declared input behavior with the endpoint that can actually invoke it."""
+        with self.external_process(name, process):
+            yield RegisteredInput(frame, send)
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.

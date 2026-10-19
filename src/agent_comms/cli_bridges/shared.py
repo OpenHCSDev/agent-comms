@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
 from typing import ClassVar, Generic, Literal, Self, TypeVar
+from collections.abc import Awaitable, Callable
 
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -309,6 +310,18 @@ class Watch(Inbox):
 @dataclass(frozen=True)
 class IncomingFrame(ABC):
     message: Message
+
+    async def turn_start(self, send: Callable[[str, bytes], Awaitable[None]]) -> None:
+        """Submit this family's input on its registered session transport."""
+        await send(self.input_id, self.payload)
+
+    @property
+    def input_id(self) -> str:
+        return self.message.message_id
+
+    @property
+    def payload(self) -> bytes:
+        return (self.text + '\n').encode()
 
     @property
     def text(self) -> str:

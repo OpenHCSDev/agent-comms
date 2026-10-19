@@ -1,20 +1,28 @@
 """Claude Code sessions: their stored transcripts, and the live bridge that follows one."""
 from __future__ import annotations
 
+import argparse
+import asyncio
 import json
+import os
+import sys
+from dataclasses import dataclass
 from collections.abc import Iterator
 from contextlib import aclosing
 from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
 
-from agent_comms.cli_protocol import WireModel
+from agent_comms.child_process import AttachedChild, ProcessIdentity, StreamingChildStdio
+from agent_comms.cli_protocol import DeliveredOutcome, Outcome, WireModel, raise_child_exit
+from agent_comms.messages import Message
+from agent_comms.registration import Registration
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.private_path import FileRevision
 from agent_comms.wire_watch import WatchSource, WireWatch
-from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame
+from .claude_protocol import CLAUDE_RECORD, ClaudeRecord, ClaudeSession, ClaudeMonitorFrame, ClaudeInputFrame
 from .history import ClaudeHistory, JsonLinesFile, OfflineHistory, OnlineHistory
-from .shared import Binding, LineMonitorBridge, Options, run_bridge
+from .shared import Binding, CliBridge, LineMonitorBridge, Operation, Options, run_bridge
 from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 
 
@@ -120,6 +128,85 @@ class ClaudeBridge(RunningClaude, LineMonitorBridge, declared_name=None):
                         raise ValueError('Claude transcript was replaced or truncated')
                     for update in self.decoded(stream, stream.tell(), opened.size, session):
                         yield update
+
+
+class ClaudeInputBridge(ClaudeBridge, declared_name=None):
+    """Own Claude's actual stdin; Monitor remains for externally started interactive sessions."""
+
+    def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
+        super().__init__(options, binding, db)
+        self.pending: dict[str, asyncio.Future[None]] = {}
+        self.transcript_ready = asyncio.Event()
+
+    async def prepare_delivery(self) -> None:
+        """The registered child owns this input pipe; no Monitor attachment is needed."""
+
+    async def send_input(self, identity: str, payload: bytes) -> None:
+        receipt = asyncio.get_running_loop().create_future()
+        self.pending[identity] = receipt
+        try:
+            await self.child.write(payload)
+            await receipt  # Claude's own replay, not pipe flush, confirms acceptance.
+        finally:
+            self.pending.pop(identity, None)
+
+    async def deliver(self, message: Message) -> type[Outcome]:
+        await self.input.turn_start(message)
+        return DeliveredOutcome
+
+    async def transcript(self) -> AsyncIterator[RuntimeUpdate]:
+        # A fresh session has no transcript until Claude writes its first answer.
+        await self.transcript_ready.wait()
+        async for update in super().transcript():
+            yield update
+
+    async def receive(self) -> None:
+        assert self.child.stdout is not None
+        while line := await self.child.stdout.readline():
+            event = json.loads(line)
+            sys.stdout.buffer.write(line)
+            sys.stdout.buffer.flush()
+            if event['type'] == 'user':
+                receipt = self.pending.get(event['uuid'])
+                if receipt is not None and not receipt.done():
+                    receipt.set_result(None)
+            elif event['type'] == 'assistant':
+                self.transcript_ready.set()
+        await raise_child_exit(self.child, '')
+        raise EOFError('Claude input session exited; no pending input was retried')
+
+
+@dataclass(frozen=True)
+class Run(Operation[ClaudeBridge]):
+    """Start a bus-addressable Claude session without requiring an initial user prompt."""
+
+    claude: str
+    arguments: tuple[str, ...]
+
+    @classmethod
+    def serves(cls, bridge: type[CliBridge]) -> bool:
+        return issubclass(bridge, ClaudeBridge)
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--claude', default='claude')
+        parser.add_argument('--claude-arg', dest='arguments', action='append', default=[])
+
+    async def run(self, bridge: ClaudeBridge) -> None:
+        session = ClaudeInputBridge(bridge.options, bridge.binding, bridge.db)
+        session.child = await AttachedChild.start(
+            ClaudeInputFrame.command(self.claude, bridge.binding.thread, self.arguments),
+            stdio=StreamingChildStdio(limit=8 * 1024 * 1024, stderr=sys.stderr))
+        try:
+            registry = session.comms.registry
+            with registry.external_input(session.binding.bus, ProcessIdentity.capture(os.getpid()),
+                                         ClaudeInputFrame, session.send_input) as session.input:
+                async with asyncio.TaskGroup() as tasks:
+                    tasks.create_task(session.receive())
+                    tasks.create_task(session.publish_transcript())
+                    tasks.create_task(session.watch())
+        finally:
+            await session.child.stop()
 
 
 def main() -> None:

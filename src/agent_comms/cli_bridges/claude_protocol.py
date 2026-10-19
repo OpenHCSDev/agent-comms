@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import ClassVar, Literal
 from xml.etree import ElementTree
+from uuid import NAMESPACE_URL, uuid5
 
 from metaclass_registry import RegistryConfig
 from pydantic import (
@@ -51,6 +52,25 @@ from .shared import (
     MonitorProbe,
     ObservedMonitor,
 )
+
+
+class ClaudeInputFrame(IncomingFrame):
+    """A real stream-JSON user input starts even a never-prompted Claude session."""
+
+    @property
+    def input_id(self) -> str:
+        return str(uuid5(NAMESPACE_URL, self.message.message_id))
+
+    @property
+    def payload(self) -> bytes:
+        return (json.dumps({'type': 'user', 'uuid': self.input_id,
+                            'message': {'role': 'user', 'content': self.text}}) + '\n').encode()
+
+    @staticmethod
+    def command(executable: str, session: str, arguments: tuple[str, ...]) -> tuple[str, ...]:
+        return (executable, *arguments, '-p', '--input-format', 'stream-json',
+                '--output-format', 'stream-json', '--verbose', '--replay-user-messages',
+                '--session-id', session)
 
 
 class ClaudeMonitorFrame(IncomingFrame):
