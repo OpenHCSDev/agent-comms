@@ -1072,8 +1072,8 @@ class FieldCodec(Sealed):
             accepted_keys=frozenset(wire_keys) | computed,
         )
 
-    @classmethod
-    def _field_plan(cls, field: Field[object], annotation: object) -> type[FieldPlan]:
+    @staticmethod
+    def _field_plan(field: Field[object], annotation: object) -> type[FieldPlan]:
         claimed = {plan for plan in FieldPlan._plans if plan.claims(field, annotation)}
         selected = claimed - {base for plan in claimed for base in plan.__mro__[1:]}
         if len(selected) != 1:
