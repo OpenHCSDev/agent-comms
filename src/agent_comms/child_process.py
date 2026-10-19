@@ -35,7 +35,7 @@ from .errors import RelationViolationError
 from .sealed import Sealed
 
 if TYPE_CHECKING:
-    from .runtime_info import RuntimeInfoStore
+    from .runtime_children import RuntimeChildrenStore, RuntimeChildReservation
     from .registration_change import RegistrationChange, UpdatedRegistration
     from .store_files import LockMode
     from .thread_identity import ThreadIncarnation, ThreadRole
@@ -409,7 +409,7 @@ class Platform(DeclaredFamily, affix="Platform"):
         """POSIX locks end at last close, including inherited descriptors."""
 
     @abstractmethod
-    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch: ...
+    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime) -> ChildLaunch: ...
 
     def terminate_group(self, identity: ProcessIdentity) -> None:
         self.signal_group(identity, signal.SIGTERM)
@@ -464,8 +464,8 @@ class PosixPlatform(Platform):
 
         fcntl.flock(descriptor, mode.flock() | fcntl.LOCK_NB)
 
-    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
-        return PosixLaunch(command, pass_fds)
+    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime) -> ChildLaunch:
+        return PosixLaunch(command, pass_fds, runtime)
 
     def group_members(self, leader: ProcessIdentity) -> tuple[ProcessIdentity, ...]:
         try:
@@ -804,10 +804,10 @@ class Win32Platform(Platform):
                 # owners outlive this launcher; no kill-on-handle-close flag.
                 self.kernel.CloseHandle(job)
 
-    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...]) -> ChildLaunch:
+    def launch(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime) -> ChildLaunch:
         if pass_fds:
             raise NotImplementedError("POSIX descriptor inheritance is unavailable on Windows")
-        return WindowsLaunch(command, self)
+        return WindowsLaunch(command, self, runtime)
 
 
 class ChildRegistration(ABC):
@@ -825,9 +825,19 @@ class NoChildRegistration(ChildRegistration):
 
 
 class ChildLaunch(ABC):
-    # Bound once by the package composition root: runtime info depends on the
-    # process identity and group implementation declared in this module.
-    runtime_info: ClassVar[type[RuntimeInfoStore]]
+    # The composition root binds the store after process types are declared.
+    children_store: ClassVar[type[RuntimeChildrenStore]]
+
+    def __init__(self, runtime: LaunchRuntime):
+        self.runtime = runtime
+
+    def record(self, identity: ProcessIdentity, reservation: RuntimeChildReservation) -> None:
+        """Persist the gated child, or cancel before user code executes."""
+        try:
+            reservation.record(identity)
+        except BaseException:
+            self.cancel_before_release(identity)
+            raise
 
     @property
     @abstractmethod
@@ -847,7 +857,7 @@ class ChildLaunch(ABC):
         stderr=subprocess.DEVNULL,
     ) -> ParentedProcess:
         """Record the parent's process handle before the platform allows exec."""
-        with self.runtime_info.launching(env) as reservation:
+        with self.children_store.launching(self.runtime, env) as reservation:
             process = subprocess.Popen(
                 self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
                 stderr=stderr, **self.options,
@@ -855,16 +865,15 @@ class ChildLaunch(ABC):
             identity = Platform.current().identity(process.pid)
             child = ParentedProcess(process, identity, reservation.store)
             try:
-                reservation.record(identity)
+                self.record(identity, reservation)
             except BaseException:
-                self.cancel_before_release(identity)
                 child.reap()
                 child.close_streams()
                 raise
         return child
 
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
-        with self.runtime_info.launching(env) as reservation:
+        with self.children_store.launching(self.runtime, env) as reservation:
             process = await asyncio.create_subprocess_exec(
                 *self.argv, cwd=cwd, env=env, **stdio.options, **self.options,
             )
@@ -872,9 +881,8 @@ class ChildLaunch(ABC):
             child = AttachedChild(process, identity, reservation.store)
             child._stderr_task = asyncio.create_task(child._drain_stderr())
             try:
-                reservation.record(identity)
+                self.record(identity, reservation)
             except BaseException:
-                self.cancel_before_release(identity)
                 await process.wait()
                 await child._stderr_task
                 raise
@@ -903,7 +911,8 @@ class ChildLaunch(ABC):
 
 
 class WindowsLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], platform: Win32Platform):
+    def __init__(self, command: tuple[str, ...], platform: Win32Platform, runtime: LaunchRuntime):
+        super().__init__(runtime)
         self.command, self.platform = command, platform
 
     @property
@@ -937,7 +946,8 @@ class WindowsLaunch(ChildLaunch):
 
 
 class PosixLaunch(ChildLaunch):
-    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...]):
+    def __init__(self, command: tuple[str, ...], pass_fds: tuple[int, ...], runtime: LaunchRuntime):
+        super().__init__(runtime)
         self.command = command
         self.pass_fds = pass_fds
         self.read_fd, self.write_fd = os.pipe()
@@ -1322,11 +1332,12 @@ class AttachedChild(ChildProcess):
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
         stdio: ChildStdio = StreamingChildStdio(),
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ) -> AttachedChild:
         if not command:
             raise ValueError("A child command is required")
         platform = Platform.current()
-        with platform.launch(command, pass_fds) as launch:
+        with platform.launch(command, pass_fds, runtime) as launch:
             child = await launch.spawn_async(cwd=cwd, env=env, stdio=stdio)
             try:
                 launch.release(child.identity)
@@ -1480,6 +1491,7 @@ class BoundedRun:
         cwd: str | Path | None = None,
         env: dict[str, str] | None = None,
         pass_fds: tuple[int, ...] = (),
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ):
         """Borrow a collected result; this scope still owns child retirement.
 
@@ -1492,7 +1504,7 @@ class BoundedRun:
         deadline = asyncio.get_running_loop().time() + timeout
         try:
             async with asyncio.timeout_at(deadline):
-                child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds)
+                child = await AttachedChild.start(command, cwd=cwd, env=env, pass_fds=pass_fds, runtime=runtime)
         except TimeoutError:
             raise  # A launch expiry is not evidence that user code never started.
         except OSError as error:
@@ -1578,10 +1590,11 @@ class ParentedProcess(SynchronousProcess):
         env: dict[str, str] | None = None,
         output: Any = subprocess.DEVNULL,
         before_start: Callable[[ProcessIdentity], None] | None = None,
+        runtime: LaunchRuntime = LaunchRuntime.running(),
     ) -> ParentedProcess:
         if not command:
             raise ValueError("A child command is required")
-        with Platform.current().launch(command, ()) as launch:
+        with Platform.current().launch(command, (), runtime) as launch:
             child = launch.spawn(cwd=cwd, env=env, stdout=output, stderr=output)
             try:
                 if before_start is not None:

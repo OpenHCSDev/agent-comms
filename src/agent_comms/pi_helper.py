@@ -12,7 +12,7 @@ from typing import ClassVar
 from .child_process import BoundedRun, ChildResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, MalformedRecord
-from .launch_runtime import RestartEnvironment
+from .launch_runtime import LaunchRuntime, RestartEnvironment
 
 
 class PiHelperError(ValueError):
@@ -74,6 +74,10 @@ class PiHelper(DeclaredFamily, affix="Helper"):
         return cls.node_launch(Path(request.package), environment)
 
     @classmethod
+    def runtime_for(cls, request) -> LaunchRuntime:
+        return LaunchRuntime.running()
+
+    @classmethod
     def node_launch(cls, package: Path, environment: dict[str, str]):
         node = shutil.which("node")
         if node is None:
@@ -100,6 +104,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
             timeout=cls.timeout_for(request),
             cwd=cwd,
             env=environment,
+            runtime=cls.runtime_for(request),
         )
         if not outcome.outcome.successful:
             raise cls.failure(request, outcome)

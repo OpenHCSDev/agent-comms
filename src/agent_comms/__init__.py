@@ -2,12 +2,11 @@
 
 __version__ = "0.1.0"
 
-# The composition root resolves the process/store dependency without local
-# imports or a second process registry. Every launch uses this store owner.
+# Bind the process/store dependency once before validating the store family.
 from .child_process import ChildLaunch
-from .runtime_info import RuntimeInfoStore
+from .runtime_children import RuntimeChildrenStore
 
-ChildLaunch.runtime_info = RuntimeInfoStore
+ChildLaunch.children_store = RuntimeChildrenStore
 
 # Every public entrypoint, including standalone stores, validates the full family.
 from . import comms, store_order

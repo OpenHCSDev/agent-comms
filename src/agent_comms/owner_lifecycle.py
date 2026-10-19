@@ -444,6 +444,7 @@ class OwnerLifecycle:
                 cwd=thread.worktree,
                 output=output,
                 before_start=reserve,
+                runtime=launch_runtime,
             )
         assert owned is not None
         return owned
