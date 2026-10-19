@@ -973,7 +973,7 @@ class GoalSegment(InstructionSegment):
     def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
-        progress = goal.order.progress(goal, todos, goals)
+        progress = goal.order.progress(goal, todos)
         revision = hashlib.sha256(json.dumps(FieldCodec.encode((goal, orders_text, progress))).encode()).hexdigest()
         return super().capture((OwnerProvenance(owner.incarnation, revision),), goal=goal,
                                orders_text=orders_text, progress=progress)

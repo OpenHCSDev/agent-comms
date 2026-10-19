@@ -1107,7 +1107,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
         todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
     worker = comms.registry.require('worker')
     progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
-    assert progress.startswith('P2: ') and progress.endswith(f'Sent back: {why}') and 'P1' not in progress
+    assert progress.splitlines() == ['P1: Delivered, waiting on install', f'P2: Open · Sent back: {why}']
     assert (worker.goal.text, worker.goal.progress) == (ProblemGoalOrder.text, '')
     with pytest.raises(ValueError, match='block the problem.s Todo, or standby with wait_for'):
         comms.goals.update_goal('worker', BlockedGoalAction(block_reason='Waiting on lead.'), actor=ModelInvocable)

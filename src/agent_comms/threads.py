@@ -47,6 +47,7 @@ from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
 from .task_sources import TaskScope
 
 if TYPE_CHECKING:
+    from .goal_management import Goals
     from .launch_runtime import ThreadLaunch
 
 class _GeneratedCreationTime(float):
@@ -283,11 +284,11 @@ class Thread(ThreadProvenance):
     def task_scope(self) -> TaskScope:
         return TaskScope.for_goal(self.worktree, self.goal)
 
-    def wake_context(self) -> dict[str, object]:
+    def wake_context(self, goals: Goals) -> dict[str, object]:
         return {
             "name": self.name, "title": self.title, "tags": sorted(self.tags),
             "original_assignment": self.task,
-            "current_goal": self.goal.wake_context(),
+            "current_goal": self.goal.wake_context(goals, self.incarnation),
         }
 
     def continuation_goal(self, original: Thread) -> GoalDeclaration:
