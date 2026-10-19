@@ -1225,6 +1225,12 @@ class TodoState(DeclaredFamily, affix="TodoState"):
         return tuple(member.declared_name for member in cls.members_with(cls) if member.open)
 
     @classmethod
+    def require_open(cls, current: Todo) -> None:
+        if not cls.open:
+            raise TodoError(f"{current.id} is {cls.declared_name}; a strike or hunt is recorded "
+                            "on an open problem.")
+
+    @classmethod
     def prepare_change(cls, goals, current):
         pass
 
