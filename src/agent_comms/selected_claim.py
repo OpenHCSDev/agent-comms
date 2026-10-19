@@ -22,7 +22,6 @@ from .coordination_cohort import _claim_record
 from .coordination_errors import StaleFence
 from .coordination_tables.participants import OwnerGenerations
 from .envelope_claim_transitions import (
-    ClaimConflict,
     ClaimOwner,
     ExistingFileClaim,
     FileClaimPath,
@@ -179,13 +178,9 @@ def publish_selected_resource_claim(
         with bus_lock.current_source(bus.log, metadata) as source:
             existing = source.claim(resource)
             if existing is not None:
-                if (
-                    existing.claim_scope == claim_scope
-                    and existing.incarnation == str(owner.created_at)
-                    and existing.owner == owner.name
-                ):
+                existing.require_holder(owner.name, str(owner.created_at))
+                if existing.claim_scope == claim_scope:
                     return existing
-                raise ClaimConflict(existing)
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
         committed = bus.publisher._publish_claim_envelope_unlocked(
@@ -198,15 +193,7 @@ def publish_selected_resource_claim(
         )
         transition = committed.claim_transition
         assert transition is not None and transition.generation is not None
-        return ClaimOwner(
-            resource,
-            transition.owner,
-            transition.incarnation,
-            transition.generation,
-            committed.seq,
-            committed.message_id,
-            claim_scope,
-        )
+        return transition.claimed(resource)
 
 
 @contextmanager
