@@ -176,15 +176,17 @@ class ModeArgument(NamedOption, ValueArgument):
             raise ValueError("Managed Pi requires RPC mode")
 
 
-class OneShotArgument(OptionArgument):
+class FlagArgument(OptionArgument):
     @classmethod
-    def consume(cls, inline: str | None, arguments: Iterator[str]) -> OneShotArgument:
+    def consume(cls, inline: str | None, arguments: Iterator[str]) -> FlagArgument:
         return cls()
 
     @property
     def argv(self) -> tuple[str, ...]:
         return (self.flag(),)
 
+
+class OneShotArgument(FlagArgument):
     def validate_rpc(self) -> None:
         raise ValueError("Managed Pi cannot run a one-shot CLI command")
 
@@ -213,9 +215,8 @@ class VersionArgument(NamedOption, OneShotArgument):
     short = "-v"
 
 
-class NoExtensionsArgument(NamedOption, OneShotArgument):
-    def validate_rpc(self) -> None:
-        pass
+class NoExtensionsArgument(NamedOption, FlagArgument):
+    pass
 
 
 @dataclass(frozen=True)
