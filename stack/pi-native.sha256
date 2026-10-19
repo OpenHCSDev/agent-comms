@@ -1,5 +1,5 @@
 8189b66abc4f9f431dbb70941dcba690d76d040de1fbfff212886be35a53639d  dist/cli.js
-f5d14ad9313b94d10aef748e761e14257cd37138ff39cb27ff0151b71d58d374  dist/core/agent-session.js
+c906fadd78739947aa8a1965153b646f641c4f47fdbd28b13cb8fda7e4898def  dist/core/agent-session.js
 84430c2d0604cf86a53003ba2d68ec2ee27bd7acbd782fe32cb703de97681ac8  dist/core/compaction/compaction.js
 117da12529fbbd66a5f8c19aae82a19db24b3aff58fccbe740427040ae6202b3  dist/core/compaction/compaction.d.ts
 54450bbf96d22be7af9d66fade282ee7f2095906e9d818b60182338ef88f64d1  dist/core/session-manager.js
@@ -24,8 +24,8 @@ fc662902a510c19c5b0af7e3cf96742f5d6071c004fe226a992a59cd0bf7522a  dist/core/sdk.
 f2ef42f5e0c70fff5cdb36e760f02195348ff8284093d9a87e51e812e47e48e6  dist/core/native-proof-journal.js
 acb4014aa807a1be2bc1277121621577034dd3fae5cc6cea3bb973c8578556d2  dist/core/native-proof-schema.js
 aae7f609bfa65d29ed16e311456921a88221622e08cf6a1f5c7aab8e58bd69e6  node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js
-be0d5f27888f1defc29ae5eb6a919cc84849fdf9703baf6df28d43c9a6da3894  agent-comms-extensions/global-agent-comms/index.mjs
-b9f8b97eb4dcfbb3d387c95cf13c0c0c8187bfdb193ddcb53b81128bb838a345  dist/agent-comms-imports.json
+36ee635ca479efbb4cc6c74be8f832ca2a2f6c65e7d3537dececb6993fcbc589  agent-comms-extensions/global-agent-comms/index.mjs
+890997022d04f03063ce620fa6ae17a7bb72e34bcb2de819492938f53b8d3123  dist/agent-comms-imports.json
 376f78f7fe90e1e9810e56b528a4dde331eae03b472ead2f28f7dba55a21ec2c  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.js
 92b604f8fe824fcb018d35fb9736319803a3caf0f90ef5e2fd53178857514086  node_modules/@earendil-works/pi-ai/dist/utils/agent-comms-request-observation.d.ts
 e87b99fc294377e78a6bc6019a6b21816d9ba27012f109fb2626105e0c3f1ceb  node_modules/@earendil-works/pi-ai/dist/utils/provider-retry.js
@@ -56,4 +56,4 @@ d64e8c05c7932d377034820b1db0df45612afe64885c0765f8f348a12e1bc955  dist/core/skil
 8e8276bbabcd898136d431345611928626fad6b6f03ac572f1d8506e6ece326f  dist/core/system-prompt.d.ts
 0391543cf703a93a0163b37b3ccebe53e0f12bff6f6162b86d56fb017fe49011  dist/core/system-prompt.js
 # agent-comms-native-stock-v1 @earendil-works/pi-coding-agent@0.85.1
-# agent-comms-native-tree-v1 67d42dcb4e6bfba51a0e049897a5fe94c6f940f4e2978352246990f8dcad75ec
+# agent-comms-native-tree-v1 2daf92228b12fd9664c4dc84a473cf65613054a9dc7b5ed01e4fea4b599005ef
