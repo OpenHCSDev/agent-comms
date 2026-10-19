@@ -280,7 +280,8 @@ class NativeSession(MroDispatch, ABC):
         self.request_observer(progress, self.native.proc.identity)
 
     async def apply_native_event(self, event) -> tuple[events.AgentEvent, ...]:
-        await self.dispatch(event)
+        if await self.dispatch(event) is None:
+            return ()
         return tuple([update async for update in event.apply(self)])
 
     @property
