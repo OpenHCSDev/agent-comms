@@ -6,11 +6,21 @@ from dataclasses import dataclass, field, replace
 from typing import ClassVar, TYPE_CHECKING
 
 from .declared_family import DeclaredFamily
-from .activity import Activity, ActivityState, ObservedActivity
+from .activity import Activity, ActivityState, ObservedActivity, ThreadOutput
 from .pi_payloads import ProviderDiagnosticError
 if TYPE_CHECKING:
     from .agent_activity import AgentActivity
     from .turn_lease import TurnLeaseFence
+
+
+@dataclass(frozen=True)
+class TurnPhaseOutput(ThreadOutput):
+    agents: AgentActivity
+    lease: TurnLeaseFence
+
+    @property
+    def activity_thread(self) -> str:
+        return self.lease.identity.incarnation.name
 
 
 class StallExempt:
@@ -92,23 +102,14 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return phase
 
-    def may_finish(self, active_tools: set[str]) -> bool:
-        return True
-
     def model_progress(self) -> TurnPhase:
         return ModelWaitPhase()
-
-    def response_output(self) -> TurnPhase:
-        """Response deltas are progress evidence, not a persisted control phase."""
-        return self
 
     def stalled(self, accepted: bool) -> TurnPhase:
         return self if accepted else PromptAcceptancePhase()
 
     def phase_effects(self, agents: AgentActivity, lease: TurnLeaseFence) -> None:
-        agents.set_activity(
-            lease.identity.incarnation.name, self.activity_state, self.activity_detail,
-        )
+        TurnPhaseOutput(agents, lease).enter(self)
 
 
 class Excursion(TurnPhase, declared_name=None):
@@ -242,8 +243,5 @@ class ToolRunningPhase(Excursion):
     def tool_ended(self, tool_id: str) -> TurnPhase:
         retained = tuple(item for item in self.tools if item[0] != tool_id)
         return replace(self, tools=retained) if retained else ModelWaitPhase()
-    def may_finish(self, active_tools: set[str]) -> bool:
-        return not active_tools
-
     def stalled(self, accepted: bool) -> TurnPhase:
         return ModelWaitPhase().stalled(accepted)

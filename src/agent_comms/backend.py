@@ -304,7 +304,7 @@ class NativeSession(MroDispatch, ABC):
             yield update
         for update in await self.apply_native_event(event):
             yield update
-        self.watchdog.transition(event, self.tool_socket.active_tools)
+        self.watchdog.transition(event)
         for update in self.native_phase_changes(previous):
             yield update
 

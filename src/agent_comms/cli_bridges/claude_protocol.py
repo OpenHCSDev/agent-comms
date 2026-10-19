@@ -16,7 +16,6 @@ from pydantic import (
     model_validator,
 )
 
-from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 from agent_comms.cli_protocol import TaggedWire, TimestampedWire, WireHeader, WireModel
 from agent_comms.runtime_updates import (
     ActiveItem,
@@ -39,6 +38,7 @@ from agent_comms.transcript_events import (
     TranscriptEvent,
     UserTranscript,
 )
+from agent_comms.turn_phase import ModelWaitPhase, ToolRunningPhase, TurnPhase
 
 from .shared import (
     MONITOR_FRAME,
