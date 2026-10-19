@@ -19,7 +19,7 @@ and refuses to let a deadline lapse silently.
 """
 import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 from uuid import uuid4
 
@@ -41,8 +41,8 @@ from ..tools import (CommsFireTool, CommsOrderCheckTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo,
-                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo)
+                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo, FoundPendingProblemOrder,
+                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
 from .config import CommanderConfig, Repo
 
@@ -180,50 +180,7 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
-class Slop:
-    """Paper 1's definition, required wherever the commander calls something slop: code restating a required fact
-    (an identity, a contract membership, an implementation pair, or a second writable copy of one state) that a
-    complete mechanism derives once from its declaration. Naming slop means naming the fact, where it is
-    restated, the declaration that should own it and the mechanism that derives it from there; a label alone
-    tells the unit nothing it can check."""
-    KINDS = {'identity': 'which meaning this is', 'membership': 'which contract or set it belongs to',
-             'implementation': 'which implementation it gets', 'state': 'a second writable copy of one value'}
-    MECHANISMS = ('nominal-key', 'subclass', 'mixin', 'base-method', 'init-subclass', 'metaclass', 'declaration', 'delete-copy')
-    USAGE = ('Refused: slop needs its formal statement: --slop KIND (' + '|'.join(KINDS) + ') --fact "<the required fact, 4+ words>" '
-             '--at PATH:LINE (where it is restated) --derive MECH (' + '|'.join(MECHANISMS) + ') --by PATH:LINE (the declaration that owns it)')
-    LINE = re.compile(r'^Slop: (\w+); fact (.+?); at (\S+:\d+); derive ([\w-]+) on (\S+:\d+)\s*$', re.M)
-
-    def __init__(self, kind, fact, at, derive, by):
-        problems = []
-        if kind not in self.KINDS:
-            problems.append(f'kind {kind!r} is not one of {sorted(self.KINDS)}')
-        if len(fact.split()) < 4:
-            problems.append('the fact needs 4+ words')
-        if derive not in self.MECHANISMS:
-            problems.append(f'mechanism {derive!r} is not one of {self.MECHANISMS}')
-        for place in (at, by):
-            path, _, line = place.rpartition(':')
-            if not (os.path.isfile(path) and line.isdigit() and int(line) <= sum(1 for _ in open(path))):
-                problems.append(f'{place} does not exist')
-        if problems:
-            sys.exit(self.USAGE + '\n  ' + '\n  '.join(problems))
-        self.kind, self.fact, self.at, self.derive, self.by = kind, fact, at, derive, by
-
-    @classmethod
-    def from_order(cls, body):
-        """Every Slop: line of an order; an order that calls something slop must carry at least one."""
-        found = [cls(*m.groups()) for m in cls.LINE.finditer(body)]
-        if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
-            sys.exit('Refused order: it calls something slop without a line\n  Slop: <' + '|'.join(cls.KINDS)
-                     + '>; fact <required fact>; at <path:line restated>; derive <' + '|'.join(cls.MECHANISMS) + '> on <path:line owner>')
-        return found
-
-    def render(self):
-        return (f'{self.at} restates a {self.kind} fact ({self.KINDS[self.kind]}): {self.fact}. '
-                f'{self.by} owns it, and {self.derive} derives it from there, so the copy is deleted.')
-
-
-def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=None, new=None, traced=None):
+def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, where=None):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -234,7 +191,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
     except SelectedToolDenied as quota:
         problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-    Slop.from_order(body)  # calling something slop requires the fact, where it is restated, its owner and the mechanism
+    Todo.require_order_body(body)
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
     works = re.search(rf'(?m)^{re.escape(OrderRun.label)}\s*(.+)$', body)
@@ -301,8 +258,13 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
                         '--root src, each as its own command"')
     # Ownership reversals waste work: one owner through completion; a change of owner names the concrete failure.
     holders = sorted({listed[pid].holder for pid in group if pid in listed} - {unit, None})
-    replaces = not new and all(pid in listed and listed[pid].holder == unit for pid in group)
+    replacing = not new and bool(group) and all(pid in listed and listed[pid].holder == unit for pid in group)
     try:
+        for pid in group:
+            if replacing:
+                listed[pid].require_replacement(replaces)
+        if replaces and not replacing:
+            raise ValueError('--replaces must name the current order on these problems to the same unit.')
         trace = FileLine.from_wire(traced) if traced is not None else None
         for pid in group:
             if pid in listed and listed[pid].assignment:
@@ -315,7 +277,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
         problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
     if problems:
         sys.exit('Refused order:\n  ' + '\n  '.join(problems))
-    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replaces else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + COMMS.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in CONFIG.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
+    message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + COMMS.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in CONFIG.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
                + '\nStart now and push as you go.')  # a unit shown a due time takes until then
     taken = {other: f'Taken off you: {", ".join(group)} ("{listed[group[0]].text[:120]}") now belongs to {unit} because: {reassign}. Stop that work; do not touch its files.' for other in holders}
     refuse('\n'.join((message, *taken.values())), *OUTGOING)  # before Core: refused records nothing
@@ -325,7 +287,7 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
                  f'Reassign them; only --mechanical orders on them reach {unit}.')
     # A miss already struck on the order this replaces is one miss:
     # the send-back records no second strike.
-    struck_already = replaces and listed[group[0]].struck_on_order(unit)
+    struck_already = replacing and listed[group[0]].struck_on_order(unit)
     at = time.time()
     try:
         order = PendingProblemOrder(
@@ -337,7 +299,9 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
-    common = dict(order=order, request=request, deadline=deadline(due), commander=ME)
+    if where is not None:
+        order = FoundPendingProblemOrder(**{item.name: getattr(order, item.name) for item in fields(order)}, finding=where)
+    common = dict(order=order, request=order.request(ME, tuple(group)), deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
@@ -353,10 +317,10 @@ def send(unit, due, body_file, request, clean=False, mechanical=False, reassign=
     for other, text in taken.items():
         post(VerdictAudience((other,)), text)
     print(order.id)
-    if replaces and not clean and struck_already:
+    if replacing and not clean and struck_already:
         print(f'{unit} already struck on this order of {group[0]}; '
               'the send-back counts that one miss once')
-    elif replaces and not clean:
+    elif replacing and not clean and not reassign:
         # A send-back is a strike, no warnings, and every send-back is roasted in #comms.
         # Done here so the commander cannot send work back and forget either.
         verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
@@ -414,8 +378,10 @@ def say(units, body_file):
     print(post(units.split(','), body.rstrip()))
 
 
-def problem(text, unit, due, order_file, request):
+def problem(text, unit, due, order_file, where, disk=False):
     """A problem is born owned: Core records it with its order in one step, or not at all."""
+    location = FileLine.from_wire(where)
+    location.require_exists()
     body = open(order_file).read()
     if 'Problem: NEW' not in body:
         sys.exit('Refused: the order file needs a "Problem: NEW" line; a problem is never logged without its order')
@@ -425,7 +391,7 @@ def problem(text, unit, due, order_file, request):
     pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
-        send(unit, due, order_file, request, new=(pid, text))
+        send(unit, due, order_file, new=(pid, text), where=location, disk=disk)
     except SystemExit:
         open(order_file, 'w').write(body)
         raise
@@ -514,12 +480,14 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
-def done(pid, sha, delivered=None, screenshot=''):
+def done(pid, sha, delivered=None, screenshot='', seen=None):
     """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
-    unit, repo = todo.assignment.owner, todo.order.check.directory
+    unit = todo.assignment.owner
+    todo.order.run.require_artifact(seen or screenshot)
+    repo = todo.order.check.directory
     operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
     if not operation:
         diff = subprocess.run(['git', '-C', repo, 'show', '--first-parent', '-m', '--format=', sha], capture_output=True, text=True).stdout
@@ -535,7 +503,7 @@ def done(pid, sha, delivered=None, screenshot=''):
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
     delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
-    claim = WorkingClaim(screenshot) if operation else MergedClaim(delivered)
+    claim = WorkingClaim(seen or screenshot) if operation else MergedClaim(delivered or sha)
     call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
@@ -840,13 +808,15 @@ class SendVerb(OrderVerb, LoadedVerb):
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     mechanical: bool = option("--mechanical", default=False)
     reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
-    request: str = option("--request", help="the owner request this order serves")
+    replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
+    disk: bool = option("--disk", default=False, help="a cleanup order; never overrides a tool's storage rule")
     traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
                                 help="the first failing source line, required after two owners")
 
     def run(self) -> None:
-        send(self.unit, self.due, self.body_file, self.request, clean=self.clean,
-             mechanical=self.mechanical, reassign=self.reassign, traced=self.traced)
+        send(self.unit, self.due, self.body_file, clean=self.clean,
+             mechanical=self.mechanical, reassign=self.reassign, traced=self.traced,
+             replaces=self.replaces, disk=self.disk)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -920,15 +890,19 @@ class WithdrawVerb(OrderVerb, RuledVerb):
 @dataclass(frozen=True, kw_only=True)
 class DoneVerb(OrderVerb, RuledVerb):
     help = "Core checks the delivered commit; late delivery is a strike"
-    pid: str = option("pid")
+    unit: str = option("unit", metavar="UNIT")
+    message: str = option("message", metavar="ORDER")
     sha: str = option("--sha", help="the checked commit (the check runs on it) or op")
     delivered: str | None = option("--delivered", default=None, metavar="SHA",
                                    help="the unit's pushed ancestor of --sha; lateness reads its time")
     screenshot: str = option("--screenshot", default="", metavar="PATH",
                              help="for an op: the screenshot the working claim stands on")
 
+    seen: str | None = option("--seen", default=None)
+
     def run(self) -> None:
-        done(self.pid, self.sha, self.delivered, self.screenshot)
+        todo = COMMS.goals.todos.resolve_order(COMMS.registry.require(ME).incarnation, self.unit, self.message)
+        done(todo.id, self.sha, self.delivered, self.screenshot, self.seen)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -984,10 +958,44 @@ class ProblemVerb(OrderVerb, LoadedVerb):
     to: str = option("--to")
     due: str = option("--due", help="HH:MM local time")
     order: str = option("--order", help="the order body file")
-    request: str = option("--request", help="the owner request this order serves")
+    where: str = option("--where", help="the actual file:line where this problem occurs")
+    disk: bool = option("--disk", default=False)
 
     def run(self) -> None:
-        problem(self.text, self.to, self.due, self.order, self.request)
+        problem(self.text, self.to, self.due, self.order, self.where, self.disk)
+
+
+@dataclass(frozen=True, kw_only=True)
+class DropVerb(OrderVerb, RuledVerb):
+    unit: str = option("unit")
+    message: str = option("message")
+    by: str = option("--by")
+
+    def run(self) -> None:
+        COMMS.goals.todos.drop(COMMS.registry.require(ME).incarnation, self.unit, self.message, self.by)
+        print(f'{self.unit}: {self.message} replaced by {self.by}')
+
+
+@dataclass(frozen=True, kw_only=True)
+class FoldVerb(OrderVerb, RuledVerb):
+    pid: str = option("pid")
+    into: str = option("--into")
+    why: str = option("--why")
+
+    def run(self) -> None:
+        COMMS.goals.todos.fold(COMMS.registry.require(ME).incarnation, self.pid, self.into, self.why)
+        print(f'{self.pid} folded into {self.into}')
+
+
+@dataclass(frozen=True, kw_only=True)
+class LinkVerb(OrderVerb, RuledVerb):
+    pid: str = option("pid")
+    unit: str = option("unit")
+    message: str = option("message")
+
+    def run(self) -> None:
+        COMMS.goals.todos.link(COMMS.registry.require(ME).incarnation, self.pid, self.unit, self.message)
+        print(f'{self.pid} held by {self.unit} through {self.message}')
 
 
 @dataclass(frozen=True, kw_only=True)
