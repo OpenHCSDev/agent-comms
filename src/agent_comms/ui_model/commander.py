@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.notification_progress import FailedProgress
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
@@ -52,6 +53,10 @@ class CardDetail:
     def text(self) -> str:
         return "Expand to read this unit's orders and recent turns."
 
+    @property
+    def turn_lines(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class OpenCardDetail(CardDetail):
@@ -65,13 +70,11 @@ class OpenCardDetail(CardDetail):
                  + "\nLatest work: " + order.progress.state for order in self.orders]
         lines.append("Latest checkout commits:\n" + "\n".join(self.latest_commits))
         lines.append("Recent turns (newest first):")
-        for turn in self.turns.turns:
-            excerpts = tuple(' '.join(imported.body.split())[:240]
-                             for event in turn.events if (imported := event.imported()) is not None)
-            lines.append(f"{turn.turn_id}: " + " · ".join(excerpts)[:400])
-        if not self.turns.turns:
-            lines.append("No recorded turns.")
         return "\n\n".join(lines)
+
+    @property
+    def turn_lines(self) -> tuple[str, ...]:
+        return tuple(turn.line for turn in self.turns.turns) or ("No recorded turns.",)
 
 
 @dataclass(frozen=True)
@@ -99,8 +102,8 @@ class CommanderAlarm:
 class CommanderAlarmSource(DeclaredFamily, affix="AlarmSource"):
     """New retained alarm sources extend the model, never the page's rendering.
 
-    The retained pre-send refusal owner can declare a source here when it lands.
-    Failed delivery is deliberately not described as a pre-send refusal.
+    Retained pre-send refusals and failed deliveries have different source owners.
+    Each source supplies its own lines; the frontend has no kind switches.
     """
 
     @classmethod
@@ -126,6 +129,14 @@ class FailedDeliveryAlarmSource(CommanderAlarmSource):
             f"RECORDED FAILED DELIVERY to {notice.recipient}: {notice.label}")
             for notice in presentation.sent_notifications
             if isinstance(notice.state, FailedProgress))
+
+
+class RefusedSendAlarmSource(CommanderAlarmSource):
+    @classmethod
+    def read(cls, comms, commander, orders, now):
+        return tuple(CommanderAlarm(
+            f"REFUSED SEND #{refusal.id} {refusal.sender} -> {refusal.target}: {refusal.reason}")
+            for refusal in SendRefusal.recent(comms.root, sender=commander.name))
 
 
 @dataclass(frozen=True)

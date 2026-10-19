@@ -101,6 +101,10 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
         """This event as portable text in an imported conversation; activity is not conversation."""
         return None
 
+    def turn_line(self) -> str:
+        """A compact account of the unit's work; prompts and silent evidence add none."""
+        return ""
+
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
@@ -256,6 +260,9 @@ class UserTranscript(NativeTextTranscript):
 
 
 class AssistantTranscript(AgentTextTranscript):
+    def turn_line(self) -> str:
+        return " ".join(self.text.split())[:240]
+
     @property
     def category(self) -> type[MessageCategory]:
         return OutboundCategory if self.routed else AgentCategory
@@ -351,6 +358,9 @@ class ToolTranscript(SilentTranscript, RecordedTranscript):
 
 @dataclass(frozen=True, kw_only=True)
 class ToolStartTranscript(ToolTranscript):
+    def turn_line(self) -> str:
+        return self.title
+
     def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
         if self.before(since) or self.tool is None:
             return ()
@@ -439,6 +449,11 @@ class TurnDigest:
 
     turn_id: str
     events: tuple[TranscriptEvent, ...]
+
+    @property
+    def line(self) -> str:
+        work = tuple(line for event in self.events if (line := event.turn_line()))
+        return f"{self.turn_id}: " + (" · ".join(work[-3:])[:400] or "No work recorded yet.")
 
     def before(self, at: float) -> bool:
         """The turn's last dated event precedes ``at``; an undated turn is never before."""

@@ -3,8 +3,8 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.ui_model.commander import CommanderModel, ObserveCommander, OpenCardDetail
 from agent_comms.todos import ProgressSource, PullRequests, StatusProgressSource
+from agent_comms.ui_model.commander import CommanderModel, ObserveCommander, OpenCardDetail
 from test_commander_problem_orders import create
 
 

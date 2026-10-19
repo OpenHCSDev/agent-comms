@@ -18,13 +18,15 @@ from agent_comms.active_route import LocalRoute
 from agent_comms.change_report import FileLine
 from agent_comms.child_process import NoProcess
 from agent_comms.comms import Comms
+from agent_comms.errors import ToolRefusedError
 from agent_comms.goal_actions import CreateProblemGoalAction, SetGoalAction
 from agent_comms.goals import CountCheckResult, NoGoal, OrderCheck, RequestGoalOrder
+from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.thread_status import StoppedThreadStatus
-from agent_comms.todos import MechanicalOrderRun, PendingProblemOrder
+from agent_comms.todos import MechanicalOrderRun, OperationDelivery, PendingProblemOrder
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import CommsTodoCreateTool
+from agent_comms.tools import CommsOrderDoneTool, CommsSendTool, CommsTodoCreateTool
 
 COMMANDER = "claude-code"
 UNITS = ("pi-cn-phase2", "pi-cn-phase5")
@@ -51,14 +53,16 @@ def prepare(output: Path) -> None:
             copied.chmod(0o600)
             session = str(copied)
             receipts.append(f"{name}: {source} -> {copied} ({copied.stat().st_size} bytes)")
-        comms.registry.declare(replace(original, process_identity=NoProcess(),
-                                      session_file=session, goal=NoGoal()), StoppedThreadStatus())
+        comms.registry.declare(
+            replace(original, process_identity=NoProcess(), session_file=session, goal=NoGoal()),
+            StoppedThreadStatus())
     comms.goals.update_goal(COMMANDER, SetGoalAction(
         text="Verify the commander page on copied real unit sessions", goal_id="page-request",
         order=RequestGoalOrder()))
     now = time.time()
     for index, name in enumerate(UNITS):
-        comms.goals.update_goal(name, SetGoalAction(text="Copied unit for read-only page verification"))
+        comms.goals.update_goal(name, SetGoalAction(
+            text="Copied unit for read-only page verification"))
         order = PendingProblemOrder(
             id=f"commander-page-{name}", owner=FileLine(__file__, 1),
             check=OrderCheck(str(output), "printf 1", CountCheckResult(1)),
@@ -72,19 +76,26 @@ def prepare(output: Path) -> None:
             deadline=RecordedEventTime(now - 60 if not index else now + 1800), commander=COMMANDER,
             repo="OpenHCSDev/agent-comms", text="Show the real order in the commander page",
         )).apply(comms, ThreadCaller(COMMANDER))
+    try:
+        CommsSendTool(sender=COMMANDER, target="unregistered-page-target",
+            body="Verify that the commander can read an actual refused send.").apply(
+                comms, ThreadCaller(COMMANDER))
+    except ToolRefusedError as error:
+        receipts.append(f"Actual refused send: {error}")
+    else:
+        raise AssertionError("The deliberately absent target unexpectedly accepted a send.")
     (output / "sources.txt").write_text("\n".join(receipts) + "\n")
 
 
 async def journey(app, pilot, output: Path) -> None:
-    from textual.widgets import Static
     from toad.navigation_target import FeedTarget
     from toad.screens.commander import CommanderScreen, CommanderUnit
     from toad.widgets.conversation import Conversation
 
     await pilot.pause(2)
     # Open a real bus conversation and submit through its actual local-command boundary.
-    await app.screen.open_sidebar_target(FeedTarget())
-    conversation = app.screen.query_one(Conversation)
+    await app.selected_session.open_sidebar_target(FeedTarget())
+    conversation = app.selected_session.query_one(Conversation)
     await pilot.pause(1)
     conversation.prompt.text = "/commander " + COMMANDER
     conversation.prompt.focus()
@@ -96,21 +107,37 @@ async def journey(app, pilot, output: Path) -> None:
     await pilot.pause(1)
     def capture(stage: str) -> None:
         # The text is from the actual laid-out terminal strips, not the model.
-        text = "\n".join(screen.render_line(y).text for y in range(screen.size.height))
+        text = "\n".join(strip.text for strip in screen._compositor.render_strips())
         (output / f"{stage}.txt").write_text(text + "\n")
         subprocess.run(("import", "-window", "root", str(output / f"{stage}.png")), check=True)
     capture("level-0")
     card = next(row for row in screen.query(CommanderUnit) if row.unit.name == UNITS[0])
     await pilot.click(card.query_one("CollapsibleTitle"))
     async with asyncio.timeout(90):
-        while "Latest checkout commits:" not in str(card.query_one(Static).content):
+        while "Latest checkout commits:" not in str(card.detail_widget.content):
             await pilot.pause(0.2)
     await pilot.pause(1)
+    assert "pi-cn-phase2" in str(card.title)
+    assert screen.rows[next(unit for unit in screen.rows if unit.name == UNITS[1])].collapsed
     capture("level-1")
+    def deliver():
+        comms = Comms(output / "bus")
+        todo = comms.goals.todos.get("P1")
+        CommsOrderDoneTool(problem=todo.id, order_id=todo.order.id,
+            delivery=OperationDelivery(), claims=(WorkingClaim(str(output / "level-0.png")),)
+        ).apply(comms, ThreadCaller(COMMANDER))
+    await app.preparation.run_thread(deliver)
+    async with asyncio.timeout(90):
+        while "Delivered, waiting on install" not in str(card.title):
+            await pilot.pause(0.2)
+    await pilot.pause(0.5)
+    capture("live-delivery")
     # Verify collapse/return does not replace the underlying conversation or its draft.
     await pilot.press("escape")
-    assert app.screen.query_one(Conversation) is conversation
-    (output / "result.txt").write_text("PASS: normal Toad, real scratch orders, level 0 and expanded card.\n")
+    assert app.selected_session.query_one(Conversation) is conversation
+    (output / "result.txt").write_text(
+        "PASS: normal Toad, real scratch orders, level 0, expanded real turns, "
+        "and live delivery update without reopening.\n")
     app.exit()
 
 
