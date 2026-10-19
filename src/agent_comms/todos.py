@@ -1888,6 +1888,9 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def prepare(self, goals, current):
         return self
 
+    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
+        current.require_commander(actor)
+
     def record(self, goals: Goals, problem: str) -> Todo:
         """Write this operation; one that also revises the holder's Goal routes through it."""
         return goals.apply_problem(problem, self)
@@ -1976,7 +1979,6 @@ class OrderVerdict(TodoOperation, declared_name=None):
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
-    tool_call_id: str
     at: EventTime = field(default_factory=lambda: EventTime.capture(time.time()), kw_only=True)
 
     @abstractmethod
@@ -1986,19 +1988,47 @@ class OrderVerdict(TodoOperation, declared_name=None):
     @abstractmethod
     def line(self) -> str: ...
 
+    def require_actor(self, current: Todo) -> None:
+        current.require_commander(self.actor)
+
+    def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
+        raise TodoError("The connector reviewer accepts a PR head, not an edit verdict.")
+
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
+        self.require_actor(current)
         current.require_assignment(self.previous)
-        _text(self.tool_call_id, "Judged tool call ID", 200)
         judged = self.judged(current)
         return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
-class AcceptedVerdict(OrderVerdict):
-    """The tool call carries out the order clause it quotes."""
+class ToolCallVerdict(OrderVerdict, declared_name=None):
+    tool_call_id: str
+
+    def apply(self, current: Todo) -> Todo:
+        _text(self.tool_call_id, "Judged tool call ID", 200)
+        return super().apply(current)
+
+
+@dataclass(frozen=True)
+class QuotedVerdict(OrderVerdict, declared_name=None):
     quote: str
+
+    def require_quote(self, text: str) -> None:
+        quoted = " ".join(self.quote.split())
+        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
+            raise ValueError("Quote 4+ words of the order this verdict carries out.")
+
+    def judged(self, current: Todo) -> Todo:
+        self.require_quote(current.order.instructions(current))
+        return current
+
+
+@dataclass(frozen=True)
+class AcceptedVerdict(QuotedVerdict, ToolCallVerdict):
+    """The tool call carries out the order clause it quotes."""
+    line = "Accepted"
 
     @classmethod
     def require_branches(cls, added: int, no_owner: str | None) -> None:
@@ -2007,16 +2037,41 @@ class AcceptedVerdict(OrderVerdict):
         if not (no_owner and len(no_owner.split()) >= 12 and re.search(r'\bbecause\b', no_owner)
                 and re.search(r'/\S+:\d+', no_owner)):
             raise ValueError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
-    line = "Accepted"
 
-    def require_quote(self, text: str) -> None:
-        quoted = " ".join(self.quote.split())
-        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
-            raise ValueError("Quote 4+ words of the order this tool call carries out.")
 
-    def judged(self, current: Todo) -> Todo:
-        self.require_quote(current.order.instructions(current))
-        return current
+@dataclass(frozen=True)
+class ReviewedHeadVerdict(QuotedVerdict):
+    """The connector reviewer accepts this immutable commit, never an inferred checkout head."""
+    head: str
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        GitCommitText.decode(self.head)
+
+    @property
+    def line(self) -> str:
+        return f"Reviewed head {self.head}"
+
+    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
+        raise TodoError("Only the connector reviewer records a PR-head verdict.")
+
+    def require_actor(self, current: Todo) -> None:
+        """reviewed checked the connector's registered reviewer before recording."""
+
+    def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
+        if self.actor != reviewer:
+            raise TodoError("The verdict actor must be the connector reviewer recording it.")
+        current = goals.todos.get(problem)
+        recorded = self.prepare(goals, current).record(goals, problem)
+        posted = subprocess.run(
+            ("gh", "api", "--method", "POST", f"repos/{recorded.repo}/statuses/{self.head}",
+             "-f", "state=success", "-f", "context=agent-comms/review",
+             "-f", f"description=Accepted by {reviewer.name} on {problem}"),
+            capture_output=True, text=True, timeout=60,
+        )
+        if posted.returncode:
+            raise TodoError(posted.stderr.strip() or f"Review status on {self.head} failed.")
+        return recorded
 
 
 @dataclass(frozen=True)
@@ -2042,7 +2097,7 @@ class PeerAcceptedVerdict(AcceptedVerdict):
 
 
 @dataclass(frozen=True)
-class SupersededVerdict(OrderVerdict):
+class SupersededVerdict(ToolCallVerdict):
     replacement: str
     reason: str
     line = "Superseded"
@@ -2063,7 +2118,7 @@ class SupersededVerdict(OrderVerdict):
 
 
 @dataclass(frozen=True)
-class SendBackVerdict(OrderVerdict):
+class SendBackVerdict(ToolCallVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
     reason: StrikeReason
 
