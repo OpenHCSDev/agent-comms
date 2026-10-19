@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from bus_history import read_history
 from conftest import publish_initial
 from agent_comms.read_basis import NamedViewer
 import os
