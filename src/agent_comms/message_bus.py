@@ -19,13 +19,14 @@ from .coordinator import Coordination
 from .maintenance_barrier import MaintenanceBarrier, MaintenanceHeldError
 from .historical_views import HistoryArchive
 from .message_page import (
-    DisplayedMessagePage, MessagePage, MessagePageRequest, PageBounds,
+    InboxPage, MessagePage, MessagePageRequest, PageBounds,
 )
 from .page_traversal import NewerTraversal
 from .message_reference import MessageReference
 from .messages import Message
 from .read_basis import (
     AnonymousViewer,
+    NamedViewer,
     DisplayViewer,
     ListedDeliveries,
     DisplayBasis,
@@ -46,7 +47,7 @@ from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
-class MessageBus[Writes: Publisher](StoreLockOwner):
+class MessageBus[Writes: Publisher](StoreLockOwner, lock_rank=0):
 
     @property
     def path(self) -> Path:
@@ -109,15 +110,17 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
 
     def inbox(
         self, name: str, target: CommandTarget = ANY_CHANNEL, *,
-        after: MessageReference | None = None,
+        after: MessageReference | None = None, bounds: PageBounds = PageBounds(),
     ) -> Sequence[Message]:
-        """Read unread deliveries against a newly captured registry."""
-        return list(self.inbox_at(name, self._registry.snapshot(), target, after=after).page.messages)
+        """Read one oldest-first unread page against a newly captured registry."""
+        return list(self.inbox_at(
+            name, self._registry.snapshot(), target, after=after, bounds=bounds,
+        ).page.messages)
 
     def inbox_at(
         self, name: str, snapshot: RegistrySnapshot, target: CommandTarget = ANY_CHANNEL, *,
-        after: MessageReference | None = None,
-    ) -> DisplayedMessagePage:
+        after: MessageReference | None = None, bounds: PageBounds = PageBounds(),
+    ) -> InboxPage:
         """Read unread deliveries using the caller's captured registry.
 
         The route index lists which deliveries are unread, as it does for the
@@ -133,15 +136,21 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
             with self.projection(
                 self.log.path, source, snapshot, {delivery.actor: delivery}
             ) as index:
-                unread = index.unseen_deliveries(delivery.actor, seen, after=after.seq if after else 0)
-            listed = ListedDeliveries(
-                selection,
-                frozenset(row.seq for row in unread),
-                frozenset(row.target for row in unread),
-            )
-            return MessagePageRequest.every(listed, after=min(listed.sequences, default=1) - 1).displayed(
-                self.reads, document, delivery.actor, snapshot, snapshot, source,
-            )
+                cursor = after.seq if after else 0
+                unread = index.unseen_deliveries(
+                    delivery.actor, seen, after=cursor, scope=selection, limit=bounds.limit + 1,
+                )
+                counts = index.unseen_counts({delivery.actor: seen}, after=cursor)[delivery.actor]
+                total = target.pending_count(counts, snapshot, self.require_channel)
+                listed = ListedDeliveries(
+                    selection,
+                    frozenset(row.seq for row in unread),
+                    frozenset(row.target for row in unread),
+                )
+                result = MessagePageRequest(
+                    listed, PageBounds(NewerTraversal(cursor), bounds.limit, bounds.max_bytes),
+                ).displayed(self.reads, document, delivery.actor, snapshot, snapshot, source)
+                return InboxPage(result.page, result.displayed, total - len(result.page.messages))
 
     async def watch(self, name: str, *, acknowledgment: type[WatchAcknowledgment], after: MessageReference | None = None) -> AsyncIterator[Message]:
         """Yield unread messages, recording only messages the caller takes.
@@ -158,14 +167,17 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
             async for _ in changes:
                 maintenance.read().require_open()
                 snapshot = self._registry.snapshot()
-                batch = await asyncio.to_thread(
-                    self.inbox_at, name, snapshot, after=after)
-                if not reader.current(self._registry.snapshot()):
-                    raise UnregisteredThreadError("Watched thread was removed or replaced")
-                for message in batch.page.messages:
-                    yield message
-                    acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
-                    after = message.reference
+                while True:
+                    batch = await asyncio.to_thread(
+                        self.inbox_at, name, snapshot, after=after)
+                    if not reader.current(self._registry.snapshot()):
+                        raise UnregisteredThreadError("Watched thread was removed or replaced")
+                    for message in batch.page.messages:
+                        yield message
+                        acknowledgment.taken(self.reads, batch.displayed.through(message.seq))
+                        after = message.reference
+                    if not batch.remaining:
+                        break
 
     async def when_open[Result](self, operation: Callable[[], Result | Awaitable[Result]]) -> Result:
         """Wait out a hold without replaying an admitted synchronous write.
@@ -219,7 +231,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
     def _pending_projection(
         self, source: WireSnapshot, basis: CapturedSelection, names: Sequence[str],
     ) -> Mapping[str, Mapping[str, int]]:
-        """Bulk delivery counts from one original source, namespace and ledger."""
+        """Count deliveries using the same bus, registrations and read positions."""
         actors = {name: basis.registry.canonical_name(name) for name in names}
         deliveries = {
             actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
@@ -234,13 +246,14 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
 
     def pending_counts_opened(self, source: WireSnapshot,
                               selection: CapturedSelection) -> Mapping[str, int]:
-        """Borrow the caller's original source, namespace and sparse reads."""
+        """Count unread messages using the caller's bus, registrations and read positions."""
         actor = selection.require_viewer()
+        seen = selection.seen(source)
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)
         with self.projection(
             self.log.path, source, selection.registry, {actor: delivery}
         ) as index:
-            return index.unseen_counts({actor: selection.seen(source)})[actor]
+            return index.unseen_counts({actor: seen})[actor]
 
     def delivered(
         self, name: str, references: Sequence[MessageReference]
@@ -270,15 +283,22 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         self.reads.mark_displayed(basis.viewer, basis)
         return basis.message_count
 
-    def mark_delivered_through(self, name: str, sequence: int) -> None:
-        """Mark delivered inbox messages through the requested source sequence."""
-        snapshot = self._registry.snapshot()
-        canonical = snapshot.require(name).name
+    def mark_delivered_through(
+        self, name: str, sequence: int, *, target: CommandTarget = ANY_CHANNEL,
+    ) -> None:
+        """Mark the selected inbox through one captured cut, without loading its messages."""
         if sequence < 0:
             raise ValueError("Delivery sequence cannot be negative.")
-        batch = self.inbox_at(canonical, snapshot)
-        self.reads.mark_displayed(canonical, batch.displayed.through(sequence))
-        return
+        with self.snapshot(NamedViewer(name)) as (basis, source):
+            canonical = basis.require_viewer()
+            delivery = DeliveryScope.capture(canonical, basis.registry, basis.catalog)
+            scope = delivery.selection(target, basis.registry,
+                lambda channel: basis.catalog.require_channel(channel, basis.activity))
+            displayed = source.query_page_index(lambda index: scope.capture_deliveries(
+                self.reads, canonical, basis.registry, source, index,
+                document=basis.document, audience=delivery, through=sequence,
+            ))
+            self.reads.mark_displayed(canonical, displayed)
 
     def awareness_segments(
         self, owner: Thread, relations: Sequence[PeerRelation], *, blocking: bool = False
@@ -299,7 +319,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
         from .peer_relevance import Prioritized
 
         try:
-            with self.log.certified_read(blocking=blocking) as source:
+            with self.log.checked_read(blocking=blocking) as source:
                 marker = source.marker
                 rows = addressed_source_pointers_unlocked(
                     self.log, marker, owner.incarnation.lookup

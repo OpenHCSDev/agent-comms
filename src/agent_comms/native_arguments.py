@@ -317,9 +317,9 @@ class NativeArguments:
 
     def managed_rpc(self, package: Path) -> tuple[str, ...]:
         """Managed sessions load the protocol extensions; ephemeral RPC does not."""
-        from .native_tools import NativeExecutableTool
+        from .native_tools import NativeToolDeclaration
 
-        return (*NativeExecutableTool.extension_arguments(package), *self.rpc())
+        return (*NativeToolDeclaration.extension_arguments(package), *self.rpc())
 
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:

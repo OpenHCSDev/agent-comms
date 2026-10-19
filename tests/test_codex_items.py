@@ -24,7 +24,7 @@ def test_items_page_decodes_every_declared_user_input():
         ]},
     }]})
     update = page.data[0].publication()
-    assert update.events == (UserTranscript("look\nImage: /tmp/shot.png\n@toad", timestamp=1.0),)
+    assert update.events == (UserTranscript("look\nImage: /tmp/shot.png\n@toad", timestamp=1.0, position="u1"),)
 
 
 def test_bus_input_encodes_its_text_with_the_codex_tag():
@@ -57,9 +57,9 @@ def test_codex_stream_reports_activity_and_finishes_items(tmp_path):
                        item=command | {"status": "completed", "exitCode": 0,
                                        "aggregatedOutput": "a\n"})
     assert finished == FinishedItem("t1", "c1", (
-        ToolStartTranscript(tool_call_id="c1", tool_name="bash",
-                            raw_input={"command": "ls -la"}, tool=BashTool(command="ls -la"), timestamp=1.0),
-        ToolEndTranscript(tool_call_id="c1", tool_name="bash", text="a\n", ok=True,
+        ToolStartTranscript(position="c1", tool_call_id="c1", tool_name="bash",
+                            raw_input={"command": "ls -la"}, tool=BashTool(call_id="c1", command="ls -la"), timestamp=1.0),
+        ToolEndTranscript(position="c1", tool_call_id="c1", tool_name="bash", text="a\n", ok=True,
                           timestamp=1.0)))
     thinking = {"type": "reasoning", "id": "r1", "summary": []}
     assert receive("item/started", turnId="t1", item=thinking, startedAtMs=3000) \
@@ -95,7 +95,7 @@ def test_deltas_require_start_and_finish_retires_the_assembly(tmp_path):
     receive("item/started", item={"type": "agentMessage", "id": "a", "text": ""}, startedAtMs=1000)
     receive("item/agentMessage/delta", itemId="a", delta="Hello")
     assert receive("item/agentMessage/delta", itemId="a", delta=" world").events == (
-        AssistantTranscript("Hello world", timestamp=1.0),)
+        AssistantTranscript("Hello world", timestamp=1.0, position="a"),)
     complete = receive("item/completed", item={"type": "agentMessage", "id": "a", "text": "Hello world!"},
                        completedAtMs=2000)
     assert complete.events[0].text == "Hello world!"
@@ -113,10 +113,10 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
     from agent_comms.recorded_time import UnrecordedEventTime
     from agent_comms.transcript_events import AssistantTranscript
 
-    first = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("H",), UnrecordedEventTime()))
-    newer = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("Hello",), UnrecordedEventTime()))
-    other = DraftItem("t", "b", TextDraft.from_parts(AssistantTranscript, ("Other",), UnrecordedEventTime()))
-    final = FinishedItem("t", "a", (AssistantTranscript("Hello!"),))
+    first = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("H",), UnrecordedEventTime(), "a"))
+    newer = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("Hello",), UnrecordedEventTime(), "a"))
+    other = DraftItem("t", "b", TextDraft.from_parts(AssistantTranscript, ("Other",), UnrecordedEventTime(), "b"))
+    final = FinishedItem("t", "a", (AssistantTranscript("Hello!", position="a"),))
     end = TurnEnded()
     assert TranscriptUpdate.coalesced([first, other, newer]) == [other, newer]
     assert TranscriptUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]
@@ -137,7 +137,7 @@ def test_function_outputs_keep_wire_fields_and_share_page_and_live_decoding(tmp_
         assert type(entry.item) is item_type
         assert entry.item.model_dump(mode="json") == wire
         expected = () if item_type is SendOutputItem else (
-            ToolEndTranscript(tool_call_id="out", tool_name=name, text="result", timestamp=1.0),)
+            ToolEndTranscript(position="out", tool_call_id="out", tool_name=name, text="result", timestamp=1.0),)
         assert entry.publication().events == expected
 
         stream = ItemStream("thread")

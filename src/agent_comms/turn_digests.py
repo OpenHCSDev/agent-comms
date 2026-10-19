@@ -17,6 +17,7 @@ from .tool_declaration import EditCall
 
 if TYPE_CHECKING:
     from .threads import Thread
+    from .todos import Todo
 
 
 @dataclass(frozen=True)
@@ -80,30 +81,67 @@ class TurnsSince(TurnBound):
 
 
 @dataclass(frozen=True)
-class TurnDigestRead(ConversationPreparation):
-    """Read this unit's own records, never its inherited conversation display."""
+class TranscriptRead[Result](ConversationPreparation):
+    """The original native/external source selection, shared by typed readers."""
 
     root: Path
     thread: Thread
     bound: TurnBound
 
-    def read(self) -> ThreadTurns:
-        return ThreadTurns(self.thread.incarnation,
-                           self.thread.execution.prepare_conversation(self))
+    def read(self) -> Result:
+        return self.thread.execution.prepare_conversation(self)
 
-    def unjudged(self, todo) -> tuple[EditCall, ...]:
-        """Each native call once, judged only by this order's own verdicts."""
-        judged = {verdict.tool_call_id for verdict in todo.verdicts}
-        since = todo.order.at.recorded_at("An order")
-        edits = {edit.id: edit for turn in reversed(self.read().turns)
+    def native(self) -> Result:
+        turns = self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)
+        return self.from_turns(turns)
+
+    def external(self) -> Result:
+        with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
+            return self.from_external(source)
+
+    @abstractmethod
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> Result: ...
+
+    def from_external(self, source) -> Result:
+        return self.from_turns(source.turns(self.bound))
+
+
+class TurnDigestRead(TranscriptRead[ThreadTurns]):
+    """Read this unit's own records, never its inherited conversation display."""
+
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> ThreadTurns:
+        return ThreadTurns(self.thread.incarnation, turns)
+
+
+@dataclass(frozen=True)
+class OrderRead[Result](TranscriptRead[Result]):
+    todo: Todo
+
+    def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
+        judged = {verdict.tool_call_id for verdict in self.todo.verdicts}
+        since = self.todo.order.at.recorded_at("An order")
+        edits = {edit.id: edit for turn in reversed(turns)
                  for event in turn.events
-                 for edit in event.edit_calls(self.thread.name, todo.id, since)
+                 for edit in event.edit_calls(self.thread.name, self.todo.id, since)
                  if edit.id not in judged}
         return tuple(reversed(edits.values()))
 
-    def native(self) -> tuple[TurnDigest, ...]:
-        return self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)
 
-    def external(self) -> tuple[TurnDigest, ...]:
-        with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
-            return source.turns(self.bound)
+class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
+    """Original unjudged calls; external events are selected before decoding."""
+
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
+        return self.edits_from_turns(turns)
+
+    def from_external(self, source) -> tuple[EditCall, ...]:
+        return tuple(source.unjudged(self.todo))
+
+
+class OrderEditCountRead(OrderRead[int]):
+    """Load needs a count, never external event bodies or edit hunks."""
+
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
+        return len(self.edits_from_turns(turns))
+
+    def from_external(self, source) -> int:
+        return source.unjudged_count(self.todo)

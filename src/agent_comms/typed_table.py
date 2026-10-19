@@ -107,7 +107,7 @@ class SqlStorage(DeclaredFamily, affix="Storage"):
 
     @classmethod
     def to_sql(cls, value: object) -> object:
-        return FieldCodec.encode(value)
+        return value
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -162,8 +162,8 @@ class BooleanStorage(SqlStorage):
         return (*super().constraints(column, annotation), f"{_identifier(column)} IN (0, 1)")
 
     @classmethod
-    def to_sql(cls, value: object) -> int:
-        return int(value)
+    def to_sql(cls, value: object) -> int | None:
+        return None if value is None else int(value)
 
     @classmethod
     def from_sql(cls, value: object) -> bool:
@@ -228,8 +228,8 @@ class JsonStorage(SqlStorage):
         )
 
     @classmethod
-    def to_sql(cls, value: object) -> str:
-        return json.dumps(FieldCodec.encode(value), separators=(",", ":"), allow_nan=False)
+    def to_sql(cls, value: object) -> str | None:
+        return None if value is None else json.dumps(value, separators=(",", ":"), allow_nan=False)
 
     @classmethod
     def from_sql(cls, value: object) -> object:
@@ -322,10 +322,7 @@ class SqlValue:
             cursor.close()
 
     def encode(self, value: object) -> object:
-        # Validate before SQLite can coerce a wrong Python value into its affinity.
-        encoded = FieldCodec.encode(value, self.annotation)
-        self.value.decode(encoded)
-        return None if encoded is None else self.storage.to_sql(encoded)
+        return self.storage.to_sql(self.value.encode(value))
 
     def decode(self, value: object) -> object:
         return self.value.decode(None if value is None else self.storage.from_sql(value))
@@ -771,7 +768,27 @@ class TypedTable(TypedRow, DeclaredFamily, affix="Row", discovery_package="agent
         )
 
 
-class TypedStore(RootFile):
+class StoreWriter:
+    """A transaction capability shared by stores and their turn-owned writers."""
+
+    @staticmethod
+    @contextmanager
+    def transaction(connection: sqlite3.Connection) -> Iterator[sqlite3.Connection]:
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            yield connection
+            connection.execute("COMMIT")
+        except BaseException:
+            if connection.in_transaction:
+                connection.execute("ROLLBACK")
+            raise
+
+    @abstractmethod
+    def writing(self):
+        """Borrow one committed write transaction from this lifetime owner."""
+
+
+class TypedStore(RootFile, StoreWriter):
     """One owner-only SQLite file whose schema its TypedTable rows declare.
 
     Members name the file and their rows. A transaction installs an absent
@@ -824,7 +841,7 @@ class TypedStore(RootFile):
             lifetime.push(retire)
             yield connection
 
-    def _open_writer(self) -> sqlite3.Connection:
+    def _open_writer(self, *, check_same_thread: bool = True) -> sqlite3.Connection:
         """Attach and install an absent store under the connection boundary."""
         from .coordination_database import CoordinationStore
 
@@ -836,7 +853,8 @@ class TypedStore(RootFile):
             pass
         else:
             os.close(descriptor)
-        connection = CoordinationStore.writer(self.path, isolation_level=None)
+        connection = CoordinationStore.writer(
+            self.path, isolation_level=None, check_same_thread=check_same_thread)
         try:
             connection.execute(f"PRAGMA synchronous={self.synchronous}")
             # This query attaches an existing WAL before releasing the boundary.
@@ -879,14 +897,14 @@ class TypedStore(RootFile):
             raise self.schema_error(f"{self.filename} differs from its declaration")
 
     @contextmanager
+    def writer_connection(self, *, check_same_thread: bool = True) -> Iterator[sqlite3.Connection]:
+        """Own attachment and schema; joined workers may borrow one serialized connection."""
+        with self._attached(lambda: closing(self._open_writer(
+                check_same_thread=check_same_thread))) as connection:
+            self.require_schema(self._schema(connection))
+            yield connection
+
+    @contextmanager
     def writing(self) -> Iterator[sqlite3.Connection]:
-        with self._attached(lambda: closing(self._open_writer())) as connection:
-            try:
-                connection.execute("BEGIN IMMEDIATE")
-                self.require_schema(self._schema(connection))
-                yield connection
-                connection.execute("COMMIT")
-            except BaseException:
-                if connection.in_transaction:
-                    connection.execute("ROLLBACK")
-                raise
+        with self.writer_connection() as connection, self.transaction(connection):
+            yield connection

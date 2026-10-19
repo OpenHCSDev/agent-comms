@@ -6,6 +6,7 @@ import type { NativeInputClaim } from "./turn-context.js";
 /** Explicit absence of an active native run. */
 export declare class InactiveNativeTurnRun {
     static readonly shared: InactiveNativeTurnRun;
+    readonly ownerTools: import('./turn-context.js').OwnerToolConnection;
     readonly tracked: false;
     readonly retrying: false;
     include(messages: readonly AgentMessage[], claims: ReadonlyMap<string, NativeInputClaim>): this;
@@ -22,6 +23,7 @@ export declare class NativeTurnRun {
     constructor(agent: Agent, emit: (event: AgentSessionEvent) => void,
                 retryable: (message: AssistantMessage) => boolean);
     finishRetry(success: boolean, finalError?: string): void;
+    readonly ownerTools: import('./turn-context.js').OwnerToolConnection;
     get tracked(): boolean;
     get retrying(): boolean;
     include(messages: readonly AgentMessage[], claims: ReadonlyMap<string, NativeInputClaim>): this;

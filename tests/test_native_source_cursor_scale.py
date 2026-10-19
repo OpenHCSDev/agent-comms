@@ -35,14 +35,16 @@ def tmp_path():
 
 
 @pytest.mark.parametrize("recipients", [10, 150])
-async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
-    tmp_path, monkeypatch, recipients, *, native_runtime_package,
-):
+async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(tmp_path, monkeypatch, recipients, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms, initial, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert first is not None and first.cursor_status == "proven"
     for number in range(recipients - 1):
@@ -69,17 +71,23 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
             comms.bus,
             store,
             wire_root_id=root_id,
-            recipient_lookup=RecordedThreadIncarnation("fixture", people[1].created_at).lookup,
-        ).read()
+            recipient_lookup=RecordedThreadIncarnation(
+                "fixture", people[1].created_at
+            ).lookup,
+        ).read(source_reads=source_reads)
         assert coverage.blocked_seq == selected.seq
     second = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert second is not None and second.cursor_status == "proven"
     assert second.input_id != first.input_id and len(calls) == 2
     with Coordination(str(root / "coordination.sqlite3")) as store:
         current = NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
-            owner_name="alpha"
+            owner_name="alpha", source_reads=source_reads
         )
         assert current is not None
         assert current.injected_seq == selected.seq
@@ -97,7 +105,7 @@ async def test_101_unrelated_initials_and_frozen_n_keeps_exact_native_cursor(
         )
 
 
-async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms, _first, _people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
@@ -117,23 +125,33 @@ async def test_page_budget_refuses_progress_but_original_is_not_replayed(tmp_pat
     # already committed original still produces its one fake native input.
     monkeypatch.setattr(SourceCoverage, "page_budget", 1)
     turn = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert turn is not None and turn.cursor_status == "unavailable" and len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+                owner_name="alpha", source_reads=source_reads
+            )
             is None
         )
 
 
-async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms, _first, _people = _root(tmp_path)
     bad, _ = _fake_model(decision="IGNORE", digest_override="b" * 64)
     monkeypatch.setattr(TrackedTurnSession, "execute", bad)
     with pytest.raises(IdentityConflict, match="exact bound source prompt equality"):
         await runtime.SelectedExecution(
-            root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+            root=root,
+            wire_root_id=root_id,
+            owner_name="alpha",
+            native_package=native_runtime_package,
+            cursor_delivery=cursor_delivery,
         ).run()
     comms.registry.declare(
         comms.registry.new_thread('other', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
@@ -146,30 +164,38 @@ async def test_unknown_first_source_cannot_be_bridged_by_101_unrelated(tmp_path,
     good, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", good)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.cursor_status == "blocked_gap" and len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:
         assert (
-            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+                owner_name="alpha", source_reads=source_reads
+            )
             is None
         )
 
 
-async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql(
-    tmp_path, monkeypatch, *, native_runtime_package,
-):
+async def test_real_writer_reopen_and_generation_change(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms, _first, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     first = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert first is not None and first.cursor_status == "proven"
     # Fresh-open same-generation proof remains valid across a reconnect.
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         valid = NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
-            owner_name="alpha"
+            owner_name="alpha", source_reads=source_reads
         )
         assert valid is not None and valid.input_id == first.input_id
 
@@ -181,58 +207,36 @@ async def test_forged_cross_generation_cursor_reopen_denied_without_mutating_sql
     with Coordination(str(root / "coordination.sqlite3")) as store:
         accept_delivery_cohort(comms.bus, root_id, second_message.seq, store)
     second = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha-new", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha-new",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert second is not None and second.cursor_status == "blocked_gap"
-    # Forge current generation identity while borrowing the previous owner's
-    # source coverage. Reopening must reject it without repairing or replaying it.
-    from agent_comms.native_runtime_input import CurrentNativeCursor, NativeRuntimeInput
-
-    with Coordination(str(root / "coordination.sqlite3")) as store:
-        proof = NativeRuntimeInput.one(store.session._connection, input_id=second.input_id)
-        assert proof is not None
-        store.session._connection.execute(
-            f"INSERT INTO {CurrentNativeCursor.declared_name} VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-            (
-                root_id,
-                lookup,
-                "alpha-new",
-                2,
-                proof.sent_owner_claimed_generation.to_wire(),
-                second_message.seq,
-                second_message.seq,
-                second.input_id,
-                type(proof.execution).declared_name,
-                proof.session_id,
-                proof.request_generation,
-            ),
-        )
+    # P636 decision: trust the real writer's durable prefix. Do not manufacture
+    # an impossible cursor with raw SQL and demand a complete prefix rescan.
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
-        before = reopened.session._connection.execute(
-            f"SELECT * FROM {CurrentNativeCursor.declared_name} WHERE owner_generation=2"
-        ).fetchone()
-        assert before is not None
-        with pytest.raises(IdentityConflict, match="borrows historical owner source proof"):
-            NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
-                owner_name="alpha-new"
-            )
-        after = reopened.session._connection.execute(
-            f"SELECT * FROM {CurrentNativeCursor.declared_name} WHERE owner_generation=2"
-        ).fetchone()
-        assert tuple(after) == tuple(before)  # No recovery mutation or replay.
+        assert NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+            owner_name="alpha-new", source_reads=source_reads,
+        ) is None
     assert len(calls) == 2
 
 
-async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery, source_reads):
     root, root_id, comms, _first, people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.cursor_status == "proven"
     lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
-    original = SourceCoverage.prefix
+    original = SourceCoverage.since
 
     def advance_generation(*args, **kwargs):
         coverage = original(*args, **kwargs)
@@ -241,29 +245,33 @@ async def test_reconnect_rechecks_sql_generation_after_proof_scan(tmp_path, monk
         args[0].store.participants.advance_generation(lookup, "alpha", expected_generation=1)
         return coverage
 
-    monkeypatch.setattr(SourceCoverage, "prefix", advance_generation)
+    monkeypatch.setattr(SourceCoverage, "since", advance_generation)
     with Coordination(str(root / "coordination.sqlite3")) as store:
         with pytest.raises(StaleFence, match="participant generation changed"):
-            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(owner_name="alpha")
+            NativeSourceCursor(comms.bus, store, wire_root_id=root_id).read(
+                owner_name="alpha", source_reads=source_reads
+            )
         assert store.participants.get(lookup).participant_generation == 2
         retained = store.session._connection.execute(
             f"SELECT owner_generation,input_id FROM {CurrentNativeCursor.declared_name}"
         ).fetchall()
         assert [tuple(row) for row in retained] == [(1, result.input_id)]
-    monkeypatch.setattr(SourceCoverage, "prefix", original)
+    monkeypatch.setattr(SourceCoverage, "since", original)
     with Coordination(str(root / "coordination.sqlite3")) as reopened:
         assert (
-            NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(owner_name="alpha")
+            NativeSourceCursor(comms.bus, reopened, wire_root_id=root_id).read(
+                owner_name="alpha", source_reads=source_reads
+            )
             is None
         )
     assert len(calls) == 1  # No cursor read replays the old native input.
 
 
-async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, monkeypatch, *, native_runtime_package):
+async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     root, root_id, comms, _first, _people = _root(tmp_path)
     fake, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr(TrackedTurnSession, "execute", fake)
-    original = SourceCoverage.prefix
+    original = SourceCoverage.since
 
     def replace_source(*args, **kwargs):
         result = original(*args, **kwargs)
@@ -273,9 +281,13 @@ async def test_replaced_bus_between_coverage_and_commit_omits_cursor(tmp_path, m
         os.replace(replacement, comms.bus.log.path)
         return result
 
-    monkeypatch.setattr(SourceCoverage, "prefix", replace_source)
+    monkeypatch.setattr(SourceCoverage, "since", replace_source)
     result = await runtime.SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="alpha", native_package=native_runtime_package
+        root=root,
+        wire_root_id=root_id,
+        owner_name="alpha",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert result is not None and result.cursor_status == "unavailable" and len(calls) == 1
     with Coordination(str(root / "coordination.sqlite3")) as store:

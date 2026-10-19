@@ -1,20 +1,10 @@
 // Pi owns the normal coding tools. The existing owner socket allows each call.
-import { requestOwnerTool } from "./owner_tool_socket.mjs";
-
 export default function channelCodingTools(pi) {
-  pi.on("tool_call", async (event) => {
-    const path = process.env.AGENT_COMMS_SELECTED_TOOL_SOCKET;
-    const token = process.env.AGENT_COMMS_SELECTED_TOOL_TOKEN;
-    if (!path || !/^[0-9a-f]{64}$/.test(token ?? "")) {
-      return { block: true, reason: "Channel coding owner is unavailable; no tool was started." };
-    }
-    const request = Buffer.from(JSON.stringify({ token, call_id: event.toolCallId,
-      name: event.toolName, arguments: event.input }) + "\n", "utf8");
-    if (request.length > 1024 * 1024) return { block: true, reason: "Coding tool request exceeds the native RPC record bound." };
+  pi.on("tool_call", async (event, context) => {
     try {
-      const response = await requestOwnerTool(
-        path,
-        request,
+      const response = await context.ownerTools.request(
+        { call_id: event.toolCallId, name: event.toolName, arguments: event.input },
+        1024 * 1024,
         16384,
         "Tool claim outcome UNKNOWN; inspect before retrying.",
       );

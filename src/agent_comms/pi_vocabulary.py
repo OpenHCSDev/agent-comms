@@ -123,6 +123,12 @@ class ToolUseStopReason(PiStopReason, declared_name="toolUse"):
     tool_round = True
 
     @classmethod
+    async def apply(cls, session, message):
+        session.accept_tool_round(message)
+        async for event in super().apply(session, message):
+            yield event
+
+    @classmethod
     def tracked(cls, session, message):
         if not session.accept_tool_round(message):
             return super().tracked(session, message)

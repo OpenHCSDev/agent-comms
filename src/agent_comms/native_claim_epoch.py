@@ -37,7 +37,7 @@ class NativeClaimEpoch(DeclaredFamily, JsonShapeFamily, affix="NativeClaim"):
 
     @abstractmethod
     def recovery_session_files(self, row, stopped_owner) -> tuple[Path, ...]:
-        """Original input selection, or the exact stopped registry owner's selection."""
+        """Find session files for the input's selection or the stopped process's selection."""
 
 
 @dataclass(frozen=True)

@@ -25,8 +25,6 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "AGENT_COMMS_PROJECT_REQUEST",
     "AGENT_COMMS_PROJECT_SOCKET",
     "AGENT_COMMS_ROOT",
-    "AGENT_COMMS_SELECTED_TOOL_SOCKET",
-    "AGENT_COMMS_SELECTED_TOOL_TOKEN",
     "AGENT_COMMS_THREAD",
     "PI_PARENT_ID",
     "PI_SESSION_FILE",
@@ -34,7 +32,6 @@ _MANAGED_RUNTIME_ENVIRONMENT = frozenset({
     "PI_TASK",
     "PI_WORKTREE",
 })
-
 
 
 def reader(root: Path) -> Comms:
@@ -61,6 +58,21 @@ def pytest_addoption(parser):
 
     parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
                      help="Root of the native test environments stack/bin/pi-native-test-env builds")
+
+
+@pytest.fixture
+def source_reads():
+    from agent_comms.native_entries import NativeEvidenceScope
+
+    with NativeEvidenceScope() as scope:
+        yield scope
+
+
+@pytest.fixture
+def cursor_delivery(source_reads):
+    from agent_comms.cursor_publication import CursorDelivery
+
+    return CursorDelivery(source_reads=source_reads)
 
 
 @pytest.fixture(scope="session")
@@ -122,6 +134,12 @@ def declared_native_package(tmp_path, monkeypatch):
     package = deployment / "node_modules/@earendil-works/pi-coding-agent"
     (package / "dist").mkdir(parents=True)
     (package / "dist/cli.js").write_text("// This fixture never starts Node.\n")
+    from agent_comms.native_tools import NativeToolDeclaration
+
+    for tool in NativeToolDeclaration.members_with(NativeToolDeclaration):
+        extension = tool.native_extension(package)
+        extension.parent.mkdir(parents=True, exist_ok=True)
+        extension.write_text("// Construction-only native tool extension.\n")
     manifest = tmp_path / "pin"
     manifest.write_text(native_package.TREE_PREFIX + native_package.package_tree_digest(package) + "\n")
     monkeypatch.setattr(native_package, "MANIFEST", manifest)
@@ -394,7 +412,6 @@ def native_rpc_fixture(monkeypatch):
             SelectedSession.for_launch(
                 Path(worktree),
                 Path(session_file) if session_file is not None else None,
-                package,
             ),
             package,
             root=Path(root), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit(env),

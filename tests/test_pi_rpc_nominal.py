@@ -14,7 +14,8 @@ import pytest
 import agent_comms.pi_commands as commands
 import agent_comms.pi_events as pi
 import agent_comms.turn_failure as failures
-from agent_comms.backend import TurnSession
+from agent_comms.native_session_prepare import NativeSessionPreparation
+from agent_comms.native_tool_call import OwnerToolConnection
 from agent_comms.native_startup import NativeStartup
 from agent_comms.native_pi import NativePiRpcLaunch
 from agent_comms.pi_native_backend import PersistentPiSession
@@ -105,8 +106,8 @@ def test_phase_watchdogs_and_overlapping_tools_preserve_protocol_semantics():
     ),
 )
 def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
-    session = TurnSession(
-        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})), "unused",
+    session = NativeSessionPreparation(
+        NativePiRpcLaunch(("unused",), Path.cwd(), {}, SelectedSession(Path.cwd()), Path.cwd(), root=Path.cwd(), runtime=LaunchRuntime.running(), configuration=RestartEnvironment.inherit({})),
         native_session=PersistentPiSession(), startup=NativeStartup(Path.cwd()),
     )
     for cls in (left, right, left):
@@ -119,11 +120,12 @@ def test_failure_precedence_text_and_uncertainty_have_one_owner(left, right):
 
 
 def test_external_formats_are_derived_and_pin_wire_spellings():
-    assert commands.Prompt(id="p", input_id="n", message="hello").to_rpc() == {
+    assert commands.Prompt(id="p", input_id="n", message="hello", owner_tools=OwnerToolConnection("/unused", "a" * 64)).to_rpc() == {
         "type": "prompt",
         "id": "p",
         "inputId": "n",
         "message": "hello",
+        "ownerTools": {"path": "/unused", "token": "a" * 64},
     }
     assert commands.SetModel(id="s", provider="configured", model_id="kept").to_rpc() == {
         "type": "set_model",
@@ -187,7 +189,7 @@ async def test_fragmented_cancelled_line_remains_intact_in_the_only_reader():
 @pytest.mark.parametrize(
     "row", [b'{"type":"response","type":"agent_settled"}\n', b"[]\n", b"{}", b"\xff\n"]
 )
-def test_strict_native_decoding_cannot_certify_malformed_rows(row):
+def test_strict_native_decoding_cannot_check_malformed_rows(row):
     with pytest.raises((ValueError, UnicodeError)):
         PiRpcChannel.decode_record(row, strict=True)
 
@@ -276,7 +278,7 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
         awaiting_native_attestation=False,
         stats=SimpleNamespace(requested=False),
         prompt_state=SimpleNamespace(awaiting_start=True),
-        active_tools=set(),
+        tool_socket=SimpleNamespace(active_tools=set()),
     )
     watchdog.phase = ModelWaitPhase()
     wait = watchdog.wait_for(session)
@@ -286,5 +288,5 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     watchdog.progress()
     assert wait.timeout() == 180.0
     watchdog.phase = ModelWaitPhase().on(pi.ToolExecutionStart(), {"tool"})
-    session.active_tools = {"tool"}
+    session.tool_socket.active_tools = {"tool"}
     assert watchdog.wait_for(session).timeout() is None

@@ -1,11 +1,9 @@
-"""Oversized inbox output remains inspectable without acknowledging unseen messages."""
+"""Inbox pages drain oldest first without changing uncertain inputs."""
 
-import hashlib
+import asyncio
 import json
 import os
-import stat
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -14,7 +12,9 @@ from agent_comms.goal_actions import SetGoalAction
 from agent_comms.input_attempt import BoundUnknownInput
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.threads import Thread
-from agent_comms.tool_output import MAX_INLINE_OUTPUT_BYTES, materialize_oversized_output
+from agent_comms.tool_output import MAX_INLINE_OUTPUT_BYTES
+from agent_comms.message_page import MessageReadRequest, PageBounds
+from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.tools import invoke_tool
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.field_codec import FieldCodec
@@ -48,42 +48,26 @@ def inbox_comms(root):
 
 
 @pytest.mark.parametrize("count,text", [(930, "historical input " * 65), (1, "🧪漢" * 40_000)])
-def test_large_inbox_is_bounded_lossless_private_and_does_not_ack(inbox_comms, count, text):
+def test_large_uncertain_inputs_do_not_stop_the_message_page_draining(inbox_comms, count, text):
     comms = inbox_comms
     ledger = seed_unknown(comms, count, text)
     comms.messaging.send("a", "b", "An unread new message").message.message_id
     authority_before = ledger.path.read_bytes()
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b")],
-        "acknowledged": 0,
+        "acknowledged": 1,
+        "remaining": 0,
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
     }
 
     result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
 
-    assert len(json.dumps(result, indent=2).encode()) < MAX_INLINE_OUTPUT_BYTES
-    assert result["complete"] is False
-    assert result["ackDeferred"] is True
-    assert result["acknowledged"] == 0
-    assert result["counts"] == {"messages": 1, "unresolved_inputs": count}
-    assert result["messages"] == result["unresolved_inputs"] == []
-    assert "omitted" in result["instruction"]
-    assert "selectively" in result["instruction"]
-    assert comms.bus.pending_count("b") == 1
+    assert result == expected
+    assert comms.bus.pending_count("b") == 0
     assert ledger.path.read_bytes() == authority_before
-    artifact = Path(result["result_file"])
-    assert artifact.parent == comms.root / "tool-output"
-    assert json.loads(artifact.read_text()) == expected
-    assert artifact.stem == hashlib.sha256(artifact.read_bytes()).hexdigest()
-    if os.name == "posix":
-        assert stat.S_IMODE(artifact.stat().st_mode) == 0o600
-        assert stat.S_IMODE(artifact.parent.stat().st_mode) == 0o700
-    assert "private-native-prompt" not in artifact.read_text()
-    assert "native_id" not in artifact.read_text()
-    snapshot_stat = artifact.stat()
-    assert invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller()) == result
-    assert artifact.stat().st_ino == snapshot_stat.st_ino
-    assert artifact.stat().st_mtime_ns == snapshot_stat.st_mtime_ns
+    assert not (comms.root / "tool-output").exists()
+    assert "private-native-prompt" not in json.dumps(result)
+    assert "native_id" not in json.dumps(result)
 
 
 @pytest.mark.parametrize("ack", [False, True])
@@ -94,6 +78,7 @@ def test_small_inbox_keeps_existing_contract(inbox_comms, ack):
     expected = {
         "messages": [message.to_wire() for message in comms.bus.inbox("b")],
         "acknowledged": int(ack),
+        "remaining": int(not ack),
         "unresolved_inputs": FieldCodec.encode(comms.goals.unresolved_inputs("b")),
     }
     authority_before = ledger.path.read_bytes()
@@ -123,24 +108,21 @@ def test_message_arriving_between_inbox_read_and_ack_remains_unread(
     assert [message["text"] for message in remaining["messages"]] == ["arrived after read"]
 
 
-def test_publication_failure_precedes_ack(inbox_comms, monkeypatch):
+@pytest.mark.parametrize("limit", [0, -1])
+def test_invalid_page_limit_precedes_ack(inbox_comms, limit):
     comms = inbox_comms
     ledger = seed_unknown(comms, 1, "body" * 20_000)
     comms.messaging.send("a", "b", "Still unread after failure").message.message_id
     authority_before = ledger.path.read_bytes()
 
-    def fail(*args, **kwargs):
-        raise OSError("artifact publication failed")
-
-    monkeypatch.setattr("agent_comms.tool_output._atomic_write_text", fail)
-    with pytest.raises(OSError, match="artifact publication failed"):
-        invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
+    with pytest.raises(ValueError, match="limit must be positive"):
+        invoke_tool(comms, "comms_inbox", {"thread": "b", "limit": limit}, caller=NoThreadCaller())
     assert comms.bus.pending_count("b") == 1
     assert ledger.path.read_bytes() == authority_before
 
 
 @pytest.mark.parametrize("large_body", ["large relevant reply " * 5_000, "🧪" * 3_000])
-def test_oversized_standby_exposes_counts_without_unseen_review_keys(
+def test_large_standby_review_returns_complete_messages_without_files(
     inbox_comms, monkeypatch, large_body
 ):
     comms = inbox_comms
@@ -184,11 +166,10 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
         "comms_inbox",
         {"thread": "b", "ack": False, "standby": {"goal_id": goal.id, "wait_for": ["a"]}}, caller=NoThreadCaller(),
     )
-    assert result["standby_review"] == {
-        "complete": False,
-        "counts": {"messages": 1, "already_reviewed_inputs": 1, "excluded_inputs": 1},
-    }
-    assert result["ackDeferred"] is False
+    assert result["standby_review"] == FieldCodec.encode(review)
+    assert result["acknowledged"] == 0
+    assert result["remaining"] == 2
+    assert not (comms.root / "tool-output").exists()
     assert stored_inputs(dispositions.root) == before
     report = {
         "goal_id": goal.id,
@@ -199,7 +180,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     with pytest.raises(ValueError, match="pending or UNKNOWN"):
         invoke_tool(comms, "comms_goal", report, caller=ThreadCaller("b"))
     assert stored_inputs(dispositions.root) == before
-    full_review = json.loads(Path(result["result_file"]).read_text())["standby_review"]
+    full_review = result["standby_review"]
     assert full_review == FieldCodec.encode(review)
     assert full_review["messages"][0]["text"] == messages[0].body
     comms.registry.register(
@@ -216,30 +197,7 @@ def test_oversized_standby_exposes_counts_without_unseen_review_keys(
     assert not stored_inputs(dispositions.root).rows.get("acp:owner-input").goal_reviews
 
 
-def test_materialization_measures_escaped_transport_bytes(tmp_path):
-    response = {"text": "🧪" * 3_000}
-    assert len(json.dumps(response, ensure_ascii=False).encode()) < MAX_INLINE_OUTPUT_BYTES
-    assert len(json.dumps(response, indent=2).encode()) > MAX_INLINE_OUTPUT_BYTES
-    artifact = materialize_oversized_output(tmp_path, response)
-    assert artifact is not None
-    assert json.loads(artifact.read_text()) == response
-
-
-def test_cached_materialization_restores_private_modes_and_corrupt_content(tmp_path):
-    response = {"text": "public result " * 3_000}
-    artifact = materialize_oversized_output(tmp_path, response)
-    artifact.chmod(0o644)
-    artifact.parent.chmod(0o755)
-    assert materialize_oversized_output(tmp_path, response) == artifact
-    if os.name == "posix":
-        assert stat.S_IMODE(artifact.stat().st_mode) == 0o600
-        assert stat.S_IMODE(artifact.parent.stat().st_mode) == 0o700
-    artifact.write_text("accidentally changed snapshot")
-    assert materialize_oversized_output(tmp_path, response) == artifact
-    assert json.loads(artifact.read_text()) == response
-
-
-def test_small_dependency_review_stays_inline_despite_large_excluded_history(
+def test_dependency_review_and_ack_survive_large_excluded_history(
     inbox_comms, monkeypatch
 ):
     comms = inbox_comms
@@ -288,21 +246,14 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     review = result["standby_review"]
     assert [row["text"] for row in review["messages"]] == [messages[1].body]
     assert review["reviewed_inputs"] == [f"bus:{messages[1].seq}"]
-    assert review["messages_complete"] is True and review["complete"] is False
     assert review["goal_id"] == goal.id and review["wait_for"] == ["a"]
-    assert review["counts"] == {
-        "messages": 1,
-        "already_reviewed_inputs": 1,
-        "excluded_inputs": 930,
-    }
-    assert "excluded_inputs" not in review and "already_reviewed_inputs" not in review
-    assert len(json.dumps(result, indent=2).encode()) <= MAX_INLINE_OUTPUT_BYTES
-    assert result["complete"] is False and result["ackDeferred"] is True
-    assert result["acknowledged"] == 0 and comms.bus.pending_count("b") == 2
+    assert len(review["already_reviewed_inputs"]) == 1
+    assert len(review["excluded_inputs"]) == 930
+    assert result["acknowledged"] == 2 and comms.bus.pending_count("b") == 0
+    assert result["remaining"] == 0
     assert stored_inputs(dispositions.root) == before
-    full = json.loads(Path(result["result_file"]).read_text())
-    assert full["standby_review"] == FieldCodec.encode(comms.goals.goal_input_review("b", goal.id, ["a"]))
-    assert len(full["standby_review"]["excluded_inputs"]) == 930
+    assert review == FieldCodec.encode(comms.goals.goal_input_review("b", goal.id, ["a"]))
+    assert not (comms.root / "tool-output").exists()
     report = {
         "goal_id": goal.id,
         "status": "standby",
@@ -330,3 +281,73 @@ def test_small_dependency_review_stays_inline_despite_large_excluded_history(
     assert isinstance(comms.goals.goal_wait("b"), RecordedGoalWait)
     assert stored_inputs(dispositions.root).rows[f"bus:{messages[1].seq}"].declared_name == "reserved"
     assert not stored_inputs(dispositions.root).rows.get("acp:owner-0").goal_reviews
+
+
+def test_300_unread_messages_drain_in_three_limited_calls(inbox_comms, monkeypatch):
+    comms = inbox_comms
+    expected = [comms.messaging.send("a", "b", str(index)).message for index in range(300)]
+    decoded = []
+    read = MessageReadRequest.indexed_records
+
+    def counted(request, source, rows):
+        for row in read(request, source, rows):
+            decoded[-1] += 1
+            yield row
+
+    monkeypatch.setattr(MessageReadRequest, "indexed_records", counted)
+    returned = []
+    for remaining in (200, 100, 0):
+        decoded.append(0)
+        result = invoke_tool(
+            comms, "comms_inbox", {"thread": "b", "limit": 100}, caller=NoThreadCaller(),
+        )
+        assert len(result["messages"]) == result["acknowledged"] == 100
+        assert result["remaining"] == comms.bus.pending_count("b") == remaining
+        assert len(json.dumps(result, indent=2).encode()) < MAX_INLINE_OUTPUT_BYTES
+        returned.extend(result["messages"])
+    assert returned == [message.to_wire() for message in expected]
+    assert decoded == [101, 101, 100]  # One message of lookahead, not the backlog.
+    assert not (comms.root / "tool-output").exists()
+
+
+def test_inbox_byte_budget_and_no_ack_keep_the_next_page_unread(inbox_comms):
+    comms = inbox_comms
+    expected = [comms.messaging.send("a", "b", str(index)).message for index in range(5)]
+    page = comms.bus.inbox_at("b", comms.registry.snapshot(), bounds=PageBounds(limit=4, max_bytes=280))
+    assert page.page.messages == tuple(expected[:2])
+    assert page.page.bytes_read <= 280
+    assert page.remaining == 3
+    for _ in range(2):
+        result = invoke_tool(
+            comms, "comms_inbox", {"thread": "b", "limit": 2, "ack": False}, caller=NoThreadCaller(),
+        )
+        assert result["messages"] == [message.to_wire() for message in expected[:2]]
+        assert result["acknowledged"] == 0 and result["remaining"] == 5
+        assert comms.bus.pending_count("b") == 5
+
+
+def test_one_oversized_message_makes_progress_without_a_snapshot(inbox_comms):
+    comms = inbox_comms
+    first = comms.messaging.send("a", "b", "🧪" * 40_000).message
+    second = comms.messaging.send("a", "b", "next page").message
+    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
+    assert result["messages"] == [first.to_wire()]
+    assert result["acknowledged"] == result["remaining"] == 1
+    result = invoke_tool(comms, "comms_inbox", {"thread": "b"}, caller=NoThreadCaller())
+    assert result["messages"] == [second.to_wire()]
+    assert result["acknowledged"] == 1 and result["remaining"] == 0
+    assert not (comms.root / "tool-output").exists()
+
+
+@pytest.mark.asyncio
+async def test_watch_drains_multiple_pages_without_another_file_event(inbox_comms):
+    comms = inbox_comms
+    expected = [comms.messaging.send("a", "b", str(index)).message for index in range(201)]
+    watcher = comms.bus.watch("b", acknowledgment=ExplicitWatchAcknowledgment)
+    try:
+        async with asyncio.timeout(5):
+            received = [await anext(watcher) for _ in expected]
+    finally:
+        await watcher.aclose()
+    assert received == expected
+    assert comms.bus.pending_count("b") == len(expected)

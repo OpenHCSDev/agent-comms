@@ -32,23 +32,21 @@ from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
 from agent_comms.registry_store import RegistryStore
+from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, RetainedBus
+from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
+from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 from tools.upgrade_bus import (
-    Backup,
     Revisions,
     Stack,
-    UpgradeRefused,
     before_stop,
-    bus_files,
     carried,
     carry_all,
-    transcripts_held,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -115,36 +113,6 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
     assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
         ("carry_a", held), ("carry_b", "HEAD")]
 
-
-
-def test_retirement_requires_every_retained_bus_to_have_applied_the_step(tmp_path):
-    repo = Repository(tmp_path)
-    bus_root = tmp_path / "laptop-bus"
-    bus_root.mkdir()
-    declarations = repo.path / STEPS / RetainedBus.filename
-    repo.commit({"carry_a": step_source(None), "carry_b": step_source("carry_a")})
-    buses = [
-        {"name": "laptop", "root": str(bus_root), "applied": ["carry_a"]},
-        {"name": "desktop", "root": "/desktop/bus", "applied": []},
-    ]
-    declarations.write_text(json.dumps(buses))
-    repo.commit({"carry_a": None, "carry_b": step_source(None)})
-    with pytest.raises(ValueError, match="desktop.*carry_a"):
-        CarryChain.at(tmp_path, "HEAD")
-    repo.commit({"carry_b": step_source("carry_a")})
-    restored = CarryChain.at(tmp_path, "HEAD")
-    assert [step.name for step in restored.pending(("carry_b",))] == ["carry_a"]
-    repo.commit({"carry_b": step_source(None)})
-    buses[1]["applied"] = ["carry_a"]
-    buses[0]["applied"] = []
-    declarations.write_text(json.dumps(buses))
-    repo.commit({"carry_b": step_source(None)})
-    with pytest.raises(ValueError, match="laptop.*carry_a"):
-        CarryChain.at(tmp_path, "HEAD")
-    buses[0]["applied"] = ["carry_a"]
-    declarations.write_text(json.dumps(buses))
-    repo.commit({"carry_b": step_source(None)})
-    assert CarryChain.at(tmp_path, "HEAD").retired == {"carry_a"}
 
 
 def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):
@@ -317,7 +285,8 @@ def test_an_older_checkout_upgrades_through_both_passes_with_the_target_src(tmp_
     (tmp_path / "checkout/src").mkdir(parents=True)
     repo = Repository(tmp_path / "checkout")
     (repo.path / "src/probe_api.py").write_text("OLD = 1\n")
-    older = repo.commit({"carry": (REPO / STEPS / "carry.py").read_text()})
+    older = repo.commit({name: (REPO / STEPS / f"{name}.py").read_text()
+                         for name in ("carry", "backup")})
     (repo.path / "src/probe_api.py").write_text("OLD = 1\nNEW = 2\n")
     newer = repo.commit({"carry_probe": (
         "from probe_api import NEW\n\nfrom cutover.carry import Carried, Carry\n\n\n"
@@ -396,7 +365,7 @@ def retained_read_ledger(root: Path) -> None:
     ))
 
 
-def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_path, monkeypatch):
+def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_path, monkeypatch, capsys):
     """Storage roots/read keys are current; the remaining carries preserve retained data.
     Todo messages are installed before orders validate the current declaration."""
     tmp_path.chmod(0o700)
@@ -423,7 +392,16 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     route.chmod(0o600)
 
     chain = CarryChain.at(REPO, "HEAD").steps
-    steps = [step.name for step in chain if step.revision == "HEAD"]
+    steps = {step.name: step.current(REPO) for step in chain if step.revision == "HEAD"}
+
+    def invoke(name, *flags):
+        # Exercise the real CLI owner without starting a fresh interpreter for every
+        # dry/apply/repeat. The target-src test separately proves process isolation.
+        with monkeypatch.context() as call:
+            call.setattr(sys, "argv", [name, str(root), *flags])
+            steps[name].main()
+        return json.loads(capsys.readouterr().out)
+
     for name in steps:
         # The older bus ran each deleted step while the tree still held it.
         for deleted in chain[len(CarryLedger(root).applied()):]:
@@ -431,10 +409,10 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
                 break
             CarryLedger(root).record(deleted.name)
         before = bus_files(root)
-        carried(root, before, [run_step(name, root)])
-        applied = run_step(name, root, "--apply")
+        carried(root, before, [invoke(name)])
+        applied = invoke(name, "--apply")
         carried(root, before, [applied])
-        assert run_step(name, root)["changed"] == 0, name
+        assert invoke(name)["changed"] == 0, name
     assert CarryLedger(root).applied() == tuple(step.name for step in chain)
 
     (thread,) = Comms(root).registry.snapshot().threads.values()
@@ -552,6 +530,10 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
     from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
 
     comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
+    reviews = RuleReviews(comms.root)
+    reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
+    reviews.write("claude-ai", AnsweredRuleReviewEntry(
+        1, "This check exercises upgrade_bus.py:158 through the connector's declared caller with its required rule review."))
     runtimes = {name: tmp_path / name / "bin/python" for name in ("installed", "other")}
     for runtime in runtimes.values():
         runtime.parent.mkdir(parents=True)
@@ -647,7 +629,8 @@ def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms)
 
     with transcripts_held(comms.root):
         before = bus_files(comms.root)
-        backup = Backup.take(comms.root, comms.root.parent / "no-route.json")
+        backup = Backup.take(comms.root, comms.root.parent / "no-route.json",
+                             (comms.root,), comms.root.parent / 'backup')
         assert bridge_publishes(comms.root).endswith("database is locked")
         assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
         backup.restore()  # the carry aborted

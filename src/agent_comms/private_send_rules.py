@@ -149,7 +149,13 @@ class RegistryTurnRule(ReservationRule):
     explanation = "The exact captured active turn changed."
 
     def violated(self, check: RegistryClaimCheck) -> bool:
-        return check.actual.turn_lease != check.expected.turn_lease
+        # Compare the captured references, not two fresh reads of mutable records.
+        # Revoking a claim makes both reads return None; it does not make the
+        # captured turn current again. The generation also fences idle captures.
+        return (
+            check.actual.turn_record != check.expected.turn_record
+            or check.actual.turn_generation != check.expected.turn_generation
+        )
 
 
 class RegistryGoalRule(ReservationRule):

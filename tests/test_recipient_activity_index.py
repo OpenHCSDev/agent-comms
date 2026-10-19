@@ -36,7 +36,7 @@ def test_recipient_index_is_built_once_and_reused_for_small_window(tmp_path):
     for index in range(12):
         comms.registry.declare(comms.registry.new_thread(f'peer-{index}', frozenset(), str(tmp_path), created_at=1700000000.0 + index))
     sent = comms.messaging.send_user_message("peer-7", "original recipient", worktree=str(tmp_path))
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         original = source.delivery(sent.seq)
     snapshot = comms.registry.snapshot()
     assert snapshot.threads
@@ -180,7 +180,7 @@ def test_viewer_selects_the_outcomes_of_a_delivery_window(tmp_path, viewer_of, s
     for name in ("sender", "peer-a", "peer-b"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({"ci"}), str(tmp_path)))
     sent = comms.messaging.send("sender", "#ci", "channel outcome").message
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         original = source.delivery(sent.seq)
     lookups = {name: thread.incarnation.lookup
                for name, thread in comms.registry.snapshot().threads.items()}

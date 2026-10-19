@@ -99,7 +99,9 @@ class Thread(ThreadProvenance):
     )
     title: str | None = field(default=None, kw_only=True,
                              metadata={"registration_inheritance": InheritMissing})
-    role: type[ThreadRole] = AgentThreadRole
+    role: type[ThreadRole] = field(
+        default=AgentThreadRole, metadata={"registration_inheritance": InheritPrevious}
+    )
     execution: type[ThreadExecution] = field(default=NativeThreadExecution, kw_only=True,
                                             metadata={"wire_omit_default": True})
     backend: type[AgentBackend] = field(
@@ -124,14 +126,19 @@ class Thread(ThreadProvenance):
         """A project this conversation ran in, or this unit's physical home and extra checkouts."""
         return self.ran_in(worktree) or Path(worktree).expanduser().resolve() in rule.checkouts_of(self)
 
+    @property
+    def project_path(self) -> Path:
+        """The physical current project declared by this thread."""
+        return Path(self.worktree).expanduser().resolve()
+
     def ran_in(self, worktree: str) -> bool:
         """The current project or one this conversation moved away from."""
         selected = Path(worktree).expanduser().resolve()
-        return selected == Path(self.worktree).expanduser().resolve() or selected in self.earlier_projects
+        return selected == self.project_path or selected in self.earlier_projects
 
     def moved_to_project(self, project: str) -> Thread:
         """A running turn finishes where it started and owes one turn in the new project."""
-        earlier = Path(self.worktree).expanduser().resolve()
+        earlier = self.project_path
         current = Path(project).expanduser().resolve()
         return replace(
             self, worktree=project,
@@ -379,12 +386,12 @@ class Thread(ThreadProvenance):
         return lease is not None and (lease.identity, lease.turn_id) == (identity, turn.value)
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
-        """Bind a certified authored row to this preparation's original turn cut.
+        """Check whether a task record can refer to this thread's current or preceding turn.
 
-        Beginning a lease clears last_finished_turn_id. The preceding allocation
-        is still derived from the original monotonic turn owner, not copied into
-        a timing register. Its row supplied the original authorized ID/generation.
-        Neither allocation nor finishing supplies subtask completion.
+        Reject a different thread registration. During a turn, accept its exact
+        ID and generation or the immediately preceding generation. When idle,
+        require a matching generation and a recorded finished turn.
+        Neither starting nor finishing a turn proves a subtask was completed.
         """
         if identity.incarnation != self.incarnation:
             return False

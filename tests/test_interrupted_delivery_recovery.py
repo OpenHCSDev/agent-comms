@@ -39,7 +39,7 @@ async def test_interrupted_following_delivery_recovers_only_before_native_send(
 
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup, owner.name)
-        with comms.bus.log.certified_read() as source:
+        with comms.bus.log.checked_read() as source:
             deliveries = tuple(source.references(tuple(row.source for row in assignments)))
     # Freeze the original storage operation without placing its live result,
     # representing an owner that died after reservation and before queue handoff.
@@ -107,7 +107,7 @@ async def test_empty_delivery_recovery_opens_no_coordinator(tmp_path, monkeypatc
         await agent.shutdown()
 
 
-async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_path, monkeypatch):
+async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_path, monkeypatch, *, cursor_delivery):
     from agent_comms.selected_participant import SelectedParticipant
     from agent_comms.turn_input_source import SelectedOriginalInput
     from agent_comms.turn_phase import PromptAcceptancePhase
@@ -130,7 +130,9 @@ async def test_selected_phase_and_delivery_share_wire_without_blocking_loop(tmp_
     monkeypatch.setattr(DeliveredInput, "remaining_capacity", staticmethod(hold_inside_delivery))
     try:
         with Coordination(str(path)) as store:
-            async with SelectedParticipant.select(comms, store, root_id, "beta", 0) as selected:
+            async with SelectedParticipant.select(
+                comms, store, root_id, "beta", 0, cursor_delivery=cursor_delivery
+            ) as selected:
                 assert selected is not None
                 leased = selected.owner.thread
                 inbox = agent.inputs.bind_native_turn("beta", leased)
@@ -176,7 +178,7 @@ async def test_recovery_without_paused_assignments_is_read_only(tmp_path, monkey
     await _accept_visible_deliveries(comms.bus, root_id, store_path, lookup, 0, owner_name="beta")
     with Coordination(str(store_path)) as store:
         assignments = pending_sealed_assignments(store, lookup, "beta")
-        with comms.bus.log.certified_read() as source:
+        with comms.bus.log.checked_read() as source:
             deliveries = tuple(source.references(tuple(row.source for row in assignments)))
     reserved = []
     await Coordination.run_worker(partial(

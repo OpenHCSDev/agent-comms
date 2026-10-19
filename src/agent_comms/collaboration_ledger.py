@@ -10,7 +10,7 @@ from .store_files import _store_lock
 
 
 @dataclass(frozen=True, slots=True)
-class CollaborationLedger(SharedLedger):
+class CollaborationLedger(SharedLedger, lock_rank=8):
     registry: Registration
 
     def merge(self, updates: Mapping[str, object], author: str) -> None:

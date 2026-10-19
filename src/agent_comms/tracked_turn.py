@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from abc import ABC, abstractmethod
 from collections.abc import Awaitable, Callable, Mapping
-from contextlib import AsyncExitStack
-from dataclasses import dataclass
+from contextlib import AsyncExitStack, ExitStack
+from dataclasses import dataclass, replace
 from functools import partial
+from itertools import islice
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Generic, TypeVar
@@ -19,12 +21,12 @@ from .backend import TurnSession
 from .coordinator import Coordination
 from .errors import RelationViolationError
 from .field_codec import Id128Text, MalformedRecord
+from .external_transcript import DraftRow
 from .following_inputs import FollowingInputs
 from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
-from .native_entries import NativeEntry
 from .native_package import VerifiedNativePackage
 from .native_pi import (
     NativeContextProof,
@@ -36,7 +38,7 @@ from .native_pi import (
 )
 from .native_prompt_send import UNGUARDED_PROMPT, PromptBoundary, PromptSendFailure
 from .native_startup import NativeStartup
-from .native_tool_call import NativeToolMode, NoNativeTools, SelectedToolDenied, ToolTransport
+from .native_tool_call import NativeToolMode, SelectedToolDenied
 from .pi_payloads import TextDelta
 from .pi_rpc import PiRpcChannel
 from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
@@ -48,6 +50,7 @@ from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
 if TYPE_CHECKING:
     from .agent_backend import TurnInbox
     from .coordinated_runtime import NativeExecution
+    from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
     from .pi_native_backend import PersistentPiSession
 
@@ -61,7 +64,6 @@ class NoObserver:
 
 
 NO_NATIVE_OBSERVER = NoObserver()
-NO_NATIVE_TOOLS = NoNativeTools()
 NO_FOLLOWING_INPUTS = FollowingInputs()
 
 T = TypeVar("T")
@@ -219,7 +221,7 @@ class AmbiguousTrackedTerminal(PendingTrackedTerminal):
         return self
 
 
-class TrackedTurnSession(TurnSession, MroDispatch):
+class TrackedTurnSession(TurnSession):
     """Own one strict input/proof exchange; never grant publication or retry authority."""
 
     def __init__(
@@ -236,30 +238,33 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         observe_event: NativeObserver,
         request_observer: RequestObserver,
         pi_session: PersistentPiSession,
+        cursor_delivery: CursorDelivery,
         following: FollowingInputs,
     ):
         # The owner's Pi session child: an idle child left by its previous
         # input is reused when its launch and source still match.
         super().__init__(
             launch,
-            command.message,
+            command,
+            tool_mode=selected_tool_mode,
             model_wait=model_wait,
             startup=startup,
             request_observer=request_observer,
             native_session=pi_session,
         )
         self.retainable = False
-        self.command = command
+        self.cursor_delivery = cursor_delivery
         self.following = following
         self.rejected_commands: list[InputRefused] = []
         self.model = model
         self.prompt_send_boundary = prompt_send_boundary
         self.ingress = ingress
-        self.selected_tool_mode, self.observe_event = selected_tool_mode, observe_event
-        self.tool_socket: ToolTransport
+        self.observe_event = observe_event
         self.input_commit: NativeCommitObservation[pi.InputCommitted] = PendingNativeCommit()
         self.context_commit: NativeCommitObservation[pi.ContextCommitted] = PendingNativeCommit()
         self.text_parts: list[str] = []
+        self.draft_written_at = 0.0
+        self.draft_start = 0
         self.terminal: TrackedTerminal = PendingTrackedTerminal()
         self.finished = False
 
@@ -280,7 +285,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         prompt_send_boundary: PromptBoundary = UNGUARDED_PROMPT,
         ingress: MaintenanceIngress = UNCOORDINATED_INGRESS,
         startup: NativeStartup,
-        selected_tool_mode: NativeToolMode = NO_NATIVE_TOOLS,
+        selected_tool_mode: NativeToolMode,
         observe_event: NativeObserver = NO_NATIVE_OBSERVER,
         request_observer: RequestObserver = NO_REQUEST_OBSERVER,
         execution: NativeExecution,
@@ -307,7 +312,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             ))
         turn = cls(
             launch,
-            commands.Prompt(
+            partial(commands.Prompt,
                 id="native-prompt",
                 input_id=input_id,
                 message=prompt,
@@ -322,6 +327,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             observe_event=observe_event,
             request_observer=request_observer,
             pi_session=execution.pi_session,
+            cursor_delivery=execution.cursor_delivery,
             following=following,
         )
         return await turn.complete()
@@ -332,15 +338,18 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             # Exit this observation after every original resource callback.
             ownership.push(retirement)
             try:
-                self.ownership = ownership
+                drafts = ExitStack()
+                ownership.push_async_callback(Coordination.run_worker, drafts.close)
                 # Transport resources are the turn's innermost lifetime. Stop
                 # closes them before child cleanup can block, so an
                 # interrupted selected turn cannot leave its socket path behind.
                 async with AsyncExitStack() as transport:
                     self.native = await self.acquire_native(transport, reuse=True)
                     ownership.push_async_callback(self.retain_or_close)
+                    self.draft_publication = await Coordination.run_worker(partial(
+                        drafts.enter_context, DraftRow.publication(
+                            self.startup.root, self.command.input_id)))
                     await ownership.enter_async_context(self.native.failures())
-                    self.tool_socket.bind_process(self.native.proc.pid)
                     self.watchdog.reading()
                     try:
                         try:
@@ -376,12 +385,7 @@ class TrackedTurnSession(TurnSession, MroDispatch):
             return
         await self.native_session.close()
 
-    async def open_transport(self, ownership: AsyncExitStack) -> None:
-        self.tool_socket = await self.selected_tool_mode.open_transport(self, ownership)
 
-    @property
-    def active_tools(self):
-        return self.tool_socket.active_tools
 
     async def apply_native_event(self, event):
         await self.dispatch(event)
@@ -481,10 +485,10 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
             self.prompt_state = self.prompt_state.start(event)
-            self.evidence = self.ownership.enter_context(
-                NativeEntry.open_input_evidence(self.active_session_file)
-            )
-            await Coordination.run_worker(self.evidence.observe)
+            async with self.cursor_delivery.reading() as source_reads:
+                await Coordination.run_worker(lambda:
+                    source_reads.for_source(self.active_session_file).observe()
+                )
             await self.following.open(self)
 
     def forward_inbox(self, inbox: TurnInbox, sender: OwnedSend) -> None:
@@ -517,16 +521,30 @@ class TrackedTurnSession(TurnSession, MroDispatch):
         if event.assistant_message_event is not None:
             await self.dispatch(event.assistant_message_event)
 
+    async def assistant_started(self) -> None:
+        self.draft_written_at = 0.0
+        self.draft_start = len(self.text_parts)
+        self.draft_publication.begin_message(time.time())
+
     @handles(TextDelta)
     async def text_delta(self, delta: TextDelta) -> None:
         self.text_parts.append(delta.delta)
+        now = time.monotonic()
+        if now - self.draft_written_at >= .1:
+            await Coordination.run_worker(partial(
+                self.draft_publication.publish,
+                islice(self.text_parts, self.draft_start, None)))
+            self.draft_written_at = now
 
     @handles(pi.MessageEnd)
     async def message_end(self, event: pi.MessageEnd) -> None:
-        event.message.tracked_end(self)
+        await event.message.tracked_end(self)
 
     def accept_tool_round(self, message):
-        return self.tool_socket.accept_round(self, message.content)
+        super().accept_tool_round(message)
+        self.text_parts.clear()
+        self.terminal = self.terminal.tool_round()
+        return True
 
     def accept_final_message(self, message):
         self.tool_socket.assert_complete()
@@ -539,25 +557,19 @@ class TrackedTurnSession(TurnSession, MroDispatch):
     async def context_proof(self) -> NativeContextProof:
         if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-        # The original event consumer serializes observations. Cancellation
-        # waits for this read before closing the evidence reader.
-        return await Coordination.run_worker(partial(_verify_context,
-            self.active_session_file,
-            self.command.input_id,
-            self.native.attestation.identity.session_id,
-            self.input_commit.require(),
-            self.context_commit.require(),
-            evidence=self.evidence,
-        ))
+        # The recipient serializes this read with cursor and settlement reads.
+        # Cancellation joins the worker before its borrowed scope is released.
+        async with self.cursor_delivery.reading() as source_reads:
+            return await Coordination.run_worker(lambda: _verify_context(
+                self.active_session_file,
+                self.command.input_id,
+                self.native.attestation.identity.session_id,
+                self.input_commit.require(),
+                self.context_commit.require(),
+                evidence=source_reads.for_source(self.active_session_file),
+            ))
 
-    @handles(pi.ToolExecutionStart)
-    async def tool_started(self, event: pi.ToolExecutionStart) -> None:
-        await self.context_proof()
-        self.tool_socket.tool_started(event)
 
-    @handles(pi.ToolExecutionEnd)
-    async def tool_finished(self, event: pi.ToolExecutionEnd) -> None:
-        self.tool_socket.tool_finished(event, self.command.input_id)
 
     @handles(pi.AgentSettled)
     async def settled(self, event: pi.AgentSettled) -> None:

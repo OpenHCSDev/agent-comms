@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cutover import carry
+from . import carry
 
 from agent_comms.todos import Todo
 
 
 class TodoOpenIndexes(carry.TodoRows):
-    after = "carry_todo_verdicts"
+    after = "carry_order_run"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> carry.Carried:

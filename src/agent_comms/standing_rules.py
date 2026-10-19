@@ -96,13 +96,8 @@ class HuntDue(ReasonedStandingRule, DatedStandingRule):
 
     @classmethod
     def hunted(cls, comms: Comms, commander: str) -> float:
-        hunts = (
-            hunt
-            for todo in comms.goals.todos.history_for_commander(
-                comms.registry.require(commander).incarnation
-            )
-            for hunt in todo.hunts
-        )
+        hunts = comms.goals.todos.hunts_for_commander(
+            comms.registry.require(commander).incarnation)
         return max((hunt.at.recorded_at("A hunt") for hunt in hunts), default=0)
 
     @classmethod

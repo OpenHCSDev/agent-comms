@@ -1,7 +1,6 @@
 """An ending attempt cannot release a replacement just because its ID is reused."""
 
 import os
-from dataclasses import replace
 
 import pytest
 
@@ -9,7 +8,7 @@ from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
 from agent_comms.threads import Thread
-from agent_comms.turn_lease import ActiveTurn, FinishedTurnFence, NoFinishedTurn
+from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 
 
 def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypatch):
@@ -52,12 +51,18 @@ def test_revoked_claim_cleanup_cannot_attest_goal_completion(tmp_path):
     lease = comms.agents.begin_turn("owner", "turn").turn_lease
     comms.registry.archive("owner")
     assert comms.registry.release_turn(lease) == (True, NoFinishedTurn())
-    assert not comms.registry.require("owner").active_turn.executing
+    assert not comms.registry.require("owner").turn_record.read().executing
 
 
 def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_registration):
     owner = thread_registration.new_thread('owner', frozenset(), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
-    retained = replace(owner, active_turn=ActiveTurn("retained", owner.process_identity.require().pid))
-    restored = FieldCodec.decode(Thread, FieldCodec.encode(retained))
-    assert restored.active_turn == retained.active_turn
+    thread_registration.register(owner)
+    retained, _ = thread_registration.lease_local_turn('owner', 'retained')
+    expected = retained.turn_record.read().without_claim()
+    thread_registration.register(retained, new_owner=True)
+    # P482 stores the turn separately; the registry binds a decoded reference.
+    restored = thread_registration.store._bind_thread(
+        FieldCodec.decode(Thread, FieldCodec.encode(retained))
+    )
+    assert restored.turn_record.read() == expected
     assert restored.turn_lease is None

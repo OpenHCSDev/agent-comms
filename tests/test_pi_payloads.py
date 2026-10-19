@@ -199,7 +199,7 @@ def test_optional_native_observations_have_named_absence_and_one_serialization()
         assert FieldCodec.decode(type(event), FieldCodec.encode(event)) == event
 
 
-def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
+async def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
     event = decode({
         "type": "message_end",
         "message": {"role": "assistant", "content": [], "stopReason": "error", "errorMessage": "original provider rejection"},
@@ -207,8 +207,9 @@ def test_native_terminal_reason_owns_error_detail_without_a_second_verdict():
     from agent_comms.turn_failure import ModelRequestFailed
     from agent_comms.turn_output import TurnOutput
 
-    session = SimpleNamespace(output=TurnOutput())
-    event.message.tracked_end(session)
+    from agent_comms.external_transcript import DraftPublication
+    session = SimpleNamespace(output=TurnOutput(), draft_publication=DraftPublication())
+    await event.message.tracked_end(session)
     assert session.output.failure == ModelRequestFailed("original provider rejection")
 
 
@@ -287,6 +288,7 @@ def test_image_forwarding_reuses_image_owner_and_preserves_native_shape():
     record = {
         "type": "prompt",
         "message": "see",
+        "ownerTools": {"path": "/unused/test-tool-socket", "token": "test-token"},
         "images": [{"type": "image", "data": "YWJj", "mimeType": "image/png"}],
     }
     command = PiCommand.from_wire(record)
@@ -384,7 +386,7 @@ def test_pi_usage_and_its_token_total_are_reported_or_not_once_decoded():
 
 
 def test_raw_tool_arguments_reach_the_declared_call_refusal():
-    from agent_comms.channel_coding_tools import CodingCall, RefusedCodingCall
+    from agent_comms.native_tool_call import CodingCall, RefusedCodingCall
     from agent_comms.native_tool_call import SelectedToolDenied
 
     event = decode({"type": "message_end", "message": {
@@ -395,5 +397,5 @@ def test_raw_tool_arguments_reach_the_declared_call_refusal():
     assert raw.arguments == []
     call = CodingCall.decode(raw.id, raw.name, raw.arguments)
     assert isinstance(call, RefusedCodingCall)
-    with pytest.raises(SelectedToolDenied, match="cannot execute"):
-        call.require_tool()
+    with pytest.raises(SelectedToolDenied, match="Expected a JSON object"):
+        call.allowed_claim()

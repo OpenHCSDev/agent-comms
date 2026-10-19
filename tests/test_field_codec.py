@@ -6,13 +6,68 @@ import pytest
 
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import (
-    FieldCodec, InlineRecord, MalformedRecord, NullMember, PathText, SubclassUnion,
+    FieldCodec, InlineRecord, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember, PathText, SubclassUnion,
     RecordedTimestamp, TimestampText, TextRepresentation, WireValue,
 )
 from agent_comms.messages import (
     ConversationRole, InfoKind, MembershipChange, MembershipConversationRole,
     MembershipNoticeRole, Message, MessageRole, NoticeRole,
 )
+
+
+def test_json_shape_schema_uses_the_same_member_annotations_as_decode():
+    class SchemaShape(DeclaredFamily, JsonShapeFamily, affix="SchemaShape"):
+        pass
+
+    assert FieldCodec.value_schema(SchemaShape) == {"not": {}}
+    with pytest.raises(MalformedRecord, match="Expected one SchemaShape owner"):
+        FieldCodec.decode(SchemaShape, None)
+
+    @dataclass(frozen=True)
+    class NullSchemaShape(SchemaShape, JsonShapeMember):
+        value: None = None
+
+    @dataclass(frozen=True)
+    class TextSchemaShape(SchemaShape, JsonShapeMember):
+        value: str
+
+    @dataclass(frozen=True)
+    class ArraySchemaShape(SchemaShape, JsonShapeMember):
+        value: tuple[int, ...]
+
+    assert FieldCodec.value_schema(SchemaShape) == {"anyOf": [
+        {"type": "null"}, {"type": "string"},
+        {"type": "array", "items": {"type": "integer"}},
+    ]}
+    for value in (NullSchemaShape(), TextSchemaShape("text"), ArraySchemaShape((1, 2))):
+        assert FieldCodec.decode(SchemaShape, FieldCodec.encode(value)) == value
+
+
+def test_compiled_plan_resolves_a_thousand_records_once(monkeypatch):
+    import agent_comms.field_codec as codec
+
+    @dataclass(frozen=True)
+    class Entry:
+        count: int
+        tags: tuple[str, ...]
+
+    annotation = list[Entry]
+    records = [Entry(i, ("alpha", "beta")) for i in range(1000)]
+    expected = [{"count": i, "tags": ["alpha", "beta"]} for i in range(1000)]
+    plan = codec.compile_decoder(annotation)
+    before = FieldCodec._record_plan.cache_info().misses
+    assert FieldCodec.encode(records, annotation) == expected
+    assert FieldCodec._record_plan.cache_info().misses == before + 1
+    assert codec.compile_decoder(annotation) is plan
+
+    def unexpected(*args):
+        raise AssertionError("The value path parsed an annotation")
+
+    monkeypatch.setattr(FieldCodec, "_representation", staticmethod(unexpected))
+    monkeypatch.setattr(codec, "get_args", unexpected)
+    monkeypatch.setattr(codec, "get_origin", unexpected)
+    assert FieldCodec.encode(records, annotation) == expected
+    assert FieldCodec._record_plan.cache_info().misses == before + 1
 
 
 def test_json_value_alias_uses_the_opaque_json_owner_everywhere():
@@ -311,7 +366,10 @@ def test_union_success_releases_rejected_payload_and_failure_keeps_first_cause()
     with pytest.raises(ValueError) as failure:
         FieldCodec.decode(str | int, None)
     assert isinstance(failure.value.__cause__, ValueError)
-    assert str(failure.value.__cause__) == "Expected <class 'str'>, received NoneType"
+    from agent_comms.field_codec import compile_decoder
+
+    first = compile_decoder(str | int).alternatives[0]
+    assert str(failure.value.__cause__) == f"Expected {first.target}, received NoneType"
 
 
 def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
@@ -344,10 +402,13 @@ def test_scalar_dispatch_keeps_representation_and_exact_type_contracts():
         pass
 
     for target, value in ((int, True), (bool, 1), (str, DerivedStr("text")),
-                          (int, DerivedInt(4)), (DerivedInt, 4),
+                          (int, DerivedInt(4)),
                           (float, True), (float, math.inf), (float, math.nan), (int, None)):
         with pytest.raises(ValueError):
             FieldCodec.decode(target, value)
+    # An unsupported declaration is a programming error, not malformed data.
+    with pytest.raises(TypeError, match="Unsupported JSON type"):
+        FieldCodec.decode(DerivedInt, 4)
     assert FieldCodec.decode(int | None, None) is None
     assert FieldCodec.decode(Literal[True, 1], True) is True
     assert type(FieldCodec.decode(Literal[True, 1], 1)) is int
@@ -492,8 +553,8 @@ def test_saved_tool_start_decodes_its_own_tool_tag_and_nullable_arguments():
 
     arguments = {"from": "sender", "to": "receiver", "body": "hello"}
     event = ToolStartTranscript(
-        tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
-        tool=ToolDeclaration.record("comms_send", arguments),
+        position=0, tool_call_id="call-1", tool_name="comms_send", raw_input=arguments,
+        tool=ToolDeclaration.record("comms_send", arguments, call_id="case"),
     )
     encoded = FieldCodec.encode(event)
     assert encoded["tool"]["tool"] == "comms_send"

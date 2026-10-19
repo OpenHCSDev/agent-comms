@@ -196,7 +196,7 @@ def test_open_sender_source_advances_without_a_native_tool_copy(tmp_path):  # no
     assert list(comms.views.history_page(ANY_CHANNEL).messages)[-1] == message
 
 
-async def test_original_target_handling_revokes_open_sender_read_without_new_message(tmp_path, monkeypatch, *, native_runtime_package):  # noqa: F811
+async def test_original_target_handling_revokes_open_sender_read_without_new_message(tmp_path, monkeypatch, *, native_runtime_package, cursor_delivery):
     from agent_comms.coordinated_runtime import SelectedExecution
     from agent_comms.native_runtime_input import NativeRuntimeInput
     from test_coordinated_runtime import _fake_model
@@ -243,7 +243,11 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     runner, calls = _fake_model(decision="IGNORE")
     monkeypatch.setattr("agent_comms.tracked_turn.TrackedTurnSession.execute", runner)
     outcome = await SelectedExecution(
-        root=root, wire_root_id=root_id, owner_name="beta", native_package=native_runtime_package,
+        root=root,
+        wire_root_id=root_id,
+        owner_name="beta",
+        native_package=native_runtime_package,
+        cursor_delivery=cursor_delivery,
     ).run()
     assert outcome is not None and outcome.disposition is IgnoredAssignment
     assert len(calls) == 1
@@ -382,7 +386,7 @@ def test_original_page_rejects_relevant_append_during_preparation(tmp_path, monk
         read.read()
 
 
-def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatch):  # noqa: F811
+def test_original_window_uses_the_barriers_open_checked_prefix(tmp_path, monkeypatch):  # noqa: F811
     import agent_comms.private_bus_checkpoint as checkpoint
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
@@ -399,11 +403,11 @@ def test_original_window_uses_the_barriers_open_certificate(tmp_path, monkeypatc
     assert view.notifications[0].message.reference == initial.message.reference
 
 
-def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noqa: F811
+def test_original_open_checked_prefix_expires_with_canonical_lock(tmp_path):  # noqa: F811
     import sqlite3
 
     _path, _root_id, comms, initial, _people = _root(tmp_path)
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         assert source.connection.execute("PRAGMA query_only").fetchone()[0] == 1
         assert tuple(source.references((initial.message.reference,))) == (initial,)
     assert source.stream.closed
@@ -413,7 +417,7 @@ def test_original_open_certificate_expires_with_canonical_lock(tmp_path):  # noq
         tuple(source.references((initial.message.reference,)))
 
 
-def test_missing_certified_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
+def test_missing_checked_wire_cannot_be_an_empty_presentation(tmp_path):  # noqa: F811
     _path, _root_id, comms, _initial, _people = _root(tmp_path)
     comms.bus.log.path.unlink()
     with pytest.raises(

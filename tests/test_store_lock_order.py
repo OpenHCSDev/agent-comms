@@ -1,6 +1,7 @@
 """Actual conversation/native lock paths follow their store declarations."""
 import os
 import threading
+import traceback
 
 import pytest
 
@@ -9,7 +10,9 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.historical_views import DMDisplayHistory
 from agent_comms.message_bus import MessageBus
-from agent_comms.store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner
+from agent_comms.store_files import (
+    ExclusiveLock, SharedLock, StoreLock, StoreLockOwner, StoreOwner, store_lock_path,
+)
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
 
@@ -26,18 +29,18 @@ def test_concrete_store_must_be_declared_at_startup(owner_type, monkeypatch):
     class UnrankedOwner(owner_type):
         pass
 
-    with pytest.raises(TypeError, match="missing from the lock order"):
-        StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order)
     with pytest.raises(TypeError, match="absent from the declared lock order"):
         object.__new__(UnrankedOwner).lock_rank
-    with pytest.raises(TypeError, match="derive from the composition root"):
+    with pytest.raises(TypeError, match="must be class keywords"):
         class MissingRankOwner(owner_type):
             lock_rank = None
 
 
 def test_duplicate_owner_in_order_is_rejected():
-    with pytest.raises(TypeError, match="occurs twice"):
-        StoreLockOwner.declare_lock_order(*StoreLockOwner._lock_order, WireLog)
+    rank = object.__new__(WireLog).lock_rank
+    with pytest.raises(TypeError, match="Duplicate store lock rank"):
+        class DuplicateOwner(StoreLockOwner, lock_rank=rank):
+            pass
 
 
 def test_conversation_read_and_native_write_share_declared_order(tmp_path):
@@ -46,23 +49,42 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
     comms.messaging.user_identity(str(tmp_path))
     reader_has_bus, writer_at_bus = threading.Event(), threading.Event()
     failures, events = [], []
+    held, files, native_bus_states = {}, {}, []
+    bus_path = str(store_lock_path(comms.bus.log.path))
+    ranks = {bus_path: comms.bus.log.lock_rank}
 
     def profile(frame, event, arg):
-        if frame.f_code.co_name != "acquire_store_lock":
+        if frame.f_code is StoreLockOwner.locked.__code__ and event == "call":
+            owner = frame.f_locals["self"]
+            ranks[str(store_lock_path(owner.path))] = owner.lock_rank
             return
-        path = os.readlink(f'/proc/self/fd/{frame.f_locals["descriptor"]}')
+        operation = frame.f_code.co_name
+        if operation not in {"acquire_store_lock", "_store_lock_file"}:
+            return
         actor = threading.current_thread().name
-        if actor == "native":
-            # Activity is read and released before the ordered publication hold.
-            parent = frame.f_back
-            while parent is not None and parent.f_code is not StoreLock.ordered.__wrapped__.__code__:
-                parent = parent.f_back
-            if parent is None:
-                return
-        if actor == "native" and event == "call" and path.endswith(".bus.jsonl.lock"):
-            writer_at_bus.set()
+        active = held.setdefault(actor, {})
+        if operation == "_store_lock_file":
+            if event == "return":
+                if arg is not None:
+                    files[frame] = arg.fileno()
+                elif frame in files:
+                    # POSIX releases at file close, not release_store_lock's no-op.
+                    active.pop(files.pop(frame), None)
+            return
+        descriptor = frame.f_locals["descriptor"]
+        path = os.readlink(f'/proc/self/fd/{descriptor}')
+        if event == "call":
+            if path in ranks:
+                assert all(rank <= ranks[path] for rank, _path in active.values()), (
+                    "out-of-order store acquisition", actor, path,
+                    tuple(active.values()), "".join(traceback.format_stack(frame)))
+            if actor == "native" and path == bus_path:
+                native_bus_states.append((tuple(active.values()), frame.f_locals["mode"]))
+                writer_at_bus.set()
         if event != "return":
             return
+        if path in ranks:
+            active[descriptor] = (ranks[path], path)
         events.append((actor, path, frame.f_locals["mode"]))
         # Select the retained conversation cut, not user_identity's earlier read.
         parent = frame.f_back
@@ -103,6 +125,24 @@ def test_conversation_read_and_native_write_share_declared_order(tmp_path):
     assert not reader.is_alive() and not writer.is_alive()
     assert not failures, failures
     assert reader_has_bus.is_set() and writer_at_bus.is_set()
+    assert not files
+    assert all(not active for active in held.values())
     native = [path for actor, path, _mode in events if actor == "native"]
-    assert native.index(str(comms.root / ".wire.lock")) < native.index(str(comms.root / ".bus.jsonl.lock"))
-    assert native.index(str(comms.root / ".bus.jsonl.lock")) < native.index(str(comms.root / ".registry.json.lock"))
+    assert len(native_bus_states) == native.count(bus_path) == 2
+    # The activity read holds no rank; publication holds the namespace rank.
+    assert native_bus_states[0][0] == ()
+    assert isinstance(native_bus_states[0][1], SharedLock)
+    assert native_bus_states[1][0] == ((comms.bus.lock_rank, str(store_lock_path(comms.bus.path))),)
+    assert isinstance(native_bus_states[1][1], ExclusiveLock)
+    assert native.count(str(store_lock_path(comms.registry.store.path))) == 1
+
+
+def test_native_bus_read_under_registry_lock_is_rejected(tmp_path, monkeypatch):
+    class InvertedBoundary(NativeBoundary):
+        def __enter__(self):
+            self.enter_context(self.bus._registry.store.locked(mode=SharedLock()))
+            return super().__enter__()
+
+    monkeypatch.setitem(globals(), "NativeBoundary", InvertedBoundary)
+    with pytest.raises(AssertionError, match="out-of-order store acquisition"):
+        test_conversation_read_and_native_write_share_declared_order(tmp_path)

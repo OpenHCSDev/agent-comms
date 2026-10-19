@@ -64,6 +64,7 @@ class PiChild:
     async def finish_input(self) -> None:
         """Retire this input's ingress without retiring a retained idle child."""
         await self.reader.finish_input()
+        await self.transport.aclose()
         forwarding, self.forwarding_task = self.forwarding_task, None
         if forwarding is not None:
             forwarding.cancel()

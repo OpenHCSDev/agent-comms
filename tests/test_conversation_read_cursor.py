@@ -4,6 +4,7 @@ from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument
+from agent_comms.recorded_bus import RecordedBusIdentity
 
 
 def test_prefixes_and_alias_union_stay_in_their_conversation():
@@ -41,7 +42,7 @@ def seed_prefix(comms, viewer, through):
     comms.bus.reads.replace(replace(
         comms.bus.reads.read(),
         messages={owner: ReadCursor({ChannelConversation(target="#a"): ConversationCursor(through)})},
-        bus_identity=comms.bus.reads.bus_identity(comms.bus.log.path),
+        bus_identity=RecordedBusIdentity.capture(comms.bus.log.path),
     ))
 
 

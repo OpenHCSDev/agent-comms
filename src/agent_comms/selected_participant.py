@@ -19,7 +19,9 @@ from .native_arguments import SelectedModel
 from .coordination_response import LiveResponseOwner, _assert_response_schema
 from .coordination_snapshot import RecoverySnapshot
 from .coordination_tables.assignments import WakeAssignment
+from .coordination_tables.executions import ExecutionOrigin
 from .coordinator import Coordination
+from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .message_bus import MessageBus
 from .publisher import ParticipantPublisher
@@ -49,6 +51,7 @@ class SelectedParticipant(MroDispatch):
     batch: SelectedSourceBatch
     sent_outcomes: tuple[SentMessageOutcome, ...]
     model: SelectedModel
+    cursor_delivery: CursorDelivery
     on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = field(default=None, kw_only=True, repr=False, compare=False)
 
     @handles(CompactionEvent)
@@ -71,6 +74,19 @@ class SelectedParticipant(MroDispatch):
         self.owner = await Coordination.run_worker(partial(
             self.comms.registry.attach_native_session, self.owner, identity.session_file
         ))
+
+    async def fail_before_send(self, max_attempts: int) -> None:
+        """Settle captured originals when acquisition fails before any native send."""
+        await self.require_current()
+        snapshot = self.store.executions.create(
+            self.batch.execution_id, ExecutionOrigin.WIRE,
+            self.lookup, self.owner.thread.name, max_attempts,
+            sources=self.batch.sources,
+        ).value
+        self.store.executions.fail_unstarted(
+            self.batch.execution_id, expected_revision=snapshot.execution.revision,
+            reason_code="session-acquisition-failed",
+        )
 
     async def prepare_attempt(self, snapshot: RecoverySnapshot) -> None:
         """Acquire the strictly newer coordinator owner required by a retry."""
@@ -123,21 +139,25 @@ class SelectedParticipant(MroDispatch):
 
     @classmethod
     @asynccontextmanager
-    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
+    async def select(cls, comms: Comms, store: Coordination, root_id: str, name: str, after_seq: int, *, cursor_delivery: CursorDelivery, on_compaction: Callable[[CompactionEvent], Awaitable[None]] | None = None):
         bus = MessageBus(comms.root / "bus.jsonl", comms.registry, ParticipantPublisher)
-        owner, participant, pending, sent_outcomes = await Coordination.run_async(
-            store.session.path,
-            lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
-        )
+        with cursor_delivery.measurements.operation("claim_prepare"):
+            owner, participant, pending, sent_outcomes = await Coordination.run_async(
+                store.session.path,
+                lambda resource: cls.prepare(comms, bus, resource, root_id, name, after_seq),
+            )
         if not pending:
             yield None
             return
         identity = ParticipantOwner(owner.thread, participant.participant_generation)
-        model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
+        with cursor_delivery.measurements.operation("model_selection"):
+            model = await Coordination.run_worker(lambda: cls.configured_model(comms, name))
         lease = cls.lease(comms, owner)
         try:
-            leased = await Coordination.run_worker(lambda: next(lease))
-            sources = await cls.sources(bus, store, root_id, pending, identity)
+            with cursor_delivery.measurements.operation("claim_lease"):
+                leased = await Coordination.run_worker(lambda: next(lease))
+            with cursor_delivery.measurements.operation("claim_sources"):
+                sources = await cls.sources(bus, store, root_id, pending, identity)
             batch = SelectedSourceBatch.first_route(sources)
             selected = cls(
                 comms,
@@ -150,6 +170,7 @@ class SelectedParticipant(MroDispatch):
                 batch,
                 sent_outcomes,
                 model,
+                cursor_delivery,
                 on_compaction=on_compaction,
             )
             await selected.require_current()
@@ -187,7 +208,7 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with bus.log.certified_read() as source:
+        with bus.log.checked_read() as source:
             _require_no_private_owner_rename(comms.root)
             marker = source.marker
             if marker.root_id != root_id:
@@ -256,16 +277,16 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     async def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:
-        """Borrow one original certificate for the already sealed pending batch.
+        """Read the pending batch from the bus and check its saved acknowledgements.
 
-        Initial acceptance owns writes. Selection verifies every original sealed
-        acknowledgement through that same validator, without re-entering acceptance. Both
-        read resources close before any native preparation or provider request.
+        Accepting input writes the records. Selecting it checks those records
+        without accepting it again. Close both the bus and database reads before
+        preparing the native session or making a provider request.
         """
         def capture():
             # Capture source pointers and bytes before opening the SQL snapshot,
             # so file decoding cannot keep a database reader open.
-            with bus.log.certified_read() as source:
+            with bus.log.checked_read() as source:
                 marker = source.marker
                 if marker.root_id != root_id:
                     raise IdentityConflict("selected source wire root changed")

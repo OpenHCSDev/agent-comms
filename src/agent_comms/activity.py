@@ -52,6 +52,7 @@ class ActivityState(Enum):
         return member
 
     IDLE = ("idle", IdleThreadPresentationStatus())
+    STARTING = ("starting", WorkingThreadPresentationStatus())
     THINKING = ("thinking", WorkingThreadPresentationStatus())
     WORKING = ("working", WorkingThreadPresentationStatus())
     # Appended once when the thread is permanently deleted. The log stays
@@ -133,7 +134,7 @@ class DrainReadiness(DeclaredFamily, affix="DrainReadiness"):
 
     @classmethod
     def acquire(cls, diagnostic: DrainDiagnostic | None, owner: OwnerIdentity) -> DrainReadiness:
-        # Nullable metadata is classified only at the original source boundary.
+        # Missing diagnostics and those from another process both mean ready.
         if diagnostic is None or diagnostic.owner != owner:
             return ReadyDrainReadiness()
         return diagnostic.readiness()

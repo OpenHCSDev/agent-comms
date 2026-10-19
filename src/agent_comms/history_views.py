@@ -200,7 +200,7 @@ class HistoryViews:
         self.ledger = ledger
         self._wire_lock_path = root / "wire"
         self.presentation = BusPresentation(bus, registry, channels.catalog, agents)
-        self.transcript_reads = transcript_read_state(bus.reads.path)
+        self.transcript_reads = transcript_read_state(bus.reads.path, registry)
 
     def message_notifications_for_references(self, references: Sequence[MessageReference]):
         return MessageNotification.references(self.root, self.registry, self.bus.log, references)
@@ -354,7 +354,7 @@ class HistoryViews:
     def thread_presentations(
         self, names: Iterable[str], *, sent_source_limit: int = 5,
     ) -> ThreadPresentations:
-        """Read status once for only the requested rows, before their original sources."""
+        """Read the requested threads' status once, before loading their messages."""
         snapshot = self.registry.snapshot()
         views = ThreadView.roster(
             snapshot, self.agents, GoalWaits.at(self.root),
@@ -380,12 +380,8 @@ class HistoryViews:
                 visibility=visibility, read_marker_notice=basis.document.notice,
             )
         # Native file IO never holds the display/bus snapshot locks.
-        sources = {
-            name: view.thread.runtime.read_keys()
-            for name, view in snapshot.threads.items()
-        }
-        unread = self.transcript_reads.counts(captured_viewer, sources, document=basis.document)
-        return replace(snapshot, thread_unread=unread.counts, unread_pending=unread.pending)
+        unread = self.transcript_reads.counts(captured_viewer, document=basis.document, visibility=visibility)
+        return replace(snapshot, thread_unread=unread.counts)
 
     def mark_thread_view_read(self, name: str, *, worktree: str, through: TranscriptCursor) -> None:
         """Acknowledge the displayed position through the thread's receiving contract."""
@@ -410,8 +406,9 @@ class HistoryViews:
         thread.execution.prepare_conversation(ThreadViewRead(
             self, thread, self.registry.require(viewer), checkpoint,
         ))
-        messages = self.bus.inbox(viewer, ThreadTarget(thread.name))
-        self.bus.mark_delivered(viewer, tuple(message.reference for message in messages))
+        self.bus.mark_delivered_through(
+            viewer, self.latest_sequence(), target=ThreadTarget(thread.name),
+        )
 
     def latest_sequence(self) -> int:
         """The sequence number of the newest message on the bus, whoever it was sent to."""

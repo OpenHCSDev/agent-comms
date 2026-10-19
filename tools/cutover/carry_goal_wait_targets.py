@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from cutover.carry import Carried, Carry
+from .carry import Carried, Carry
 
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goal_waits import GoalWaits, RecordedGoalWait

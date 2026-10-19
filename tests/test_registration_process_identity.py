@@ -11,6 +11,39 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
 from agent_comms.threads import Thread
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.maintenance_barrier import (
+    InstallingPhase, MaintenanceOperator, PausedPhase, ReadyPhase,
+)
+from agent_comms.thread_status import NoBridgeThreadStatus
+
+
+@pytest.mark.parametrize('phases', [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
+def test_bridge_releases_during_maintenance_without_allowing_a_new_owner(tmp_path, phases):
+    comms = wire(tmp_path)
+    registry = comms.registry
+    registry.declare(registry.new_thread(
+        'bridge', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
+    ))
+    gate = comms.owners.maintenance
+    process = ProcessIdentity.capture(os.getpid())
+    with registry.external_process('bridge', process):
+        hold = gate.begin(MaintenanceOperator('bridge-release'))
+        for phase in phases:
+            hold = gate.advance(hold, phase)
+        with pytest.raises(RelationViolationError, match='Maintenance'):
+            registry.register(registry.require('bridge'), new_owner=True)
+    assert registry.require('bridge').process_identity == NoProcess()
+    assert registry.status('bridge') == NoBridgeThreadStatus()
+    assert gate.read() == hold
+    with pytest.raises(RelationViolationError, match='Maintenance'):
+        with registry.external_process('bridge', process):
+            pytest.fail('A new bridge entered during maintenance')
+    while hold.phase is not ReadyPhase:
+        hold = gate.advance(hold, hold.phase.successors()[0])
+    with registry.external_process('bridge', process):
+        assert registry.require('bridge').process_identity == process
+    assert registry.require('bridge').process_identity == NoProcess()
 
 
 def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
@@ -21,7 +54,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     identity = ProcessIdentity.capture(os.getpid())
     assert owner.process_identity == identity
     session = tmp_path / "session.jsonl"
-    session.write_text('{"type":"session","id":"fixture"}\n')
+    session.write_text('{"type":"session","id":"fixture","timestamp":"2026-10-19T11:00:00Z"}\n')
     attached = comms.threads.attach_session(owner, str(session), process=owner.process_identity)
     assert attached.process_identity == identity
     assert wire(tmp_path).registry.require(owner.name) == attached
@@ -34,7 +67,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     restored = RegistryDocument()
     restored.restore_stopped(comms.registry.snapshot(), (owner.name,))
     saved = restored.threads[owner.name]
-    assert saved.process_identity == NoProcess() and not saved.active_turn.executing
+    assert saved.process_identity == NoProcess() and not saved.turn_record.read().executing
     assert saved.incarnation == owner.incarnation and saved.session_file == str(session)
 
 
@@ -89,5 +122,6 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     assert comms.registry.require(owner.name) == leased
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), title='metadata'))
     current = comms.registry.require(owner.name)
-    assert current.process_identity == identity and current.active_turn == leased.active_turn
+    assert current.process_identity == identity and current.turn_record == leased.turn_record
+    assert current.turn_record.read().id == 'active-turn'
     comms.registry.release_turn(current.turn_lease)

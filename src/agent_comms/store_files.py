@@ -28,7 +28,6 @@ if TYPE_CHECKING:
     import sqlite3
 
     from .private_bus_checkpoint import (
-        CertifiedSourceRead,
         CheckpointNeedsRepair,
         PrefixWitness,
         WritableCheckpoint,
@@ -169,19 +168,18 @@ class StoreLockRelease:
 
 @dataclass(frozen=True)
 class StoreLock:
-    """One physical lock's descriptor and opened durability resource."""
+    """A held store lock's file descriptor."""
 
     descriptor: int
-    source: CertifiedSourceRead | None
     _releases: ClassVar[ContextVar[StoreLockRelease]] = ContextVar(
         "store_lock_release", default=StoreLockRelease(active=False)
     )
 
     @classmethod
     @contextmanager
-    def open_source(cls, path: Path, mode: LockMode):
-        """Generic file locks lend no bus data or recovery authority."""
-        yield None
+    def hold(cls, path: Path, descriptor: int, mode: LockMode):
+        """Keep a plain store lock; it does not hold a checked bus read."""
+        yield cls(descriptor)
 
     @classmethod
     @contextmanager
@@ -227,32 +225,6 @@ class StoreLock:
         finally:
             scope.close()
 
-    def certified_read(self) -> CertifiedSourceRead:
-        if self.source is None:
-            raise RelationViolationError("Store has no certified original wire source.")
-        return self.source
-
-    @contextmanager
-    def current_source(
-        self, log: WireLog, metadata: WireMetadata
-    ) -> Iterator[CertifiedSourceRead]:
-        """Lend the current certificate under this retained physical bus lock.
-
-        A prior append may have advanced the immutable source originally lent
-        to this lock. Refresh that view, never reconstruct claim state or scan
-        an uncertified bus.
-        """
-        source = self.certified_read()
-        if source.marker == metadata:
-            source.require_open_prefix()
-            yield source
-            return
-        with self.open_source(log.path, ExclusiveLock()) as refreshed:
-            if refreshed is None:
-                raise RelationViolationError("Store has no certified original wire source.")
-            refreshed.require_marker(metadata)
-            yield refreshed
-
 
 class StoreOwner(DeclaredFamily):
     """Shared declaration membership for composable store capabilities."""
@@ -261,33 +233,33 @@ class StoreOwner(DeclaredFamily):
 
 
 class StoreLockOwner(StoreOwner, declared_name=None):
-    """The composition root orders owners; each rank derives from that order."""
+    """Each store declares its acquisition rank alongside its behavior."""
 
     __slots__ = ()
     path: Path
-    _lock_order: ClassVar[tuple[type[StoreLockOwner], ...]] = ()
+    _declared_lock_rank: ClassVar[int]
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, *, lock_rank: int | None = None, **kwargs):
         super().__init_subclass__(**kwargs)
         if "lock_rank" in vars(cls):
-            raise TypeError("Store lock ranks derive from the composition root")
-
-    @classmethod
-    def declare_lock_order(cls, *owners: type[StoreLockOwner]) -> None:
-        if len(set(owners)) != len(owners):
-            raise TypeError("A store owner occurs twice in the lock order")
-        missing = set(cls.members_with(cls)) - set(owners)
-        if missing:
-            names = ", ".join(sorted(owner.__name__ for owner in missing))
-            raise TypeError(f"Store owners missing from the lock order: {names}")
-        StoreLockOwner._lock_order = owners
+            raise TypeError("Store lock ranks must be class keywords")
+        # slots dataclasses rebuild their declaration with its namespace intact.
+        rank = vars(cls).get("_declared_lock_rank", lock_rank)
+        if rank is not None:
+            if type(rank) is not int or rank < 0:
+                raise TypeError("Store lock ranks must be nonnegative integers")
+            for owner in StoreLockOwner.members_with(StoreLockOwner):
+                if (vars(owner).get("_declared_lock_rank") == rank
+                        and owner.declared_name != cls.declared_name):
+                    raise TypeError(f"Duplicate store lock rank {rank}: {owner.__name__}, {cls.__name__}")
+            cls._declared_lock_rank = rank
 
     @property
     def lock_rank(self) -> int:
         try:
-            return StoreLockOwner._lock_order.index(type(self))
-        except ValueError:
+            return vars(type(self))["_declared_lock_rank"]
+        except KeyError:
             raise TypeError(f"{type(self).__name__} is absent from the declared lock order") from None
 
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
@@ -328,8 +300,8 @@ def _held_store_source(store_path, lock_file, platform, max_bus_bytes, *, mode, 
                 bus_info = store_path.lstat()
                 if not stat.S_ISREG(bus_info.st_mode) or bus_info.st_size > max_bus_bytes:
                     raise RelationViolationError("Bus exceeds bounded read budget.")
-        with lock_type.open_source(store_path, mode) as source:
-            yield lock_type(lock_file.fileno(), source)
+        with lock_type.hold(store_path, lock_file.fileno(), mode) as lock:
+            yield lock
     finally:
         platform.release_store_lock(lock_file.fileno())
 

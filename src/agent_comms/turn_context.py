@@ -226,7 +226,7 @@ class InstructionFile:
 
 @dataclass(frozen=True)
 class ContextSources:
-    """Native journal coordinates derived from one group of original sources."""
+    """Find native journal positions from the records contributing to this context."""
 
     provenance: tuple[Provenance, ...]
 
@@ -279,7 +279,7 @@ class SegmentManifest:
         return f"{self.kind.public_title()} · {self.tokens} estimated tokens"
 
     def contains_span(self, span: ContextSpan) -> bool:
-        """An annotation retains its original source, not just matching prose."""
+        """Match an annotation by its segment hash and position, not by text alone."""
         return (span.segment_sha256 == self.sha256
                 and span.coordinates.kind is self.kind
                 and self.kind.contains_contribution(self, span.coordinates))
@@ -515,7 +515,7 @@ class ContextSegment(
         return all(source in original.source_membership() for source in coordinates.provenance)
 
     def public_spans(self) -> tuple[ContextSpan, ...]:
-        """Address public sentences within this owner's original source ranges."""
+        """Locate public sentences within the text ranges supplied by this segment."""
         digest = self.manifest(0).sha256
         text = self.public_text()
         return tuple(ContextSpan(digest, sentence)
@@ -596,7 +596,7 @@ class ContributionCoordinates:
 
 @dataclass(frozen=True)
 class InputContributionCoordinates(ContributionCoordinates):
-    """Original INPUT coordinates; image membership remains input-only."""
+    """Record positions in submitted input, including only images from that input."""
     images: tuple[int, ...] = ()
 
 
@@ -1174,10 +1174,10 @@ class TurnContext(DeclaredReply):
 
     @classmethod
     def for_inspection(cls, comms, owner: Thread) -> TurnContext:
-        """The current Core contributors, before any future original input.
+        """Preview the Core context that would be added before the next input.
 
-        This is a preview through the same contributor declarations used by
-        preparation. It is never a recorded SDK request or an input grant.
+        Use the same context builders as turn preparation. This preview is not
+        a recorded SDK request and does not grant permission to submit input.
         """
         relations = comms.relationships.context_relations(owner.name)
         context = cls.for_owner(owner, NextContextTurn(), "", comms.views.thread_views(), relations, comms.goals)

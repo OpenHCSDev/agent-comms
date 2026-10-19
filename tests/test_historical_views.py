@@ -379,8 +379,8 @@ def test_historical_namespace_has_recorded_provenance_and_no_live_authority(migr
     assert live.views.historical_threads("alice")
 
 
-@pytest.mark.parametrize('changed_resource', ['bus', 'certificate', 'pending'])
-def test_archived_certificate_remains_immutable_without_writer_recovery(migrated, changed_resource):
+@pytest.mark.parametrize('changed_resource', ['bus', 'prefix record', 'pending'])
+def test_archived_checked_prefix_remains_immutable_without_writer_recovery(migrated, changed_resource):
     """Archive reads reject mutation/pending ownership instead of adopting it."""
     import sqlite3
     from agent_comms.checkpoint_seals import PendingSeal
@@ -389,14 +389,14 @@ def test_archived_certificate_remains_immutable_without_writer_recovery(migrated
 
     _, _, _, source = migrated
     log = WireLog(Path(source.root) / 'bus.jsonl')
-    with log.certified_read() as opened:
+    with log.checked_read() as opened:
         saved = opened.witness
         assert opened.connection.execute('PRAGMA query_only').fetchone()[0] == 1
         with pytest.raises(sqlite3.OperationalError, match='readonly'):
             opened.connection.execute('DELETE FROM prefix_certificate')
     if changed_resource == 'bus':
         log.path.write_bytes(log.path.read_bytes() + b'\n')
-    elif changed_resource == 'certificate':
+    elif changed_resource == 'prefix record':
         with sqlite3.connect(log.path.with_name('private_bus_checkpoint.sqlite3')) as db:
             db.execute('CREATE TABLE unrelated(value TEXT)')
     else:
@@ -407,6 +407,6 @@ def test_archived_certificate_remains_immutable_without_writer_recovery(migrated
     before = {p: p.read_bytes() for p in (log.path, log.metadata_path,
                                          log.path.with_name('private_bus_checkpoint.sqlite3'))}
     with pytest.raises(RelationViolationError):
-        with log.certified_read():
+        with log.checked_read():
             pass
     assert {p: p.read_bytes() for p in before} == before

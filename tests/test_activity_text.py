@@ -61,7 +61,7 @@ def test_native_status_reads_long_preparation_first_and_parallel_tools(comms):
     detail = "preparing_" + "p" * Activity.detail_limit
     lease = comms.agents.begin_turn(thread.name, "long-status", detail).turn_lease
     try:
-        assert comms.registry.require(thread.name).active_turn.phase.detail == detail
+        assert comms.registry.require(thread.name).turn_state.active.phase.detail == detail
         assert comms.agents.activity_of(thread.name, snapshot=comms.registry.snapshot()).detail.endswith("…")
         phase = ModelWaitPhase()
         for index in range(2):
@@ -97,7 +97,7 @@ def test_native_and_cli_activity_publish_member_order_and_ignore_unchanged_phase
     try:
         started = observed()
         assert members(started) == (native.name, cli.name)
-        assert comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp >= comms.registry.require(native.name).active_turn.started_at
+        assert comms.agents.activity_of(native.name, snapshot=comms.registry.snapshot()).timestamp >= comms.registry.require(native.name).turn_state.active.started_at
         output.status(ActivityState.WORKING, "unchanged")
         external = observed()
         assert members(external) == (cli.name, native.name)

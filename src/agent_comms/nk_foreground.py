@@ -20,6 +20,7 @@ import select
 import sys
 import time
 from collections.abc import Sequence
+from contextlib import closing
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -28,6 +29,7 @@ from agent_comms.coordination_errors import PublicationActivationBlocked
 from .child_process import ProcessIdentity
 from .comms import Comms
 from .coordinated_runtime import SelectedExecution
+from .cursor_publication import CursorDelivery
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
 from .native_pi import _private_session_dir
@@ -57,14 +59,16 @@ class ForegroundOwner:
         if self._started:
             raise PublicationActivationBlocked("Foreground owner accepts exactly one GO")
         self._started = True  # Before the first await: even an uncertain attempt is spent.
-        return await SelectedExecution(
-            root=self.root,
-            wire_root_id=self.wire_root_id,
-            owner_name=self.name,
-            native_package=self.native_package,
-            opt_in=True,
-            after_seq=int(match.group(1)),
-        ).run()
+        with closing(CursorDelivery()) as cursor_delivery:
+            return await SelectedExecution(
+                root=self.root,
+                wire_root_id=self.wire_root_id,
+                owner_name=self.name,
+                native_package=self.native_package,
+                cursor_delivery=cursor_delivery,
+                opt_in=True,
+                after_seq=int(match.group(1)),
+            ).run()
 
 
 def reserve_foreground_owner(
@@ -96,7 +100,7 @@ def reserve_foreground_owner(
     worktree = root / "work"
     _private_session_dir(worktree)
     comms = Comms(root)
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         marker = source.marker
     if marker.root_id != wire_root_id:
         raise RelationViolationError("Private wire root changed before owner reservation")
