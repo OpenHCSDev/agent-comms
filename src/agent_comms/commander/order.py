@@ -459,8 +459,8 @@ def board():
 STAGES = ('tool call', 'review', 'install', 'live', 'user')  # where a mistake was caught; later is worse
 
 
-def on_record(line: str, recorded: str) -> None:
-    """Put one line on the public record: the narrative file, then #comms.
+def on_record(line: str, recorded: str, audience: tuple[str, ...] = ('#comms',)) -> None:
+    """Put one line on the public record: the narrative file, then its audience.
 
     Core already holds what `recorded` names, so a failed post is reposted, never recorded again.
     """
@@ -471,9 +471,9 @@ def on_record(line: str, recorded: str) -> None:
                     'Written by agent-comms-commander order; never edited.\n\n')
         f.write(f'- {line}\n')
     try:
-        post(['#comms'], f'On the record: {line}')
+        post([*audience], f'On the record: {line}')
     except SystemExit as failed:
-        print(f'{recorded} recorded, but the #comms post failed ({failed}). '
+        print(f'{recorded} recorded, but the post failed ({failed}). '
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
 

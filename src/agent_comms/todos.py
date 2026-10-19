@@ -914,6 +914,9 @@ class GoalReference(SubclassUnion):
     def require_reference(self) -> None:
         pass
 
+    def threads(self) -> tuple[str, ...]:
+        return ()
+
 
 @dataclass(frozen=True)
 class NoGoalReference(NullMember, GoalReference):
@@ -941,6 +944,9 @@ class GoalRef(RecordMember, GoalReference):
     @property
     def incarnation(self) -> ThreadIncarnation:
         return RecordedThreadIncarnation(self.owner, self.owner_created)
+
+    def threads(self) -> tuple[str, ...]:
+        return (self.owner,)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1107,9 +1113,17 @@ class StrikeTodo(TodoOperation):
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
 
 
+class VerdictAudience:
+    """The order's unit and its goal's thread; no verdict kind today concerns every unit."""
+    @staticmethod
+    def targets(todo: Todo) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((todo.held().owner, *todo.goal.threads())))
+
+
 @dataclass(frozen=True)
 class OrderVerdict(TodoOperation, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
+    audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
     previous: Assignment
     tool_call_id: str
