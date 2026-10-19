@@ -13,6 +13,8 @@ from uuid import uuid4
 from typing import TYPE_CHECKING
 
 from .field_codec import MalformedRecord
+from .input_disposition import InputDispositions
+from .registration import Registration
 from agent_comms.attempt_states import UnknownOutcomeAttempt, UnsuccessfulTerminal
 from agent_comms.coordination_contracts import (
     MAX_REASON_CODE_CHARS,
@@ -218,9 +220,6 @@ class RecoveryMonitorCapability:
         Moving the small directory keeps sessions, diagnostics and SQLite/WAL
         evidence together without copying a store or replaying an input.
         """
-        from .input_disposition import InputDispositions
-        from .registration import Registration
-
         uncertain = False
         if (root / "coordination.sqlite3").is_file():
             with Coordination(str(root / "coordination.sqlite3")) as store:
@@ -233,7 +232,9 @@ class RecoveryMonitorCapability:
         if uncertain:
             destination = root.with_name(f"{root.name}.unknown-{uuid4().hex}")
             root.rename(destination)
-            raise RecoveryBlocked(f"Check directory removed; uncertain work kept at {destination}; do not replay")
+            raise RecoveryBlocked(
+                f"Check directory removed; uncertain work kept at {destination}; do not replay"
+            )
         shutil.rmtree(root)
 
     @classmethod

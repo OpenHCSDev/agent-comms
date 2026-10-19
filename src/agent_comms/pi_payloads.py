@@ -10,10 +10,21 @@ import math
 import re
 import types
 from abc import abstractmethod
-from decimal import Decimal
 from dataclasses import dataclass, field, fields, is_dataclass, replace
+from decimal import Decimal
 from functools import singledispatch
-from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    ClassVar,
+    Literal,
+    Self,
+    Union,
+    cast,
+    get_args,
+    get_origin,
+)
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
@@ -27,9 +38,9 @@ from .pi_vocabulary import (
     ThinkingLevelField,
     UnreportedStopReason,
 )
+from .send_result import CorrectionResult, CorrectionUnreported
 from .tool_declaration import ToolDeclaration
 from .transcript_events import SentTranscript
-from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
@@ -108,8 +119,8 @@ class PiPayload:
         return project_wire(value, target)
 
     @classmethod
-    def from_wire(cls, value):
-        return FieldCodec.decode(cls, cls.normalize_wire(value))
+    def from_wire(cls, value: object) -> Self:
+        return cast(Self, FieldCodec.decode(cls, cls.normalize_wire(value)))
 
     def to_wire(self):
         data = FieldCodec.encode(self)

@@ -3,21 +3,24 @@
 from __future__ import annotations
 
 import json
-from itertools import chain
-from contextlib import ExitStack, contextmanager
 from abc import ABC, abstractmethod
+from collections.abc import Iterable
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
+from datetime import datetime
+from itertools import chain
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal
+from typing import Annotated, Any, ClassVar, Literal, TextIO
+from uuid import uuid4
 
-from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
+from .importing import ImportBuffer, ImportedSessionMetadata, ImportLimits
 from .pi_payloads import PiMessage, PiPayload
+from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .routing import TurnRouting
-from .transcript_events import NoticeTranscript, TranscriptEvent
+from .transcript_events import ImportedMessage, NoticeTranscript, TranscriptEvent
 from .transcript_routes import InputDisplay
-from .importing import ImportedSessionMetadata
 
 
 @dataclass(frozen=True)
@@ -37,6 +40,17 @@ class RecordedEntry(PiPayload):
     assistant_message: ClassVar[bool] = False
     messages: ClassVar[tuple[PiMessage, ...]] = ()
     final_reply: ClassVar[bool] = False
+
+    @property
+    def child_parent(self) -> object:
+        return self.require_entry_id()
+
+    def imported_child(self, message: ImportedMessage, timestamp: datetime) -> dict[str, object]:
+        return {
+            "type": "message", "id": uuid4().hex[:16], "parentId": self.child_parent,
+            "timestamp": timestamp.isoformat(),
+            "message": message.pi_message(int(timestamp.timestamp() * 1000)),
+        }
 
     @property
     def input_boundary(self):
@@ -152,6 +166,25 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     @property
     def unread_reply(self) -> bool:
         return False
+
+
+@dataclass
+class ImportedSessionWriter:
+    stream: TextIO
+    parent: NativeEntry
+
+    def append(self, message: ImportedMessage, timestamp: datetime) -> None:
+        encoded = self.parent.imported_child(message, timestamp)
+        self.stream.write(json.dumps(encoded, ensure_ascii=False) + "\n")
+        self.parent = NativeEntry.from_wire(encoded)
+
+    def import_record(
+        self, entry: RecordedEntry, events: Iterable[TranscriptEvent], limits: ImportLimits
+    ) -> None:
+        buffer = ImportBuffer(limits)
+        buffer.add(events)
+        for message in buffer.messages:
+            self.append(message, entry.timestamp.at)
 
 
 class NativeHeaderState(ABC):
@@ -429,6 +462,10 @@ class NativeEvidenceScope(ExitStack):
 
 @dataclass(frozen=True, kw_only=True)
 class SessionEntry(NativeEntry):
+    @property
+    def child_parent(self) -> object:
+        return self.parent_id
+
     version: int | None = None
     cwd: str | None = field(default=None, metadata={"wire_omit_default": True})
     parent_session: str | None = field(default=None, metadata={

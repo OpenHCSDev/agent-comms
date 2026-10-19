@@ -261,8 +261,8 @@ class InitialWrites(PrivateWrites):
 
     def _initialize_private_protocol_unlocked(self, *, history: Sequence[Message] = ()) -> str:
         self.log.require_fresh_private_root_unlocked()
-        # Selected public history predates this root's admission floor. It is
-        # display content, never a copied delivery or permission to replay input.
+        # Selected public history precedes this root's first writable sequence. It is
+        # display content, never a copied delivery or permission to run old input.
         previous = 0
         rows = []
         for message in history:

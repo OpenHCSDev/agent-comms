@@ -8,6 +8,7 @@ from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from io import StringIO
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -15,7 +16,7 @@ from .cli_result import CliResult
 from .field_codec import FieldCodec
 from .transcript_events import TRUNCATED, ImportedInput, ImportedMessage, ImportedRequest
 from .harness_install import Harness
-from .turn_context import CodexRolloutProvenance
+from .turn_context import CodexRolloutProvenance, ContextSourceText
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -60,8 +61,6 @@ class ImportedSessionMetadata:
 
     @classmethod
     def public_source_text(cls, registry, owner, source, comms):
-        from .turn_context import ContextSourceText
-
         if source not in cls.sources_for_owner(registry, owner):
             raise ValueError("Source is outside the original imported snapshot")
         return ContextSourceText(source.public_description(), source.public_text(comms))
@@ -93,6 +92,8 @@ class ImportSnapshot:
 
     def pi_session(self, project: Path) -> str:
         """A valid Pi v3 tree, using text-only portable historical context."""
+        from .native_entries import ImportedSessionWriter, NativeEntry
+
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
         records: list[dict[str, object]] = [
@@ -117,11 +118,13 @@ class ImportSnapshot:
             context += "\nMost recent user request in the source session:\n" + self.latest_request
         if self.notices:
             context += "\nImport notes:\n" + "\n".join(self.notices)
+        output = StringIO()
+        for record in records:
+            output.write(json.dumps(record, ensure_ascii=False) + "\n")
+        writer = ImportedSessionWriter(output, NativeEntry.from_wire(records[-1]))
         for message in (ImportedInput(context), *self.messages):
-            entry = message.session_entry(parent, timestamp)
-            records.append(entry)
-            parent = entry["id"]
-        return "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records)
+            writer.append(message, timestamp)
+        return output.getvalue()
 
     @property
     def retains_latest_request(self) -> bool:
