@@ -322,8 +322,9 @@ class SqlValue:
             cursor.close()
 
     def encode(self, value: object) -> object:
-        # Validate before SQLite can coerce a wrong Python value into its affinity.
-        encoded = FieldCodec.encode(value, self.annotation)
+        # SQL parameters may already be wire data. Convert that input shape,
+        # then validate its declared column before SQLite can coerce it.
+        encoded = FieldCodec.encode(value)
         self.value.decode(encoded)
         return None if encoded is None else self.storage.to_sql(encoded)
 

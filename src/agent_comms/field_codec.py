@@ -1230,13 +1230,20 @@ class _AnyDecoder(_JsonValueRepresentation, ValueDecoder[Any]):
     def encode(self, value: object) -> object:
         if isinstance(value, WireValue):
             return compile_decoder(type(value)).encode(value)
+        kind = type(value)
+        if value is None or kind in (str, int, bool, float):
+            return compile_decoder(kind).encode(value)
+        if is_dataclass(value) and not isinstance(value, type):
+            return compile_decoder(kind).encode(value)
+        if isinstance(value, type) and issubclass(value, DeclaredFamily):
+            return value.declared_name
+        if isinstance(value, (Enum, list, tuple, frozenset)):
+            return compile_decoder(kind).encode(value)
         if isinstance(value, dict):
             if all(type(key) is str for key in value):
                 return {key: self.encode(item) for key, item in value.items()}
             return [[self.encode(key), self.encode(item)] for key, item in value.items()]
-        if isinstance(value, type) and issubclass(value, DeclaredFamily):
-            return value.declared_name
-        return compile_decoder(type(value)).encode(value)
+        raise TypeError(f"Unsupported JSON value: {type(value).__name__}")
 
 
 def _declared_member(family: type[DeclaredFamily], name: str) -> type[DeclaredFamily]:
