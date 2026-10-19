@@ -818,6 +818,11 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def installed(self, works: str, artifact: str) -> ProblemOrder:
         raise ValueError("Check the delivered order before recording installation.")
 
+    def require_checked(self, problem: str) -> None:
+        """An installed claim stands on this order's recorded check result."""
+        raise ValueError(f"An installed claim needs the recorded check result of {problem}; "
+                         "its order has none.")
+
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 
@@ -871,6 +876,9 @@ class DeliveredProblemOrder(ProblemOrder):
     def installed(self, works, artifact):
         self.run.require_closing(works)
         return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
+
+    def require_checked(self, problem: str) -> None:
+        """The delivery passed the order's check, so its result is recorded."""
 
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return (todo,)
