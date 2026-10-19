@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Generator
-from contextlib import contextmanager, nullcontext
+from contextlib import closing, contextmanager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -20,6 +20,8 @@ from .field_codec import MalformedRecord
 from .native_entries import NativeEntry, RecordedEntry, SessionEntry, TranscriptProjection
 from .native_runtime_input import NativeRuntimeInput, PublishedReplyRevision
 from .private_path import FileRevision
+from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
+from .transcript_events import ToolStartTranscript
 from .transcript_sources import TranscriptSource
 
 
@@ -187,6 +189,15 @@ class NativeTranscript(TranscriptSource):
     def reading(self):
         """Keep the native record owner bound across one page projection."""
         yield self
+
+    def last_tool_call(self) -> EventTime:
+        """Read the newest tool start from this unit's original transcript records."""
+        with closing(self.reverse(self.cut().offset)) as records:
+            for record in records:
+                for event in reversed(record.events):
+                    if isinstance(event, ToolStartTranscript):
+                        return GeneratedTimestamp.decode(event.timestamp)
+        return UnrecordedEventTime()
 
     def imported_sources(self):
         """Read original metadata before conversation, including native configuration.
