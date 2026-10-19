@@ -506,13 +506,17 @@ class ForeignFieldSpellings(PerFileOccurrenceMeasure):
 
 
 class BroadExceptDefault(PerFileOccurrenceMeasure):
-    @staticmethod
-    def broad(node: ast.AST | None) -> bool:
+    broad_names: typing.ClassVar[frozenset[str]] = frozenset({"Exception", "BaseException"})
+
+    @classmethod
+    def broad(cls, node: ast.AST | None) -> bool:
         match node:
-            case None | ast.Name(id="Exception" | "BaseException"):
+            case None:
                 return True
+            case ast.Name(id=name):
+                return name in cls.broad_names
             case ast.Tuple(elts=items):
-                return any(BroadExceptDefault.broad(item) for item in items)
+                return any(cls.broad(item) for item in items)
         return False
 
     @staticmethod
@@ -537,6 +541,20 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
     def occurrences(cls, node: ast.AST) -> int:
         return int(isinstance(node, ast.ExceptHandler) and cls.broad(node.type)
                    and any(cls.returns_default(statement) for statement in node.body))
+
+
+class BroadSwallow(CleanChangedLines, BroadExceptDefault):
+    """A broad handler without a raise hides the failure, whatever it returns."""
+
+    broad_names = frozenset({
+        "Exception", "ValueError", "RuntimeError", "OSError", "TypeError",
+        "KeyError", "AttributeError", "LookupError",
+    })
+
+    @classmethod
+    def occurrences(cls, node: ast.AST) -> int:
+        return int(isinstance(node, ast.ExceptHandler) and cls.broad(node.type)
+                   and not any(isinstance(child, ast.Raise) for child in ast.walk(node)))
 
 
 class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 
 from tools.debt_ratchet import (
-    BannedVocabulary, BroadExceptDefault, ForeignFieldSpellings,
+    BannedVocabulary, BroadExceptDefault, BroadSwallow, ForeignFieldSpellings,
     FrozenFieldWrite, FunctionLocalImport, LiteralGetattr, GitMeasure, NoneAbsence, UncarriedRecordFormat,
     python_paths,
 )
@@ -720,6 +720,30 @@ def test_literal_getattr_does_not_count_dynamic_names_or_prose():
 def test_field_spelling_rosters_count_loops_not_declarations():
     source = b'''fields = ("path", "file_path", "filePath")\nfor key in ("path", "file_path", "filePath"):\n    value = data[key]\nvalue = next(data[key] for key in ("path", "file_path", "filePath") if key in data)\n'''
     assert ForeignFieldSpellings.count(source, "read.py") == 2
+
+
+def test_broad_swallow_is_counted_and_cannot_be_added(repo):
+    source = b'''try: work()
+except (OSError, ValueError): pass
+try: work()
+except Exception: return_default()
+try: work()
+except: continue_work()
+try: work()
+except RuntimeError: raise
+try: work()
+except FileNotFoundError: absent()
+'''
+    assert BroadSwallow.count(source, "read.py") == 3
+    root = Path(__file__).resolve().parents[2] / "src/agent_comms"
+    assert sum(BroadSwallow.count(path.read_bytes(), str(path))
+               for path in root.rglob("*.py")) <= 96
+    before = repo.commit({"reader.py": "work()\n"})
+    after = repo.commit({"reader.py": "try: work()\nexcept OSError: pass\n"})
+    status, report = repo.compare(before, after)
+    identity = f"BroadSwallow:{repo.root}/reader.py"
+    assert status == 1 and report["introduced"][identity] == 1
+    assert report["delta"][identity] == 1
 
 
 def test_broad_handlers_only_count_defaults_returned_by_the_handler():
