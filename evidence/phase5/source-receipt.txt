@@ -14,7 +14,7 @@ b07a12f036e55bbc051dd01e1b69c7bc270774757ed5eb6b46150b110155e7f3  src/agent_comm
 
 Lifecycle: actual CLI-created order; actual native read from a saved-session copy;
 CLI acceptance, send-back plus strike, and checked operation delivery. Story output
-at every step is preserved in lifecycle.md. Duplicate reads matched and did not
+at every step was moved into PR #1929's body. Duplicate reads matched and did not
 write the Todo store. No original session was changed; no input was replayed.
 
 Remaining: complete transition history, exactly-once public send-back posting,

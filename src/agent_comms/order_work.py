@@ -22,10 +22,18 @@ class OrderWorkResult(ToolResult, ABC):
     @classmethod
     def for_problem(cls, comms: Comms, problem: str) -> OrderWorkResult:
         comms.goals.todos.get(problem)  # Unknown problems are not unassigned orders.
-        return next((OrderWork.for_assigned(comms, todo.id, todo.held().owner,
-                                           todo.order.issued().at.recorded_at("An order"))
-                     for todo in comms.goals.todos.assigned_problem(problem)),
-                    UnassignedOrderWork(problem))
+        return next(
+            (
+                OrderWork.for_assigned(
+                    comms,
+                    todo.id,
+                    todo.held().owner,
+                    todo.order.issued().at.recorded_at("An order"),
+                )
+                for todo in comms.goals.todos.assigned_problem(problem)
+            ),
+            UnassignedOrderWork(problem),
+        )
 
     @abstractmethod
     def story(self) -> tuple[StoryLine, ...]: ...

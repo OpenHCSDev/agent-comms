@@ -2,7 +2,7 @@
 
 - Real CLI scratch-bus journey succeeded: ordered; actual saved native tool work;
   accepted verdict; send-back with one strike and one verdict; checked operation
-  delivery; identical read-only re-reads. Both stories are pasted in lifecycle.md.
+  delivery; identical read-only re-reads. Both stories were moved into PR #1929's body as requested.
 - The native worker read is from a copied actual session, not authored events or
   a fixture. The original session and live bus were not changed or replayed.
 - Final source CLI fleet read returned exactly its strike and send-back records.
@@ -23,6 +23,12 @@ One environment warning remains: pytest-timeout is absent, so its configured
 `timeout` option is unknown; the explicit shell timeout bounded the run.
 The earlier focused invocation passed its assertions but failed the irrelevant
 whole-repository coverage floor. These are sanity checks, not phase-5 acceptance.
+
+P218 repair: the fresh typed-tool journey also succeeded on the private bus under
+/home/ts/.cache/agent-scratch/pi-cn-phase5/. It read an actual saved-session copy,
+not a fixture. Five focused sanity tests passed in 5.08 seconds. A subsequent
+real fire operation returned UnassignedOrderWork and the order story showed its
+original release record without an assignment absence probe.
 
 No new tools are claimed installed. No public channel posting or script deletion
 is claimed. The native record plane still overwrites earlier orders and lacks

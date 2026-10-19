@@ -57,7 +57,7 @@ class Journey:
         return ThreadCaller("lead")
 
     @property
-    def receipt(self) -> Path:
+    def artifact(self) -> Path:
         return self.scratch / "lifecycle.md"
 
     def copy_session(self) -> None:
@@ -67,7 +67,7 @@ class Journey:
     def show(self, stage: str) -> OrderStory:
         story = CommsOrderStoryTool(problem="P1").apply(self.comms, self.caller)
         fleet = CommsFleetStoryTool().apply(self.comms, self.caller)
-        with self.receipt.open("a") as report:
+        with self.artifact.open("a") as report:
             report.write(f"\n## {stage}\n\n```json\n{json.dumps(story.to_wire(), indent=2)}\n```\n")
             report.write(f"\nFleet:\n```json\n{json.dumps(fleet.to_wire(), indent=2)}\n```\n")
         print(stage, json.dumps(story.to_wire()), flush=True)
@@ -112,7 +112,7 @@ class SetupStep(JourneyStep):
         ordered = PendingProblemOrder(
             id="phase5-live-order",
             owner=FileLine("src/agent_comms/order_story.py", 1),
-            check=OrderCheck(str(journey.project), f"test -s '{journey.receipt}'"),
+            check=OrderCheck(str(journey.project), f"test -s '{journey.artifact}'"),
             edits=("Read src/agent_comms/order_story.py:1 and describe the story output",),
             banned=("Do not change the original session or replay any saved input",),
             report="Report the order story and the remaining delivery gaps",
@@ -174,7 +174,7 @@ class AfterAcceptanceStep(JourneyStep):
             problem=todo.id,
             order_id=todo.order.issued().id,
             delivery=OperationDelivery(),
-            claims=(WorkingClaim(str(journey.receipt)),),
+            claims=(WorkingClaim(str(journey.artifact)),),
         ).apply(comms, journey.caller)
         journey.show("Delivered: operation check passed")
         before = comms.goals.todos.path.stat().st_mtime_ns

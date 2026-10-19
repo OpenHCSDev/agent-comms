@@ -1,13 +1,15 @@
 # Commander-native phase 5
 
-Owner: pi-cn-phase5. Branch: feat/cn-phase5-story. Base: origin/main 011084fc5.
+Owner: pi-cn-phase5. Branch: feat/cn-phase5-story. Current repair order: P218.
+Current main 5c4e7e3b4 is merged normally; #1912 is also merged into this branch
+and remains a PR dependency until its own merge.
 
 ## Delivery checklist
 
 - [x] Native chronological order story from original retained records (coverage limits below).
 - [x] Native newest-first fleet story from original strikes and send-backs.
 - [x] Real scratch-bus lifecycle, using public tools and actual unit records.
-- [ ] Remove script board/narrative writers and roast after shared-function ownership clears.
+- [ ] Remove script board/narrative writers and roast; P218 repairs take priority.
 - [ ] Record-owned send-back channel publication, once.
 
 ## Source and ownership
@@ -29,7 +31,8 @@ complete transition coverage. Restoring those facts needs the record-plane owner
 
 - #1912, updated 2026-10-19 17:02 UTC: turns script `board`, `on_record`, `recorded`,
   `posted` into Commander methods; also changes `BackVerb.report` and configuration.
-  These functions remain untouched pending claude-code's ownership decision.
+  The explicit-context branch is now merged here; ownership is cleared, but the
+  newer P218 ratchet repair supersedes the earlier deletion assignment.
 - #1756, updated 17:34 UTC: changes pattern-ID validation in BackVerb and Slop.
   Native event rendering does not change that validation.
 
@@ -81,7 +84,7 @@ The order-work reader consumed a frozen copy of this worker's actual saved nativ
 session, including an actual read of order_story.py after the scratch order was
 created. No event was authored and no saved input was replayed. The real CLI then
 recorded acceptance, send-back/strike and operation delivery. Both stories are
-pasted at every step in evidence/phase5/lifecycle.md. Two subsequent reads were
+pasted at every step in the PR body (removed from the tree as requested). Two subsequent reads were
 identical and left the Todo store mtime unchanged. The original check ran through
 comms_order_done; its artifact was the actual textual CLI receipt, not an image.
 
@@ -101,4 +104,43 @@ source receipt are retained under evidence/phase5/.
 After-edit NRA syntax census: 380 modules, 3,579 classes, zero parse omissions.
 Story rendering lives on the original event owners and shared StoryEvent
 contract; Todo and the native tools gather and sort their results. The shared
-script functions involved in #1912 remain untouched.
+script functions retain #1912's explicit context. The merge also keeps main's
+record-owned delivery strikes instead of adding another script strike.
+
+## P218 repair checkpoint
+
+Published read-side repair: 6c7d459d5. No OrderPost implementation exists in this
+checkpoint. Phase 3 has the exact source list of missing transition facts and
+retains record-plane ownership. A future post must use verdict.previous, not the
+result's holder, because automatic firing can release that holder in the same
+transaction. Keep the publication insertion in that transaction; no second Todo
+upsert or reconstructed history is acceptable.
+
+The work reader now returns OrderWork or UnassignedOrderWork. Both the work tool
+and story tool consume that same result; neither probes Todo.assignment. The
+Todo store selects the actual assigned row by its existing keyed index. The
+original float-or-null timestamp is decoded once through GeneratedTimestamp at
+the tool-work read boundary. No sentinel, copied nullable timestamp or replacement
+clock was added.
+
+The journey is a typed Journey with declaration-owned steps, ordinary tool/action
+records, top-level imports and shared result encoding. It does not turn typed
+actions or deliveries into raw dictionaries and string-selected tool identities.
+Mypy and Ruff pass for the rewritten journey. Fresh actual saved-session work,
+acceptance, send-back and checked delivery succeeded on a new private scratch
+bus. Five focused sanity tests passed in 5.08 seconds; none is claimed to prove
+public posting or complete phase-5 acceptance.
+
+The repair AST pass covers 382 production modules plus the rewritten journey:
+3,627 declarations, 8,958 functions, 5,421 from-imports, 569 imports, 8,758 writes,
+5,306 annotated writes, 3,965 ifs, 4,105 comparisons, 32,284 calls and 43,797
+attributes, with zero parse omissions. NRA ModuleSyntaxIndex was reused. The
+shared development Python lacks tree-sitter; the installed stack Python performed
+this read-only census with NRA's own metaclass-registry dependency. No new parser
+or package environment was created. Dynamic tool dispatch remains a runtime
+obligation, not an AST proof.
+
+Current owned disposable output: /home/ts/.cache/agent-scratch/pi-cn-phase5/,
+including the new private bus and its copied session. Original user sessions and
+UNKNOWN inputs are untouched. The old evidence/phase5 private bus remains an
+unpublished historical proof source; it is not a second live installation.
