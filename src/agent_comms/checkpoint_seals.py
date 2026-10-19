@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Literal
 
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import CheckpointNeedsRepairError, RelationViolationError
 from .field_codec import Id128Text, Sha256Text
 from .private_path import FileRevision
 
@@ -148,6 +148,4 @@ class PendingSeal(CheckpointSeal):
             raise RelationViolationError("Private bus checkpoint pending suffix differs from intent.")
 
     def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
-        from .private_bus_checkpoint import CheckpointNeedsRepair
-
-        raise CheckpointNeedsRepair("Private bus checkpoint has an unfinished write.")
+        raise CheckpointNeedsRepairError("Private bus checkpoint has an unfinished write.")
