@@ -9,7 +9,6 @@ from __future__ import annotations
 import re
 import types
 from abc import abstractmethod
-from collections.abc import Iterator
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
@@ -18,7 +17,7 @@ from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
-from .pi_counts import NonnegativeCountWire, PiCount, UnreportedCount
+from .pi_counts import NonnegativePiCount, PiCount, UnreportedCount
 from .pi_vocabulary import (
     NoThinkingOverride,
     PiStopReason,
@@ -30,8 +29,7 @@ from .tool_declaration import ToolDeclaration
 from .transcript_events import SentTranscript
 
 if TYPE_CHECKING:
-    from .agent_events import AgentEvent, ProviderUsage
-    from .backend import TurnSession
+    from .agent_events import ProviderUsage
     from .turn_usage import UsageAccount
 
 
@@ -236,14 +234,14 @@ class PiUsage(PiPayload):
             return None
         return super().normalize_field(target, key, value, record)
 
-    input: Annotated[PiCount, NonnegativeCountWire] = wire_field("input", UnreportedCount())
-    output: Annotated[PiCount, NonnegativeCountWire] = wire_field("output", UnreportedCount())
-    cache_read: Annotated[PiCount, NonnegativeCountWire] = wire_field("cacheRead", UnreportedCount())
-    cache_write: Annotated[PiCount, NonnegativeCountWire] = wire_field("cacheWrite", UnreportedCount())
+    input: NonnegativePiCount = wire_field("input", UnreportedCount())
+    output: NonnegativePiCount = wire_field("output", UnreportedCount())
+    cache_read: NonnegativePiCount = wire_field("cacheRead", UnreportedCount())
+    cache_write: NonnegativePiCount = wire_field("cacheWrite", UnreportedCount())
     total_tokens: PiCount = wire_field("totalTokens", UnreportedCount())
     cost: PiCost | None = wire_field("cost")
-    reasoning: Annotated[PiCount, NonnegativeCountWire] = wire_field("reasoning", UnreportedCount())
-    cache_write_1h: Annotated[PiCount, NonnegativeCountWire] = wire_field("cacheWrite1h", UnreportedCount())
+    reasoning: NonnegativePiCount = wire_field("reasoning", UnreportedCount())
+    cache_write_1h: NonnegativePiCount = wire_field("cacheWrite1h", UnreportedCount())
 
     @property
     def token_total(self) -> PiCount:
@@ -1026,8 +1024,8 @@ class StateData(NativeSessionSnapshot, PiResponseData):
     # default on output; its internal family tag is not a native model object.
     model: PiModel = field(default_factory=UnreportedModel, metadata={"wire_omit_default": True})
     thinking_level: ThinkingLevelField = wire_field("thinkingLevel", default=NoThinkingOverride)
-    message_count: Annotated[PiCount, NonnegativeCountWire] = wire_field("messageCount", UnreportedCount())
-    pending_message_count: Annotated[PiCount, NonnegativeCountWire] = wire_field("pendingMessageCount", UnreportedCount())
+    message_count: NonnegativePiCount = wire_field("messageCount", UnreportedCount())
+    pending_message_count: NonnegativePiCount = wire_field("pendingMessageCount", UnreportedCount())
     is_streaming: bool | None = wire_field("isStreaming")
     is_compacting: bool | None = wire_field("isCompacting")
 

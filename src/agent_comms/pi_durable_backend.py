@@ -3,23 +3,36 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
-from contextlib import ExitStack, contextmanager
 from collections.abc import Callable
+from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from uuid import uuid4
 
 from pydantic import JsonValue
 
-from .agent_backend import AgentBackend, Compacts, CompactionOutcome, ConfiguresModel, RuntimeLocation
+from .agent_backend import (
+    AgentBackend,
+    CompactionOutcome,
+    Compacts,
+    ConfiguresModel,
+    RuntimeLocation,
+)
 from .agent_events import Error
 from .coordination_database import CoordinationStore
-from .native_child import PiChild
 from .external_transcript import ExternalCut
+from .native_child import PiChild
 from .native_entries import StoredEntry
 from .native_session_files import SessionFiles
 from .native_transcript import StoredRecord
-from .pi_commands import Compact, GetAvailableModels, GetSessionStats, GetState, PiCommand, SetModel, SetThinkingLevel
+from .pi_commands import (
+    Compact,
+    GetAvailableModels,
+    GetState,
+    PiCommand,
+    SetModel,
+    SetThinkingLevel,
+)
 from .pi_events import AutoRetryEnd, DurablePiEvent, RetryEnd
 from .pi_payloads import PiResponseData
 from .pi_vocabulary import ThinkingLevelField

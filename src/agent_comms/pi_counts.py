@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .context_reading import ContextReading, ContextUsage, UnmeasuredContext
 from .field_codec import FieldCodec, FieldRepresentation, WireValue
@@ -134,3 +134,6 @@ class ReportedCount(PiCount):
             return
         session.usage.confirm(self)
         yield session.context_info()
+
+
+NonnegativePiCount = Annotated[PiCount, NonnegativeCountWire]

@@ -32,9 +32,9 @@ from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .launch_runtime import LaunchRuntime
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
+    from .launch_runtime import LaunchRuntime
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
 

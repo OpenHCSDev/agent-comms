@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
 from dataclasses import replace
 from functools import partial
-from .coordinator import Coordination
+from typing import TYPE_CHECKING, Any, cast
 
 from acp.schema import (
     AgentMessageChunk,
@@ -25,6 +24,7 @@ from .acp_extension import (
     PromptCancelledUpdate,
     encode_updates,
 )
+from .coordinator import Coordination
 from .mro_dispatch import MroDispatch, handles
 from .tool_results import tool_result_content
 
