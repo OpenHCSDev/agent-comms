@@ -163,8 +163,12 @@ def _github_time(text: str) -> float:
 class PullRequests:
     """Pull requests queried by immutable order identity, cached within one board read."""
 
-    def __init__(self) -> None:
+    def __init__(self, todos: Sequence[Todo] = ()) -> None:
         self._read: dict[tuple[str, str, str], tuple[PullRequest, ...]] = {}
+        self._orders: dict[str, dict[str, ProblemOrder]] = {}
+        for todo in todos:
+            if todo.holder:
+                self._orders.setdefault(todo.repo, {})[todo.order.id] = todo.order
 
     def listed(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
         key = (repo, state, order.id)
@@ -173,18 +177,30 @@ class PullRequests:
         return self._read[key]
 
     def read(self, repo: str, state: str, order: ProblemOrder) -> tuple[PullRequest, ...]:
+        orders = self._orders.setdefault(repo, {})
+        orders[order.id] = order
+        aliases = {f"o{index}": candidate for index, candidate in enumerate(orders.values())}
+        selections = []
+        for alias, candidate in aliases.items():
+            search = json.dumps(f'repo:{repo} is:pr is:{state} in:body '
+                                f'"{candidate.pull_request_reference}" sort:updated-desc')
+            selections.append(
+                f'{alias}: search(query: {search}, type: ISSUE, first: 100) {{ nodes {{ '
+                '... on PullRequest { number headRefName headRefOid body '
+                'mergeCommit { oid } mergedAt updatedAt } } }')
         listed = subprocess.run(
-            ("gh", "pr", "list", "-R", repo, "--state", state, "--limit", "100",
-             "--search", f'"{order.pull_request_reference}" in:body',
-             "--json", "number,headRefName,headRefOid,mergeCommit,mergedAt,updatedAt,body", "--jq",
-             'map([.number, .headRefName, .headRefOid, .mergeCommit.oid // "", .mergedAt // "",'
-             " .updatedAt, .body])"),
+            ("gh", "api", "graphql", "-f", "query=query {" + " ".join(selections) + "}",
+             "--jq", '.data | map_values(.nodes | map([.number, .headRefName, .headRefOid,'
+             ' .mergeCommit.oid // "", .mergedAt // "", .updatedAt, .body]))'),
             capture_output=True, text=True, timeout=60)
         if listed.returncode:
-            raise ValueError(listed.stderr.strip() or f"gh pr list -R {repo} failed.")
-        rows = FieldCodec.decode(tuple[tuple[int, str, str, str, str, str, str], ...],
+            raise ValueError(listed.stderr.strip() or f"GitHub order lookup in {repo} failed.")
+        rows = FieldCodec.decode(dict[str, tuple[tuple[int, str, str, str, str, str, str], ...]],
                                  FieldCodec.parse(listed.stdout))
-        return tuple(PullRequest.listed(*row) for row in rows)
+        for alias, candidate in aliases.items():
+            self._read[repo, state, candidate.id] = tuple(
+                PullRequest.listed(*row) for row in rows[alias])
+        return self._read[repo, state, order.id]
 
 
 def _clock(at: float) -> str:
@@ -210,7 +226,7 @@ class ProgressSource:
     def commits(self, *excluded: str) -> Iterator[tuple[str, float]]:
         """The checkout's newest commit since the order that no ``excluded`` ref already holds."""
         log = subprocess.run(
-            ("git", "-C", str(self.checkout), "log", "-1", f"--since=@{int(self.since)}",
+            ("git", "-C", str(self.checkout), "log", "-1", f"--since={time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))}",
              "--format=%H %ct", "HEAD", "--not", *excluded),
             capture_output=True, text=True, timeout=30)
         for line in log.stdout.splitlines() if not log.returncode else ():
@@ -1576,7 +1592,7 @@ class TodoStore(TypedStore):
 
     def progress(self, todos: Sequence[Todo], storage: StorageRule) -> str:
         """Each pending problem's progress and latest verdict, as its Goal shows them."""
-        pulls = PullRequests()
+        pulls = PullRequests(todos)
         return "\n".join(
             " · ".join((f"{todo.id}: {OrderProgress.read(todo, storage, pulls).line}",
                         *(verdict.line for verdict in todo.verdicts[-1:])))
