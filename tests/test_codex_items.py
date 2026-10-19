@@ -118,7 +118,7 @@ def test_coalescing_preserves_completion_and_unrelated_updates():
     first = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("H",), UnrecordedEventTime(), "a"))
     newer = DraftItem("t", "a", TextDraft.from_parts(AssistantTranscript, ("Hello",), UnrecordedEventTime(), "a"))
     other = DraftItem("t", "b", TextDraft.from_parts(AssistantTranscript, ("Other",), UnrecordedEventTime(), "b"))
-    final = FinishedItem("t", "a", (AssistantTranscript("Hello!", position="a"),))
+    final = FinishedItem("t", "a", (AssistantTranscript("Hello!", position="a", timestamp=1.0),))
     end = TurnEnded()
     assert RuntimeUpdate.coalesced([first, other, newer]) == [other, newer]
     assert RuntimeUpdate.coalesced([first, other, newer, final, end]) == [other, final, end]

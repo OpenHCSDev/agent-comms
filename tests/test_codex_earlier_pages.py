@@ -170,7 +170,7 @@ def test_stopped_carry_preserves_external_items(tmp_path):
     root = tmp_path / 'root'
     root.mkdir()
     path = ExternalTranscript.path_in(root)
-    saved = json.dumps(FieldCodec.encode((AssistantTranscript('preserved', position='i'),)))
+    saved = json.dumps(FieldCodec.encode((AssistantTranscript('preserved', position='i', timestamp=1.0),)))
     # This historical conversion predates the separate event table.
     with closing(CoordinationStore.writer(path)) as connection:
         connection.execute('CREATE TABLE external_item (thread TEXT NOT NULL, turn_id TEXT NOT NULL, '
