@@ -11,16 +11,17 @@ from typing import TYPE_CHECKING
 
 from .agent_backend import AgentBackend
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .cli_result import ThreadToolCatalogResult
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
+from .cli_result import ThreadToolCatalogResult
+from .launch_runtime import LaunchRecord
+from .native_arguments import NativeArguments
+from .native_tools import NativeRequestTools
+from .store_files import _atomic_write_text
 from .goals import (
     GoalDeclaration,
     NoGoal,
 )
-from .launch_runtime import LaunchRecord
-from .native_arguments import NativeArguments
-from .native_tools import NativeRequestTools
 from .pi_vocabulary import (
     NoThinkingOverride,
     ServiceTier,
@@ -34,18 +35,17 @@ from .registration_inheritance import (
     InheritThinkingLevel,
 )
 from .storage_rules import StoragePath, StorageRoots, StorageRule
-from .store_files import _atomic_write_text
-from .task_sources import TaskScope
 from .thread_execution import NativeThreadExecution, ThreadExecution
 from .thread_identity import (
     AgentThreadRole,
     ThreadProvenance,
     ThreadRole,
-    TurnFence,
     TurnId,
     TurnIdentity,
 )
+from .thread_identity import TurnFence
 from .turn_lease import NoTurnRecord, TurnLeaseFence, TurnRecord, TurnState
+from .task_sources import TaskScope
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -166,8 +166,9 @@ class Thread(ThreadProvenance):
 
     def native_launch(self, root, snapshot, worktree: str) -> LaunchRecord:
         """Project this captured thread and checked project request into its child's record."""
-        from .launch_runtime import OwnerLaunchRecord
         from .runtime_requests import ProjectRuntimeRequest
+
+        from .launch_runtime import OwnerLaunchRecord
         record = OwnerLaunchRecord.from_record(LaunchRecord.current().at_root(Path(root)),
                          thread=replace(self.launch(), worktree=worktree, managed=True))
         return ProjectRuntimeRequest.for_native(snapshot, self).launch(record)
@@ -445,6 +446,6 @@ def current_thread(registry) -> Thread:
 
 # Thread's backend field is the lookup boundary. Declare both implementations
 # after the record graph, then reject incomplete declarations before any lookup.
-from . import pi_durable_backend, pi_native_backend  # noqa: E402, F401
+from . import pi_native_backend, pi_durable_backend  # noqa: E402, F401
 
 AgentBackend.seal()

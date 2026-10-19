@@ -17,78 +17,35 @@ counting. An order sent in error is retired with `withdraw`: its problem closes 
 Nothing here judges code; it refuses orders that leave a unit room to interpret,
 and refuses to let a deadline lapse silently.
 """
-import argparse
-import asyncio
-import os
-import re
-import subprocess
-import sys
-import time
+import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
 from ..change_report import FileLine
-from ..child_process import BoundedRun, CheckPrinted
+from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
+from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
-from ..launch_runtime import LaunchRuntime
-from ..messages import Message
 from ..native_tool_call import SelectedToolDenied
+from ..messages import Message
+from ..launch_runtime import LaunchRuntime
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
-from ..todos import (
-    ApplicationOrderRun,
-    AssignTodo,
-    BluntText,
-    CleanHunt,
-    CommitDelivery,
-    DirectiveText,
-    FileDeliveryEvidence,
-    InstallDeadline,
-    LocatedProblemFinding,
-    MechanicalOrderRun,
-    NoDeliveryEvidence,
-    NotifiedFirstCallEvent,
-    ObservedFirstCallEvent,
-    OperationDelivery,
-    OrderDeletion,
-    OrderedHunt,
-    OrderMessage,
-    OrderProgress,
-    OrderRun,
-    PendingProblemOrder,
-    PlannedInstallDeadline,
-    RecordFirstCallTodo,
-    Slop,
-    StrikeReason,
-    StrikeTodo,
-    Todo,
-    UnlocatedProblemFinding,
-    VerdictAudience,
-    VoidStrikeTodo,
-    WithdrawTodo,
-)
 from ..tool_caller import ThreadCaller
-from ..tools import (
-    CommsFireTool,
-    CommsOrderCheckTool,
-    CommsOrderDoneTool,
-    CommsOrderServeTool,
-    CommsOrderTool,
-    CommsProblemCloseTool,
-    CommsSendTool,
-    CommsTodoCreateTool,
-    CommsTodoListTool,
-    CommsTodoTool,
-    TodoList,
-)
+from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
+                     CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
+                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
+from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
+                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
+                     OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
+                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
 from .config import Commander, CommanderConfig, CommanderRole, Repo
 

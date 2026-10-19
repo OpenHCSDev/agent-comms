@@ -12,14 +12,17 @@ from functools import cached_property
 from pathlib import Path
 from uuid import uuid4
 
-from .active_route import resolve_comms_route
 from .child_process import ObservedProcess, ParentedProcess, ProcessIdentity, ProcessState
+from .turn_lease import NoTurnRecord
 from .cli_result import CliResult
+from .tool_result import ToolResult
 from .diagnostics import owner_process_output
 from .errors import RelationViolationError
-from .launch_runtime import LaunchRecord, LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
+from .native_arguments import NativeArguments
+from .launch_runtime import LaunchRecord, LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .active_route import resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
 from .registry_document import RegistrySnapshot
@@ -31,8 +34,6 @@ from .store_files import _store_lock
 from .thread_identity import ClaimedIdentity, OwnerIdentity, ThreadIncarnationRecord
 from .thread_owned_state import ThreadOwnedState
 from .threads import Thread
-from .tool_result import ToolResult
-from .turn_lease import NoTurnRecord
 from .typed_table import Column, JsonStorage, TypedStore, TypedTable
 
 _LOG = logging.getLogger(__name__)

@@ -14,8 +14,8 @@ from typing import TYPE_CHECKING
 
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
-from .launch_runtime import LaunchRecord, LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_launch import RetainedOwnerLaunch
+from .launch_runtime import LaunchRecord, LaunchRuntime, RestartEnvironment, RestoredRuntime
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path

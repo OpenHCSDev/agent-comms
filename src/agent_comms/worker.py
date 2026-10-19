@@ -1,15 +1,15 @@
 """Persistent owner for a forked thread; idle turns consume no model process."""
 
-import argparse
 import asyncio
+import argparse
 import os
 import signal
-from contextlib import suppress
 from functools import partial
+from .coordinator import Coordination
+from contextlib import suppress
 
 from .acp import CommsAgent
 from .comms import wire
-from .coordinator import Coordination
 from .launch_runtime import LaunchRecord, ThreadLaunch
 
 

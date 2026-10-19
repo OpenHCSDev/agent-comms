@@ -19,11 +19,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import sys
 import time
 from contextlib import AsyncExitStack
 from functools import partial
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from acp import RequestError, run_agent
@@ -44,24 +46,25 @@ from agent_comms.coordination_errors import (
 from agent_comms.coordinator import Coordination
 
 from . import agent_events as events
+from .acp_failure import NativeTurnError
 from .acp_extension import (
     CompactRequest,
     TextRouteUpdate,
     encode_updates,
 )
-from .acp_failure import NativeTurnError
 from .agent_event_updates import AcpEventConsumer
+from .image_inputs import prompt_images
 from .cohort_foreground import _accept_visible_deliveries
 from .comms import Comms, wire
 from .coordination_cohort import next_sealed_assignment
-from .cursor_publication import CursorPublication
 from .field_codec import FieldCodec, MalformedRecord
-from .image_inputs import prompt_images
+from .cursor_publication import CursorPublication
 from .input_drain import InputDrain
+from .queued_input import DeliveredInput
+from .schedule_rules import SelectedWakeCheck
 from .input_effects import InputEffects
 from .message_bus import MessageBus
 from .publisher import ResponseWrites
-from .queued_input import DeliveredInput
 from .routing import MessageRoute
 from .runtime import (
     UNBOUND_CONTROLLER,
@@ -69,7 +72,6 @@ from .runtime import (
     RuntimeServer,
     socket_path,
 )
-from .schedule_rules import SelectedWakeCheck
 from .session_effects import SessionEffects
 from .session_lifecycle import AttachedSessionLifecycle, SessionLifecycle
 from .threads import Thread

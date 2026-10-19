@@ -16,7 +16,7 @@ from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
 from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
-from agent_comms.launch_runtime import CallingThreadUnavailableError, ThreadLaunch
+from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import QuestionKind
 from agent_comms.pi_counts import PiCount
@@ -30,7 +30,7 @@ from agent_comms.tool_caller import ThreadCaller
 
 def test_calling_thread_is_declared_by_owner_launch_environment():
     assert ThreadLaunch.current({"AGENT_COMMS_THREAD": "owner"}).name == "owner"
-    with pytest.raises(CallingThreadUnavailableError, match="AGENT_COMMS_THREAD"):
+    with pytest.raises(CallingThreadUnavailable, match="AGENT_COMMS_THREAD"):
         ThreadLaunch.current({})
     assert not ThreadLaunch.called_by("owner", lambda caller: caller, environment={})
 

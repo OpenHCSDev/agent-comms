@@ -7,21 +7,17 @@ owners for each process. This module installs no marker, participant, schema or 
 
 from __future__ import annotations
 
-import shutil
 from abc import ABC, abstractmethod
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
-
 from agent_comms.coordination_errors import IdentityConflict, PublicationActivationBlocked
 
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_package import (
-    MANIFEST,
-    NativePackageError,
-    VerifiedNativePackage,
-    pinned_native_package,
+    MANIFEST, NativePackageError, VerifiedNativePackage, pinned_native_package,
 )
 from .native_pi import NativePiUnavailable, _private_session_dir
 from .wire_log import WireLog

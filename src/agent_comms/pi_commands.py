@@ -16,10 +16,9 @@ from . import turn_phase as phases
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec
 from .image_inputs import ImageInput
-from .native_package import VerifiedNativePackage
 from .native_session_reopen import NativeSessionIdentity
-from .native_tool_call import OwnerToolConnection
 from .native_turn_context import NativeContextData
+from .native_tool_call import OwnerToolConnection
 from .pi_payloads import (
     CompactionData,
     EmptyData,
@@ -33,6 +32,8 @@ from .pi_payloads import (
     UnknownData,
 )
 from .turn_context import InputContributionCoordinates, SegmentManifest
+
+from .native_package import VerifiedNativePackage
 
 if TYPE_CHECKING:
     from .backend import TurnSession

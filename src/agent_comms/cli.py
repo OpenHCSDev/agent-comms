@@ -12,12 +12,13 @@ from __future__ import annotations
 import argparse
 import sys
 from collections.abc import Sequence
+from pathlib import Path
 
 from .cli_commands import CliCommand
 from .cli_protocol import CoreError
 from .comms import client_wire
 from .coordination_errors import CoordinationError
-from .launch_runtime import LaunchRecord
+from .launch_runtime import CurrentLaunchRoot, ExplicitLaunchRoot, LaunchRecord
 
 
 def _fail(error: BaseException) -> int:
@@ -37,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
     parser.add_argument(
         "--root",
-        default="",
+        default=None,
         help="Comms root directory (otherwise the supplied launch record's root)",
     )
     parser.add_argument(LaunchRecord.argument, help=argparse.SUPPRESS)
@@ -51,7 +52,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         arguments = list(sys.argv[1:] if argv is None else argv)
         args = build_parser().parse_args(arguments)
-        record = LaunchRecord.client_startup(arguments, root=args.root)
+        root = (ExplicitLaunchRoot(Path(args.root).expanduser().resolve())
+                if args.root is not None else CurrentLaunchRoot.capture())
+        record = LaunchRecord.client_startup(arguments, root)
         command = CliCommand.member_named(args.command).from_namespace(args)
         with client_wire(record.root_selection.path) as comms:
             return command.run(comms, sys.stdout)

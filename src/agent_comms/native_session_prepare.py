@@ -5,23 +5,23 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable, Iterable, Sequence
 from contextlib import aclosing
-from functools import partial
 from pathlib import Path
+from functools import partial
 from typing import TYPE_CHECKING
 
 from . import agent_events as events
 from . import backend
-from .coordinator import Coordination
-from .native_package import VerifiedNativePackage
 from .native_pi import NativePiUnavailable
+from .native_package import VerifiedNativePackage
 from .native_startup import NativeStartup
+from .coordinator import Coordination
 from .pi_payloads import StateData
-from .prompt_state import UnwrittenPrompt
 from .session_fence import session_writer_fence
+from .prompt_state import UnwrittenPrompt
 
 if TYPE_CHECKING:
-    from .following_inputs import FollowingInputs
     from .pi_native_backend import PersistentPiSession
+    from .following_inputs import FollowingInputs
 
 
 class PreparedSession(UnwrittenPrompt):
