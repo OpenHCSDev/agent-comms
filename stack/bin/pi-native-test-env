@@ -7,13 +7,13 @@ usage='Usage: pi-native-test-env [--python PATH] [--cache DIR] [--from BUILT_STA
 stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 repo_root=$(cd -- "$stack_root/.." && pwd)
 python=$(command -v python3)
-cache=()
+cache=
 built=$stack_root
 while [[ $# -gt 0 ]]; do
     [[ $# -ge 2 ]] || { printf '%s\n' "$usage" >&2; exit 1; }
     case "$1" in
         --python) python=$2 ;;
-        --cache) mkdir -p -- "$2"; cache=("$(cd -- "$2" && pwd)") ;;
+        --cache) mkdir -p -- "$2"; cache=$(cd -- "$2" && pwd) ;;
         --from) built=$(cd -- "$2" && pwd) ;;
         *) printf '%s\n' "$usage" >&2; exit 1 ;;
     esac
@@ -23,7 +23,9 @@ done
 export PYTHONPATH="$repo_root/src"
 manifest="$stack_root/pi-native.sha256"
 build_id=$(sha256sum "$manifest" | cut -c1-16)
-environment=$("$python" -m agent_comms.native_package --environment "${cache[@]}")
+# StorageRule.native_cache declares the shared root when --cache names none.
+cache=${cache:-$("$python" -c 'from agent_comms.storage_rules import StorageRule; print(StorageRule.native_cache)')}
+environment=$("$python" -m agent_comms.native_package --environment "$cache")
 package=.pi-native-$build_id/node_modules/@earendil-works/pi-coding-agent
 
 verify() (

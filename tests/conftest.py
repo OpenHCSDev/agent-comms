@@ -57,7 +57,9 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
         )
 
 def pytest_addoption(parser):
-    parser.addoption("--native-cache", type=Path, default=None,
+    from agent_comms.storage_rules import StorageRule
+
+    parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
                      help="Root of the native test environments stack/bin/pi-native-test-env builds")
 
 
@@ -66,8 +68,7 @@ def native_runtime_package(pytestconfig):
     """The artifact of this checkout's own pin from its test environment; the pins must agree."""
     from agent_comms import native_package
 
-    cache = pytestconfig.getoption("native_cache")
-    environment = native_package.native_environment(*(cache,) if cache else ())
+    environment = native_package.native_environment(pytestconfig.getoption("native_cache"))
     manifest = environment / "pi-native.sha256"
     if not manifest.is_file():
         pytest.exit(f"No native test environment at {environment}; run stack/bin/pi-native-test-env.", 2)

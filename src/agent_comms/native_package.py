@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .private_path import PrivateDirectoryRole, TrustedAncestorRole
-from .storage_rules import StorageRule
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
@@ -60,9 +59,10 @@ def pinned_location() -> Path:
     return MANIFEST.parent / f".pi-native-{pin_id()}" / PACKAGE_LAYOUT
 
 
-def native_environment(cache: Path = StorageRule.native_cache) -> Path:
-    """This pin's test environment, shared by digest: its manifest beside its built artifact,
-    laid out as stack/ is. stack/bin/pi-native-test-env builds it; the live install never does."""
+def native_environment(cache: Path) -> Path:
+    """This pin's test environment under a StorageRule.native_cache root, shared by digest: its
+    manifest beside its built artifact, laid out as stack/ is. stack/bin/pi-native-test-env
+    builds it; the live install never does."""
     return cache / pin_id()
 
 
@@ -422,8 +422,8 @@ if __name__ == "__main__":
         print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)
     elif len(sys.argv) == 4 and sys.argv[1] == "--install-sources":
         install_declared_sources(Path(sys.argv[2]), Path(sys.argv[3]))
-    elif sys.argv[1:2] == ["--environment"] and len(sys.argv) <= 3:
-        print(native_environment(*map(Path, sys.argv[2:])))
+    elif len(sys.argv) == 3 and sys.argv[1] == "--environment":
+        print(native_environment(Path(sys.argv[2])))
     elif len(sys.argv) == 3 and sys.argv[1] == "--digest":
         print(package_tree_digest(Path(sys.argv[2])))
     elif len(sys.argv) == 3 and sys.argv[1] == "--write-manifest":
@@ -433,7 +433,7 @@ if __name__ == "__main__":
     else:
         raise SystemExit(
             "Usage: python -m agent_comms.native_package [--digest|--write-manifest] PACKAGE_DIR | "
-            "--environment [CACHE] | "
+            "--environment CACHE | "
             "--share-resources NEW_PACKAGE DEPLOYMENTS | "
             "--install-sources PACKAGE_DIR SNAPSHOT_ROOT"
         )
