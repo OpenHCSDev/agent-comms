@@ -72,11 +72,8 @@ class Binding(TypedTable):
 
     @classmethod
     def from_arguments(cls, arguments: argparse.Namespace) -> Binding | None:
-        values = {
-            key: vars(arguments)[key]
-            for _, key in FieldCodec.record_fields(cls)
-            if vars(arguments)[key] is not None
-        }
+        values = {key: vars(arguments)[key] for _, key in FieldCodec.record_fields(cls)
+                  if vars(arguments)[key] is not None}
         return (
             FieldCodec.decode(cls, {cls.family_discriminator: cls.declared_name, **values})
             if values

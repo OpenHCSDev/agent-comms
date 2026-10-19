@@ -441,9 +441,7 @@ class Registration:
             return document.status(name)
 
     def session_thread(
-        self,
-        project_path: Path,
-        preferred: str | None = None,
+        self, project_path: Path, preferred: str | None = None,
     ) -> ProjectThreadSelection:
         """Select an unbound project's preferred name or sole declared ACP thread.
 
