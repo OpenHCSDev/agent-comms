@@ -13,7 +13,9 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_errors import RecoveryBlocked
 from agent_comms.envelope_claim_transitions import ClaimRelease, ClaimTransition
 from agent_comms.errors import RelationViolationError
+from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.fresh_private_session import create_fresh_private_session
+from agent_comms.transcript_events import AssistantTranscript, UserTranscript
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -43,6 +45,34 @@ def test_only_selected_registry_and_history_without_old_pending_input(source, tm
         with c.bus.log.opened_wire_snapshot() as history:
             assert [m.body for m in history.newest_messages()] == ["old history is not a new input"]
         assert sum(p.stat().st_size for p in root.rglob("*") if p.is_file()) < 2 * 1024 * 1024
+    assert not root.exists()
+
+
+@pytest.mark.parametrize("timestamp", (None, 1_760_000_000.125))
+def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, tmp_path, timestamp):
+    owner = source.registry.require("B")
+    external = ExternalTranscript(source.root, owner.incarnation)
+    events = (
+        UserTranscript("source request " * 1500, position=1, timestamp=timestamp),
+        AssistantTranscript("source reply", position=2,
+                            timestamp=None if timestamp is None else timestamp + 1.125),
+    )
+    external.finish(turn_id="saved", item_id="item", events=events)
+    root = tmp_path / "external-window"
+    if timestamp is None:
+        with pytest.raises(ValueError, match="no original timestamp"):
+            with CheckRoot(source, (owner.name,), root).open():
+                pytest.fail("An unknown source clock was rewritten as known time")
+    else:
+        with CheckRoot(source, (owner.name,), root).open() as copied:
+            session = Path(copied.registry.require(owner.name).session_file)
+            rows = [NativeEntry.read(line) for line in session.read_bytes().splitlines()]
+            assert [entry.message.text for entry in rows[1:]] == [event.text for event in events]
+            assert [entry.timestamp.at.timestamp() for entry in rows[1:]] == [
+                event.timestamp for event in events
+            ]
+    with external.reading() as original:
+        assert tuple(original.reverse(original.cut().offset))[0].events == events
     assert not root.exists()
 
 
@@ -144,5 +174,7 @@ def test_native_window_uses_existing_import_and_route_readers(source, tmp_path, 
         assert [entry.message.text for entry in rows[1:]] == ["history 17", "history 18", "history 19"]
         assert rows[1].parent_id is None
         assert rows[2].parent_id == rows[1].id
+        source_time = NativeEntry.read(original.splitlines()[1]).timestamp.at
+        assert all(entry.timestamp.at == source_time for entry in rows[1:])
         assert session.path.read_bytes() == original
     assert not root.exists()

@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, field, replace
-from datetime import datetime
+from datetime import UTC, datetime
 from itertools import chain
 from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal, TextIO
@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
-from .importing import ImportBuffer, ImportedSessionMetadata, ImportLimits
+from .importing import ImportedSessionMetadata
 from .pi_payloads import PiMessage, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .routing import TurnRouting
@@ -178,13 +178,15 @@ class ImportedSessionWriter:
         self.stream.write(json.dumps(encoded, ensure_ascii=False) + "\n")
         self.parent = NativeEntry.from_wire(encoded)
 
-    def import_record(
-        self, entry: RecordedEntry, events: Iterable[TranscriptEvent], limits: ImportLimits
-    ) -> None:
-        buffer = ImportBuffer(limits)
-        buffer.add(events)
-        for message in buffer.messages:
-            self.append(message, entry.timestamp.at)
+    def import_events(self, events: Iterable[TranscriptEvent]) -> None:
+        """The source already normalized records; preserve its conversation and clock."""
+        for event in events:
+            message = event.imported()
+            if message is None or not message.body.strip():
+                continue
+            if event.timestamp is None:
+                raise ValueError("Copied conversation event has no original timestamp")
+            self.append(message, datetime.fromtimestamp(event.timestamp, UTC))
 
 
 class NativeHeaderState(ABC):
