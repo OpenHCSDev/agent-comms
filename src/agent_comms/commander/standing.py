@@ -28,8 +28,8 @@ class Detached(StandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Detached, ...]:
         owed: dict[str, list[str]] = {}
-        for todo in comms.goals.todos.held_for_commander(comms.registry.require(commander).incarnation):
-            owed.setdefault(todo.held().owner, []).append(todo.id)
+        for todo in cls.todos(comms, commander):
+            owed.setdefault(todo.holder, []).append(todo.id)
         statuses = comms.registry.snapshot().statuses
         away = [unit for unit in sorted(owed) if unit not in statuses or not statuses[unit].receiving]
         unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in statuses))
@@ -65,11 +65,10 @@ class IdleUnits(ReasonedStandingRule):
 
     @classmethod
     def reason(cls, comms: Comms, commander: str) -> str | None:
-        held = {todo.holder for todo in comms.goals.todos.held_for_commander(
-            comms.registry.require(commander).incarnation)}
+        held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CONFIG.parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
-        idle = sorted(thread.name for thread in comms.registry.all_threads.values()
+        idle = sorted(thread.name for thread in comms.registry.all_threads().values()
                       if thread.name not in excluded
                       and TurnDigestRead(comms.root, thread, bound).native())
         return ", ".join(idle) or None
