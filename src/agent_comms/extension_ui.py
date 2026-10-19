@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
-from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -40,9 +39,14 @@ class ExtensionUiSession:
         self.seen.add(key)
         # The controller maps unanswered, disconnected and refused replies to
         # CancelledUiChoice itself; only this outer deadline is a denial here.
-        with suppress(TimeoutError):
-            return await asyncio.wait_for(self.controller(request), timeout=15)
-        return CancelledUiChoice()
+        deadline = asyncio.timeout(15)
+        try:
+            async with deadline:
+                return await self.controller(request)
+        except TimeoutError:
+            if not deadline.expired():
+                raise
+            return CancelledUiChoice()
 
     async def fail(self, reason: str, session: TurnSession) -> None:
         session.output.record_failure(ExtensionUiFailed(reason))

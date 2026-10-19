@@ -509,14 +509,15 @@ class BroadExceptDefault(PerFileOccurrenceMeasure):
     broad_names: typing.ClassVar[frozenset[str]] = frozenset({"Exception", "BaseException"})
 
     @classmethod
-    def broad(cls, node: ast.AST | None) -> bool:
+    def broad(cls, node: ast.AST | None, *, names: frozenset[str] | None = None) -> bool:
+        names = cls.broad_names if names is None else names
         match node:
             case None:
                 return True
             case ast.Name(id=name) | ast.Attribute(attr=name):
-                return name in cls.broad_names
+                return name in names
             case ast.Tuple(elts=items):
-                return any(cls.broad(item) for item in items)
+                return any(cls.broad(item, names=names) for item in items)
         return False
 
     @staticmethod
@@ -551,10 +552,24 @@ class BroadSwallow(CleanChangedLines, BroadExceptDefault):
         "KeyError", "AttributeError", "LookupError",
     })
 
+    suppressed_names = broad_names | {"ConnectionError", "TimeoutError"}
+
+    @classmethod
+    def suppresses(cls, node: ast.AST) -> bool:
+        match node:
+            case ast.Call(func=ast.Name(id="suppress") | ast.Attribute(attr="suppress"), args=arguments):
+                return any(cls.broad(argument, names=cls.suppressed_names) for argument in arguments)
+        return False
+
     @classmethod
     def occurrences(cls, node: ast.AST) -> int:
-        return int(isinstance(node, ast.ExceptHandler) and cls.broad(node.type)
-                   and not any(isinstance(child, ast.Raise) for child in ast.walk(node)))
+        match node:
+            case ast.With(items=items) | ast.AsyncWith(items=items):
+                return sum(cls.suppresses(item.context_expr) for item in items)
+            case ast.ExceptHandler(type=error):
+                return int(cls.broad(error) and not any(
+                    isinstance(child, ast.Raise) for child in ast.walk(node)))
+        return 0
 
 
 class FamilyFlattened(PerFileMeasure, ast.NodeTransformer):
