@@ -26,8 +26,9 @@ class NativeBuildInputs:
             ("src/agent_comms/instructions", {".md"}),
         )
         paths: set[Path] = {
-            self.root / "src/agent_comms" / name
+            path
             for name in ("native_build.py", "native_build_inputs.py", "native_package.py")
+            if (path := self.root / "src/agent_comms" / name).is_file()
         }
         for directory, suffixes in families:
             for path in (self.root / directory).rglob("*"):

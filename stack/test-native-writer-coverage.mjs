@@ -385,7 +385,7 @@ if (process.env.AC_CAPACITY_SESSION) {
             peak_rss_kib: process.resourceUsage().maxRSS }));
     };
 }
-const selected = process.argv[2] ? [process.argv[2]] : Object.keys(cases);
+const selected = process.argv[3] ? [process.argv[3]] : Object.keys(cases);
 try {
     for (const name of selected) {
         assert.ok(cases[name], `unknown case ${name}`);
