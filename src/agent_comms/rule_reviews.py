@@ -16,6 +16,7 @@ from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, TypedStore, TypedTable
 
 if TYPE_CHECKING:
+    from .standing_rules import RulesDue
     from .threads import Thread
 
 
@@ -95,36 +96,34 @@ class RuleReview(ABC):
     """A reviewer's latest review as the store reads it, saying why its actions are refused."""
 
     @abstractmethod
-    def due(self, reviewer: str, max_age: int) -> tuple[tuple[str, float], ...]:
-        """Each reason the reviewer's actions are refused, with when it began."""
+    def due[Due: RulesDue](self, rule: type[Due], reviewer: str) -> tuple[Due, ...]:
+        """Each refusal of the reviewer's actions, as the rule that owns it."""
 
 
 class NoRuleReview(RuleReview):
-    def due(self, reviewer: str, max_age: int) -> tuple[tuple[str, float], ...]:
-        return ((f"no rule review recorded for {reviewer}", 0.0),)
+    def due[Due: RulesDue](self, rule: type[Due], reviewer: str) -> tuple[Due, ...]:
+        return (rule(f"no rule review recorded for {reviewer}", 0.0),)
 
 
 @dataclass(frozen=True)
-class DrawnRuleReview(RuleReview):
+class UnansweredRuleReview(RuleReview):
     at: float
     unanswered: tuple[int, ...]
 
-    def due(self, reviewer: str, max_age: int) -> tuple[tuple[str, float], ...]:
-        if self.unanswered:
-            drawn = time.strftime("%H:%M", time.localtime(self.at))
-            return (
-                (
-                    f"drawn rules {list(self.unanswered)} of the {drawn} review are unanswered",
-                    self.at,
-                ),
-            )
-        if (age := time.time() - self.at) > max_age:
-            return (
-                (
-                    f"last rule review was {int(age // 60)} min ago (max {max_age // 60})",
-                    self.at + max_age,
-                ),
-            )
+    def due[Due: RulesDue](self, rule: type[Due], reviewer: str) -> tuple[Due, ...]:
+        drawn = time.strftime("%H:%M", time.localtime(self.at))
+        why = f"drawn rules {list(self.unanswered)} of the {drawn} review are unanswered"
+        return (rule(why, self.at),)
+
+
+@dataclass(frozen=True)
+class AnsweredRuleReview(RuleReview):
+    at: float
+
+    def due[Due: RulesDue](self, rule: type[Due], reviewer: str) -> tuple[Due, ...]:
+        if (age := time.time() - self.at) > rule.max_age:
+            why = f"last rule review was {int(age // 60)} min ago (max {rule.max_age // 60})"
+            return (rule(why, self.at + rule.max_age),)
         return ()
 
 
@@ -139,8 +138,11 @@ class RuleReviews(ThreadOwnedState, TypedStore):
         with self.snapshot() as db:
             drawn = DrawnRule.select(db, reviewer=reviewer, order_by=("n",))
             answered = {answer.n for answer in RuleAnswer.select(db, reviewer=reviewer)}
-        unanswered = tuple(rule.n for rule in drawn if rule.n not in answered)
-        return DrawnRuleReview(drawn[0].drawn_at, unanswered) if drawn else NoRuleReview()
+        if not drawn:
+            return NoRuleReview()
+        if unanswered := tuple(rule.n for rule in drawn if rule.n not in answered):
+            return UnansweredRuleReview(drawn[0].drawn_at, unanswered)
+        return AnsweredRuleReview(drawn[0].drawn_at)
 
     def write(self, reviewer: str, entry: RuleReviewEntry) -> None:
         with self.writing() as db:

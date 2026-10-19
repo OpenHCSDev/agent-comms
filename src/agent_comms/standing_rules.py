@@ -108,8 +108,7 @@ class RulesDue(StandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
-        review = RuleReviews(comms.root).review(commander)
-        return tuple(cls(why, since) for why, since in review.due(commander, cls.max_age))
+        return RuleReviews(comms.root).review(commander).due(cls, commander)
 
     def began(self) -> float:
         return self.since
