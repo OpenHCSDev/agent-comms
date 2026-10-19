@@ -8,12 +8,12 @@ longer accept undated events.
 
 from __future__ import annotations
 
-from contextlib import closing
-from pathlib import Path
-
 import json
 import re
+from collections.abc import Callable
+from contextlib import closing
 from datetime import datetime
+from pathlib import Path
 
 from agent_comms.cli_bridges.claude_protocol import ToolResult, ToolUse
 from agent_comms.coordination_database import CoordinationStore
@@ -25,9 +25,11 @@ from .carry import Carried, StoreCarry
 TRANSCRIPTS = Path.home() / ".claude" / "projects"
 CALL = re.compile(r'"(?:id|tool_use_id)":"(toolu_\w+)"')
 # Claude's own block decoders: which saved event each block dates.
-BLOCKS = {
-    ToolUse.wire_tag: (ToolUse, ToolStartTranscript, lambda block: block.id),
-    ToolResult.wire_tag: (ToolResult, ToolEndTranscript, lambda block: block.tool_use_id),
+BLOCKS: dict[str, tuple[tuple[type[ToolUse | ToolResult], str, Callable[..., str]], ...]] = {
+    ToolUse.wire_tag: ((ToolUse, ToolStartTranscript.declared_name, lambda block: block.id),),
+    ToolResult.wire_tag: (
+        (ToolResult, ToolEndTranscript.declared_name, lambda block: block.tool_use_id),
+    ),
 }
 
 
@@ -45,12 +47,11 @@ def recorded_times(wanted: set[str]) -> dict[tuple[str, str], float]:
                 if "timestamp" not in record or not isinstance(content, list):
                     continue  # snapshots and queue lines quote ids but time nothing
                 at = datetime.fromisoformat(record["timestamp"]).timestamp()
-                for item in content:
-                    block, event, call_of = BLOCKS.get(item.get("type"), (None, None, None))
-                    if block is not None:
+                for item in (item for item in content if item["type"] in BLOCKS):
+                    for block, kind, call_of in BLOCKS[item["type"]]:
                         call = call_of(block.model_validate(item))
                         if call in wanted:
-                            times.setdefault((event.declared_name, call), at)
+                            times.setdefault((kind, call), at)
     return times
 
 
@@ -75,17 +76,20 @@ class ExternalEventTimes(StoreCarry):
                 raise ValueError(
                     f"{len(missing)} saved events have no transcript time, e.g. {missing[:3]}"
                 )
-            # One pass over the table: per-event updates would each scan it, since no index leads with call_id.
+            # One pass over the table: per-event updates would each scan it,
+            # since no index leads with call_id.
             db.execute(
-                "CREATE TEMP TABLE dated (kind TEXT, call_id TEXT, at REAL, PRIMARY KEY (kind, call_id))"
+                "CREATE TEMP TABLE dated"
+                " (kind TEXT, call_id TEXT, at REAL, PRIMARY KEY (kind, call_id))"
             )
             db.executemany(
                 "INSERT INTO dated VALUES (?, ?, ?)",
                 ((kind, call, at) for (kind, call), at in times.items()),
             )
             db.execute(
-                f"UPDATE \"{table}\" SET event=json_set(event, '$.timestamp', (SELECT at FROM dated d "
-                f'WHERE d.kind="{table}".kind AND d.call_id="{table}".call_id)) WHERE timestamp IS NULL'
+                f'UPDATE "{table}" AS t SET event=json_set(event, \'$.timestamp\','
+                " (SELECT at FROM dated d WHERE d.kind=t.kind AND d.call_id=t.call_id))"
+                " WHERE timestamp IS NULL"
             )
             db.commit() if apply else db.rollback()
         return Carried(
