@@ -1,5 +1,6 @@
-import importlib
+import asyncio
 
+from agent_comms import stall_watcher
 from agent_comms.change_report import FileLine
 from agent_comms.goal_actions import CreateProblemGoalAction
 from agent_comms.goals import CountCheckResult, OrderCheck
@@ -11,8 +12,6 @@ from agent_comms.tools import CommsTodoCreateTool
 
 def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(commander, commander_script, monkeypatch):
     comms, caller = commander
-    from agent_comms.commander import wheel_spin
-    wheel_spin = importlib.reload(wheel_spin)
     comms.registry.declare(comms.registry.new_thread("spare", frozenset({'comms'}), str(comms.root), created_at=3.0))
     order = PendingProblemOrder(id="order-P1", owner=FileLine(__file__, 1), run=MechanicalOrderRun(),
         check=OrderCheck(str(comms.root), "printf 1", CountCheckResult(1)), edits=("Repair the owner",),
@@ -22,9 +21,9 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
         request="request", deadline=RecordedEventTime(1000), commander="lead",
         repo="OpenHCSDev/agent-comms", text="Fix P1")).apply(comms, caller)
     # the one stubbed read: turn-digest activity marks worker and spare as recently active
-    monkeypatch.setattr(wheel_spin.WheelSpin, "idle", classmethod(
+    monkeypatch.setattr(stall_watcher.WheelSpin, "idle", classmethod(
         lambda cls, c, cmd: [c.registry.require("worker"), c.registry.require("spare")]))
-    wheel_spin.UnownedWheelSpin.after_stall(comms)
+    stall_watcher.StallWheelSpin.after_stall(comms)
     todo = comms.goals.todos.get("P1")
     # read back from the store: the strike keeps its kind and the watcher as its actor
     assert [type(s) for s in todo.strikes] == [StallStrikeTodo]
@@ -33,3 +32,39 @@ def test_stall_pass_strikes_releases_and_reassigns_on_the_watcher_identity(comma
     assert StallWatcherIncarnation.watcher().name == "stall_watcher"
     # the same pass gives the order to the idle unit not struck on it, never back to worker
     assert todo.holder == "spare" and todo.live_strikes("worker")
+    # Core's watcher made the assignment, while the order stays on its commander's board
+    assert todo.assignment.parent_identity == StallWatcherIncarnation.watcher()
+    assert [t.id for t in comms.goals.todos.held_for_commander(comms.registry.require("lead").incarnation)] == ["P1"]
+
+
+def test_a_failed_stall_pass_is_recorded_and_the_next_pass_still_runs(commander, monkeypatch):
+    comms, _ = commander
+    passes = []
+
+    def after_stall(cls, c):
+        # the second pass runs after the first raised, and sees the first's recorded failure
+        passes.append([f.error for f in c.goals.todos.stall_pass_failures()])
+        if len(passes) == 1:
+            raise FileNotFoundError("no commander config")
+        c.goals.todos.stall_pass_succeeded()
+        raise asyncio.CancelledError
+
+    async def no_wait(seconds):
+        pass
+
+    monkeypatch.setattr(stall_watcher.StallWheelSpin, "after_stall", classmethod(after_stall))
+    monkeypatch.setattr(stall_watcher.asyncio, "sleep", no_wait)
+    try:
+        asyncio.run(stall_watcher.StallWheelSpin.watch(comms))
+    except asyncio.CancelledError:
+        pass
+    assert passes == [[], ["FileNotFoundError: no commander config"]]
+    assert comms.goals.todos.stall_pass_failures() == ()
+
+
+def test_parked_threads_are_core_facts_stored_with_the_todos(commander):
+    comms, _ = commander
+    comms.goals.todos.park("worker")
+    assert comms.goals.todos.parked() == frozenset({"worker"})
+    comms.goals.todos.unpark("worker")
+    assert comms.goals.todos.parked() == frozenset()

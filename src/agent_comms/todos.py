@@ -1479,6 +1479,19 @@ class HuntRecord(TypedTable):
     hunt: Hunt
 
 
+@dataclass(frozen=True)
+class ParkedThread(TypedTable):
+    """A thread Core's stall watcher never gives an order to."""
+    name: str = field(metadata={"sql": Column(primary_key=True)})
+
+
+@dataclass(frozen=True)
+class StallPassFailed(TypedTable):
+    """A stall watcher pass that raised; the board shows it until a later pass succeeds."""
+    at: float = field(metadata={"sql": Column(primary_key=True)})
+    error: str
+
+
 class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
@@ -1554,9 +1567,8 @@ class Assignment:
         _text(self.parent, "Thread name", 128)
         try:
             self.owner_identity.require_recorded()
-            self.parent_identity.require_recorded()
         except ValueError as error:
-            raise TodoError("Assignment requires recorded owner and parent incarnations") from error
+            raise TodoError("Assignment requires a recorded owner incarnation") from error
         _text(self.generation, "Assignment generation", 128)
 
     @property
@@ -1565,7 +1577,8 @@ class Assignment:
 
     @property
     def parent_identity(self) -> ThreadIncarnation:
-        return RecordedThreadIncarnation(self.parent, self.parent_created)
+        """Who made the assignment: the order's commander, or Core's stall watcher."""
+        return ThreadIncarnation.from_wire({"name": self.parent, "created_at": self.parent_created})
 
     def owned_by(self, actor: ThreadIncarnation, generation: str | None) -> bool:
         return (self.owner_identity, self.generation) == (actor, generation)
@@ -1673,8 +1686,25 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def apply(self, current: Todo) -> Todo: ...
 
 
+class CommanderPermission:
+    """Assignments, strikes and releases are the order's commander's to make."""
+    actor: ThreadIncarnation
+
+    def require_permitted(self, current: Todo) -> None:
+        current.require_commander(self.actor)
+
+
+class StallWatcherPermission(CommanderPermission):
+    """Core's stall watcher makes these on its own declared identity, never the commander's."""
+
+    def require_permitted(self, current: Todo) -> None:
+        if self.actor != StallWatcherIncarnation.watcher():
+            raise TodoConflict(current)
+
+
 @dataclass(frozen=True)
-class AssignTodo(TodoOperation):
+class AssignTodo(CommanderPermission, TodoOperation):
+    """The order's commander gives the problem to a unit."""
     proposed: Assignment
     deadline: EventTime
     order: PendingProblemOrder
@@ -1688,27 +1718,20 @@ class AssignTodo(TodoOperation):
                 proposed, self.deadline, self.order, self.goal):
             return current
         current.require_revision(self.expected_revision)
-        current.require_commander(proposed.parent_identity)
+        self.require_permitted(current)
         assigned = (current if current.assignment == proposed
                     else current.state.assign(current, proposed, self.traced))
         return replace(assigned, deadline=self.deadline, order=self.order, goal=self.goal,
                        revision=current.revision + 1)
 
-
-class CommanderPermission:
-    """Strikes and releases are the order's commander's to make."""
-    actor: ThreadIncarnation
-
-    def require_permitted(self, current: Todo) -> None:
-        current.require_commander(self.actor)
+    @property
+    def actor(self) -> ThreadIncarnation:
+        return self.proposed.parent_identity
 
 
-class StallWatcherPermission(CommanderPermission):
-    """Core's stall watcher makes these on its own declared identity, never the commander's."""
-
-    def require_permitted(self, current: Todo) -> None:
-        if self.actor != StallWatcherIncarnation.watcher():
-            raise TodoConflict(current)
+@dataclass(frozen=True)
+class StallAssignTodo(StallWatcherPermission, AssignTodo):
+    """Core's stall watcher gives a released order to an idle unit."""
 
 
 @dataclass(frozen=True)
@@ -2248,7 +2271,31 @@ class TodoStore(TypedStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord, ParkedThread, StallPassFailed)
+
+    def park(self, name: str) -> None:
+        with self.writing() as db:
+            ParkedThread(name).upsert(db)
+
+    def unpark(self, name: str) -> None:
+        with self.writing() as db:
+            ParkedThread.delete(db, name=name)
+
+    def parked(self) -> frozenset[str]:
+        with self.snapshot() as db:
+            return frozenset(row.name for row in ParkedThread.select(db))
+
+    def stall_pass_failed(self, failed: StallPassFailed) -> None:
+        with self.writing() as db:
+            failed.upsert(db)
+
+    def stall_pass_succeeded(self) -> None:
+        with self.writing() as db:
+            StallPassFailed.delete(db)
+
+    def stall_pass_failures(self) -> tuple[StallPassFailed, ...]:
+        with self.snapshot() as db:
+            return tuple(StallPassFailed.select(db))
 
     def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
         hunt.require_commander(self, commander)
@@ -2501,19 +2548,16 @@ class TodoStore(TypedStore):
         *,
         expected_revision: int,
         owner: Thread,
-        parent: Thread,
+        assigner: ThreadIncarnation,
+        operation: type[AssignTodo],
         generation: str,
         goal: GoalRef,
         deadline: EventTime,
         order: PendingProblemOrder,
         traced: FileLine | None = None,
     ) -> Todo:
-        identity, parent_identity = _thread(owner), _thread(parent)
-        proposed = Assignment(
-            identity.name,
-            identity.created_at,
-            parent_identity.name,
-            parent_identity.created_at,
-            generation,
-        )
-        return self.apply(todo_id, AssignTodo(expected_revision, proposed, deadline, order, goal, traced))
+        identity = _thread(owner)
+        proposed = Assignment(identity.name, identity.created_at, assigner.name, assigner.wire_birth,
+                              generation)
+        return self.apply(todo_id, operation(expected_revision, proposed, deadline, order, goal, traced))
+

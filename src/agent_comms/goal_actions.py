@@ -39,7 +39,9 @@ from .goals import (
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .threads import Thread
-from .todos import GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
+from .thread_identity import StallWatcherIncarnation, ThreadIncarnation
+from .todos import (AssignTodo, GoalRef, PendingProblemOrder, SendBackVerdict, StallAssignTodo, Todo,
+                    TodoOperation)
 
 if TYPE_CHECKING:
     from .goal_management import Goals
@@ -542,14 +544,28 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
 
 @dataclass(frozen=True, kw_only=True)
 class OrderGoalAction(ProblemOrderGoalAction):
+    """The order's commander gives the problem to this thread."""
     expected_revision: int
     traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
+    assignment: ClassVar[type[AssignTodo]] = AssignTodo
+
+    def assigner(self, ctx: GoalActionContext) -> ThreadIncarnation:
+        return ctx.goals.registry.require(self.commander).incarnation
 
     def reserve(self, ctx: GoalActionContext, generation: str, goal: GoalRef) -> Todo:
         return ctx.goals.todos.assign(self.problem, expected_revision=self.expected_revision,
-            owner=ctx.thread, parent=ctx.goals.registry.require(self.commander),
+            owner=ctx.thread, assigner=self.assigner(ctx), operation=self.assignment,
             generation=generation, goal=goal, deadline=self.deadline, order=self.order,
             traced=self.traced)
+
+
+@dataclass(frozen=True, kw_only=True)
+class StallOrderGoalAction(OrderGoalAction):
+    """Core's stall watcher gives a released order of ``commander`` to this thread."""
+    assignment: ClassVar[type[AssignTodo]] = StallAssignTodo
+
+    def assigner(self, ctx: GoalActionContext) -> ThreadIncarnation:
+        return StallWatcherIncarnation.watcher()
 
 
 @dataclass(frozen=True, kw_only=True)

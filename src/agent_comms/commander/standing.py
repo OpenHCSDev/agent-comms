@@ -15,7 +15,7 @@ from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo
 from ..turn_digests import TurnDigestRead, TurnsSince
 from . import capacity, judge
 from .config import CommanderConfig, Repo
-from .wheel_spin import WheelSpin
+from ..stall_watcher import WheelSpin
 
 CONFIG = CommanderConfig.installed()
 

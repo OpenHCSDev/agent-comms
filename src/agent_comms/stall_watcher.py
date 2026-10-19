@@ -7,16 +7,15 @@ import asyncio
 import time
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Self
 
-from ..comms import Comms
-from ..coordinator import Coordination
-from ..goal_actions import OrderGoalAction
-from ..standing_rules import StandingRule, UndatedStandingRule
-from ..threads import Thread
-from ..todos import Todo
-from ..turn_digests import TurnDigestRead, TurnsSince
-from .config import CommanderConfig
+from .comms import Comms
+from .coordinator import Coordination
+from .goal_actions import OrderGoalAction, StallOrderGoalAction
+from .standing_rules import StandingRule, UndatedStandingRule
+from .threads import Thread
+from .todos import StallPassFailed, Todo, TodoConflict
+from .turn_digests import TurnDigestRead, TurnsSince
 
 
 @dataclass(frozen=True)
@@ -27,12 +26,13 @@ class WheelSpin(StandingRule, declared_name=None):
     todo: Todo
 
     recent: ClassVar[int] = 10 * 60
+    order_action: ClassVar[type[OrderGoalAction]] = OrderGoalAction
 
     @classmethod
     def idle(cls, comms: Comms, commander: str) -> list[Thread]:
         """Units with a native turn in the last ten minutes and no order, parked threads aside."""
         held = {todo.holder for todo in cls.todos(comms, commander)}
-        excluded = held | CommanderConfig.installed().parked | {commander, ""}
+        excluded = held | comms.goals.todos.parked() | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
         return sorted(
             (
@@ -50,7 +50,7 @@ class WheelSpin(StandingRule, declared_name=None):
         order = todo.order.reissued(time.time())
         comms.goals.update_goal(
             unit.name,
-            OrderGoalAction(
+            self.order_action(
                 problem=todo.id,
                 expected_revision=todo.revision,
                 order=order,
@@ -101,6 +101,13 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
     def enforce(self, comms: Comms, commander: str) -> None:
         self.assign(comms, commander, comms.registry.require(self.unit))
 
+
+@dataclass(frozen=True)
+class StallWheelSpin(UnownedWheelSpin, declared_name=None):
+    """The stall watcher's own pairing: Core, not the commander, makes the assignment."""
+
+    order_action: ClassVar[type[OrderGoalAction]] = StallOrderGoalAction
+
     @classmethod
     def after_stall(cls, comms: Comms) -> None:
         """One stall watcher pass: strike and release stalled orders, then give each released
@@ -109,11 +116,37 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
         for commander in {todo.creator_identity.name for todo in released}:
             mine = (todo for todo in released if todo.creator_identity.name == commander)
             for rule in cls.paired(comms, commander, mine):
-                rule.enforce(comms, commander)
+                try:
+                    rule.enforce(comms, commander)
+                except TodoConflict:
+                    # A concurrent order change owns the row; the next pass sees its new state.
+                    continue
+        comms.goals.todos.stall_pass_succeeded()
 
     @classmethod
     async def watch(cls, comms: Comms) -> None:
-        """The running Core service makes one stall pass a minute."""
+        """The running Core service makes one stall pass a minute; a pass that raises is
+        recorded for the board and the next pass still runs."""
         while True:
-            await Coordination.run_worker(lambda: cls.after_stall(comms))
+            try:
+                await Coordination.run_worker(lambda: cls.after_stall(comms))
+            except Exception as error:  # noqa: BLE001 - recorded on the board, never swallowed
+                comms.goals.todos.stall_pass_failed(
+                    StallPassFailed(time.time(), f"{type(error).__name__}: {error}"))
             await asyncio.sleep(60)
+
+
+@dataclass(frozen=True)
+class StallWatcherFailed(UndatedStandingRule):
+    """A stall watcher pass raised and no pass has succeeded since."""
+
+    failed: StallPassFailed
+
+    @classmethod
+    def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
+        return tuple(map(cls, comms.goals.todos.stall_pass_failures()))
+
+    def line(self) -> str:
+        at = time.strftime("%H:%M", time.localtime(self.failed.at))
+        return (f"STALL WATCHER FAILED at {at}: {self.failed.error} -> fix the cause; the next"
+                " pass runs within a minute")

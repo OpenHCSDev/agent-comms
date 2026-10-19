@@ -49,7 +49,7 @@ from .connector_store import (
     RegisteredClient, digest,
 )
 from .messages import Message
-from .commander.wheel_spin import UnownedWheelSpin
+from .stall_watcher import StallWheelSpin
 from .todos import DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import CommsChannelsTool, ReadTool, ToolRequest
@@ -377,7 +377,7 @@ class Connector:
     async def watch_orders(self, app: web.Application) -> AsyncIterator[None]:
         """The running Core service advances stalled orders without a commander call."""
         with self.opened_wire() as comms:
-            task = asyncio.create_task(UnownedWheelSpin.watch(comms))
+            task = asyncio.create_task(StallWheelSpin.watch(comms))
             try:
                 yield
             finally:
