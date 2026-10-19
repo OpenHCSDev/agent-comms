@@ -48,6 +48,8 @@ from .tools import ReadTool, ToolRequest
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
+
+
 @dataclass(frozen=True)
 class DirectorCaller(ThreadCaller):
     """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
@@ -55,8 +57,10 @@ class DirectorCaller(ThreadCaller):
 
     def sent(self, comms: Comms, message: Message) -> None:
         if message.target in comms.registry:  # a channel holds no requests
-            comms.goals.update_goal(message.target, DirectiveGoalAction(
-                text=message.body, seq=message.seq, at=message.timestamp))
+            comms.goals.update_goal(
+                message.target,
+                DirectiveGoalAction(text=message.body, seq=message.seq, at=message.timestamp),
+            )
 
 
 CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.

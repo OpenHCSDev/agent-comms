@@ -109,17 +109,23 @@ class DirectiveUnacted(StandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         thread, now = comms.registry.require(commander), time.time()
-        return tuple(cls(goal, directive) for goal in thread.goal.active()
-                     for directive in goal.order.overdue_directives(
-                         goal, comms.goals, thread.incarnation, now))
+        return tuple(
+            cls(goal, directive)
+            for goal in thread.goal.active()
+            for directive in goal.order.overdue_directives(
+                goal, comms.goals, thread.incarnation, now
+            )
+        )
 
     def began(self) -> float:
         return self.directive.deadline
 
     def line(self) -> str:
         due = time.strftime("%H:%M", time.localtime(self.directive.deadline))
-        return (f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.goal.id},"
-                f" due {due} -> order its next step or mark the request done")
+        return (
+            f"DIRECTIVE UNACTED: claude-ai {self.directive.seq} on request {self.goal.id},"
+            f" due {due} -> order its next step or mark the request done"
+        )
 
 
 @dataclass(frozen=True)

@@ -25,8 +25,16 @@ from .goal_states import (
     RuntimePause,
 )
 from .goal_waits import GoalWaits, RecordedGoalWait
-from .goals import (Goal, GoalDeclaration, GoalOrder, NoGoal, ProblemGoalOrder, RequestDirective,
-                    RequestGoalOrder, UnorderedGoalOrder)
+from .goals import (
+    Goal,
+    GoalDeclaration,
+    GoalOrder,
+    NoGoal,
+    ProblemGoalOrder,
+    RequestDirective,
+    RequestGoalOrder,
+    UnorderedGoalOrder,
+)
 from .recorded_time import EventTime
 from .threads import Thread
 from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
