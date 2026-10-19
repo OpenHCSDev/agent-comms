@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar
 
+from .commander_parity import ParityRow
 from .declared_family import DeclaredFamily
 from .phase_tasks import PhaseTask, UnspecifiedPhaseTask
 
@@ -89,10 +90,16 @@ class ControlPlanePhase(PlanPhase):
     after = (RecordPlanePhase,)
 
 
-class CutoverPhase(PlanPhase):
-    # The parity gate in the Markdown plan has no executable declaration yet.
-    # These dependencies do not establish parity or authorize deleting scripts.
+class ParityPhase(PlanPhase):
     after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase)
+
+    @classmethod
+    def done(cls, todos: Iterable[Todo]) -> bool:
+        return ParityRow.done(todos)
+
+
+class CutoverPhase(PlanPhase):
+    after = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase, ParityPhase)
 
 
 class StoryPhase(PlanPhase):
