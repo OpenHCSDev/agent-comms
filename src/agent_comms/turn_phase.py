@@ -18,14 +18,6 @@ class StallExempt:
         return self
 
 
-class LabeledActivity:
-    """A distinct operation includes its phase label in activity presentation."""
-
-    @property
-    def activity_detail(self) -> str:
-        return self.summary
-
-
 @dataclass(frozen=True)
 class TurnPhase(DeclaredFamily, affix="Phase"):
     """One phase owns watchdog behavior and its public control projection.
@@ -60,7 +52,7 @@ class TurnPhase(DeclaredFamily, affix="Phase"):
 
     @property
     def activity_detail(self) -> str:
-        return self.detail
+        return self.summary
 
     def activity_event(self, thread: str) -> Activity:
         """Record this phase's declared activity, without observation-only readiness."""
@@ -145,7 +137,7 @@ class IdlePhase(TurnPhase):
     label = "Ready"
 
 
-class CancellingPhase(LabeledActivity, TurnPhase):
+class CancellingPhase(TurnPhase):
     accepts_followup = False
     keeps_project_resume = False
     label = "Cancelling"
@@ -154,7 +146,7 @@ class CancellingPhase(LabeledActivity, TurnPhase):
     def observed(self, phase: TurnPhase) -> TurnPhase:
         return self
 
-class ShutdownPhase(LabeledActivity, TurnPhase):
+class ShutdownPhase(TurnPhase):
     """Native shutdown cannot allow follow-ups or resume model activity."""
 
     accepts_followup = False
@@ -166,7 +158,7 @@ class ShutdownPhase(LabeledActivity, TurnPhase):
         return self
 
 
-class PublishingPhase(LabeledActivity, TurnPhase):
+class PublishingPhase(TurnPhase):
     accepts_followup = False
     label = "Finishing turn"
     can_cancel = False
@@ -176,17 +168,23 @@ class PublishingPhase(LabeledActivity, TurnPhase):
 
 
 class ModelWaitPhase(TurnPhase):
+    """Waiting on the model shows only its activity, Thinking."""
+
+    @property
+    def activity_detail(self) -> str:
+        return self.detail
+
     def model_progress(self) -> TurnPhase:
         return self
 
 
-class SettlingStatsPhase(LabeledActivity, TurnPhase):
+class SettlingStatsPhase(TurnPhase):
     accepts_followup = False
     label = "Finishing native statistics"
 
 
 @dataclass(frozen=True)
-class CompactionPhase(LabeledActivity, StallExempt, Excursion):
+class CompactionPhase(StallExempt, Excursion):
     resume: TurnPhase = field(default_factory=ModelWaitPhase)
 
     @classmethod
@@ -217,7 +215,7 @@ class CompactionPhase(LabeledActivity, StallExempt, Excursion):
         return self.resume
 
 
-class ProviderRetryPhase(LabeledActivity, StallExempt, Excursion):
+class ProviderRetryPhase(StallExempt, Excursion):
     stall_reason = "retry_no_progress"
     label = "Provider retry"
     # The recovery re-requests each refused empty response; its end event
@@ -225,13 +223,13 @@ class ProviderRetryPhase(LabeledActivity, StallExempt, Excursion):
     holds_refusal_reports = True
 
 
-class SummarizationRetryPhase(LabeledActivity, StallExempt, Excursion):
+class SummarizationRetryPhase(StallExempt, Excursion):
     stall_reason = "summarization_retry_no_progress"
     label = "Summary retry"
 
 
 @dataclass(frozen=True)
-class ToolRunningPhase(LabeledActivity, Excursion):
+class ToolRunningPhase(Excursion):
     tools: tuple[tuple[str, str], ...] = ()
     activity_state = ActivityState.WORKING
     label = "Running tool"
