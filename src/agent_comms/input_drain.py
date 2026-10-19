@@ -262,7 +262,7 @@ class InputObservation:
     """File-driven observation and process-local wake behavior."""
 
     def _tick_paths(self) -> TickRevisionPaths:
-        configuration = self.sessions.config.configuration
+        configuration = self.sessions.config.record.configuration
         return TickRevision.paths(
             self.comms.root,
             registry=self.comms.registry.store.path,
