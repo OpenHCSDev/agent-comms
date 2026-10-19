@@ -116,7 +116,6 @@ class DeclaredFamily(ABC, metaclass=_FamilyMeta):
 
     @classmethod
     def member_named(cls, name: str) -> type[Self]:
-        """The member class this family declares under a name."""
         cls._member_declarations()
         try:
             member = cls.__registry__[name]
