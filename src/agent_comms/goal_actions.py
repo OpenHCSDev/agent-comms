@@ -35,6 +35,7 @@ from .goals import (
     RequestGoalOrder,
     UnorderedGoalOrder,
 )
+from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
 from .threads import Thread
 from .todos import DeliverTodo, GoalRef, PendingProblemOrder, SendBackVerdict, Todo, TodoOperation
@@ -198,6 +199,10 @@ class TransitionGoalAction(GoalAction[Goal]):
         """The goal's own state machine allows this transition."""
         goal.state.check_transition(state, owner=ctx.actor is OwnerInvocable)
 
+    @classmethod
+    def require_claims(cls, claims: tuple[ProgressClaim, ...]) -> None:
+        """Only a completed report claims a state, so only it needs a claim attached."""
+
     def before_goal_publish(self, goal: Goal, ctx: GoalActionContext) -> None:
         pass
 
@@ -354,6 +359,10 @@ class CompletionGoalAction(TransitionGoalAction):
 class CompletedGoalAction(CompletionGoalAction, ModelInvocable, OwnerInvocable, RuntimeInvocable):
     def before_transition(self, goal: Goal, ctx: GoalActionContext) -> None:
         goal.order.require_completion(goal, ctx.goals, ctx.thread.incarnation)
+
+    @classmethod
+    def require_claims(cls, claims: tuple[ProgressClaim, ...]) -> None:
+        ProgressClaim.require_claimed(claims, "completed")
 
 
 @dataclass(frozen=True, kw_only=True)

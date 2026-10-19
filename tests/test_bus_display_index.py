@@ -8,6 +8,7 @@ import pytest
 from agent_comms.bus_activity_index import BusActivityIndex, ChannelActivity
 from agent_comms.bus_projection import NoCheckpoint
 from agent_comms.bus_display_index import BusDisplayIndex, DisplaySnapshot
+from agent_comms.bus_page_index import BusPageIndex
 from agent_comms.coordination_errors import StaleRevision
 from agent_comms.messages import InfoKind, Message
 from agent_comms.read_basis import ChannelDisplayScope
@@ -17,11 +18,13 @@ from agent_comms.wire_metadata import WireMetadata
 
 @contextmanager
 def opened(path, *indexes):
-    prepared = tuple((index, index.prepare()) for index in indexes)
-    path.chmod(0o600)
+    if path.stat().st_mode & 0o777 != 0o600:
+        path.chmod(0o600)
     log = WireLog(path)
+    for index in indexes:
+        log.register_append_index(index)
     log.write_metadata_unlocked(WireMetadata(last_seq=2, claimed_after_seq=2, writer_protocol_version=1, wire_root_id="0" * 32))
-    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening(), prepared_indexes=prepared) as source:
+    with log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
         yield source
 
 
@@ -69,7 +72,8 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
     first, second = row(1), row(2)
     path.write_bytes(first)
     index = BusDisplayIndex(path, "viewer")
-    with opened(path, index) as source:
+    with opened(path, index) as source, BusPageIndex(path) as pages:
+        pages.sync(source)
         initial = index.snapshot(source, semantics())
     with path.open("ab") as stream:
         stream.write(second[:len(second) // 2])
@@ -80,16 +84,21 @@ def test_torn_append_uses_checkpoint_then_reads_only_completed_suffix(tmp_path, 
         parsed.append(value["seq"])
         return decode(value)
 
-    monkeypatch.setattr(Message, "from_wire", measured)
-    with opened(path, index) as source:
-        partial = index.snapshot(source, semantics())
+    with opened(path, index) as source, BusPageIndex(path) as pages:
+        pages.sync(source)
+        with monkeypatch.context() as reading:
+            reading.setattr(Message, "from_wire", measured)
+            partial = index.snapshot(source, semantics())
         assert partial.activity == initial.activity
         assert partial.offset == len(first) < partial.source.size
         assert parsed == []
     with path.open("ab") as stream:
         stream.write(second[len(second) // 2:])
-    with opened(path, index) as source:
-        completed = index.snapshot(source, semantics())
+    with opened(path, index) as source, BusPageIndex(path) as pages:
+        pages.sync(source)
+        with monkeypatch.context() as reading:
+            reading.setattr(Message, "from_wire", measured)
+            completed = index.snapshot(source, semantics())
         assert completed.activity == {"#team": ChannelActivity(last_message=2.0)}
         assert completed.offset == len(first) + len(second)
         assert parsed == [2]
@@ -109,6 +118,20 @@ def test_activity_uses_the_same_complete_line_cut(tmp_path):
         assert source.complete_prefix.boundary == len(first) < source.boundary
 
 
+def test_reopened_activity_restores_saved_prefix_without_decoding_it(tmp_path, monkeypatch):
+    path = tmp_path / "bus.jsonl"
+    path.write_bytes(row(1))
+    with opened(path, index := BusActivityIndex(path)) as source:
+        initial = index.snapshot(source)
+
+    def unexpected_prefix(*args, **kwargs):
+        pytest.fail("An unchanged bus must not decode the saved prefix again")
+
+    monkeypatch.setattr(Message, "from_wire", unexpected_prefix)
+    with opened(path, reopened := BusActivityIndex(path)) as source:
+        assert reopened.snapshot(source) == initial
+
+
 @pytest.mark.parametrize("index_type,index_args,read_args", [
     (BusDisplayIndex, ("viewer",), (semantics(),)), (BusActivityIndex, (), ()),
 ])
@@ -116,7 +139,8 @@ def test_checkpoint_write_failure_is_visible_and_not_remembered(tmp_path, index_
     path = tmp_path / "bus.jsonl"
     path.write_bytes(row(1))
     index = index_type(path, *index_args)
-    with opened(path, index) as source:
+    with opened(path, index) as source, BusPageIndex(path) as pages:
+        pages.sync(source)
         index.path.mkdir()  # Real publication failure, not a mocked write.
         with pytest.raises(OSError):
             index.snapshot(source, *read_args)

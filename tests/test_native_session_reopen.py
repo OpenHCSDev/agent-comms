@@ -1,7 +1,6 @@
 """Saved identity selection and strict history loading have distinct owners."""
 
 from __future__ import annotations
-from agent_comms.native_package import pinned_native_package
 
 import json
 import subprocess
@@ -12,15 +11,13 @@ import pytest
 
 from agent_comms.native_session_reopen import NativeReopenError, NativeSessionIdentity
 
-PACKAGE = str(pinned_native_package())
 pytestmark = pytest.mark.skipif(
     sys.platform != "linux", reason="Disposable Linux canonical native fixture"
 )
 
 
 @pytest.fixture
-def saved(tmp_path):
-    assert PACKAGE
+def saved(tmp_path, native_runtime_package):
     code = """
 import {pathToFileURL} from 'node:url';
 import {join} from 'node:path';
@@ -33,14 +30,14 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'answer'}],
 console.log(JSON.stringify({id:manager.getSessionId(),file:manager.getSessionFile()}));
 """
     result = subprocess.run(
-        ["node", "--input-type=module", "-e", code, PACKAGE, str(tmp_path)],
+        ["node", "--input-type=module", "-e", code, str(native_runtime_package.path), str(tmp_path)],
         check=True,
         capture_output=True,
         timeout=10,
     )
     item = json.loads(result.stdout)
     assert item["file"] and item["id"]
-    return Path(PACKAGE), Path(item["file"]), item["id"]
+    return native_runtime_package, Path(item["file"]), item["id"]
 
 
 def test_saved_identity_preserves_bytes_and_strips_preload(saved, tmp_path, monkeypatch):
@@ -95,12 +92,12 @@ def test_native_loader_rejects_invalid_history_without_repair(saved, mutation):
     # the real loader must refuse before constructing an agent or provider.
     assert NativeSessionIdentity.locate(package, str(file)) == NativeSessionIdentity(identity, str(file))
     result = subprocess.run([
-        "node", "--no-global-search-paths", "--import", str(package / "dist/agent-comms-import-fence.mjs"),
+        "node", "--no-global-search-paths", "--import", str(package.path / "dist/agent-comms-import-fence.mjs"),
         "--input-type=module", "-e",
         "import {pathToFileURL} from 'node:url'; import {join} from 'node:path';"
         "const {SessionManager}=await import(pathToFileURL(join(process.argv[1], 'dist/core/session-manager.js')));"
         "SessionManager.open(process.argv[2]);",
-        str(package), str(file),
+        str(package.path), str(file),
     ], capture_output=True, timeout=10)
     assert result.returncode != 0
     assert file.read_bytes() == before

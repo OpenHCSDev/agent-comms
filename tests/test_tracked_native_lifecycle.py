@@ -1,13 +1,11 @@
 """Installed selected coding journey through real CLI/tools; localhost responses only."""
 from agent_comms.pi_vocabulary import OffThinkingLevel
-from agent_comms.native_package import pinned_native_package
 
 import asyncio
 import json
 import os
 import time
 from dataclasses import replace
-from pathlib import Path
 
 import pytest
 
@@ -22,8 +20,6 @@ from native_proof_cases import read_proof_rows
 from delivery_owner_fixture import canonical_agent
 from test_coordinated_runtime import _root
 from agent_comms.channels import ANY_CHANNEL
-
-PACKAGE = str(pinned_native_package())
 
 
 class CodingProvider(LoopbackProvider):
@@ -64,9 +60,9 @@ class CodingProvider(LoopbackProvider):
 
 @pytest.mark.parametrize("outcome", ["complete", "cancel", "exit"])
 async def test_installed_selected_long_tool_and_uncertain_cleanup(
-    tmp_path, monkeypatch, outcome
+    tmp_path, monkeypatch, outcome, native_runtime_package
 ):
-    package = Path(PACKAGE).resolve(strict=True)
+    package = native_runtime_package
     # The default acceptance crosses the removed whole-turn90 boundary. A shorter
     # environment override is for fixture development, never evidence of that gate.
     seconds = float(os.environ.get("TRACKED_NATIVE_LONG_TOOL_SECONDS", "95"))

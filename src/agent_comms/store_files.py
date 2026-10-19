@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import BinaryIO, ClassVar, TYPE_CHECKING
 
+from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .private_path import PrivateFileRole
 
@@ -184,12 +185,11 @@ class StoreLock:
 
     @classmethod
     @contextmanager
-    def ordered(cls, requests, *, blocking=True, contention=None):
+    def ordered(cls, requests: Mapping[StoreLockOwner, LockMode], *, blocking=True, contention=None):
         """Acquire store owners by their declared rank, never their filenames."""
         with ExitStack() as resources:
-            yield {owner: resources.enter_context(_store_lock(owner.path,
-                mode=requests[owner], blocking=blocking, contention=contention,
-                lock_type=owner.lock_type))
+            yield {owner: resources.enter_context(owner.locked(
+                mode=requests[owner], blocking=blocking, contention=contention))
                 for owner in sorted(requests, key=lambda owner: (owner.lock_rank, str(owner.path)))}
 
     @classmethod
@@ -252,6 +252,48 @@ class StoreLock:
                 raise RelationViolationError("Store has no certified original wire source.")
             refreshed.require_marker(metadata)
             yield refreshed
+
+
+class StoreOwner(DeclaredFamily):
+    """Shared declaration membership for composable store capabilities."""
+
+    __slots__ = ()
+
+
+class StoreLockOwner(StoreOwner, declared_name=None):
+    """The composition root orders owners; each rank derives from that order."""
+
+    __slots__ = ()
+    path: Path
+    _lock_order: ClassVar[tuple[type[StoreLockOwner], ...]] = ()
+    lock_type: ClassVar[type[StoreLock]] = StoreLock
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "lock_rank" in vars(cls):
+            raise TypeError("Store lock ranks derive from the composition root")
+
+    @classmethod
+    def declare_lock_order(cls, *owners: type[StoreLockOwner]) -> None:
+        if len(set(owners)) != len(owners):
+            raise TypeError("A store owner occurs twice in the lock order")
+        missing = set(cls.members_with(cls)) - set(owners)
+        if missing:
+            names = ", ".join(sorted(owner.__name__ for owner in missing))
+            raise TypeError(f"Store owners missing from the lock order: {names}")
+        StoreLockOwner._lock_order = owners
+
+    @property
+    def lock_rank(self) -> int:
+        try:
+            return StoreLockOwner._lock_order.index(type(self))
+        except ValueError:
+            raise TypeError(f"{type(self).__name__} is absent from the declared lock order") from None
+
+    def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,
+               mode: LockMode = ExclusiveLock(), contention: StoreLockContention | None = None):
+        return _store_lock(self.path, blocking=blocking, max_bus_bytes=max_bus_bytes,
+                           mode=mode, contention=contention, lock_type=self.lock_type)
 
 
 def store_lock_path(store_path: Path) -> Path:
