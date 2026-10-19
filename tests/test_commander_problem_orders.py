@@ -31,13 +31,13 @@ from agent_comms.progress_claims import WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
-from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderMergeTool, CommsOrderTool,
+from agent_comms.tools import (CommsCorrectWordingTool, CommsSendTool, CommsFireTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderTool,
     CommsOrderWorkTool, CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, CommsVerdictTool)
 from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage, OrderDeletion, GoalRef, CleanHunt, CommitDelivery, FirstCall, Hunt, OrderDelivery,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    AcceptedVerdict, Assignment, PullRequest, PullRequests, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
+    AcceptedVerdict, Assignment, ReviewedHeadVerdict, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
 from agent_comms.turn_context import GoalSegment
 
@@ -1429,40 +1429,38 @@ def test_a_done_report_with_no_claim_is_refused_and_a_merged_claim_passes_claim_
     assert isinstance(report.apply(comms, caller).goal.state, CompletedGoal)
 
 
-def test_merge_without_verdict_on_the_pr_head_is_refused(commander, monkeypatch, tmp_path):
-    """The holder merges its order's PR only at a head claude-ai or the commander accepted; a
-    verdict on an older head is no verdict, and order done refuses a merged PR none accepted."""
+
+def test_merge_without_verdict_has_no_review_status_and_only_the_reviewer_sets_one(commander, tmp_path, monkeypatch):
+    """The connector's reviewer accepting a PR head sets one review status on that head, the
+    status the PR merges on; the commander and a thread merely named like it set none."""
+    from agent_comms.connector import CALLER
     comms, lead = commander
-    comms.registry.declare(comms.registry.new_thread('claude-ai', frozenset(), str(tmp_path), created_at=3.0))
-    todo = create(commander, 'P1')
-    old, head = 'a' * 40, 'b' * 40
-    listed = {'open': (PullRequest(7, 'p1', head),), 'merged': ()}
-    monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: listed[state])
+    comms.registry.declare(comms.registry.new_thread(CALLER.name, frozenset(), str(tmp_path), created_at=3.0))
+    create(commander, 'P1')
+    statuses = tmp_path / 'statuses'
     gh = tmp_path / 'bin' / 'gh'
     gh.parent.mkdir()
-    gh.write_text(f'#!/bin/sh\necho "$@" >> {tmp_path / "merged"}\n')
+    gh.write_text(f'#!/bin/sh\necho "$@" >> {statuses}\n')
     gh.chmod(0o755)
     monkeypatch.setenv('PATH', f'{gh.parent}:{os.environ["PATH"]}')
-    merge = CommsOrderMergeTool(problem='P1', number=7)
-    worker = ThreadCaller('worker')
+    head = 'b' * 40
 
-    def accepted(caller, judged):
-        judge = comms.registry.require(caller.name).incarnation
-        current = comms.goals.todos.get('P1')
+    def review(caller):
+        todo = comms.goals.todos.get('P1')
+        return CommsVerdictTool(id='P1', operation=ReviewedHeadVerdict(
+            todo.revision, comms.registry.require(caller.name).incarnation, todo.assignment,
+            'review-1', quote='Repair the existing owner', head=head)).apply(comms, caller)
+
+    for refused in (lead, ThreadCaller(CALLER.name)):
+        with pytest.raises(TodoError, match="Only the connector's reviewer"):
+            review(refused)
+    assert not statuses.exists() and comms.goals.todos.get('P1').verdicts == ()
+    with pytest.raises(TodoError, match='only an accepted verdict on a PR head'):
         CommsVerdictTool(id='P1', operation=AcceptedVerdict(
-            current.revision, judge, current.assignment, judged, quote='Repair the existing owner')
-        ).apply(comms, caller)
-
-    with pytest.raises(TodoError, match=f'PR head {head} has no accepted verdict'):
-        merge.apply(comms, worker)
-    accepted(ThreadCaller('claude-ai'), old)
-    with pytest.raises(TodoError, match='no accepted verdict'):
-        merge.apply(comms, worker)
-    assert not (tmp_path / 'merged').exists()
-    accepted(lead, head)
-    assert merge.apply(comms, worker).head == head
-    assert f'--match-head-commit {head}' in (tmp_path / 'merged').read_text()
-    listed['merged'] = (PullRequest(8, 'p1', 'c' * 40),)
-    with pytest.raises(TodoError, match='no accepted verdict'):
-        CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, lead)
-    assert comms.goals.todos.get('P1').pending and todo.verdicts == ()
+            comms.goals.todos.get('P1').revision, comms.registry.require(CALLER.name).incarnation,
+            comms.goals.todos.get('P1').assignment, 'review-1', quote='Repair the existing owner')
+        ).apply(comms, CALLER)
+    assert review(CALLER).todo.verdicts[-1].head == head
+    assert statuses.read_text().splitlines() == [
+        f'api --method POST repos/openhcsdev/agent-comms/statuses/{head} -f state=success '
+        f'-f context=agent-comms/review -f description=Accepted by {CALLER.name} on P1']

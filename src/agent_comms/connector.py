@@ -44,7 +44,7 @@ from .goal_actions import DirectiveGoalAction
 from .locked_store import LockedStore, RootFile
 from .messages import Message
 from .standing_rules import RulesDue
-from .todos import AcceptedVerdict, DirectiveText
+from .todos import DirectiveText, OrderVerdict, Todo
 from .tool_caller import ThreadCaller
 from .tools import ReadTool, ToolRequest
 
@@ -64,6 +64,10 @@ class DirectorCaller(ThreadCaller):
         if refused := (*DirectiveText.refused(body), *due):
             raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
 
+    def judged(self, comms: Comms, problem: str, verdict: OrderVerdict) -> Todo:
+        """claude-ai reviews a unit's PR head; it records no other verdict."""
+        return verdict.reviewed(comms.goals, problem, comms.registry.require(self.name).incarnation)
+
     def sent(self, comms: Comms, message: Message) -> None:
         if message.target in comms.registry:  # a channel holds no requests
             comms.goals.update_goal(
@@ -72,8 +76,7 @@ class DirectorCaller(ThreadCaller):
             )
 
 
-# Owner-typed calls act as this registered bus thread.
-CALLER = DirectorCaller(AcceptedVerdict.reviewer)
+CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"

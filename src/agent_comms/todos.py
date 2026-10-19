@@ -161,15 +161,6 @@ class PullRequest:
                    _github_time(merged) if merged else None, _github_time(updated),
                    ProblemOrder.pull_request_ids(body))
 
-    def merge_reviewed(self, todo: Todo) -> None:
-        """Merge this open PR for ``todo`` at the head commit an accepted verdict names."""
-        todo.require_reviewed(self.head)
-        merged = subprocess.run(
-            ("gh", "pr", "merge", str(self.number), "--repo", todo.repo, "--merge", "--admin",
-             "--match-head-commit", self.head), capture_output=True, text=True, timeout=120)
-        if merged.returncode:
-            raise ValueError(merged.stderr.strip() or f"Merging PR #{self.number} failed.")
-
 
 def _github_time(text: str) -> float:
     return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
@@ -705,12 +696,17 @@ class OrderText(OrderWords):
     refusal = "Soft wording {1}: state the edit, do not ask."
 
 
-class BluntText(OrderWords):
-    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
+class BluntWords:
+    """The words that name witnessed incompetence, and the refusal a text lacking them gets."""
 
-    REFUSED = re.compile(r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
-                         r"worthless|broke|broken|pointless|waste)\b", re.I)
-    refusal = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+    REFUSED: ClassVar[re.Pattern] = re.compile(
+        r"\b(stupid|slop|bullshit|useless|wrong|lazy|garbage|nonsense|incompeten\w*|sloppy|theater|dumb|"
+        r"worthless|broke|broken|pointless|waste)\b", re.I)
+    refusal: ClassVar[str] = "Not blunt: name what was stupid/slop/wrong and why, or pass --clean if nothing was."
+
+
+class BluntText(BluntWords, OrderWords):
+    """Witnessed incompetence is named as such: the text must call something stupid, slop or wrong."""
 
     @staticmethod
     def refuses(found: list[str]) -> bool:
@@ -750,16 +746,15 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
-class DefectText(OrderWords):
+class DefectText(BluntWords, OrderWords):
     """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
     a text naming no defect needs no label."""
 
     SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
-    REFUSED, refusal = BluntText.REFUSED, BluntText.refusal  # the label is BluntText's own
 
     @classmethod
     def found(cls, text: str) -> list[str]:
-        return [] if BluntText.found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
+        return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
 class DirectiveText:
@@ -1386,13 +1381,15 @@ class OrderVerdict(TodoOperation, declared_name=None):
     @abstractmethod
     def line(self) -> str: ...
 
-    def accepts(self, head: str) -> bool:
-        """Whether this verdict lets the order's PR merge at ``head``."""
-        return False
+    def require_actor(self, current: Todo) -> None:
+        current.require_commander(self.actor)
+
+    def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
+        raise TodoError("The reviewer records only an accepted verdict on a PR head.")
 
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        self.require_caller(current, self.actor)
+        self.require_actor(current)
         current.require_assignment(self.previous)
         _text(self.tool_call_id, "Judged tool call ID", 200)
         judged = self.judged(current)
@@ -1401,18 +1398,9 @@ class OrderVerdict(TodoOperation, declared_name=None):
 
 @dataclass(frozen=True)
 class AcceptedVerdict(OrderVerdict):
-    """The tool call carries out the order clause it quotes; the owner's reviewer accepts
-    beside the commander, and a PR head commit as the judged call lets that PR merge."""
-    reviewer: ClassVar[str] = "claude-ai"
+    """The tool call carries out the order clause it quotes."""
     quote: str
     line = "Accepted"
-
-    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
-        if actor.name != self.reviewer:
-            current.require_commander(actor)
-
-    def accepts(self, head: str) -> bool:
-        return self.tool_call_id == head
 
     def judged(self, current: Todo) -> Todo:
         quoted = " ".join(self.quote.split())
@@ -1420,6 +1408,36 @@ class AcceptedVerdict(OrderVerdict):
         if len(quoted.split()) < 4 or quoted not in order:
             raise ValueError("Quote 4+ words of the order this tool call carries out.")
         return current
+
+
+@dataclass(frozen=True)
+class ReviewedHeadVerdict(AcceptedVerdict):
+    """The connector's reviewer accepts the PR head commit it read; recording it sets that
+    head's review status, which is what lets the PR merge."""
+    head: str
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        GitCommitText.decode(self.head)
+
+    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
+        raise TodoError("Only the connector's reviewer records an accepted verdict on a PR head.")
+
+    def require_actor(self, current: Todo) -> None:
+        """Its actor is the reviewer ``reviewed`` checked; the commander never records it."""
+
+    def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
+        if self.actor != reviewer:
+            raise TodoError("A reviewed head names the reviewer recording it.")
+        todo = self.prepare(goals, goals.todos.get(problem)).record(goals, problem)
+        posted = subprocess.run(
+            ("gh", "api", "--method", "POST", f"repos/{todo.repo}/statuses/{self.head}",
+             "-f", "state=success", "-f", "context=agent-comms/review",
+             "-f", f"description=Accepted by {reviewer.name} on {problem}"),
+            capture_output=True, text=True, timeout=60)
+        if posted.returncode:
+            raise ValueError(posted.stderr.strip() or f"The review status on {self.head} failed.")
+        return todo
 
 
 @dataclass(frozen=True)
@@ -1563,8 +1581,6 @@ class DeliverTodo(TodoOperation):
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        for pull in PullRequests().listed(current.repo, "merged", current.order):
-            current.require_reviewed(pull.head)
         verified = self.delivery.verified(current.order.check, current.order.deletes)
         return replace(self, delivery=asyncio.run(verified))
 
@@ -1738,11 +1754,6 @@ class Todo(TypedTable):
     def require_commander(self, actor: ThreadIncarnation) -> None:
         if self.creator_identity != actor:
             raise TodoConflict(self)
-
-    def require_reviewed(self, head: str) -> None:
-        if not any(verdict.accepts(head) for verdict in self.verdicts):
-            raise TodoError(f"PR head {head} has no accepted verdict from "
-                            f"{AcceptedVerdict.reviewer} or the commander; send it for review.")
 
     def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
         if self.creator_identity != actor:

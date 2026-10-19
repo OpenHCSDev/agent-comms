@@ -15,6 +15,7 @@ from .tool_result import ToolResult
 if TYPE_CHECKING:
     from .comms import Comms
     from .messages import Message
+    from .todos import OrderVerdict, Todo
     from .tools import ToolRequest
 
 
@@ -109,3 +110,7 @@ class ThreadCaller(ToolCaller):
 
     def sent(self, comms: Comms, message: Message) -> None:
         """An agent's message is only the bus record."""
+
+    def judged(self, comms: Comms, problem: str, verdict: OrderVerdict) -> Todo:
+        """An agent's verdict is its commander's, on the order it gave."""
+        return comms.goals.change_problem(problem, verdict, self.name)

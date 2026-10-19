@@ -13,7 +13,7 @@ from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.progress_claims import WorkingClaim
 from agent_comms.todos import (AcceptedVerdict, MechanicalOrderRun, OperationDelivery, PendingProblemOrder,
-    PullRequest, PullRequests, StrikeTodo)
+    StrikeTodo)
 from agent_comms.rule_reviews import DrawnRuleReviewEntry
 from agent_comms.tool_caller import NoThreadCaller, ThreadCaller
 from agent_comms.tool_result import ToolResult
@@ -21,7 +21,7 @@ from agent_comms.tools import (
     CommsArchiveTool, CommsCancelRestartTool, CommsChannelsTool, CommsCollaborationTool,
     CommsCollaborationsTool, CommsConstraintTool, CommsDecisionTool, CommsDeleteViewTool,
     CommsEditGoalTool, CommsGoalHistoryTool, CommsGoalTool, CommsInboxTool,
-    CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderMergeTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
+    CommsCorrectWordingTool, CommsFireTool, CommsModelTool, CommsOrderCheckTool, CommsOrderDoneTool, CommsOrderServeTool, CommsOrderTool, CommsOrderWorkTool, CommsPinChannelTool, CommsPinThreadTool,
     CommsProblemCloseTool, CommsRenameSelfTool, CommsRestartQueueTool, CommsRuleReviewTool,
     CommsResumeGoalTool, CommsSendTool, CommsSetChannelMetadataTool, CommsSetGoalTool,
     CommsSetProjectTool, CommsSetViewTool, CommsSortChannelTool, CommsSortChannelsTool, CommsStandingRulesTool,
@@ -87,17 +87,6 @@ def scenario(comms: Comms, project, monkeypatch):
         RecordedEventTime(500)))}, lead
     yield CommsVerdictTool, {"id": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
         todo.revision + 1, actor, todo.assignment, "toolu_1", quote="Repair the existing owner"))}, lead
-    head = "b" * 40
-    yield CommsVerdictTool, {"id": "P1", "operation": FieldCodec.encode(AcceptedVerdict(
-        todo.revision + 2, actor, todo.assignment, head, quote="Repair the existing owner"))}, lead
-    monkeypatch.setattr(PullRequests, "read", lambda self, repo, state, order:  # It asks gh.
-                        (PullRequest(7, "fix/p1", head),) if state == "open" else ())
-    gh = project / "bin" / "gh"
-    gh.parent.mkdir()
-    gh.write_text("#!/bin/sh\n")
-    gh.chmod(0o755)
-    monkeypatch.setenv("PATH", f"{gh.parent}:{os.environ['PATH']}")
-    yield CommsOrderMergeTool, {"problem": "P1", "number": 7}, worker
     yield CommsOrderServeTool, {"problem": "P1", "serves": RecordPlanePhase.declared_name}, lead
     yield CommsRuleReviewTool, {"entry": FieldCodec.encode(DrawnRuleReviewEntry(("Declare each fact once",), 0))}, lead
     yield CommsOrderTool, {"owner": "worker", "order": FieldCodec.encode(OrderGoalAction(

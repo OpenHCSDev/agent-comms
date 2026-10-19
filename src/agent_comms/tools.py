@@ -182,12 +182,6 @@ class ProblemClosed(ToolResult):
 
 
 @dataclass(frozen=True)
-class PullRequestMerged(ToolResult):
-    number: int
-    head: str
-
-
-@dataclass(frozen=True)
 class WorkBranchList(ToolResult):
     branches: tuple[WorkBranch, ...]
 
@@ -771,9 +765,14 @@ class CommsTodoTool(ThreadToolRequest):
 class CommsVerdictTool(CommsTodoTool):
     label = "Judge order tool call"
     description = ("Record the commander's verdict on one tool call the holder made for its "
-                   "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
-                   "the holder and revises its Goal in the same write.")
+                   "order, or the reviewer's accepted verdict on its PR head: an accepted verdict "
+                   "quotes 4+ words of the order; a send-back strikes the holder and revises its "
+                   "Goal in the same write.")
     operation: OrderVerdict = tool_field("Accepted or send-back verdict on the judged tool call ID")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
+        todo = caller.judged(comms, self.id, self.operation)
+        return TodoChanged(todo, todo.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -909,25 +908,6 @@ class CommsOrderDoneTool(ThreadToolRequest):
             expect=GoalPrecondition(goal_id=assignment.generation), problem=self.problem,
             operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery)))
         return GoalRead(goal)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsOrderMergeTool(ThreadToolRequest):
-    label = "Merge reviewed PR"
-    description = ("Merge the holder's open PR for its order; refused unless claude-ai or the "
-                   "commander recorded an accepted verdict on the PR's head commit.")
-    problem: str = tool_field("Problem ID")
-    number: int = tool_field("The open PR that names the order")
-
-    def apply(self, comms: Comms, caller: ThreadCaller) -> PullRequestMerged:
-        todo = comms.goals.todos.get(self.problem)
-        holder = comms.registry.require(caller.name).incarnation
-        todo.require_assignee(holder, todo.held().generation)
-        pulls = {pull.number: pull for pull in PullRequests().listed(todo.repo, "open", todo.order)}
-        if self.number not in pulls:
-            raise ValueError(f"PR #{self.number} is no open PR naming {self.problem}.")
-        pulls[self.number].merge_reviewed(todo)
-        return PullRequestMerged(self.number, pulls[self.number].head)
 
 
 @dataclass(frozen=True, kw_only=True)

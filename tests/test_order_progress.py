@@ -256,8 +256,7 @@ def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander,
     for pid in ('P1', 'P2', 'P3'):
         create(commander, pid, deadline=1)
     merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0, orders=('order-P1',)),)
-    monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order:
-                        merged if (state, order.id) == ('merged', 'order-P1') else ())
+    monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state, order: merged if state == 'merged' else ())
     for pid in ('P2', 'P3'):
         CommsOrderDoneTool(problem=pid, delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     p1, p2, p3 = (comms.goals.todos.get(pid) for pid in ('P1', 'P2', 'P3'))
