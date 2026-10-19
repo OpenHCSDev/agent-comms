@@ -17,8 +17,7 @@ the commander to that unit. Nothing here judges code; it only refuses to let an 
 """
 import hashlib, json, os, re, sys, time
 from abc import abstractmethod
-from dataclasses import dataclass
-from typing import NotRequired, TypedDict
+from dataclasses import asdict, dataclass
 
 from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo
 from ..tools import CommsVerdictTool
@@ -33,67 +32,80 @@ RTS = str(CONFIG.state)
 EDITS = f'{RTS}/edits.jsonl'
 
 
-class Hunk(TypedDict):
-    old: str
-    new: str
-
-
-class Edit(TypedDict):
-    """One row of edits.jsonl: a unit's file edit awaiting its verdict."""
-    id: str
-    thread: str
-    at: float
-    path: NotRequired[str]
-    hunks: list[Hunk]
-
-
-def rows(path: str) -> list[Edit]:
-    if not os.path.exists(path):
-        return []
-    with open(path) as f:
-        return [json.loads(line) for line in f if line.strip()]
-
-
-def unjudged() -> list[Edit]:
-    judged = {v.tool_call_id for todo in order.COMMS.goals.todos.history_for_commander(
-        order.COMMS.registry.require(ME).incarnation) for v in todo.verdicts}
-    return [e for e in rows(EDITS) if e['id'] not in judged]
-
-
-def my_messages(thread: str) -> list[dict[str, str]]:
-    """The commander's messages to thread, newest first: one bounded page of the bus's DM history."""
-    page = order.COMMS.views.dm_history_page(ME, thread)
-    return [dict(id=m.message_id, text=m.body) for m in reversed(page.messages) if m.sender == ME]
-
-
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
 
 
-def branches_added(edit: Edit) -> int:
-    """Branches the edit's new text has beyond its old text (branch-vs-polymorphism: presumed slop)."""
-    count = lambda text: sum(1 for line in text.splitlines() if BRANCH.search(line))
-    return sum(count(h['new']) - count(h['old']) for h in edit['hunks'])
+@dataclass(frozen=True)
+class Hunk:
+    old: str
+    new: str
+
+    def branches_added(self) -> int:
+        """Branches the new text has beyond the old text (branch-vs-polymorphism: presumed slop)."""
+        return sum(1 for line in self.new.splitlines() if BRANCH.search(line)) - sum(
+            1 for line in self.old.splitlines() if BRANCH.search(line))
+
+    def rendered(self) -> str:
+        return (''.join(f'- {line}\n' for line in self.old.splitlines())
+                + ''.join(f'+ {line}\n' for line in self.new.splitlines()))
 
 
-def check_code(edit: Edit) -> str:
-    """Four hex digits derived from the edit's own text; shown only after its full hunks."""
-    return hashlib.sha256((edit['id'] + json.dumps(edit['hunks'])).encode()).hexdigest()[:4]
+@dataclass(frozen=True)
+class Edit:
+    """One row of edits.jsonl, decoded once: a unit's file edit awaiting its verdict."""
+    id: str
+    at: float
+    thread: str
+    path: str
+    hunks: tuple[Hunk, ...]
+
+    @classmethod
+    def from_row(cls, id: str, at: float, thread: str, path: str, hunks: list[dict[str, str]]) -> Edit:
+        return cls(id, at, thread, path, tuple(Hunk(**hunk) for hunk in hunks))
+
+    @classmethod
+    def recorded(cls) -> dict[str, Edit]:
+        if not os.path.exists(EDITS):
+            return {}
+        with open(EDITS) as f:
+            edits = (cls.from_row(**json.loads(line)) for line in f if line.strip())
+            return {edit.id: edit for edit in edits}
+
+    @classmethod
+    def unjudged(cls) -> list[Edit]:
+        judged = {v.tool_call_id for todo in order.COMMS.goals.todos.history_for_commander(
+            order.COMMS.registry.require(ME).incarnation) for v in todo.verdicts}
+        return [edit for edit in cls.recorded().values() if edit.id not in judged]
+
+    def code(self) -> str:
+        """Four hex digits derived from the edit's own text; shown only after its full hunks."""
+        return hashlib.sha256((self.id + json.dumps([asdict(h) for h in self.hunks])).encode()).hexdigest()[:4]
+
+    def branches_added(self) -> int:
+        return sum(hunk.branches_added() for hunk in self.hunks)
+
+    def text(self) -> str:
+        return ''.join(hunk.old + hunk.new for hunk in self.hunks)
+
+    def added(self) -> str:
+        return ''.join('+' + line + '\n' for hunk in self.hunks for line in hunk.new.splitlines())
+
+    def rendered(self) -> str:
+        return (f'--- {self.id} {time.strftime("%H:%M", time.localtime(self.at))} {self.path}\n'
+                + '\n'.join(hunk.rendered() for hunk in self.hunks)
+                + f'\n=== end {self.id} code {self.code()}')
 
 
-def show(thread=None):
-    pending = [e for e in unjudged() if thread in (None, e['thread'])]
-    by_thread = {}
-    for e in pending:
-        by_thread.setdefault(e['thread'], []).append(e)
+def show(pending: list[Edit]) -> None:
+    by_thread: dict[str, list[Edit]] = {}
+    for edit in pending:
+        by_thread.setdefault(edit.thread, []).append(edit)
     for name, edits in by_thread.items():
         orders = order.held_by(name)
         intent = '\n'.join(todo.order.instructions(todo) for todo in orders) or 'NO OPEN ORDER TODO'
         print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
-        for e in edits:
-            print(f'--- {e["id"]} {time.strftime("%H:%M", time.localtime(e["at"]))} {e["path"]}')
-            for h in e['hunks']:
-                print(''.join(f'- {l}\n' for l in h['old'].splitlines()) + ''.join(f'+ {l}\n' for l in h['new'].splitlines()))
-            print(f'=== end {e["id"]} code {check_code(e)}')
+        for edit in edits:
+            print(edit.rendered())
     print(f'{len(pending)} unjudged')
 
 
@@ -110,12 +122,12 @@ def roast(thread, lines, text, fix, slop):
 
 def alarm():
     while True:
-        late = [e for e in unjudged() if time.time() - e['at'] > 300]
+        late = [edit for edit in Edit.unjudged() if time.time() - edit.at > 300]
         if late:
-            counts = {}
-            for e in late:
-                counts[e['thread']] = counts.get(e['thread'], 0) + 1
-            oldest = min(e['at'] for e in late)
+            counts: dict[str, int] = {}
+            for edit in late:
+                counts[edit.thread] = counts.get(edit.thread, 0) + 1
+            oldest = min(edit.at for edit in late)
             print(f'UNJUDGED {len(late)} edits over 5 min (oldest {int((time.time() - oldest) / 60)} min): '
                   + ', '.join(f'{t} {n}' for t, n in counts.items()) + ' -> judge show', flush=True)
         time.sleep(60)
@@ -125,13 +137,23 @@ class JudgeVerb(CommanderVerb):
     """A verb of `judge`."""
 
 
-@dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
-    help = "unjudged edits in full, beside the unit's current order"
-    thread: str | None = option("thread", nargs="?", default=None)
+    help = "every unit's unjudged edits in full, beside its current orders"
+
+    def selects(self, edit: Edit) -> bool:
+        return True
 
     def run(self) -> None:
-        show(self.thread)
+        show([edit for edit in Edit.unjudged() if self.selects(edit)])
+
+
+@dataclass(frozen=True, kw_only=True)
+class ShowUnitVerb(ShowVerb, declared_name="show-unit"):
+    help = "one unit's unjudged edits in full, beside its current orders"
+    thread: str = option("thread")
+
+    def selects(self, edit: Edit) -> bool:
+        return edit.thread == self.thread
 
 
 class AlarmVerb(JudgeVerb):
@@ -161,31 +183,25 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def report(self, todos: tuple[Todo, ...]) -> None: ...
 
     def held_order(self, edit: Edit) -> Todo:
-        """The order Todo my cited message names; no verdict is recorded without it."""
-        cited = next((m for m in my_messages(edit['thread']) if m['id'] == self.msg), None)
-        if cited is None:
-            sys.exit(f'Refused: edit {edit["id"]}: {self.msg} is not a message from {ME} to {edit["thread"]}')
-        candidates = order.held_by(edit['thread'])
-        if found := re.search(r'\bP\d+\b', cited['text']):
-            candidates = tuple(todo for todo in candidates if todo.id == found.group())
-        if len(candidates) != 1:
-            sys.exit(f'Refused: edit {edit["id"]} by {edit["thread"]} needs one open order Todo; '
-                     f'found {[todo.id for todo in candidates]}; cite a message naming its P-number')
-        return candidates[0]
+        """The open order my cited message was sent in; no verdict is recorded without it."""
+        sent = [todo for todo in order.held_by(edit.thread) if todo.sent_in(self.msg)]
+        if len(sent) != 1:
+            sys.exit(f'Refused: edit {edit.id}: {self.msg} was sent in {[todo.id for todo in sent]} of '
+                     f'the open orders {edit.thread} holds; cite the message its one order was sent in')
+        return sent[0]
 
     def run(self) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        edits = {e['id']: e for e in rows(EDITS)}
+        edits = Edit.recorded()
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
         if unread := [token for token in self.ids
-                      if token != f'{token.split(":")[0]}:{check_code(edits[token.split(":")[0]])}']:
+                      if token != f'{token.split(":")[0]}:{edits[token.split(":")[0]].code()}']:
             sys.exit(f'Refused: wrong or missing read codes {unread}; read each edit to its "=== end" line')
         for i in ids:
-            text = ''.join(h['old'] + h['new'] for h in edits[i]['hunks'])
-            if not any(line in text for line in self.lines):
+            if not any(line in edits[i].text() for line in self.lines):
                 sys.exit(f'Refused: none of your --line quotes is in edit {i}; judge it by its own text')
         selected = {i: self.held_order(edits[i]) for i in ids}
         self.check_edits([edits[i] for i in ids])
@@ -196,7 +212,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         for i, todo in selected.items():
             result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
             current[todo.id] = result.todo
-        print(f'{self.declared_name}: {len(ids)} edits; {len(unjudged())} still unjudged')
+        print(f'{self.declared_name}: {len(ids)} edits; {len(Edit.unjudged())} still unjudged')
         self.report(tuple(current.values()))
 
 
@@ -211,13 +227,12 @@ class OkVerb(VerdictVerb):
 
     def check_edits(self, edits: list[Edit]) -> None:
         for edit in edits:
-            diff = ''.join('+' + line + '\n' for h in edit['hunks'] for line in h['new'].splitlines())
-            path = edit.get('path') or ''
+            path = edit.path
             after = [open(path).read()] if path.endswith('.py') and os.path.exists(path) else []
-            if added := order.forwarders_added(diff, after):
-                sys.exit(f'Refused: edit {edit["id"]} adds forwarders {added[:5]}; it goes back with judge back, never ok')
-            if (extra := branches_added(edit)) > 0:
-                self.own_branches(f'Refused: edit {edit["id"]} adds {extra} branch(es)')
+            if added := order.forwarders_added(edit.added(), after):
+                sys.exit(f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')
+            if (extra := edit.branches_added()) > 0:
+                self.own_branches(f'Refused: edit {edit.id} adds {extra} branch(es)')
 
     def own_branches(self, refusal: str) -> None:
         sys.exit(refusal + '; send it back, or judge it ok-unowned with --no-owner'
