@@ -686,7 +686,7 @@ class ProviderUsageTotal:
                 input_tokens=totals.input_tokens.plus(usage.input),
                 output_tokens=totals.output_tokens.plus(usage.output),
                 total_tokens=totals.total_tokens.plus(usage.total_tokens),
-                cost_total=totals.cost_total + usage.charged(),
+                cost_total=totals.cost_total + usage.cost.charged(),
             )
         return totals
 

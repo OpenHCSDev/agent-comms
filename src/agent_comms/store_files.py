@@ -55,6 +55,10 @@ class LockMode(ABC):
         """Verify a writable bus checkpoint as this lock's holder may."""
 
     @abstractmethod
+    def require_writer(self) -> None:
+        """Require the exclusive holder before rebuilding a replaced source."""
+
+    @abstractmethod
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         """The mode that may repair what this holder could only name."""
 
@@ -73,6 +77,10 @@ class SharedLock(LockMode):
                           stream: BinaryIO) -> PrefixWitness:
         return checkpoint.check_final(bus, marker, db, stream)
 
+    def require_writer(self) -> None:
+        from .private_bus_checkpoint import CheckpointNeedsRepair
+        raise CheckpointNeedsRepair("Replaced bus file needs its page index rebuilt.")
+
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         return ExclusiveLock()
 
@@ -90,6 +98,9 @@ class ExclusiveLock(LockMode):
                           marker: WireMetadata, db: sqlite3.Connection,
                           stream: BinaryIO) -> PrefixWitness:
         return checkpoint.verify_with_repair(bus, marker, db, stream)
+
+    def require_writer(self) -> None:
+        pass
 
     def after_repair_needed(self, error: CheckpointNeedsRepair) -> LockMode:
         raise error
