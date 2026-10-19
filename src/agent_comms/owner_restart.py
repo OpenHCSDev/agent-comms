@@ -15,7 +15,10 @@ from typing import TYPE_CHECKING
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
 from .owner_launch import RetainedOwnerLaunch
-from .launch_runtime import LaunchRecord, LaunchRuntime, RestartEnvironment
+from .launch_runtime import (AnySourceInterpreter, ArgumentsLaunchChange, CommandLaunchChange,
+    EnvironmentLaunchChange, ExactSourceInterpreter, LaunchChange, LaunchRecord, LaunchRuntime,
+    NoLaunchChange, RestartEnvironment, SourceInterpreter)
+from .field_codec import boundary_decoder
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
 from .store_files import store_lock_path
@@ -31,12 +34,25 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class OwnerRestartRequest:
     names: tuple[str, ...] | None = None
-    agent_bin: str | None = None
-    agent_args: tuple[str, ...] | None = None
+    changes: tuple[LaunchChange, ...] = field(default_factory=lambda: (NoLaunchChange(), NoLaunchChange()))
     expected: OwnerRestartSelection | None = None
-    runtime: RestartEnvironment | None = None
-    source_interpreter: str | None = None
+    runtime: LaunchChange = field(default_factory=NoLaunchChange)
+    source_interpreter: SourceInterpreter = field(default_factory=AnySourceInterpreter)
     launch_runtime: LaunchRuntime = field(default_factory=LaunchRuntime.running, kw_only=True)
+
+    @classmethod
+    @boundary_decoder
+    def capture(cls, names: tuple[str, ...] | None = None, agent_bin: str | None = None,
+                agent_args: tuple[str, ...] | None = None, expected: OwnerRestartSelection | None = None,
+                runtime: RestartEnvironment | None = None, source_interpreter: str | None = None,
+                *, launch_runtime: LaunchRuntime) -> OwnerRestartRequest:
+        """Decode optional values at the public restart API before retaining its request."""
+        return cls(names=names, expected=expected,
+            changes=(NoLaunchChange() if agent_bin is None else CommandLaunchChange(agent_bin),
+                     NoLaunchChange() if agent_args is None else ArgumentsLaunchChange(agent_args)),
+            runtime=NoLaunchChange() if runtime is None else EnvironmentLaunchChange(runtime),
+            source_interpreter=AnySourceInterpreter() if source_interpreter is None else ExactSourceInterpreter(source_interpreter),
+            launch_runtime=launch_runtime)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:
         if self.names is None:
@@ -54,7 +70,7 @@ class OwnerRestartRequest:
     def environment(self, lifecycle: OwnerLifecycle) -> RestartEnvironment:
         self.launch_runtime.require_available()
         return lifecycle.restart_environment(
-            LaunchRecord.current().configuration if self.runtime is None else self.runtime,
+            self.runtime.apply(LaunchRecord.current()).configuration,
             self.launch_runtime)
 
 
@@ -103,18 +119,17 @@ class OwnerRestartHandoff:
     root: str
     owners: tuple[RetiredOwnerLaunch, ...]
     runtime: RestartEnvironment
-    agent_bin: str | None
-    agent_args: tuple[str, ...] | None
+    changes: tuple[LaunchChange, ...]
     launch_runtime: LaunchRuntime
 
     def launch(self, lifecycle: OwnerLifecycle, runtime: LaunchRuntime) -> tuple[OwnerRestartResult, ...]:
         def target(thread, source):
+            record = replace(source.record, runtime=runtime, configuration=self.runtime,
+                agent_bin=lifecycle.restart_entrypoint(source.record.agent_bin, runtime))
+            for change in self.changes:
+                record = change.apply(record)
             return lifecycle._launch_owner_unlocked(
-                thread, replace(source.record, runtime=runtime, configuration=self.runtime,
-                    agent_bin=(lifecycle.restart_entrypoint(source.record.agent_bin, runtime)
-                               if self.agent_bin is None else self.agent_bin),
-                    agent_args=source.record.agent_args if self.agent_args is None else self.agent_args),
-                environment=self.runtime.apply_runtime(source.environment),
+                thread, record, environment=self.runtime.apply_runtime(source.environment),
             )
 
         return self._launch(lifecycle, target)
@@ -274,7 +289,7 @@ class FencedOwnerBatch:
                 owner.require_current(snapshot)
                 progress = replace(progress, retired=progress.retired + (owner,))
             handoff = OwnerRestartHandoff(str(self.lifecycle.root), progress.retired, self.runtime,
-                                         self.request.agent_bin, self.request.agent_args,
+                                         self.request.changes,
                                          self.request.launch_runtime)
             stopped = StoppedOwnerBatch(self.lifecycle, wire, handoff, self.ownership.pop_all())
         except BaseException as cause:

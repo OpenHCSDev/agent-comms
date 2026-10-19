@@ -289,9 +289,7 @@ class RetainedNative(ChildNative):
             original, authentication = self.child.key
             candidate = original.retained_managed(command, arguments,
                 root=root, directory=directory, worktree=worktree, environment=environment, session_file=session_file)
-            if candidate is not None and (candidate, candidate.record.configuration.auth_revision()) == (
-                original, authentication
-            ):
+            if candidate.same_acquired(original, authentication):
                 return original
         return super().managed_launch(
             command, arguments, package=package, root=root, directory=directory,

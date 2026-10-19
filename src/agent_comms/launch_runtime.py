@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import json
+import asyncio
 from abc import abstractmethod
 import os
 import sys
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from tempfile import TemporaryFile
-from collections.abc import Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Self, get_args, get_type_hints
@@ -44,7 +45,7 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def project(self, configuration: RestartEnvironment) -> RestartEnvironment:
-        return replace(configuration, virtual_env=str(self.prefix)).for_interpreter(self.interpreter)
+        return replace(configuration, virtual_env=SpecifiedEnvironmentValue(str(self.prefix))).for_interpreter(self.interpreter)
 
     def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
         return self.project(configuration).apply_runtime(source)
@@ -74,6 +75,37 @@ class SpecifiedImportPath(ImportPath, JsonShapeMember):
         environment["PYTHONPATH"] = self.value
 
 
+class EnvironmentValue(DeclaredFamily, JsonShapeFamily, affix="EnvironmentValue"):
+    @abstractmethod
+    def prepend_search(self, directory: str) -> EnvironmentValue: ...
+
+
+@dataclass(frozen=True)
+class AbsentEnvironmentValue(EnvironmentValue):
+    def prepend_search(self, directory: str) -> EnvironmentValue:
+        # An unset PATH uses the operating system's defined executable search path.
+        return SpecifiedEnvironmentValue(os.defpath).prepend_search(directory)
+
+
+@dataclass(frozen=True)
+class SpecifiedEnvironmentValue(EnvironmentValue, JsonShapeMember):
+    value: str
+
+    def prepend_search(self, directory: str) -> EnvironmentValue:
+        parts = (part for part in self.value.split(os.pathsep) if part != directory)
+        return SpecifiedEnvironmentValue(os.pathsep.join((directory, *parts)))
+
+
+class CapturedDirectoryText(PathText):
+    @staticmethod
+    def capture(path: Path) -> Path:
+        return path.expanduser().resolve()
+
+    @classmethod
+    def from_text(cls, value: str) -> Path:
+        return cls.capture(Path(value))
+
+
 class NativeField:
     """A launch field exported to the native process environment."""
 
@@ -82,17 +114,22 @@ class NativeField:
 class RestartEnvironment:
     """Retained external directories and import settings selected by the launch."""
 
-    home: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "HOME"})
-    path: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True})
+    home: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "HOME"})
+    path: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True})
     pythonpath: ImportPath = field(default_factory=NoImportPath, metadata={"wire_omit_default": True})
-    virtual_env: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True})
-    config: str | None = field(default=None, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"})
-    native_config: Annotated[Path, PathText] = field(kw_only=True)
-    agent_directory: Annotated[Path, PathText, NativeField()] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR"})
+    virtual_env: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True})
+    config: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"})
+    native_config: Annotated[Path, CapturedDirectoryText] = field(kw_only=True)
+    agent_directory: Annotated[Path, CapturedDirectoryText, NativeField()] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR"})
 
-    def __post_init__(self) -> None:
-        object.__setattr__(self, "native_config", self.native_config.expanduser().resolve())
-        object.__setattr__(self, "agent_directory", self.agent_directory.expanduser().resolve())
+    @classmethod
+    def capture(cls, source: Mapping[str, str], *, native_config: Path, agent_directory: Path) -> Self:
+        values = {FieldCodec.wire_key(declaration): source[FieldCodec.wire_key(declaration)]
+                  for declaration in fields(cls) if "wire_name" in declaration.metadata
+                  and FieldCodec.wire_key(declaration) in source}
+        values[FieldCodec.record_key(cls, "native_config")] = str(native_config)
+        values[FieldCodec.record_key(cls, "agent_directory")] = str(agent_directory)
+        return FieldCodec.decode(cls, values)
 
     def encode(self) -> dict[str, str]:
         wire = FieldCodec.encode(self)
@@ -103,14 +140,11 @@ class RestartEnvironment:
         return encoded
 
     def for_agent(self, directory: Path) -> RestartEnvironment:
-        return replace(self, agent_directory=directory)
+        return replace(self, agent_directory=CapturedDirectoryText.capture(directory))
 
     def for_interpreter(self, interpreter: Path) -> RestartEnvironment:
         directory = str(interpreter.parent)
-        inherited = os.defpath if self.path is None else self.path
-        path = os.pathsep.join((directory, *(part for part in inherited.split(os.pathsep)
-                                             if part != directory)))
-        return replace(self, path=path)
+        return replace(self, path=self.path.prepend_search(directory))
 
     def encode_native(self) -> dict[str, str]:
         encoded = self.encode()
@@ -138,9 +172,89 @@ class RestartEnvironment:
 
 
 @dataclass(frozen=True)
+class LaunchChange(DeclaredFamily, affix="LaunchChange"):
+    @abstractmethod
+    def apply(self, record: LaunchRecord) -> LaunchRecord: ...
+
+
+class NoLaunchChange(LaunchChange):
+    def apply(self, record: LaunchRecord) -> LaunchRecord:
+        return record
+
+
+@dataclass(frozen=True)
+class EnvironmentLaunchChange(LaunchChange):
+    configuration: RestartEnvironment
+
+    def apply(self, record: LaunchRecord) -> LaunchRecord:
+        return replace(record, configuration=self.configuration)
+
+
+@dataclass(frozen=True)
+class CommandLaunchChange(LaunchChange):
+    value: str
+
+    def apply(self, record: LaunchRecord) -> LaunchRecord:
+        return replace(record, agent_bin=self.value)
+
+
+@dataclass(frozen=True)
+class ArgumentsLaunchChange(LaunchChange):
+    value: tuple[str, ...]
+
+    def apply(self, record: LaunchRecord) -> LaunchRecord:
+        return replace(record, agent_args=self.value)
+
+
+@dataclass(frozen=True)
+class SourceInterpreter(DeclaredFamily, affix="SourceInterpreter"):
+    @abstractmethod
+    def require(self, observed: str) -> None: ...
+
+
+class AnySourceInterpreter(SourceInterpreter):
+    def require(self, observed: str) -> None:
+        pass
+
+
+@dataclass(frozen=True)
+class ExactSourceInterpreter(SourceInterpreter):
+    value: str
+
+    def require(self, observed: str) -> None:
+        if observed != self.value:
+            raise RelationViolationError("Selected source owner interpreter changed")
+
+
+@dataclass(frozen=True)
+class StartupInput(DeclaredFamily, affix="StartupInput"):
+    @asynccontextmanager
+    async def running(self, operation: Callable[[str], Awaitable[object]]) -> AsyncIterator[StartupInput]:
+        yield self
+
+
+class NoStartupInput(StartupInput):
+    pass
+
+
+@dataclass(frozen=True)
+class QueuedStartupInput(StartupInput):
+    key: str
+
+    @asynccontextmanager
+    async def running(self, operation: Callable[[str], Awaitable[object]]) -> AsyncIterator[StartupInput]:
+        task = asyncio.ensure_future(operation(self.key))
+        try:
+            yield self
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+@dataclass(frozen=True)
 class ThreadLaunch:
     name: str
-    startup_input: str | None
+    startup_input: StartupInput = field(default_factory=NoStartupInput)
 
 @dataclass(frozen=True)
 class LaunchRoot(DeclaredFamily, affix="LaunchRoot"):
@@ -319,8 +433,8 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
             raise LaunchRecordUnavailable("An explicit --comms-launch FILE is required") from error
 
     @classmethod
-    def startup(cls, argv: list[str] | None = None) -> LaunchRecord:
-        arguments = sys.argv if argv is None else argv
+    def startup(cls, argv: list[str]) -> LaunchRecord:
+        arguments = argv
         record = cls.read(cls.argument_path(arguments))
         index = arguments.index(cls.argument)
         del arguments[index:index + 2]
@@ -359,7 +473,7 @@ class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
     def require_thread(self) -> ThreadLaunch:
         raise CallingThreadUnavailable("This launch has no owner thread")
 
-    def take_startup_input(self) -> str | None:
+    def take_startup_input(self) -> StartupInput:
         raise CallingThreadUnavailable("This launch has no startup input")
 
     def prepare(self, resources) -> Self:
@@ -371,8 +485,7 @@ class CommandLineLaunchRecord(LaunchRecord):
     def entrypoint(cls, root: LaunchRoot) -> CommandLineLaunchRecord:
         directory = Path.home() / ".pi" / "agent"
         return cls(root, LaunchRuntime(Path(sys.executable)),
-                   RestartEnvironment(home=str(Path.home()), path=os.environ.get("PATH"),
-                                      native_config=directory, agent_directory=directory),
+                   RestartEnvironment.capture(os.environ, native_config=directory, agent_directory=directory),
                    "pi", (), ())
 
 
@@ -386,9 +499,9 @@ class OwnerLaunchRecord(LaunchRecord):
     def require_thread(self) -> ThreadLaunch:
         return self.thread
 
-    def take_startup_input(self) -> str | None:
+    def take_startup_input(self) -> StartupInput:
         value = self.thread.startup_input
-        LaunchRecord.install(replace(self, thread=replace(self.thread, startup_input=None)))
+        LaunchRecord.install(replace(self, thread=replace(self.thread, startup_input=NoStartupInput())))
         return value
 
 

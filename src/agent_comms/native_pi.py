@@ -11,6 +11,7 @@ import re
 import shutil
 import sqlite3
 import sys
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, fields, replace
@@ -135,7 +136,7 @@ def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
     from .active_route import resolve_comms_route
 
-    record = LaunchRecord.startup()
+    record = LaunchRecord.startup(sys.argv)
     package = resolve_comms_route(record.root_selection.path).launch().require_private().validate()
     argv, environment = NativePiRpcLaunch.bootstrap(
         package, tuple(sys.argv[1:]), Path.cwd(), dict(os.environ), record,
@@ -411,8 +412,19 @@ class NativeTurnResult:
     context: NativeContextProof
 
 
+class NativeLaunchMatch(ABC):
+    @abstractmethod
+    def same_acquired(self, original: NativePiRpcLaunch, authentication: tuple[int, int]) -> bool:
+        """Whether the retained child already owns this complete launch/auth key."""
+
+
+class NoRetainedNativeLaunch(NativeLaunchMatch):
+    def same_acquired(self, original: NativePiRpcLaunch, authentication: tuple[int, int]) -> bool:
+        return False
+
+
 @dataclass(frozen=True, slots=True)
-class NativePiRpcLaunch:
+class NativePiRpcLaunch(NativeLaunchMatch):
     """Verified native Pi subprocess launch, not an authorization to send input."""
 
     argv: tuple[str, ...]
@@ -556,7 +568,7 @@ class NativePiRpcLaunch:
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
         directory: Path,
         environment: LaunchRecord, session_file: str | None,
-    ) -> NativePiRpcLaunch | None:
+    ) -> NativeLaunchMatch:
         """Derive a candidate from this acquired immutable launch, not a path cache.
 
         Only the session that owns the child may reuse it after comparing the complete
@@ -564,12 +576,14 @@ class NativePiRpcLaunch:
         A different package or selected file needs its own fresh acquisition.
         """
         self._command_selection(command, self.record.runtime, self.package)
-        saved = Path(session_file).absolute() if session_file is not None else None
-        if (saved, directory) != (self.session.path, self.session.directory):
-            return None
+        if (session_file, directory) != (self.session.session_file, self.session.directory):
+            return NoRetainedNativeLaunch()
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
             worktree, environment.at_root(root), self.session)
+
+    def same_acquired(self, original: NativePiRpcLaunch, authentication: tuple[int, int]) -> bool:
+        return (self, self.record.configuration.auth_revision()) == (original, authentication)
 
     @classmethod
     def tracked(cls, package: VerifiedNativePackage, **options) -> NativePiRpcLaunch:

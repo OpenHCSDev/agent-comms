@@ -349,7 +349,7 @@ def step(comms: Comms) -> None:
         if not record.state.attempting:
             continue
         try:
-            request = OwnerRestartRequest(
+            request = OwnerRestartRequest.capture(
                 (owner.name,),
                 expected=record.selection,
                 runtime=record.target.runtime,
@@ -415,7 +415,7 @@ async def run(comms: Comms) -> None:
 
 
 def main() -> None:
-    LaunchRecord.startup()
+    LaunchRecord.startup(sys.argv)
     if len(sys.argv) != 2:
         raise SystemExit("usage: python -m agent_comms.restart_queue ROOT")
     comms = wire(sys.argv[1])

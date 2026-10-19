@@ -21,7 +21,7 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRecord, LaunchRuntime, RestartEnvironment, ThreadLaunch
+from .launch_runtime import LaunchRecord, LaunchRuntime, QueuedStartupInput, RestartEnvironment, ThreadLaunch
 from .active_route import resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration
@@ -55,7 +55,7 @@ class TaskLaunchInput(LaunchInput):
     input_key: str = field(default_factory=lambda: f"acp:{uuid4().hex}", init=False)
 
     def launch(self, launch: ThreadLaunch) -> ThreadLaunch:
-        return replace(launch, startup_input=self.input_key)
+        return replace(launch, startup_input=QueuedStartupInput(self.input_key))
 
     def record_first_input(self, record) -> None:
         record(self.input_key, seq=None, text=self.text)
@@ -337,10 +337,10 @@ class OwnerLifecycle:
         """
         from .owner_restart import OwnerRestartRequest
 
-        request = OwnerRestartRequest(
+        request = OwnerRestartRequest.capture(
             tuple(names) if names is not None else None, agent_bin,
             tuple(agent_args) if agent_args is not None else None,
-            expected, runtime, source_interpreter,
+            expected, runtime, source_interpreter, launch_runtime=LaunchRuntime.running(),
         )
         return cutover.restart(self, request)
 
@@ -409,12 +409,12 @@ class OwnerLifecycle:
         record: LaunchRecord,
         *,
         initial_input: LaunchInput = LaunchInput(),
-        environment: Mapping[str, str] | None = None,
+        environment: Mapping[str, str] = os.environ,
     ) -> Thread:
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         record.runtime.require_available()
-        env = record.runtime.environment(os.environ if environment is None else environment,
+        env = record.runtime.environment(environment,
                                          configuration=record.configuration)
         agent_bin = self.require_launch_authority().prepare_owner(thread, record.agent_bin, record.runtime)
         from .launch_runtime import OwnerLaunchRecord

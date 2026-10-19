@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .child_process import Platform, ProcessIdentity
 from .errors import RelationViolationError
-from .launch_runtime import LaunchRecord
+from .launch_runtime import AnySourceInterpreter, LaunchRecord, SourceInterpreter
 from .registry_document import RegistrySnapshot
 from .threads import Thread
 
@@ -23,15 +23,16 @@ class RetainedOwnerLaunch:
 
     @classmethod
     def capture(
-        cls, thread: Thread, snapshot: RegistrySnapshot, *, interpreter: str | None = None
+        cls, thread: Thread, snapshot: RegistrySnapshot, *, interpreter: SourceInterpreter = AnySourceInterpreter()
     ) -> RetainedOwnerLaunch:
         process = thread.require_process()
         platform = Platform.current()
         platform.require(process)
         record = LaunchRecord.for_process(process.pid)
         observed = os.fsdecode(Path(f"/proc/{process.pid}/cmdline").read_bytes().split(b"\0", 1)[0])
-        if observed != str(record.runtime.interpreter) or (interpreter is not None and observed != interpreter):
+        if observed != str(record.runtime.interpreter):
             raise RelationViolationError("Selected source owner interpreter changed")
+        interpreter.require(observed)
         raw = Path(f"/proc/{process.pid}/environ").read_bytes()
         values = dict(item.split(b"=", 1) for item in raw.split(b"\0") if b"=" in item)
         environment = {os.fsdecode(key): os.fsdecode(value) for key, value in values.items()}

@@ -489,7 +489,7 @@ class CommsClient(CommsAgent):
 def main() -> int:
     from .launch_runtime import LaunchRecord
 
-    record = LaunchRecord.startup()
+    record = LaunchRecord.startup(sys.argv)
     with record.route().hold_client_route():
         if "--login" in sys.argv[1:]:
             from .login import run_login

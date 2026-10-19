@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterable, Iterator
+from functools import partial
 from pathlib import Path
 
 from .cli_commands import CliCommand
@@ -27,6 +28,11 @@ def _fail(error: BaseException) -> int:
     return 1
 
 
+class ProcessArguments:
+    def __iter__(self) -> Iterator[str]:
+        return iter(sys.argv[1:])
+
+
 class CliArgumentParser(argparse.ArgumentParser):
     """Argument errors use Core's JSON failure boundary, including subcommands."""
 
@@ -38,7 +44,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = CliArgumentParser(prog="agent-comms", description=__doc__)
     parser.add_argument(
         "--root",
-        default=None,
+        default=CurrentLaunchRoot.capture,
+        type=lambda value: partial(ExplicitLaunchRoot, Path(value).expanduser().resolve()),
         help="Comms root directory (otherwise the supplied launch record's root)",
     )
     parser.add_argument(LaunchRecord.argument, help=argparse.SUPPRESS)
@@ -48,12 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(argv: Iterable[str] = ProcessArguments()) -> int:
     try:
-        arguments = list(sys.argv[1:] if argv is None else argv)
+        arguments = list(argv)
         args = build_parser().parse_args(arguments)
-        root = (ExplicitLaunchRoot(Path(args.root).expanduser().resolve())
-                if args.root is not None else CurrentLaunchRoot.capture())
+        root = args.root()
         record = LaunchRecord.client_startup(arguments, root)
         command = CliCommand.member_named(args.command).from_namespace(args)
         with client_wire(record.root_selection.path) as comms:

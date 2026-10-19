@@ -4,6 +4,7 @@ import asyncio
 import argparse
 import os
 import signal
+import sys
 from functools import partial
 from .coordinator import Coordination
 from contextlib import suppress
@@ -38,16 +39,12 @@ async def run_owner(comms: Comms) -> None:
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stopped.set)
-    initial: asyncio.Task | None = None
     try:
         await agent.sessions.start_owner(thread.worktree, name)
-        if key := LaunchRecord.current().take_startup_input():
-            initial = asyncio.create_task(run_startup_input(agent, name, key))
-        await stopped.wait()
+        startup = LaunchRecord.current().take_startup_input()
+        async with startup.running(partial(run_startup_input, agent, name)):
+            await stopped.wait()
     finally:
-        if initial is not None:
-            initial.cancel()
-            await asyncio.gather(initial, return_exceptions=True)
         await agent.shutdown()
 
 
@@ -96,7 +93,7 @@ def main() -> int:
     before consulting a route or wire so discovery cannot start an owner.
     Registration belongs to the original thread management operation.
     """
-    record = LaunchRecord.startup()
+    record = LaunchRecord.startup(sys.argv)
     argparse.ArgumentParser(prog="agent-comms-agent", description=__doc__).parse_args()
     wire(record.root_selection.path).owners.require_private_launch()
     with suppress(KeyboardInterrupt):

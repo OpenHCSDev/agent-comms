@@ -189,7 +189,7 @@ class Thread(ThreadProvenance):
         """The launch environment this thread's owner process carries."""
         from .launch_runtime import ThreadLaunch
 
-        return ThreadLaunch(self.name, None)
+        return ThreadLaunch(self.name)
 
     def native_session_directory(self, root: Path) -> Path:
         return root / "native-sessions" / self.incarnation.require_recorded().lookup
