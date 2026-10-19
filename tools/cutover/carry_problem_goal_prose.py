@@ -13,10 +13,10 @@ from pathlib import Path
 
 from cutover.carry import Carried, Carry
 
+from agent_comms.goal_mentions import bind_goal_mentions
 from agent_comms.goals import Goal, ProblemGoalOrder
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.registry_store import RegistryStore
-from agent_comms.text_digest import TextDigest
 
 
 class ProblemGoalProse(Carry):
@@ -40,13 +40,16 @@ class ProblemGoalProse(Carry):
                     continue
                 changed += 1
                 revision = goal.revision + 1
-                text = replace(goal, text=ProblemGoalOrder.text, progress="", revision=revision)
-                if goal.mention_source is not None:
-                    digest = TextDigest.of(ProblemGoalOrder.text).value
-                    source = replace(
-                        goal.mention_source, text_revision=revision, text_digest=digest, bindings=()
-                    )
-                    text = replace(text, mention_source=source)
+                source = bind_goal_mentions(
+                    ProblemGoalOrder.text, goal.id, revision, thread, document.snapshot()
+                )
+                text = replace(
+                    goal,
+                    text=ProblemGoalOrder.text,
+                    progress="",
+                    revision=revision,
+                    mention_source=source,
+                )
                 document.threads[name] = replace(thread, goal=text)
             if apply and changed:
                 store.save_unlocked(document)
