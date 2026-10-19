@@ -105,7 +105,7 @@ class FinalSeal(CheckpointSeal):
 
     def require_rebuilt(self, saved: PrefixWitness, rebuilt: PrefixWitness) -> None:
         if self.witness != saved.seal():
-            raise RelationViolationError("Private bus checkpoint certificate differs from its seal.")
+            raise RelationViolationError("Private bus checkpoint prefix record differs from its seal.")
 
     def require_final(self, saved: PrefixWitness, db_path: Path) -> None:
         self.check_final(saved, db_path)

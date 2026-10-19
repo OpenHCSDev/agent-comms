@@ -190,7 +190,7 @@ class SelectedParticipant(MroDispatch):
         tuple[MessageNotification, ...],
     ]:
         """Capture detached registry, participant and optional context in one worker."""
-        with bus.log.certified_read() as source:
+        with bus.log.checked_read() as source:
             _require_no_private_owner_rename(comms.root)
             marker = source.marker
             if marker.root_id != root_id:
@@ -268,7 +268,7 @@ class SelectedParticipant(MroDispatch):
         def capture():
             # Capture source pointers and bytes before opening the SQL snapshot,
             # so file decoding cannot keep a database reader open.
-            with bus.log.certified_read() as source:
+            with bus.log.checked_read() as source:
                 marker = source.marker
                 if marker.root_id != root_id:
                     raise IdentityConflict("selected source wire root changed")

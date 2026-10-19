@@ -114,7 +114,7 @@ class OptionalAwarenessProjection:
         generation: int,
         claimed_generation: int,
     ) -> OptionalAwarenessProjection:
-        with index.log.certified_read() as source:
+        with index.log.checked_read() as source:
             after_seq = source.marker.claimed_after_seq
         return cls(index, after_seq, through_seq, generation, claimed_generation,
                    registry=registry)

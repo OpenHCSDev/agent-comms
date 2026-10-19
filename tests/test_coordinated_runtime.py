@@ -680,7 +680,7 @@ async def test_selected_original_survives_auxiliary_cursor_over_100_initials(tmp
             if message.reference in tuple(acknowledgement.reference for acknowledgement in outcome.publications)
         )
         # The published own reply is nonbinding for beta, but belongs to the
-        # certified scanned prefix. It cannot become a second injected source.
+        # checked scanned prefix. It cannot become a second injected source.
         assert cursor.covered_seq == response.seq == 103
         assert cursor.injected_seq == _initial.message.seq
 

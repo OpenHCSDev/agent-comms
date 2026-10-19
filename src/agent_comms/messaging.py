@@ -102,7 +102,7 @@ class Messaging:
         from .input_disposition import InputDispositions
 
         inputs = InputDispositions(self.root).in_turn(lease.turn_id)
-        with self.bus.log.certified_read() as source:
+        with self.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, self.registry.snapshot(), target)
 
     def initialize_private_initial_protocol(self) -> str:

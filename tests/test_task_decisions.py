@@ -66,7 +66,7 @@ def test_user_pin_original_source_without_model_lease_and_complete_lineage(comms
 
     def captured(name):
         current = comms.registry.require(name)
-        with comms.bus.log.certified_read() as source:
+        with comms.bus.log.checked_read() as source:
             facts = tuple(source.retained_task_facts(current.incarnation))
         return RetainedTaskFacts(facts).for_owner(current, comms.registry.snapshot())
 
@@ -136,7 +136,7 @@ def test_user_pin_goal_scope_replacement_and_original_subject_fences(comms):
                                             change=CorrectionTaskChange(pin.reference))
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts)
     current_owner = comms.registry.require(owner.name)
@@ -181,7 +181,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
         "text": "Keep UNKNOWN; preserve /artifacts/approved instead.", "to": "#team",
         "change": {"kind": "correction", "original": result["reference"]}})
     rows = list(comms.bus.full_history_page().messages)
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (rows[1],)
@@ -195,7 +195,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     invoke_tool(comms, "comms_constraint", {
         "text": "A later peer cannot overwrite the human supersession.", "to": "#team",
         "change": {"kind": "correction", "original": corrected["reference"]}})
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
     assert retained.current_authored_sources(owner, comms.registry.snapshot()) == (human,)
@@ -221,7 +221,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert isinstance(original.role, NoticeRole) and not original.role.response_policy(original).starts_turn
     assert Message.from_committed_wire(original.to_wire()) == original
     correction = invoke_tool(comms, "comms_decision", {
-        **request, "chosen": "Keep /artifacts/certified-root", "change": {"kind": "correction", "original": first["reference"]},
+        **request, "chosen": "Keep /artifacts/checked-root", "change": {"kind": "correction", "original": first["reference"]},
     })
     rows = list(comms.bus.full_history_page().messages)
     assert len(rows) == 2 and rows[0] == original
@@ -229,7 +229,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
     from agent_comms.retained_task_facts import RetainedTaskFacts
 
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         facts = tuple(source.retained_task_facts(alpha.incarnation))
     retained = RetainedTaskFacts(facts)
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(
@@ -271,7 +271,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     from agent_comms.retained_task_facts import CurrentDecisionTaskFact, RetainedTaskFacts
 
     owner = admit(comms, "alpha")
-    owner = replace(owner, goal=Goal("Keep certified root", "goal", published_seq=0, revision=1))
+    owner = replace(owner, goal=Goal("Keep checked root", "goal", published_seq=0, revision=1))
     comms.registry.register(owner)
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/exact", "rejected": ["/scratch/guess"], "to": "#team"}
@@ -284,11 +284,11 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     renamed = comms.registry.require("renamed-alpha")
     monkeypatch.setenv("AGENT_COMMS_THREAD", "renamed-alpha")
     invoke_tool(comms, "comms_decision", {
-        **request, "chosen": "/artifacts/certified",
+        **request, "chosen": "/artifacts/checked",
         "change": {"kind": "correction", "original": first["reference"]},
     })
     snapshot = comms.registry.snapshot()
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         facts = tuple(source.retained_task_facts(renamed.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(renamed, snapshot)
     rows = list(comms.bus.full_history_page().messages)
@@ -376,7 +376,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
         "change": {"kind": "correction", "original": first["reference"]},
     })
     snapshot = comms.registry.snapshot()
-    with comms.bus.log.certified_read() as source:
+    with comms.bus.log.checked_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, snapshot)
     assert len(retained.facts) == 3

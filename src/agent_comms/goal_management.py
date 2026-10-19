@@ -373,7 +373,7 @@ class Goals:
         wait = self.waits.for_goal(goal, self.waits.read())
         if not wait.owner_matches(current.incarnation.require_recorded()):
             return False
-        with self.bus.log.certified_read() as source:
+        with self.bus.log.checked_read() as source:
             original = source.delivery(reference.seq)
             if original.message.reference != reference:
                 raise ValueError("Dependency reply source reference changed.")
