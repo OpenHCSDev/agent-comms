@@ -227,7 +227,6 @@ class NativeEvidenceRead:
 
     def _forget(self) -> None:
         self.entries: tuple[NativeEntry, ...] = ()
-        # Each tracked input's position in entries, indexed once as its entry is decoded.
         self.inputs: dict[str, int] = {}
 
     def close(self):
