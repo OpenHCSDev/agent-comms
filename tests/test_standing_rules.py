@@ -23,7 +23,7 @@ from agent_comms.storage_rules import MemoryHolder, UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import (CleanHunt, DefectText, DirectiveText, MergedProgress,
-    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, RecordHuntTodo, StrikeReason, Todo, UnreadProgress)
+    NoCommitProgress, OpenPrProgress, OrderProgress, PullRequest, PullRequests, StrikeReason, Todo, UnreadProgress)
 from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
@@ -110,7 +110,7 @@ def test_hunt_due_until_a_hunt_is_recorded(commander):
     hunt = CleanHunt(FileLine(__file__, 1), "This source reads the same rows on every event "
                      "without changing any owned fact.", RecordedEventTime(time.time()))
     actor = comms.registry.require("lead").incarnation
-    CommsTodoTool(id="P1", operation=RecordHuntTodo(todo.revision, actor, hunt)).apply(comms, caller)
+    comms.goals.todos.record_hunt(actor, hunt)
     assert lines(comms, HuntDue) == []
 
 
