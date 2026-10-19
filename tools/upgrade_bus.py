@@ -190,11 +190,9 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
         if "--before-stop" in flags:
             return TodoColumnCarry.before_stop(root, apply=True)
         return TodoColumnCarry.carry_step(
-            root, step, CarryChain.at(revisions.repo, step.chain_revision), apply=True)
+            root, step, CarryChain.at(revisions.repo, step.revision), apply=True)
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
-    # Historical conversions use their own source, but their old CLI cannot decide
-    # the target chain's order or recognize steps added after that source revision.
     worker = (
         "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
         "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
@@ -222,7 +220,7 @@ def carry_all(
     for step in pending:
         with _store_lock(root / "wire"):
             result = CarryLedger(root).apply(
-                CarryChain.at(revisions.repo, step.chain_revision), step.name,
+                CarryChain.at(revisions.repo, step.revision), step.name,
                 lambda: carry(step, root, stack, revisions, "--apply"))
         results.append(result.report(step.name, True))
     return results

@@ -38,7 +38,6 @@ class ExternalPositions(carry.StoreCarry):
     """Saved events take the identity their original bridge item owns."""
 
     store = ExternalTranscript
-    after = "carry_check_revision"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:

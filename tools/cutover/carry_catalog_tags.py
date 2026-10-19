@@ -10,7 +10,6 @@ from .carry import Carried, Carry
 
 
 class CatalogTags(Carry):
-    after = "carry_todo_open_indexes"
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
