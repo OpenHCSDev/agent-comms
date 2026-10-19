@@ -182,8 +182,7 @@ def publish_selected_resource_claim(
     ):
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
-            existing = source.claim(resource)
-            if existing is not None:
+            for existing in source.claims_for((resource,)).values():
                 existing.require_holder(owner.name, str(owner.created_at))
                 if existing.claim_scope.same_attempt(claim_scope):
                     return existing

@@ -200,8 +200,7 @@ class OwnedSend(CodingToolOwner):
                 turn_id=self.turn.value, owner_claimed_generation=self.claim_scope,
                 operation_id=slot)
             with self.comms.bus.log.checked_read() as source:
-                existing = source.claim(canonical)
-                if existing is not None:
+                for existing in source.claims_for((canonical,)).values():
                     existing.require_holder(owner.name, str(owner.created_at))
                     if existing.claim_scope.same_attempt(scope):
                         return existing
