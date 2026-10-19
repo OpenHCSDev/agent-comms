@@ -150,11 +150,23 @@ class Stack:
     def python(self) -> Path:
         return self.checkout / "stack/.venv/bin/python"
 
+    @property
+    def uv(self) -> Path:
+        """The uv the installer runs, kept in the installer's own state."""
+        return self.home / ".local/state/agent-comms/upgrade-bus/uv"
+
+    def require_uv(self) -> None:
+        if not os.access(self.uv, os.X_OK):
+            raise UpgradeRefused(f"No uv executable at {self.uv}; the installer runs only that uv")
+
     def relock(self) -> None:
         """OpenHCSDev packages track their mains; the lock only records this resolution."""
-        run("uv", "lock", "--project", "stack", "--upgrade", "--python", "3.14", cwd=self.checkout)
-        run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=self.checkout)
+        run(self.uv, "lock", "--project", "stack", "--upgrade", "--python", "3.14", cwd=self.checkout)
+        self.sync()
         self.imports()
+
+    def sync(self) -> None:
+        run(self.uv, "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=self.checkout)
 
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
@@ -389,6 +401,7 @@ def upgrade(checkout: Path, root: Path, target: str, rehearse_only: bool) -> dic
     except ValueError as error:
         raise UpgradeRefused(str(error)) from None
     installed = Stack(checkout)
+    installed.require_uv()
     if not rehearse_only and not installed.python.exists():
         raise UpgradeRefused(f"No installed stack at {installed.python}")
     with tempfile.TemporaryDirectory(prefix="upgrade-bus.") as scratch:
@@ -452,7 +465,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
-        run("uv", "sync", "--project", "stack", "--locked", "--python", "3.14", cwd=checkout)
+        installed.sync()
         installed.prepare_native()
         maintenance.clear(held)
         start(installed, root, running)

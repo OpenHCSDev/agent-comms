@@ -3,6 +3,7 @@
 import importlib
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -561,12 +562,15 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
         def prepare_native(self):
             pass
 
+        def sync(self):
+            pass
+
         def verify(self, root):
             return {}
 
     ran = upgrade_bus.run
     monkeypatch.setattr(upgrade_bus, "run", lambda *command, **options: (
-        "" if command[0] in ("git", "uv") else ran(*command, **options)))
+        "" if command[0] == "git" else ran(*command, **options)))
     monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
     stack = Owners(REPO, tmp_path / "home")
@@ -585,6 +589,13 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
             upgrading()
         assert len(list(failed)) == 1
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+
+
+def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):
+    """The 22:20 install ran a uv from another agent's scratch; the installer names its own."""
+    stack = Stack(REPO, tmp_path)
+    with pytest.raises(UpgradeRefused, match=re.escape(str(stack.uv))):
+        stack.require_uv()
 
 
 def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):
