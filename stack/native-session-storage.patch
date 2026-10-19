@@ -11,19 +11,19 @@
  import { readdir, stat } from "fs/promises";
  import { dirname, join, resolve } from "path";
  import { createInterface } from "readline";
-@@ -18,147 +22,15 @@
+@@ -18,147 +22,9 @@
      }
  }
- /** Generate a unique short ID (8 hex chars, collision-checked) */
+-/** Generate a unique short ID (8 hex chars, collision-checked) */
 -function generateId(byId) {
-+function generateId(store) {
-     for (let i = 0; i < 100; i++) {
-         const id = randomUUID().slice(0, 8);
+-    for (let i = 0; i < 100; i++) {
+-        const id = randomUUID().slice(0, 8);
 -        if (!byId.has(id))
-+        if (!store.has(id))
-             return id;
-     }
-     // Fallback to full UUID if somehow we have collisions
+-            return id;
+-    }
+-    // Fallback to full UUID if somehow we have collisions
++/** UUID identity does not require a historical absence query. */
++function generateId() {
      return randomUUID();
  }
 -/** Migrate v1 → v2: add id/parentId tree structure. Mutates in place. */
@@ -505,7 +505,7 @@
 -            return;
 +        if (!this.persist || !this.sessionFile) return;
 +        let hasAssistant = entry.type === 'message' && entry.message.role === 'assistant';
-+        if (!hasAssistant) for (const meta of this.entryStore.metadataEntries()) {
++        if (!this.flushed && !hasAssistant) for (const meta of this.entryStore.metadataEntries()) {
 +            if (meta.role === 'assistant') { hasAssistant = true; break; }
          }
 +        if (!this.flushed && !hasAssistant) return;
@@ -607,18 +607,18 @@
      }
      /** Append a message as child of current leaf, then advance leaf. Returns entry id.
       * Does not allow writing CompactionSummaryMessage and BranchSummaryMessage directly.
-@@ -876,36 +671,41 @@
+@@ -876,36 +671,38 @@
       * These need to be appended via appendCompaction() and appendBranchSummary() methods.
       */
      appendMessage(message) {
 +        return this.#acMutation(() => {
-         if (message?.role === "user" && message.inputId && this.getTrackedInput(message.inputId)) {
-             throw new Error("Native input ID is already present in this session");
-         }
+-        if (message?.role === "user" && message.inputId && this.getTrackedInput(message.inputId)) {
+-            throw new Error("Native input ID is already present in this session");
+-        }
          const entry = {
              type: "message",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              message,
@@ -633,7 +633,7 @@
          const entry = {
              type: "thinking_level_change",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              thinkingLevel,
@@ -648,7 +648,7 @@
          const entry = {
              type: "model_change",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              provider,
@@ -664,7 +664,7 @@
          const entry = {
              type: "compaction",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              summary,
@@ -682,7 +682,7 @@
              customType,
              data,
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
@@ -697,7 +697,7 @@
          const entry = {
              type: "session_info",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              name: sanitizedName,
@@ -719,9 +719,9 @@
 -        }
 -        return undefined;
 +        this.#acAssertUsable();
-+        let id;
-+        for (const meta of this.entryStore.metadataEntries()) if (meta.type === 'session_info') id = meta.id;
-+        return id ? this.entryStore.get(id).name?.trim() || undefined : undefined;
++        for (const meta of this.entryStore.metadataEntries()) if (meta.type === 'session_info')
++            return this.entryStore.get(meta.id).name?.trim() || undefined;
++        return undefined;
      }
      /**
       * Append a custom message entry (for extensions) that participates in LLM context.
@@ -737,7 +737,7 @@
              display,
              details,
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
          };
@@ -796,7 +796,7 @@
          const entry = {
              type: "label",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: this.leafId,
              timestamp: new Date().toISOString(),
              targetId,
@@ -930,7 +930,7 @@
          const entry = {
              type: "branch_summary",
 -            id: generateId(this.byId),
-+            id: generateId(this.entryStore),
++            id: generateId(),
              parentId: branchFromId,
              timestamp: new Date().toISOString(),
              fromId,
@@ -2351,3 +2351,30 @@
              }
              // =================================================================
              // Commands (available for invocation via prompt)
+--- a/dist/core/agent-session.js
++++ b/dist/core/agent-session.js
+@@ -238,12 +238,3 @@
+     _loadNativeInputState() {
+-        // SessionManager's historical index owns durable claims on every branch.
+-        // This map holds only newly admitted, not-yet-committed live requests.
+-        for (const entry of this.sessionManager.entryStore.trackedMetadata()) {
+-            const { inputId, inputDigest } = entry;
+-            if (entry.role !== "user" || typeof inputId !== "string" || typeof inputDigest !== "string" ||
+-                !/^[a-f0-9]{32}$/.test(inputId) || !/^[a-f0-9]{64}$/.test(inputDigest) ||
+-                this.sessionManager.entryStore.trackedInputMetadata(inputId)?.id !== entry.id) {
+-                throw new Error("Invalid or duplicate native input in persisted Pi session");
+-            }
+-        }
++        // Core's attempt ledger owns historical admission; recover only committed evidence.
+         if (!this.sessionManager.isPersisted()) return;
+@@ -261,4 +252,3 @@
+         const digest = createHash("sha256").update(`pi-input-request-v1\n${JSON.stringify(request)}`).digest("hex");
+-        const previous = this.sessionManager.entryStore.trackedInputMetadata(inputId)?.inputDigest
+-            ?? this._nativeInputClaims.get(inputId)?.digest;
++        const previous = this._nativeInputClaims.get(inputId)?.digest;
+         if (previous !== undefined) {
+@@ -271,3 +261,3 @@
+     _releaseUnqueuedNativeInput(inputId) {
+-        if (!inputId || this.sessionManager.getTrackedInput(inputId) ||
++        if (!inputId || !this._nativeInputClaims.has(inputId) ||
+             this._awaitingNativeInputIds.has(inputId) ||
