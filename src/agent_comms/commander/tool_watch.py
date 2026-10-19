@@ -2,6 +2,7 @@
 import os, time, glob, collections
 
 from . import order
+from .loops import Loop
 from ..native_tool_call import CodingCall, SelectedToolDenied
 from ..native_entries import NativeEntry
 from ..pi_payloads import PiMessage, TextContent
@@ -63,31 +64,36 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
         emit(turns, thread, text)
 
 
-def main(a):
-    registry = order.COMMS.registry
-    names, offsets = thread_names(registry), {}
-    turns = collections.defaultdict(list)
-    last_names = time.time()
-    while True:
-        if time.time() - last_names > 60:
-            names.update(thread_names(registry)); last_names = time.time()
-        for path in set(glob.glob(f'{order.COMMS.root}/native-sessions/*/*.jsonl')) | set(names):
-            try:
-                st = os.stat(path)
-            except FileNotFoundError:
-                continue
-            if time.time() - st.st_mtime > 900 and path not in offsets:
-                continue
-            start = offsets.get(path, st.st_size)  # new files: start at end; only new calls matter
-            if st.st_size <= start:
-                offsets[path] = st.st_size if st.st_size < start else start
-                continue
-            with open(path, 'rb') as f:
-                f.seek(start); data = f.read(st.st_size - start)
-            cut = data.rfind(b'\n') + 1
-            offsets[path] = start + cut
-            if path not in names and time.time() - last_names > 10:
+class ToolWatchLoop(Loop, name="tool-watch"):
+    def run(self):
+        registry = order.COMMS.registry
+        names, offsets = thread_names(registry), {}
+        turns = collections.defaultdict(list)
+        last_names = time.time()
+        while True:
+            if time.time() - last_names > 60:
                 names.update(thread_names(registry)); last_names = time.time()
-            thread = names.get(path, path.split('/')[-2][:8])
-            follow(registry, turns, thread, data[:cut])
-        time.sleep(2)
+            for path in set(glob.glob(f'{order.COMMS.root}/native-sessions/*/*.jsonl')) | set(names):
+                try:
+                    st = os.stat(path)
+                except FileNotFoundError:
+                    continue
+                if time.time() - st.st_mtime > 900 and path not in offsets:
+                    continue
+                start = offsets.get(path, st.st_size)  # start at end; only new calls matter
+                if st.st_size <= start:
+                    offsets[path] = st.st_size if st.st_size < start else start
+                    continue
+                with open(path, 'rb') as f:
+                    f.seek(start); data = f.read(st.st_size - start)
+                cut = data.rfind(b'\n') + 1
+                offsets[path] = start + cut
+                if path not in names and time.time() - last_names > 10:
+                    names.update(thread_names(registry)); last_names = time.time()
+                thread = names.get(path, path.split('/')[-2][:8])
+                follow(registry, turns, thread, data[:cut])
+            time.sleep(2)
+
+
+def main(a):
+    ToolWatchLoop().run()

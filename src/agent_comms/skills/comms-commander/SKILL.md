@@ -11,12 +11,7 @@ All tools are `agent-comms-commander <tool> ...`; they read `~/.config/agent-com
 
 ## Start of session
 
-Arm one Monitor per loop, each printing to the session:
-- `agent-comms-claude-bridge watch` (messages to the commander; see the `comms` skill for the first binding)
-- `agent-comms-commander order overdue` (deadlines, no first call, hunt due, branches without a PR)
-- `agent-comms-commander rotate` (next unit, idle units, bridge down, rules due, fork now)
-- `agent-comms-commander tool-watch` (every unit tool call, per-turn digests, hard-rule violations)
-- `agent-comms-commander growth-watch` (source files growing in the configured repos)
+Arm one Monitor: `agent-comms-commander loops` (inbox, overdue, rotate and tool-watch; see the `comms` skill for the first inbox binding). Each stream names itself; crashes print their traceback and restart on the next tick. The watch guard names any missing loop on the next prompt or tool result.
 
 Then `agent-comms-commander rules review` and answer each drawn rule.
 

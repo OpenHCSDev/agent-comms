@@ -46,6 +46,7 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
+from .loops import Loop
 from .config import Commander, CommanderConfig, CommanderRole, Repo
 
 CONFIG = CommanderConfig.installed()
@@ -609,38 +610,38 @@ def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: f
     return InstallDeadline.read(COMMS.root).alarm(waiting, now)
 
 
-def overdue():
-    since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
-    installs: list[str] = []
-    while True:
-        now = time.time()
-        held = held_orders()
-        activity = {unit: last_activity(unit) for unit in {t.assignment.owner for t in held}}
-        if missing := first_calls(held, activity):
-            print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
-                  flush=True)
-        stale = [f'{t.id} {t.assignment.owner} (last {activity[t.assignment.owner].clock()})' for t in held
-                 if activity[t.assignment.owner].before(now - 1200)]
-        if stale:
-            print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
-        pending = [t for t in held if t.pending]
-        read = progress() if pending else {}
-        for line in deadline_lines(pending, read, since):
-            print(line, flush=True)
-        if (lines := install_lines(held, read, now)) != installs:
-            for line in lines:
+class OverdueLoop(Loop, name="overdue"):
+    def run(self):
+        since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
+        installs: list[str] = []
+        while True:
+            now = time.time()
+            held = held_orders()
+            activity = {unit: last_activity(unit) for unit in {t.assignment.owner for t in held}}
+            if missing := first_calls(held, activity):
+                print('NO FIRST CALL: ' + ', '.join(missing) + ' -> stuck holding an order; push it now or reassign',
+                      flush=True)
+            stale = [f'{t.id} {t.assignment.owner} (last {activity[t.assignment.owner].clock()})' for t in held
+                     if activity[t.assignment.owner].before(now - 1200)]
+            if stale:
+                print(f'IDLE OWNER 20+ min: {", ".join(stale)} -> push or reassign', flush=True)
+            pending = [t for t in held if t.pending]
+            read = progress() if pending else {}
+            for line in deadline_lines(pending, read, since):
                 print(line, flush=True)
-            installs = lines
-        # Units leave finished PRs open and wander off. An order's open PR that nobody has touched for
-        # 5 minutes is a stall, whatever the unit says it is doing; until its deadline, OVERDUE owns the alarm.
-        idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
-                    for t in pending if t.overdue(now) and read[t.id].untouched(now)]
-        if idle_prs:
-            print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
-        for _ in HuntDue.broken(COMMS, ME, since):
-            print(HuntVerb.due(next_hunt()), flush=True)
-        since = now
-        time.sleep(60)
+            if (lines := install_lines(held, read, now)) != installs:
+                for line in lines:
+                    print(line, flush=True)
+                installs = lines
+            # Until the deadline, OVERDUE owns the alarm for untouched PRs.
+            idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
+                        for t in pending if t.overdue(now) and read[t.id].untouched(now)]
+            if idle_prs:
+                print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
+            for _ in HuntDue.broken(COMMS, ME, since):
+                print(HuntVerb.due(next_hunt()), flush=True)
+            since = now
+            time.sleep(60)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1012,7 +1013,7 @@ class OverdueVerb(OrderVerb):
     help = "loop: every minute, name units past their deadline"
 
     def run(self) -> None:
-        overdue()
+        OverdueLoop().run()
 
 
 def main(a):

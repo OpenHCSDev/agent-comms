@@ -15,6 +15,7 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import ClassVar
 
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
@@ -29,6 +30,7 @@ class WatchRecord:
 @dataclass(frozen=True)
 class WatchClaim:
     thread: str
+    record_type: ClassVar[type[WatchRecord]] = WatchRecord
 
     @property
     def path(self) -> Path:
@@ -57,10 +59,17 @@ class WatchClaim:
             text = lock.read()
         if not text:
             return UnclaimedWatch()
-        return LapsedWatch(self, WatchRecord(**json.loads(text)))
+        return LapsedWatch(self, self.record_type(**json.loads(text)))
 
 
 class WatchState:
+    running = False
+
+    @staticmethod
+    def emit(event: str, warning: str) -> None:
+        context = {"hookEventName": event, "additionalContext": warning}
+        print(json.dumps({"hookSpecificOutput": context}))
+
     def report(self, event: str) -> None:
         """Silent unless the conversation is meant to be watched and is not."""
 
@@ -70,7 +79,7 @@ class UnclaimedWatch(WatchState):
 
 
 class LiveWatch(WatchState):
-    pass
+    running = True
 
 
 @dataclass(frozen=True)
@@ -89,8 +98,43 @@ class LapsedWatch(WatchState):
         )
 
     def report(self, event: str) -> None:
-        context = {"hookEventName": event, "additionalContext": self.warning}
-        print(json.dumps({"hookSpecificOutput": context}))
+        self.emit(event, self.warning)
+
+
+@dataclass(frozen=True)
+class LoopsRecord(WatchRecord):
+    loops: Sequence[str]
+
+
+@dataclass(frozen=True)
+class LoopClaim(WatchClaim):
+    name: str
+
+    @property
+    def path(self) -> Path:
+        path = super().path
+        return path.parent / f"{path.stem}.loops" / f"{self.name}.lock"
+
+
+@dataclass(frozen=True)
+class LoopsClaim(WatchClaim):
+    record_type: ClassVar[type[WatchRecord]] = LoopsRecord
+
+    @property
+    def path(self) -> Path:
+        return super().path.with_suffix(".loops.json")
+
+    def report(self, event: str) -> bool:
+        if not self.path.exists():
+            return False
+        record = LoopsRecord(**json.loads(self.path.read_text()))
+        missing = [name for name in record.loops
+                   if not LoopClaim(self.thread, name).state().running]
+        if missing:
+            WatchState.emit(event,
+                f"agent-comms: commander loops not running: {', '.join(missing)} "
+                f"(bus {record.bus}, Core {record.root}). Re-arm: {shlex.join(record.command)}")
+        return True
 
 
 class WatchGuard(ClaudeHookProgram):
@@ -108,4 +152,5 @@ def main() -> None:
 
     A failure exits nonzero, which Claude Code reports without blocking the session."""
     hook = ClaudeHook.read()
-    WatchClaim(hook.session_id).state().report(hook.hook_event_name)
+    if not LoopsClaim(hook.session_id).report(hook.hook_event_name):
+        WatchClaim(hook.session_id).state().report(hook.hook_event_name)

@@ -6,6 +6,7 @@ from . import judge, order
 from ..tools import CommsStandingRulesTool, StandingRulesRead
 from ..todos import Todo
 from .config import CommanderConfig
+from .loops import Loop
 
 CONFIG = CommanderConfig.installed()
 
@@ -23,22 +24,27 @@ def owed_orders() -> dict[str, list[Todo]]:
     return owed
 
 
+class RotateLoop(Loop, name="rotate"):
+    def run(self):
+        turn, since = 0, 0.0  # a rule that stays broken is said once
+        while True:
+            now = time.time()
+            owed = owed_orders()
+            units = sorted(owed)
+            if units:
+                unit = units[turn % len(units)]
+                turn += 1
+                read = order.progress()
+                orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)} ({read[t.id].line})"
+                                   for t in owed[unit])
+                edits = judge.Edit.unjudged(order.COMMS, order.ME)
+                waiting = sum(edit.thread == unit for edit in edits)
+                print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {waiting} -> read its git state and newest turn, judge, push or hunt", flush=True)
+            for line in broken_rules(since):
+                print(f"  RULE {line}", flush=True)
+            since = now
+            time.sleep(60)
+
+
 def main(a):
-    turn, since = 0, 0.0  # since: the previous wake; a rule that stays broken is said once
-    while True:
-        now = time.time()
-        owed = owed_orders()
-        units = sorted(owed)
-        if units:
-            unit = units[turn % len(units)]
-            turn += 1
-            read = order.progress()
-            orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)} ({read[t.id].line})"
-                               for t in owed[unit])
-            edits = judge.Edit.unjudged(order.COMMS, order.ME)
-            waiting = sum(edit.thread == unit for edit in edits)
-            print(f"ROTATE {datetime.now():%H:%M} {unit}: {orders}; unjudged {waiting} -> read its git state and newest turn, judge, push or hunt", flush=True)
-        for line in broken_rules(since):
-            print(f"  RULE {line}", flush=True)
-        since = now
-        time.sleep(60)
+    RotateLoop().run()
