@@ -40,7 +40,7 @@ export declare abstract class EntryStore {
     abstract metadata(id: string | null): EntryMetadata | undefined;
     abstract get(id: string): SessionEntry | undefined;
     abstract metadataEntries(): IterableIterator<EntryMetadata>;
-    abstract branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
+    branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
     abstract append(entry: SessionEntry): void;
     abstract committedAppend(entry: SessionEntry, file?: string): EntryStore;
     abstract storedAt(file: string): EntryStore;
@@ -78,7 +78,6 @@ export declare class MemoryEntryStore extends EntryStore {
     metadata(id: string | null): EntryMetadata | undefined;
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
-    branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
     append(entry: SessionEntry): void;
     committedAppend(entry: SessionEntry, file?: string): EntryStore;
     storedAt(file: string): DiskEntryStore;
@@ -93,7 +92,6 @@ export declare class DiskEntryStore extends EntryStore {
     metadata(id: string | null): EntryMetadata | undefined;
     get(id: string): SessionEntry | undefined;
     metadataEntries(): IterableIterator<EntryMetadata>;
-    branchMetadata(leafId?: string | null): IterableIterator<EntryMetadata>;
     append(entry: SessionEntry): void;
     committedAppend(entry: SessionEntry, file?: string): EntryStore;
     storedAt(file: string): EntryStore;

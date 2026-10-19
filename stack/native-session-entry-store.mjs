@@ -1,7 +1,7 @@
 /** Native session history storage. JSONL is authority; SQLite contains rebuildable selectors only. */
 import { closeSync, fstatSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync, statSync, unlinkSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { getHeapStatistics } from 'node:v8';
 import { sessionEntryToContextMessages } from './session-manager.js';
@@ -272,7 +272,6 @@ export class DiskEntryStore extends EntryStore {
             this.#db.exec(`CREATE TABLE entries(sequence INTEGER PRIMARY KEY, id TEXT UNIQUE NOT NULL,
                 parent TEXT, type TEXT NOT NULL, offset INTEGER NOT NULL, length INTEGER NOT NULL,
                 input_id TEXT, selectors TEXT NOT NULL);
-                CREATE INDEX entry_parent ON entries(parent);
                 CREATE INDEX entry_input ON entries(input_id);
                 CREATE INDEX entry_label ON entries(json_extract(selectors,'$.label.targetId'),sequence);`);
             // SQLite has initialized and owns an exclusive open inode. Derived pages
@@ -306,7 +305,7 @@ export class DiskEntryStore extends EntryStore {
         }
         return EntryMetadata.fromIndex(row);
     }
-    metadata(id) { return this.#find(this.#metadata, id); }
+    metadata(id) { return id === null || id === this.#header.id ? undefined : this.#find(this.#metadata, id); }
     *metadataEntries() {
         this.assertCurrent();
         let ceiling = Number.MAX_SAFE_INTEGER;
@@ -458,6 +457,8 @@ export class DiskEntryStore extends EntryStore {
     }
     close() {
         this.invalidate();
+        this.#lines?.return();
+        this.#lines = undefined;
         const database = this.#db, descriptor = this.#fd;
         this.#db = undefined; this.#fd = undefined;
         try { database?.close(); }
