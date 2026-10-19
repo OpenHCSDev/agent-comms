@@ -23,7 +23,8 @@ class RetainedOwnerLaunch:
 
     @classmethod
     def capture(
-        cls, thread: Thread, snapshot: RegistrySnapshot, *, interpreter: SourceInterpreter = AnySourceInterpreter()
+        cls, thread: Thread, snapshot: RegistrySnapshot,
+        *, interpreter: SourceInterpreter = AnySourceInterpreter(),
     ) -> RetainedOwnerLaunch:
         process = thread.require_process()
         platform = Platform.current()

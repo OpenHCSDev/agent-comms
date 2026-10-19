@@ -21,7 +21,9 @@ from .errors import RelationViolationError
 from .maintenance_barrier import MaintenanceBarrier
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
-from .launch_runtime import LaunchRecord, LaunchRuntime, QueuedStartupInput, RestartEnvironment, ThreadLaunch
+from .launch_runtime import (
+    LaunchRecord, LaunchRuntime, QueuedStartupInput, RestartEnvironment, ThreadLaunch,
+)
 from .active_route import resolve_comms_route
 from .private_nk_entrypoint import PrivateNkLaunch, RootLaunch
 from .registration import Registration

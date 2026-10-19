@@ -15,9 +15,12 @@ from typing import TYPE_CHECKING
 from .coordination_errors import CoordinationError
 from .errors import RelationViolationError
 from .owner_launch import RetainedOwnerLaunch
-from .launch_runtime import (AnySourceInterpreter, ArgumentsLaunchChange, CommandLaunchChange,
-    ConfigurationLaunchChange, EnvironmentLaunchChange, ExactSourceInterpreter, LaunchChange, LaunchRecord, LaunchRuntime,
-    NoConfigurationLaunchChange, NoLaunchChange, RestartEnvironment, SourceInterpreter)
+from .launch_runtime import (
+    AnySourceInterpreter, ArgumentsLaunchChange, CommandLaunchChange,
+    ConfigurationLaunchChange, EnvironmentLaunchChange, ExactSourceInterpreter,
+    LaunchChange, LaunchRecord, LaunchRuntime, NoConfigurationLaunchChange,
+    NoLaunchChange, RestartEnvironment, SourceInterpreter,
+)
 from .field_codec import boundary_decoder
 from .owner_lifecycle import OwnerRestartSelection
 from .restart_refusals import OwnerSelectionChangedRefusal
@@ -34,7 +37,9 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class OwnerRestartRequest:
     names: tuple[str, ...] | None = None
-    changes: tuple[LaunchChange, ...] = field(default_factory=lambda: (NoLaunchChange(), NoLaunchChange()))
+    changes: tuple[LaunchChange, ...] = field(
+        default_factory=lambda: (NoLaunchChange(), NoLaunchChange()),
+    )
     expected: OwnerRestartSelection | None = None
     runtime: ConfigurationLaunchChange = field(default_factory=NoConfigurationLaunchChange)
     source_interpreter: SourceInterpreter = field(default_factory=AnySourceInterpreter)
@@ -42,16 +47,20 @@ class OwnerRestartRequest:
 
     @classmethod
     @boundary_decoder
-    def capture(cls, names: tuple[str, ...] | None = None, agent_bin: str | None = None,
-                agent_args: tuple[str, ...] | None = None, expected: OwnerRestartSelection | None = None,
-                runtime: RestartEnvironment | None = None, source_interpreter: str | None = None,
-                *, launch_runtime: LaunchRuntime) -> OwnerRestartRequest:
+    def capture(
+        cls, names: tuple[str, ...] | None = None, agent_bin: str | None = None,
+        agent_args: tuple[str, ...] | None = None,
+        expected: OwnerRestartSelection | None = None,
+        runtime: RestartEnvironment | None = None, source_interpreter: str | None = None,
+        *, launch_runtime: LaunchRuntime,
+    ) -> OwnerRestartRequest:
         """Decode optional values at the public restart API before retaining its request."""
         return cls(names=names, expected=expected,
             changes=(NoLaunchChange() if agent_bin is None else CommandLaunchChange(agent_bin),
                      NoLaunchChange() if agent_args is None else ArgumentsLaunchChange(agent_args)),
             runtime=NoConfigurationLaunchChange() if runtime is None else EnvironmentLaunchChange(runtime),
-            source_interpreter=AnySourceInterpreter() if source_interpreter is None else ExactSourceInterpreter(source_interpreter),
+            source_interpreter=(AnySourceInterpreter() if source_interpreter is None
+                                else ExactSourceInterpreter(source_interpreter)),
             launch_runtime=launch_runtime)
 
     def threads(self, snapshot: RegistrySnapshot) -> list[Thread]:

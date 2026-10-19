@@ -45,7 +45,9 @@ class LaunchRuntime:
         return str(self.interpreter.with_name("pi-comms-native"))
 
     def project(self, configuration: RestartEnvironment) -> RestartEnvironment:
-        return replace(configuration, virtual_env=SpecifiedEnvironmentValue(str(self.prefix))).for_interpreter(self.interpreter)
+        return replace(
+            configuration, virtual_env=SpecifiedEnvironmentValue(str(self.prefix))
+        ).for_interpreter(self.interpreter)
 
     def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
         return self.project(configuration).apply_runtime(source)
@@ -114,16 +116,32 @@ class NativeField:
 class RestartEnvironment:
     """Retained external directories and import settings selected by the launch."""
 
-    home: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "HOME"})
-    path: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True})
+    home: EnvironmentValue = field(
+        default_factory=AbsentEnvironmentValue,
+        metadata={"wire_omit_default": True, "wire_name": "HOME"},
+    )
+    path: EnvironmentValue = field(
+        default_factory=AbsentEnvironmentValue,
+        metadata={"wire_omit_default": True, "wire_name": "PATH", "runtime": True},
+    )
     pythonpath: ImportPath = field(default_factory=NoImportPath, metadata={"wire_omit_default": True})
-    virtual_env: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True})
-    config: EnvironmentValue = field(default_factory=AbsentEnvironmentValue, metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"})
+    virtual_env: EnvironmentValue = field(
+        default_factory=AbsentEnvironmentValue,
+        metadata={"wire_omit_default": True, "wire_name": "VIRTUAL_ENV", "runtime": True},
+    )
+    config: EnvironmentValue = field(
+        default_factory=AbsentEnvironmentValue,
+        metadata={"wire_omit_default": True, "wire_name": "XDG_CONFIG_HOME"},
+    )
     native_config: Annotated[Path, CapturedDirectoryText] = field(kw_only=True)
-    agent_directory: Annotated[Path, CapturedDirectoryText, NativeField()] = field(kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR"})
+    agent_directory: Annotated[Path, CapturedDirectoryText, NativeField()] = field(
+        kw_only=True, metadata={"wire_name": "PI_CODING_AGENT_DIR"},
+    )
 
     @classmethod
-    def capture(cls, source: Mapping[str, str], *, native_config: Path, agent_directory: Path) -> Self:
+    def capture(
+        cls, source: Mapping[str, str], *, native_config: Path, agent_directory: Path,
+    ) -> Self:
         values = {FieldCodec.wire_key(declaration): source[FieldCodec.wire_key(declaration)]
                   for declaration in fields(cls) if "wire_name" in declaration.metadata
                   and FieldCodec.wire_key(declaration) in source}
@@ -237,7 +255,9 @@ class ExactSourceInterpreter(SourceInterpreter):
 @dataclass(frozen=True)
 class StartupInput(DeclaredFamily, affix="StartupInput"):
     @asynccontextmanager
-    async def running(self, operation: Callable[[str], Awaitable[object]]) -> AsyncIterator[StartupInput]:
+    async def running(
+        self, operation: Callable[[str], Awaitable[object]],
+    ) -> AsyncIterator[StartupInput]:
         yield self
 
 
@@ -250,7 +270,9 @@ class QueuedStartupInput(StartupInput):
     key: str
 
     @asynccontextmanager
-    async def running(self, operation: Callable[[str], Awaitable[object]]) -> AsyncIterator[StartupInput]:
+    async def running(
+        self, operation: Callable[[str], Awaitable[object]],
+    ) -> AsyncIterator[StartupInput]:
         task = asyncio.ensure_future(operation(self.key))
         try:
             yield self
@@ -493,7 +515,8 @@ class CommandLineLaunchRecord(LaunchRecord):
     def entrypoint(cls, root: LaunchRoot) -> CommandLineLaunchRecord:
         directory = Path.home() / ".pi" / "agent"
         return cls(root, LaunchRuntime(Path(sys.executable)),
-                   RestartEnvironment.capture(os.environ, native_config=directory, agent_directory=directory),
+                   RestartEnvironment.capture(
+                       os.environ, native_config=directory, agent_directory=directory),
                    "pi", (), ())
 
 
@@ -509,7 +532,8 @@ class OwnerLaunchRecord(LaunchRecord):
 
     def take_startup_input(self) -> StartupInput:
         value = self.thread.startup_input
-        LaunchRecord.install(replace(self, thread=replace(self.thread, startup_input=NoStartupInput())))
+        LaunchRecord.install(replace(
+            self, thread=replace(self.thread, startup_input=NoStartupInput())))
         return value
 
 

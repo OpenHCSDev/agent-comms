@@ -414,12 +414,16 @@ class NativeTurnResult:
 
 class NativeLaunchMatch(ABC):
     @abstractmethod
-    def same_acquired(self, original: NativePiRpcLaunch, authentication: tuple[int, int]) -> bool:
+    def same_acquired(
+        self, original: NativePiRpcLaunch, authentication: tuple[int, int],
+    ) -> bool:
         """Whether the retained child already owns this complete launch/auth key."""
 
 
 class NoRetainedNativeLaunch(NativeLaunchMatch):
-    def same_acquired(self, original: NativePiRpcLaunch, authentication: tuple[int, int]) -> bool:
+    def same_acquired(
+        self, original: NativePiRpcLaunch, authentication: tuple[int, int],
+    ) -> bool:
         return False
 
 
@@ -581,7 +585,9 @@ class NativePiRpcLaunch(NativeLaunchMatch):
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
             worktree, environment.at_root(root), self.session)
 
-    def same_acquired(self, original: NativePiRpcLaunch, authentication: tuple[int, int]) -> bool:
+    def same_acquired(
+        self, original: NativePiRpcLaunch, authentication: tuple[int, int],
+    ) -> bool:
         return (self, self.record.configuration.auth_revision()) == (original, authentication)
 
     @classmethod
