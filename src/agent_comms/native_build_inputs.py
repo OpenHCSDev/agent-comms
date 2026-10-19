@@ -14,7 +14,7 @@ class NativeBuildInputs:
     def paths(self) -> tuple[Path, ...]:
         """Inventory source families, never a second roster of patch filenames."""
         families = (
-            ("stack", {".py", ".mjs", ".ts", ".patch", ".json", ".sha256"}),
+            ("stack", {"", ".py", ".mjs", ".ts", ".patch", ".json", ".sha256"}),
             ("experiments/pi-context-proof", {".sh", ".patch"}),
             ("extensions", {".ts", ".mjs", ".js", ".json", ".md"}),
             ("src/agent_comms", {".mjs"}),
@@ -24,10 +24,12 @@ class NativeBuildInputs:
         for directory, suffixes in families:
             for path in (self.root / directory).rglob("*"):
                 relative = path.relative_to(self.root)
-                if any(part.startswith(".") or part in {"node_modules", "__pycache__"}
-                       for part in relative.parts):
+                if any(
+                    part.startswith(".") or part in {"node_modules", "__pycache__"}
+                    for part in relative.parts
+                ):
                     continue
-                if path.is_file() and (path.suffix in suffixes or path.parent.name == "bin"):
+                if path.is_file() and path.suffix in suffixes:
                     paths.add(path)
         return tuple(sorted(paths - {self.root / "stack/pi-native.sha256"}))
 

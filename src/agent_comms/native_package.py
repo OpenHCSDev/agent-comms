@@ -19,8 +19,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
 MAX_ENTRIES = 30_000
