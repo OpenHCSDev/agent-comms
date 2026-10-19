@@ -19,8 +19,8 @@ from agent_comms.agent_backend import AgentBackend
 print(json.dumps({{
     'catalog_loaded': 'agent_comms.tools' in sys.modules,
     'sealed': AgentBackend._sealed,
-    'native': AgentBackend.decode('pi_native').declared_name,
-    'durable': AgentBackend.decode('pi_durable').declared_name,
+    'native': AgentBackend.member_named('pi_native').declared_name,
+    'durable': AgentBackend.member_named('pi_durable').declared_name,
     'default': AgentBackend.for_new_threads().declared_name,
 }}))
 """

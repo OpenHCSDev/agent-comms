@@ -748,21 +748,24 @@ def test_an_open_request_alarms_until_an_order_serves_it_and_closes_only_once_no
     from agent_comms.commander import request
     comms, caller = commander
     request = importlib.reload(request)
-    assert request.stalled() == [
+    standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
+    def stalled():
+        return [rule.line() for rule in standing.RequestStalled.violations(comms, 'lead')]
+    assert stalled() == [
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     todo = create(commander, 'P1')
     lead = comms.registry.require('lead').incarnation
     assert todo.goal == GoalRef('lead', lead.created_at, 'request')
-    assert request.stalled() == []
+    assert stalled() == []
     with pytest.raises(ValueError, match='still has open orders'):
         request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
     with pytest.raises(ValueError, match='still open'):
         request.RequestAddVerb(text='A second owner request while the first is open').run()
     CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
-    assert request.stalled() == [
+    assert stalled() == [
         'REQUEST STALLED: request Owner request -> order its next step or mark it done']
     request.RequestCompleteVerb(id='request', why='The owner request is finished').run()
-    assert request.stalled() == []
+    assert stalled() == []
 
 
 def stray(commander, problem, generation):
@@ -892,7 +895,8 @@ def test_a_rotation_pass_names_the_unit_with_orders_that_reads_nothing(commander
     comms.messaging.send('lead', 'parted', 'Are you there?').message.message_id
     rotate = importlib.reload(importlib.import_module('agent_comms.commander.rotate'))
     with comms.registry.external_process('watching', ProcessIdentity.capture(os.getpid())):
-        lines = rotate.detached(rotate.owed_orders())
+        standing = importlib.reload(importlib.import_module('agent_comms.commander.standing'))
+        lines = [rule.line() for rule in standing.Detached.violations(comms, 'lead')]
     assert lines == ['DETACHED parted: 1 unread, orders P1 -> wake it or reassign']
 
 

@@ -320,12 +320,12 @@ expected = {"awareness", "unavailable_awareness", "retained", "selected_wake",
             "selected_triage", "selected_work", "selected_response", "complete_awareness"}
 assert expected <= set(schema["enum"]), schema
 for name in expected:
-    manifest = SegmentManifest(ContextSegment.decode(name), contributor.provenance,
+    manifest = SegmentManifest(ContextSegment.member_named(name), contributor.provenance,
         hashlib.sha256(contributor.public_text().encode()).hexdigest(), 40, 7)
     assert FieldCodec.decode(SegmentManifest, FieldCodec.encode(manifest)) == manifest
     assert FieldCodec.encode(manifest)["kind"] == name
 try:
-    ContextSegment.decode("not_an_original_contributor")
+    ContextSegment.member_named("not_an_original_contributor")
 except ValueError:
     pass
 else:

@@ -103,6 +103,12 @@ class Carry(ABC):
         return cls.module().stem
 
     @classmethod
+    def chain(cls) -> CarryChain:
+        """The chain declared by the revision this step's module was checked out from."""
+        checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
+        return CarryChain.at(Path(checkout), "HEAD")
+
+    @classmethod
     @abstractmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         """Carry ``root`` with its wire lock held; on a dry run, write nothing."""
@@ -125,9 +131,8 @@ class Carry(ABC):
         with _store_lock(args.root / "wire"):
             if args.apply and not args.before_stop:
                 applied = CarryLedger(args.root).applied()
-                checkout = git(cls.module().parent, "rev-parse", "--show-toplevel").decode().strip()
                 try:
-                    CarryChain.at(Path(checkout), "HEAD").require_next(cls.name(), applied)
+                    cls.chain().require_next(cls.name(), applied)
                 except ValueError as error:
                     raise SystemExit(f"{cls.name()}: {error}") from None
             if args.before_stop:
@@ -182,6 +187,17 @@ class Step:
     name: str
     after: str | None
     revision: str
+    columns: tuple[str, ...] = ()
+    """The todo column this step adds, as its ``column`` declares it."""
+
+    @staticmethod
+    def declared_columns(source: bytes) -> tuple[str, ...]:
+        """The ``column`` a step module's class declares, read without importing it."""
+        return tuple(ast.literal_eval(statement.value)
+                     for node in ast.parse(source).body if isinstance(node, ast.ClassDef)
+                     for statement in node.body if isinstance(statement, ast.Assign)
+                     and [target.id for target in statement.targets
+                          if isinstance(target, ast.Name)] == ["column"])
 
     @classmethod
     def declared(cls, name: str, source: bytes, revision: str) -> Step | None:
@@ -194,7 +210,8 @@ class Step:
                     if (isinstance(statement, ast.Assign)
                             and [target.id for target in statement.targets
                                  if isinstance(target, ast.Name)] == ["after"]):
-                        return cls(name, ast.literal_eval(statement.value), revision)
+                        return cls(name, ast.literal_eval(statement.value), revision,
+                                   cls.declared_columns(source))
                 raise ValueError(f"{name} declares no step it runs after")
         return None
 
@@ -224,6 +241,8 @@ class CarryChain:
 
     steps: tuple[Step, ...]
     retired: frozenset[str] = frozenset()
+    retired_columns: frozenset[str] = frozenset()
+    """Todo columns added by retired steps; a bus that never ran them still lacks them."""
     added: Mapping[str, int] = field(default_factory=dict)
     """Each step's first main-line addition, numbered oldest first."""
 
@@ -250,8 +269,11 @@ class CarryChain:
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
+        retired_columns = frozenset(
+            column for name in retired
+            for column in Step.declared_columns(cls.source(repo, revision, name)[1]))
         if not known:
-            return cls((), retired)
+            return cls((), retired, retired_columns)
         added = cls.added_at(repo, revision)
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
@@ -270,7 +292,7 @@ class CarryChain:
                 raise ValueError(f"Carry chain loops at {step.name}")
         if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
-        return cls(tuple(reversed(steps)), retired, added)
+        return cls(tuple(reversed(steps)), retired, retired_columns, added)
 
     @staticmethod
     def added_at(repo: Path, revision: str) -> dict[str, int]:
@@ -300,10 +322,23 @@ class CarryChain:
         """A step no longer in the tree, at the main-line revision that last wrote it: the
         source it was written against, not the later source beside its deletion. None if
         that revision held a plain script rather than a step."""
+        written, source = CarryChain.source(repo, revision, name)
+        return Step.declared(name, source, written)
+
+    @staticmethod
+    def source(repo: Path, revision: str, name: str) -> tuple[str, bytes]:
+        """The main-line revision that last wrote a step file, and that file."""
         path = f"{STEPS}/{name}.py"
         written = git(repo, "log", "-m", "--first-parent", "--no-renames", "-1", "--format=%H",
                       "--diff-filter=AM", revision, "--", path).decode().strip()
-        return Step.declared(name, git(repo, "show", f"{written}:{path}"), written)
+        return written, git(repo, "show", f"{written}:{path}")
+
+    def lacking(self, name: str) -> frozenset[str]:
+        """Todo columns a bus may still lack when step ``name`` runs: its own, those the
+        kept steps after it add, and those retired steps added."""
+        names = [step.name for step in self.steps]
+        return frozenset(column for step in self.steps[names.index(name):]
+                         for column in step.columns) | self.retired_columns
 
     def require_next(self, name: str, applied: tuple[str, ...]) -> None:
         """A step applies to a bus that already records it or whose next pending step it is.
@@ -357,21 +392,25 @@ class TodoColumnCarry(Carry):
     @classmethod
     def _carry(cls, db: sqlite3.Connection, *, apply: bool) -> int:
         table, fields = Todo.declared_name, Todo._fields()
-        (added,) = (item for item in fields if item.name == cls.column)
         actual = tuple(row[1] for row in db.execute(f'PRAGMA table_info("{table}")'))
         expected = tuple(item.wire_name for item in fields)
         if actual == expected:
-            for _row in Todo.stream(db):
-                pass
             db.rollback()
             return 0
-        if actual != tuple(item.wire_name for item in fields if item is not added):
+        # The chain says which declared columns this bus may still lack here; the
+        # rebuild fills each one empty, as the step that declares it does.
+        added = tuple(item for item in fields if item.wire_name not in actual)
+        lacking = cls.chain().lacking(cls.name())
+        if (actual != tuple(item.wire_name for item in fields if item not in added)
+                or cls.column not in {item.name for item in added}
+                or not {item.name for item in added} <= lacking):
             raise ValueError(f"Unexpected todo columns: {actual!r}")
-        selected = ", ".join(f'? AS "{item.wire_name}"' if item is added else f'"{item.wire_name}"'
+        selected = ", ".join(f'? AS "{item.wire_name}"' if item in added else f'"{item.wire_name}"'
                              for item in fields)
-        empty = (added.encode(()),)
-        rows = db.execute(f'SELECT {selected} FROM "{table}"', empty)
-        count = sum(1 for _row in Todo.iterate(rows))
+        empty = tuple(item.encode(()) for item in added)
+        # Rows decode only once every step before the last has carried them; this one
+        # adds columns, so it counts rows without reading them as today's Todo.
+        count = int(db.execute(f'SELECT count(*) FROM "{table}"').fetchone()[0])
         if not apply:
             db.rollback()
             return count

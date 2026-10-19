@@ -132,7 +132,7 @@ class ThinkingArgument(NamedOption, ValueOption):
 
     @classmethod
     def from_text(cls, value: str) -> ThinkingArgument:
-        return cls(ThinkingLevel.decode(value))
+        return cls(ThinkingLevel.member_named(value))
 
     @property
     def argv(self) -> tuple[str, ...]:

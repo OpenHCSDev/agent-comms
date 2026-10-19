@@ -81,9 +81,7 @@ class InputDocument:
     def transition(self, keys: tuple[str, ...], change) -> InputDocument:
         """Each original state decides its successor; unchanged rows stay intact."""
         successors = {
-            key: successor
-            for key in keys
-            if (successor := change(self.lookup(key))) is not None
+            name: row for key in keys for name, row in change(self.lookup(key)).successors(key).items()
         }
         return replace(self, rows={**self.rows, **successors}) if successors else self
 
@@ -100,10 +98,8 @@ class InputDocument:
         Look up that producer's exact native ID/text rather than choosing the
         initial turn input, a public event or the first matching row.
         """
-        return tuple(acknowledgement for row in self.rows.values()
-                     if (acknowledgement := row.started_for_native(
-                         lease, native_id, sent_text, snapshot=snapshot
-                     )) is not None)
+        return tuple(row for row in self.rows.values()
+                     if row.started_for_native(lease, native_id, sent_text, snapshot=snapshot))
 
     def shared_state(self, keys: tuple[str, ...]) -> type[InputAttempt] | None:
         """Project only a complete, homogeneous durable observation."""
@@ -129,7 +125,7 @@ class InputDocument:
         delivered = tuple(
             reference
             for row in sorted(self.rows.values(), key=lambda item: item.order)
-            if (reference := row.delivered_in(lease, source.marker.root_id, snapshot)) is not None
+            for reference in row.delivered_in(lease, source.marker.root_id, snapshot).references()
         )
         route = CommandTarget.named(target).canonical_name(snapshot.canonical_name)
         return tuple(
@@ -143,7 +139,7 @@ class InputDocument:
         return {
             reference: row
             for row in self.rows.values()
-            if (reference := row.unbound_delivery(root_id)) is not None
+            for reference in row.unbound_delivery(root_id).references()
         }
 
     def delivery_overview(
@@ -310,8 +306,10 @@ class InputDispositions(TypedStore):
             lambda document: document.transition(keys, lambda row: row.clear_unbound()),
         )
 
-    def clear_native(self, key: str, native_id: str, text: str) -> bool:
-        return self._transition(key, lambda row: row.clear_native(native_id, text))
+    def clear_native(self, key: str, native_id: str, text: str) -> None:
+        """A native clear moves its original input, or nothing is published."""
+        refusal = "Native clear differs from its original input"
+        self._transition(key, lambda row: row.clear_native(native_id, text).require_moved(refusal))
 
     def bind(self, key: str, *, claim_scope: int, turn_id: str, native_id: str, text: str) -> bool:
         return self.bind_originals(
@@ -350,13 +348,13 @@ class InputDispositions(TypedStore):
             nonlocal bound
             if not keys or len(set(keys)) != len(keys):
                 return document
-            successors = tuple(document.lookup(key).bind(
+            successors = {name: row for key in keys for name, row in document.lookup(key).bind(
                 claim_scope=claim_scope, turn_id=turn_id, native_id=native_id, text=text
-            ) for key in keys)
-            if any(row is None for row in successors):
+            ).successors(key).items()}
+            if successors.keys() != set(keys):
                 return document
             bound = True
-            return replace(document, rows={**document.rows, **dict(zip(keys, successors, strict=True))})
+            return replace(document, rows={**document.rows, **successors})
 
         self._update(*_members("key", keys), change)
         return bound

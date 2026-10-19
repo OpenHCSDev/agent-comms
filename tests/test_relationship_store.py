@@ -31,7 +31,7 @@ def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
     assert not service.store.path.exists()
     monkeypatch.setattr("agent_comms.relationships.time.time", lambda: 123.0)
     first, peer = comms.registry.require("owner"), comms.registry.require("peer")
-    service.edit("owner", RelationshipEdit.decode("add"), "peer", "Review")
+    service.edit("owner", RelationshipEdit.member_named("add"), "peer", "Review")
     service.set_order("owner", ChildrenRelationshipGroup, CreatedThreadSort)
     expected = {
         "collaborations": [
@@ -58,8 +58,8 @@ def test_golden_relationship_document_and_noop(tmp_path, monkeypatch):
     expected["version"] = 2
     assert service.store.path.read_text() == json.dumps(expected, indent=2) + "\n"
     before = service.store.path.stat()
-    service.edit("owner", RelationshipEdit.decode("add"), "peer", "ignored")
-    service.edit("owner", RelationshipEdit.decode("remove"), "absent")
+    service.edit("owner", RelationshipEdit.member_named("add"), "peer", "ignored")
+    service.edit("owner", RelationshipEdit.member_named("remove"), "absent")
     assert service.store.path.stat() == before
     assert RelationshipStore.read is LockedStore.read
     assert RelationshipStore.update is LockedStore.update
@@ -72,7 +72,7 @@ def test_relationship_corruption_stays_strict(tmp_path, text):
     with pytest.raises(ValueError):
         comms.relationships.collaborations("owner")
     with pytest.raises(ValueError):
-        comms.relationships.edit("owner", RelationshipEdit.decode("add"), "peer")
+        comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer")
     assert comms.relationships.store.path.read_text() == text
 
 
@@ -107,11 +107,11 @@ def test_shared_read_scope_holds_lock_until_exit(tmp_path):
 @pytest.mark.parametrize("stage", ["file_sync", "replace", "directory_sync"])
 def test_adopter_failure_restores_old_bytes_and_mode(tmp_path, monkeypatch, stage):
     comms = setup_wire(tmp_path)
-    comms.relationships.edit("owner", RelationshipEdit.decode("add"), "peer", "old")
+    comms.relationships.edit("owner", RelationshipEdit.member_named("add"), "peer", "old")
     path = comms.relationships.store.path
 
     def mutate():
-        comms.relationships.edit("owner", RelationshipEdit.decode("update"), "peer", "new")
+        comms.relationships.edit("owner", RelationshipEdit.member_named("update"), "peer", "new")
 
     path.chmod(0o640)
     before = path.read_bytes()

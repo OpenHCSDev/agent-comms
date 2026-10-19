@@ -82,7 +82,7 @@ class PiEvent(PiPayload, DeclaredFamily):
     @classmethod
     def wire_member(cls, wire):
         try:
-            return cls.decode(wire.get("type")).wire_case(wire)
+            return cls.member_named(wire.get("type")).wire_case(wire)
         except ValueError:
             return UnknownPiEvent
 
