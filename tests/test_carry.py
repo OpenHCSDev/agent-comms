@@ -86,8 +86,7 @@ def test_steps_at_head_form_one_chain_and_each_module_declares_its_step():
             (declared,) = [value for value in vars(importlib.import_module(f"cutover.{step.name}")).values()
                            if isinstance(value, type) and issubclass(value, Carry) and value is not Carry]
             assert declared.name() == step.name
-            # A deleted line may run between a step and the step it names.
-            assert declared.after is None or names.index(declared.after) < names.index(step.name)
+            assert declared.after == step.after
 
 
 def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
@@ -103,36 +102,24 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
         chain.pending(("carry_b",))
     with pytest.raises(ValueError, match="does not declare"):
         chain.pending(("carry_a", "carry_z"))
-    tail = repo.commit({"carry_c": None})
+    repo.commit({"carry_c": None})
     assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
-        ("carry_a", held), ("carry_b", "HEAD"), ("carry_c", repo.git("rev-parse", f"{tail}^"))]
+        ("carry_a", held), ("carry_b", "HEAD")]
 
 
-def test_a_step_added_after_a_deleted_line_runs_after_it_for_both_real_ledgers(tmp_path):
-    """Today's history: route_index and wake_index were deleted before display_counts forked
-    from their parent, then todo_releases (17:15) and order_run arrived. Every bus that ran
-    the deleted line keeps a pending list, at 17:15 and at main."""
+def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):
+    """Finished migrations leave Git history but no longer enter the executable chain."""
     repo = Repository(tmp_path)
     repo.commit({"carry_external_pages": step_source(None)})
     repo.commit({"carry_route_index": step_source("carry_external_pages"),
                  "carry_wake_index": step_source("carry_route_index")})
     repo.commit({"carry_route_index": None, "carry_wake_index": None})
     repo.commit({"carry_display_counts": step_source("carry_external_pages")})
-    repo.commit({"carry_todo_voids": step_source("carry_display_counts"),
-                 "carry_turn_records": step_source("carry_todo_voids")})
-    released = repo.commit({"carry_todo_releases": step_source("carry_turn_records")})
-    repo.commit({"carry_order_run": step_source("carry_wake_index"),
-                 "carry_todo_releases": step_source("carry_order_run")})
-    # The laptop's ledger; ts-gaming's adds carry_order_run, applied before it reached main.
-    laptop = ("carry_external_pages", "carry_display_counts", "carry_todo_voids",
-              "carry_turn_records", "carry_route_index", "carry_wake_index")
-
-    def pending(revision: str, applied: tuple[str, ...]) -> list[str]:
-        return [step.name for step in CarryChain.at(tmp_path, revision).pending(applied)]
-
-    assert pending(released, laptop) == ["carry_todo_releases"]
-    assert pending("HEAD", (*laptop, "carry_order_run")) == ["carry_todo_releases"]
-    assert pending("HEAD", laptop) == ["carry_order_run", "carry_todo_releases"]
+    chain = CarryChain.at(tmp_path, "HEAD")
+    assert [step.name for step in chain.steps] == ["carry_external_pages", "carry_display_counts"]
+    assert [step.name for step in chain.pending(("carry_external_pages",))] == ["carry_display_counts"]
+    with pytest.raises(ValueError, match="skips a step"):
+        chain.pending(("carry_display_counts",))
 
 
 def test_a_step_applies_only_after_every_earlier_step_and_a_ledgerless_bus_upgrades_in_order(tmp_path):
@@ -189,7 +176,8 @@ def test_ledger_appends_each_step_once_and_owner_only(tmp_path):
 @pytest.mark.refactor_guard
 @pytest.mark.parametrize("change, edited", [
     ({"carry_b": step_source("carry_a")}, 0),
-    ({"carry_a": step_source(None) + "# changed\n"}, 1),
+    ({"carry_a": step_source(None).replace("Carried(0)", "Carried(1)")}, 1),
+    ({"carry_a": step_source("carry_previous")}, 0),
     ({"carry_a": None, "carry_renamed": step_source(None)}, 1),
     ({"carry_a": None}, 0),
 ])
@@ -322,8 +310,8 @@ def retained_read_ledger(root: Path) -> None:
 
 
 def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_path, monkeypatch):
-    """Earlier formats: storage roots with a checkout list, a JSON-text-keyed read
-    ledger already carried by its retired step, and a route naming its native package. Each declared step dry-runs,
+    """Storage roots and read keys already have their carried formats, while the
+    route still names its native package. Each declared step dry-runs,
     applies, then finds nothing left; no file it does not name changes."""
     tmp_path.chmod(0o700)
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -333,7 +321,7 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     root_id = comms.messaging.initialize_private_initial_protocol()
     comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
     registry = json.loads((root / "registry.json").read_text())
-    registry["threads"]["worker"]["storage_roots"]["checkouts"] = [str(tmp_path), "/earlier/project"]
+    registry["threads"]["worker"]["earlier_projects"] = ["/earlier/project"]
     store = RegistryStore(root / "registry.json")
     with store.locked():
         store._write_unlocked(json.dumps(registry, indent=2))
