@@ -41,7 +41,7 @@ from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily
-from .errors import UnregisteredThreadError
+from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
@@ -66,9 +66,13 @@ class DirectorCaller(ThreadCaller):
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText and needs this caller's rules review, drawn,
         answered and under 20 minutes old."""
-        due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
-        if refused := (*DirectiveText.refused(body), *due):
-            raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
+        # Only the review's own stored state belongs on this refusal path.
+        # Deriving StandingRule.broken here can run subprocesses and scan history.
+        if due := RulesDue.violations(comms, self.name):
+            raise ToolRefusedError(
+                "Directive refused, nothing sent: " + " ".join(rule.line() for rule in due)
+            )
+        DirectiveText.require(body)
 
     def sent(self, comms: Comms, message: Message) -> None:
         if message.target in comms.registry:  # a channel holds no requests
@@ -290,11 +294,11 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         tool = Connector.exposed().get(self.params.name)
         if tool is None:
             return ToolsCallResult.refused(
-                ValueError(f"The connector exposes no tool {self.params.name!r}.")
+                ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except UnregisteredThreadError as error:
+        except ToolRefusedError as error:
             return ToolsCallResult.refused(error)
         return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
 
@@ -317,7 +321,7 @@ class ToolsCallResult:
     )
 
     @classmethod
-    def refused(cls, error: BaseException) -> ToolsCallResult:
+    def refused(cls, error: ToolRefusedError) -> ToolsCallResult:
         return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
 
 

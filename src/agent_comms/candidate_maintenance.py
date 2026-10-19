@@ -17,7 +17,7 @@ from .bus_route_counts import BusRouteCounts
 from .coordination_errors import CoordinationError
 from .routing import DeliveryMessage
 from .wire_log import CurrentSnapshotOpening, WireLog
-from .wake_candidate_index import FirstBuild, WakeCandidateIndex
+from .wake_candidate_index import FirstBuild, ProjectionUnavailableError, WakeCandidateIndex
 
 _LOG = logging.getLogger(__name__)
 _MAX_ACTIVE_ROOTS = 32
@@ -96,7 +96,9 @@ def _drain_candidate(root: Path) -> None:
                             cleanup.pop_all()
                             _pending.pop(root)
                             return
-        except (OSError, ValueError, sqlite3.Error, CoordinationError) as error:
+        except (
+            OSError, ValueError, sqlite3.Error, CoordinationError, ProjectionUnavailableError,
+        ) as error:
             failure = CandidateMaintenanceFailed(root)
             _LOG.exception("%s", failure)
             raise failure from error

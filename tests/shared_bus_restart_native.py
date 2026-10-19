@@ -43,6 +43,7 @@ from agent_comms.native_prompt_binding import PromptBinding, binding_store_path
 from agent_comms.private_sidecar import sidecar_connection
 from agent_comms.coordinator import Coordination
 from agent_comms.historical_native_inputs import read_historical_native_inputs
+from bus_history import read_history
 
 
 def configured_stage(arguments, configured, snapshot, *, continue_existing=False):
@@ -177,7 +178,7 @@ async def configured_pure_channel(arguments):
 
     def read_original_bus():
         started = time.perf_counter()
-        history = list(service.bus.full_history_page().messages)
+        history = read_history(service)
         with service.bus.opened_activity():
             service.bus.pending_counts_all(names)
         return {'seconds': time.perf_counter() - started, 'messages': len(history)}
@@ -1092,12 +1093,12 @@ async def run(arguments):
                 cancelled_assignment = WakeAssignment.one(db,assignment_id=retained.assignment_id)
                 assert retained == cancelled_input
                 assert cancelled_assignment.lifecycle.declared_name=='deferred'
-            replies = list(service.bus.channel_history_page('#team').messages)
+            replies = read_history(service, '#team')
             assert any(reply.sender==names[0] and reply.body=='Unique controlled native reply.'
                        for reply in replies)
             assert provider.posts == 2
         elif arguments.wave_size > 1:
-            replies = [message for message in list(service.bus.channel_history_page('#team').messages)
+            replies = [message for message in read_history(service, '#team')
                        if message.sender == names[0]]
             assert len(replies) == 2
             assert replies[0].body == 'Combined wave answer: ' + '; '.join(

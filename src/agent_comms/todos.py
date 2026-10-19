@@ -25,6 +25,7 @@ from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
+from .errors import ToolRefusedError
 from .field_codec import (
     FieldCodec, GitCommitText, MalformedRecord, NullMember, RecordMember, SubclassUnion, WireValue,
     boundary_decoder,
@@ -97,6 +98,13 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
     @abstractmethod
     async def delivery_time(self, check): ...
 
+    def strikes(
+        self, todo: Todo, order_id: str, actor: ThreadIncarnation
+    ) -> tuple[StrikeTodo, ...]:
+        """An operation has no commit time: recording it later is the commander's delay, so its
+        lateness is judged at the OVERDUE alarm and its delivery strikes nobody."""
+        return ()
+
 
 @dataclass(frozen=True, kw_only=True)
 class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
@@ -126,6 +134,15 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
             await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
+
+    def strikes(
+        self, todo: Todo, order_id: str, actor: ThreadIncarnation
+    ) -> tuple[StrikeTodo, ...]:
+        """A commit delivered after the order's deadline strikes its holder once."""
+        lateness = self.at.lateness(todo.deadline)
+        reason = (f"{todo.id} order {order_id} {lateness} as {self.delivered} "
+                  f"(caught by {actor.name} at review)")
+        return (StrikeTodo(todo.revision, actor, todo.held(), reason),) * lateness.late()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -695,7 +712,7 @@ class OrderWords(WireValue):
 
     def __post_init__(self) -> None:
         if refused := self.refused(self.text):
-            raise ValueError(refused)
+            raise ToolRefusedError(refused)
 
     def to_wire(self) -> str:
         return self.text
@@ -914,6 +931,11 @@ class DirectiveText:
     @classmethod
     def refused(cls, text: str) -> tuple[str, ...]:
         return tuple(refused for family in cls.OUTGOING if (refused := family.refused(text)))
+
+    @classmethod
+    def require(cls, text: str) -> None:
+        if refused := cls.refused(text):
+            raise ToolRefusedError("Directive refused, nothing sent: " + " ".join(refused))
 
 
 class OrderRun(DeclaredFamily, affix="OrderRun"):
@@ -1373,7 +1395,7 @@ class HuntRecord(TypedTable):
     hunt: Hunt
 
 
-class TodoError(ValueError):
+class TodoError(ToolRefusedError):
     """A todo request is invalid or its persisted state cannot be trusted."""
 
 
@@ -1864,7 +1886,10 @@ class DeliverTodo(TodoOperation):
         current.require_commander(self.actor)
         current.state.require_open(current)
         current.order.require_delivery(self.order_id)
-        return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
+        return replace(current, order=current.order.delivered(self.delivery),
+                       strikes=(*current.strikes,
+                                *self.delivery.strikes(current, self.order_id, self.actor)),
+                       revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
@@ -2033,8 +2058,7 @@ class Todo(TypedTable):
 
     @classmethod
     def require_order_body(cls, body: str) -> None:
-        if refused := DirectiveText.refused(body):
-            raise ValueError("; ".join(refused))
+        DirectiveText.require(body)
         Slop.from_order(body)
 
     def require_fold(self, target: Todo, why: str) -> None:

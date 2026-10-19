@@ -15,36 +15,24 @@ whole edit on screen: a show piped into head or /dev/null yields no codes.
 A verdict without a reason is refused; a send-back must cite a real message from
 the commander to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
 """
-import hashlib
-import json
-import os
-import re
-import sys
-import time
+import hashlib, json, os, re, sys, time
 from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
-from ..cli_commands import option
 from ..comms import Comms
+from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, SlopKind, Derivation, SupersededVerdict
+from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec
-from ..todos import (
-    AcceptedVerdict,
-    BluntText,
-    Derivation,
-    OrderVerdict,
-    PeerAcceptedVerdict,
-    SendBackVerdict,
-    Slop,
-    SlopKind,
-    StrikeReason,
-    SupersededVerdict,
-    Todo,
-)
 from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
-from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from . import order
+from ..cli_commands import option
 from .order import CommanderVerb, RuledVerb
+from .config import CommanderConfig
+
+CONFIG = CommanderConfig.installed()
+ME = CONFIG.commander
+
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
 
@@ -92,12 +80,12 @@ class Edit(EditCall):
                 + f'\n=== end {self.id} code {self.code()}')
 
 
-def show(commander, pending: list[Edit]) -> None:
+def show(pending: list[Edit]) -> None:
     by_thread: dict[str, list[Edit]] = {}
     for edit in pending:
         by_thread.setdefault(edit.thread, []).append(edit)
     for name, edits in by_thread.items():
-        orders = commander.held_by(name)
+        orders = order.held_by(name)
         intent = '\n'.join(todo.order.instructions(todo) for todo in orders) or 'NO OPEN ORDER TODO'
         print(f'===== {name}: {len(edits)} unjudged\nCURRENT ORDERS:\n{intent}\n')
         for edit in edits:
@@ -105,7 +93,7 @@ def show(commander, pending: list[Edit]) -> None:
     print(f'{len(pending)} unjudged')
 
 
-def roast(commander, audience, thread, lines, text, fix, slop):
+def roast(audience, thread, lines, text, fix, slop):
     """Every send-back is a lesson, sent to its verdict's audience: the quoted slop,
     the required fact it restates and the declaration that derives it (paper 1's definition), why that is
     stupid, and what replaces it."""
@@ -113,12 +101,12 @@ def roast(commander, audience, thread, lines, text, fix, slop):
             + '\n'.join(f'    {l.strip()}' for l in lines)
             + f'\nThe slop: {slop.render()}'
             + f'\nWhy it is stupid: {text}\nWhat replaces it: {fix}\nNobody writes this again.')
-    print(f'roast sent to {", ".join(audience.threads)}: ' + commander.post(audience, body))
+    print(f'roast sent to {", ".join(audience.threads)}: ' + order.post(audience, body))
 
 
-def alarm(commander):
+def alarm():
     while True:
-        late = [edit for edit in Edit.unjudged(commander.comms, commander.commander) if time.time() - edit.at > 300]
+        late = [edit for edit in Edit.unjudged(order.COMMS, ME) if time.time() - edit.at > 300]
         if late:
             counts: dict[str, int] = {}
             for edit in late:
@@ -142,14 +130,14 @@ class ShowVerb(JudgeVerb):
         return not self.thread or edit.thread == self.thread
 
     def run(self) -> None:
-        show(self.context, [edit for edit in Edit.unjudged(self.context.comms, self.context.commander) if self.selects(edit)])
+        show([edit for edit in Edit.unjudged(order.COMMS, ME) if self.selects(edit)])
 
 
 class AlarmVerb(JudgeVerb):
     help = "loop: every minute, name edits unjudged for 5 min"
 
     def run(self) -> None:
-        alarm(self.context)
+        alarm()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -174,8 +162,8 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def run(self) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        orders = {todo.id: todo for todo in self.context.held_orders() if not self.msg or todo.sent_in(self.msg)}
-        edits = {edit.id: edit for edit in Edit.unjudged(self.context.comms, self.context.commander) if edit.problem in orders}
+        orders = {todo.id: todo for todo in order.held_orders() if not self.msg or todo.sent_in(self.msg)}
+        edits = {edit.id: edit for edit in Edit.unjudged(order.COMMS, ME) if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
@@ -189,12 +177,12 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         self.check_edits([edits[i] for i in ids])
         # Validate the whole batch through the operation owner before its first write.
         for i, todo in selected.items():
-            self.operation(todo, i).prepare(self.context.comms.goals, todo).apply(todo)
+            self.operation(todo, i).prepare(order.COMMS.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
-            result = self.context.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
+            result = order.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
             current[todo.id] = result.todo
-        left = len(Edit.unjudged(self.context.comms, self.context.commander))
+        left = len(Edit.unjudged(order.COMMS, ME))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
         self.report(tuple(current.values()))
 
@@ -207,7 +195,7 @@ class OkVerb(VerdictVerb):
     peer: str = option("--peer", default="", help="another sender's retained order message to the unit")
 
     def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        actor = self.context.comms.registry.require(self.context.commander).incarnation
+        actor = order.COMMS.registry.require(ME).incarnation
         if self.peer:
             return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit_id,
                                        quote=self.serves, peer=self.peer)
@@ -231,7 +219,7 @@ class SupersededVerb(VerdictVerb):
     by: str = option("--by", help="the replacing order's message")
 
     def operation(self, todo: Todo, edit_id: str) -> SupersededVerdict:
-        return SupersededVerdict(todo.revision, self.context.comms.registry.require(self.context.commander).incarnation,
+        return SupersededVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
                                  todo.held(), edit_id, replacement=self.by, reason=self.why)
 
     def check_edits(self, edits: list[Edit]) -> None:
@@ -258,7 +246,7 @@ class BackVerb(VerdictVerb):
                                            at=self.at, derive=self.derive, by=self.by))
 
     def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, self.context.comms.registry.require(self.context.commander).incarnation,
+        return SendBackVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
                                todo.held(), edit_id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 
@@ -274,12 +262,12 @@ class BackVerb(VerdictVerb):
     def report(self, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
             audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
-            roast(self.context, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
+            roast(audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {self.context.commander} at review): '
+                    f'(strike {todo.strike_count} on {todo.id}; caught by {ME} at review): '
                     f'{todo.strikes[-1].reason}')
-            self.context.on_record(line, 'Send-back', audience)
+            order.on_record(line, 'Send-back', audience)
 
 
-def main(args, commander):
-    JudgeVerb.parse(args or ['show'], __doc__, commander).apply()
+def main(args):
+    JudgeVerb.parse(args or ['show'], __doc__).apply()

@@ -16,14 +16,14 @@ from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
 from ..todos import Todo
-from .order import CommanderVerb, RuledVerb, hhmm
+from .order import COMMS, ME, CommanderVerb, RuledVerb, hhmm
 
 
-def open_requests(commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
+def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
-    thread = commander.comms.registry.require(commander.commander)
+    thread = COMMS.registry.require(ME)
     return tuple(request for goal in thread.goal.active()
-                 for request in goal.order.open_requests(goal, commander.comms.goals, thread.incarnation))
+                 for request in goal.order.open_requests(goal, COMMS.goals, thread.incarnation))
 
 
 class RequestVerb(CommanderVerb):
@@ -36,7 +36,7 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
     text: str = option("text")
 
     def run(self) -> None:
-        goal = self.context.comms.goals.update_goal(self.context.commander, SetGoalAction(text=self.text, order=RequestGoalOrder()))
+        goal = COMMS.goals.update_goal(ME, SetGoalAction(text=self.text, order=RequestGoalOrder()))
         print(goal.require().id)
 
 
@@ -48,7 +48,7 @@ class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
 
     def run(self) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())
-        self.context.comms.goals.update_goal(self.context.commander, CompletedGoalAction(progress=self.why, expect=expect))
+        COMMS.goals.update_goal(ME, CompletedGoalAction(progress=self.why, expect=expect))
         print(f"{self.id} done")
 
 
@@ -56,7 +56,7 @@ class RequestListVerb(RequestVerb, declared_name="list"):
     help = "the open request and the open orders serving it"
 
     def run(self) -> None:
-        requests = open_requests(self.context)
+        requests = open_requests()
         if not requests:
             print("No open request.")
         for goal, served in requests:
@@ -65,5 +65,5 @@ class RequestListVerb(RequestVerb, declared_name="list"):
                 print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
 
 
-def main(a, commander):
-    RequestVerb.parse(a, __doc__, commander).apply()
+def main(a: list[str]) -> None:
+    RequestVerb.parse(a, __doc__).apply()

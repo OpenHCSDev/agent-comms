@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from .goal_attempts import GoalAttemptStore, LaunchPermit
     from .goal_waits import GoalWait
     from .goals import GoalDeclaration
+    from .input_drain import InputDrain
     from .queued_input import QueuedInput
     from .registry_document import RegistrySnapshot
     from .threads import Thread
@@ -124,7 +125,8 @@ class AcceptedInputCheck(RuleCheck):
     claim_scope: int
     input_id: str
     keys: tuple[str, ...]
-    accepted_source: TurnInputSource | None
+    inputs: InputDrain
+    session_id: str
 
 
 class AcceptedInputAuthorityRule(ReservationRule):
@@ -148,7 +150,7 @@ class AcceptedInputSourceRule(ReservationRule):
     explanation = "The captured accepted input source is no longer live."
 
     def violated(self, check: AcceptedInputCheck) -> bool:
-        return check.accepted_source != check.acknowledgement.source()
+        return not check.acknowledgement.is_live(check.inputs, check.session_id)
 
 
 @dataclass(frozen=True, kw_only=True)
