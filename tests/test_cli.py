@@ -520,7 +520,7 @@ class TestSelectedTargetActions:
         target = ChannelTarget("#team")
         commands = StartCliCommand.bindings(
             comms, target, snapshot=snapshot, catalog=catalog,
-            resolved=target.resolve(snapshot, catalog))
+            resolved=target.resolve(snapshot, comms.bus.require_channel))
         assert tuple(command.name for command in commands) == ("alpha",)
         assert all(comms.registry.require(name).process_identity == NoProcess()
                    for name in ("alpha", "external", "archived", "human"))
@@ -588,10 +588,11 @@ class TestSelectedTargetActions:
         from agent_comms.cli_commands import ReadTargetCliCommand, TargetEdit
         from agent_comms.threads import Thread
         from native_unread_fixture import completed_snapshot
+        from agent_comms.ui_model.unread import ReplyUnread
 
         comms = self.declared(tmp_path)
         source = tmp_path / 'alpha.jsonl'
-        source.write_text(json.dumps({'type': 'message', 'message': {
+        source.write_text(json.dumps({'type': 'message', 'timestamp': '2026-09-20T00:00:01Z', 'message': {
             'role': 'assistant', 'content': [{'type': 'text', 'text': 'Saved reply'}],
         }}) + '\n')
         comms.registry.declare(comms.registry.new_thread('alpha', frozenset({'team'}), str(tmp_path), session_file=str(source)))
@@ -601,14 +602,16 @@ class TestSelectedTargetActions:
         comms.messaging.send('alpha', viewer, 'Human DM').message.message_id
         comms.messaging.send('alpha', '#team', 'Channel message').message.message_id
         before = completed_snapshot(comms, str(tmp_path))
-        assert before.thread_unread['alpha'] == before.unread['alpha'] == 1
+        assert before.thread_unread['alpha'] == ReplyUnread(1)
+        assert before.unread['alpha'] == 1
         # The canonical tag change also publishes its membership notification.
         assert before.channel_unread['#team'] == 2
         result = TargetEdit(ReadTargetCliCommand, ReadTargetCliCommand.selected_targets(('alpha', '#team')),
                             {}, project=str(tmp_path)).apply(comms)
         assert result.successful and tuple(item.result.read for item in result.outcomes) == ('alpha', '#team')
         after = completed_snapshot(comms, str(tmp_path))
-        assert after.thread_unread['alpha'] == after.unread.get('alpha', 0) == 0
+        assert after.thread_unread['alpha'] == ReplyUnread(0)
+        assert after.unread.get('alpha', 0) == 0
         assert after.channel_unread['#team'] == 0
         assert comms.bus.pending_count('beta', CommandTarget.named('alpha')) == 1
         # DeliveryScope excludes beta's own membership notice from its inbox.
