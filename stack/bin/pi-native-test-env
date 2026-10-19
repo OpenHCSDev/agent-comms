@@ -23,9 +23,14 @@ done
 export PYTHONPATH="$repo_root/src"
 manifest="$stack_root/pi-native.sha256"
 build_id=$(sha256sum "$manifest" | cut -c1-16)
-# StorageRule.native_cache declares the shared root when --cache names none.
-cache=${cache:-$("$python" -c 'from agent_comms.storage_rules import StorageRule; print(StorageRule.native_cache)')}
-environment=$("$python" -m agent_comms.native_package --environment "$cache")
+# native_environment owns the layout; StorageRule.native_cache is the root when --cache names none.
+environment=$("$python" -c '
+import sys
+from pathlib import Path
+from agent_comms.native_package import native_environment
+from agent_comms.storage_rules import StorageRule
+print(native_environment(Path(sys.argv[1]) if sys.argv[1:] else StorageRule.native_cache))
+' ${cache:+"$cache"})
 package=.pi-native-$build_id/node_modules/@earendil-works/pi-coding-agent
 
 verify() (

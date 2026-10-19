@@ -422,8 +422,6 @@ if __name__ == "__main__":
         print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)
     elif len(sys.argv) == 4 and sys.argv[1] == "--install-sources":
         install_declared_sources(Path(sys.argv[2]), Path(sys.argv[3]))
-    elif len(sys.argv) == 3 and sys.argv[1] == "--environment":
-        print(native_environment(Path(sys.argv[2])))
     elif len(sys.argv) == 3 and sys.argv[1] == "--digest":
         print(package_tree_digest(Path(sys.argv[2])))
     elif len(sys.argv) == 3 and sys.argv[1] == "--write-manifest":
@@ -433,7 +431,6 @@ if __name__ == "__main__":
     else:
         raise SystemExit(
             "Usage: python -m agent_comms.native_package [--digest|--write-manifest] PACKAGE_DIR | "
-            "--environment CACHE | "
             "--share-resources NEW_PACKAGE DEPLOYMENTS | "
             "--install-sources PACKAGE_DIR SNAPSHOT_ROOT"
         )
