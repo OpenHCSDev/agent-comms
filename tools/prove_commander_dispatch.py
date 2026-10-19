@@ -166,7 +166,6 @@ class RunProofCommand(ProofCommand):
             state=root.parent / "state",
             board=root.parent / "board.md",
             narrative=root.parent / "narrative.md",
-            rules=(),
             repos=(),
             worktrees=comms.registry.storage_rule.checkout_base,
             scratch=root.parent,
@@ -237,20 +236,24 @@ class ObserveProofCommand(ProofCommand):
         for line in rotate.broken_rules():
             print(line, flush=True)
         assigned = comms.goals.todos.get(problem)
+        received_order = FieldCodec.decode(PendingProblemOrder, FieldCodec.encode(assigned.order))
         started = comms.registry.require(assigned.held().owner)
         print(
             f"UNIT {started.name} model={started.model} pid={started.require_process().pid}",
             flush=True,
         )
         print(
-            f"ORDER {assigned.order.id} problem={problem} checkout={started.worktree}", flush=True
+            f"ORDER {received_order.id} problem={problem} checkout={started.worktree}", flush=True
         )
         (root.parent / "order.json").write_text(json.dumps(FieldCodec.encode(assigned), indent=2))
         before = comms.registry.all_threads()
         for line in rotate.broken_rules():
             print(line, flush=True)
         assert comms.registry.all_threads().keys() == before.keys(), "duplicate unit"
-        assert comms.goals.todos.get(problem).order.id == assigned.order.id, "duplicate order"
+        after = FieldCodec.decode(
+            PendingProblemOrder, FieldCodec.encode(comms.goals.todos.get(problem).order)
+        )
+        assert after.id == received_order.id, "duplicate order"
         print("SECOND_ROTATION no duplicate unit or order", flush=True)
         found = asyncio.run(first_reply(comms, commander.name, started.name, token))
         print(f"FIRST_REPLY {found.sender}: {found.body}", flush=True)
@@ -258,7 +261,7 @@ class ObserveProofCommand(ProofCommand):
         artifact.write_text(json.dumps(FieldCodec.encode(found), indent=2))
         CommsOrderDoneTool(
             problem=problem,
-            order_id=assigned.order.id,
+            order_id=received_order.id,
             delivery=OperationDelivery(),
             claims=(WorkingClaim(str(artifact)),),
         ).apply(comms, ThreadCaller(commander.name))
