@@ -653,16 +653,41 @@ def test_unit_wording_gets_a_correction_not_a_strike(commander):
     assert comms.goals.todos.get('P1') == held and held.strike_count == 0
 
 
-def test_published_unit_jargon_is_corrected_on_its_open_order(commander):
+@pytest.mark.parametrize('claim', [False, True])
+def test_published_unit_jargon_is_corrected_on_its_open_order(commander, claim):
     """No watch runs: publishing the message is what records the correction on the order."""
     comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
     create(commander, 'P1')
-    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed')
+    from agent_comms.envelope_claim_transitions import WritableFileClaim
+    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
+    vague = comms.messaging.send('worker', 'lead', 'The canonical ownership changed', claims=claims)
     comms.messaging.send('worker', 'lead', 'The tests pass now.')
     comms.messaging.send('lead', 'worker', 'Your lifecycle report is late.')
     corrected = comms.goals.todos.get('P1')
     assert [(c.message_id, c.words) for c in corrected.corrections] == [(vague, ('canonical', 'ownership'))]
     assert corrected.strike_count == 0
+
+
+@pytest.mark.parametrize('claim', [False, True])
+@pytest.mark.parametrize('body', ['The tests pass now.', 'The canonical ownership changed'])
+def test_old_todo_schema_refuses_before_any_bus_publication(commander, claim, body):
+    from agent_comms.envelope_claim_transitions import WritableFileClaim
+    from agent_comms.errors import RelationViolationError
+
+    comms, _ = commander
+    comms.messaging.initialize_private_initial_protocol()
+    create(commander, 'P1')
+    with closing(sqlite3.connect(TodoStore.path_in(comms.root))) as db:
+        for column in ('corrections', 'verdicts', 'released'):
+            db.execute(f'ALTER TABLE todo DROP COLUMN {column}')
+        db.commit()
+    path = comms.root / 'bus.jsonl'
+    before = path.read_bytes() if path.exists() else b''
+    claims = (WritableFileClaim(Path('value.py')),) if claim else ()
+    with pytest.raises(RelationViolationError, match='todos.sqlite3 differs from its declaration'):
+        comms.messaging.send('worker', 'lead', body, claims=claims)
+    assert (path.read_bytes() if path.exists() else b'') == before
 
 
 @pytest.mark.parametrize('step, name, column', [
