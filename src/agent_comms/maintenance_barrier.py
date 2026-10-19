@@ -141,6 +141,10 @@ class ReadyPhase(MaintenancePhase):
         drained()
 
 
+# The holding operation hands its nonce to its own child processes through this variable.
+HOLDER_NONCE = "AGENT_COMMS_MAINTENANCE_HOLDER"
+
+
 class MaintenanceStatus:
     """Absent witness is READY; stored phases derive from their record."""
 
@@ -153,6 +157,10 @@ class MaintenanceStatus:
 
     def require_open(self) -> None:
         self.phase.new_sends.require_open()
+
+    def require_open_to(self, holder: str) -> None:
+        """Open, or held by ``holder``: the operation holding maintenance still runs its own reads."""
+        self.require_open()
 
 
 @dataclass(frozen=True)
@@ -215,6 +223,10 @@ class MaintenanceState(MaintenanceMarker, MaintenanceStatus):
         return MaintenanceState(version=self.version, root=self.root,
                                 generation=self.generation + 1, operator=self.operator,
                                 nonce=nonce, phase=phase)
+
+    def require_open_to(self, holder: str) -> None:
+        if holder != self.nonce:
+            self.require_open()
 
     def require_draining(self) -> None:
         if self.phase is not DrainingPhase:
@@ -300,7 +312,7 @@ class MaintenanceBarrier(MaintenanceIngress):
 
     def assert_open_unlocked(self) -> MaintenanceStatus:
         hold = self.current_unlocked()
-        hold.require_open()
+        hold.require_open_to(os.environ.get(HOLDER_NONCE, ""))
         return hold
 
     def read(self) -> MaintenanceStatus:
