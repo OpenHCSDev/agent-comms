@@ -1,8 +1,7 @@
 """Problem goals drop the text and progress their Todos own (P147).
 
-A problem goal's text is ProblemGoalOrder's fixed text and its progress is read
-from its Todos each turn. Each problem goal still holding its own prose takes the
-fixed text at a new revision, with its mention source rebound to that text.
+Its progress is read from its Todos each turn; a problem goal still holding prose
+takes ProblemGoalOrder's fixed text at a new revision, mentions rebound to it.
 """
 
 from __future__ import annotations
