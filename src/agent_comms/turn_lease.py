@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -20,6 +20,8 @@ from .turn_phase import IdlePhase, PreparingPhase, TurnPhase
 
 if TYPE_CHECKING:
     from .child_process import ProcessState
+    from .registry_document import RegistrySnapshot
+    from .threads import Thread
 
 
 class TurnDeclaration(SubclassUnion, affix=""):
@@ -357,5 +359,21 @@ class StoredTurnRecord(JsonDocument[ActiveTurn], StoredTurnReference, declared_n
         return self._turn_effects(lease, lambda state: state.native_phase_effects(phase))
 
 
-class FinishedTurnFence(TurnFence):
+class TurnCompletion(ABC):
+    """Whether terminal publication attested an exact finished turn."""
+
+    @abstractmethod
+    def idle_sources(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]: ...
+
+
+@dataclass(frozen=True, slots=True)
+class NoFinishedTurn(TurnCompletion):
+    def idle_sources(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        return ()
+
+
+class FinishedTurnFence(TurnFence, TurnCompletion):
     """Durable exact-turn completion witness, not a reply or model grant."""
+
+    def idle_sources(self, snapshot: RegistrySnapshot) -> tuple[Thread, ...]:
+        return snapshot.idle_after(self)
