@@ -135,7 +135,7 @@ def _selected_claim_boundary(
         bus.log.locked() as bus_lock,
         _store_lock(comms.registry.store.path),
     ):
-        registry = comms.registry.store._read_unlocked().snapshot()
+        registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)
         try:
             captured = RegistryOwner.capture(registry, canonical, "Selected wake owner stopped or changed")
@@ -298,7 +298,7 @@ def write_selected_claimed_file(
         bus.log.locked() as bus_lock,
         _store_lock(comms.registry.store.path),
     ):
-        registry = comms.registry.store._read_unlocked().snapshot()
+        registry = comms.registry.store.read_snapshot_unlocked()
         canonical = registry.canonical_name(owner_name)
         try:
             captured = RegistryOwner.capture(registry, canonical, "Selected write owner stopped or changed")
