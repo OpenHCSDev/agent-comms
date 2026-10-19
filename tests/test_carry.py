@@ -478,6 +478,32 @@ def test_turn_records_drop_an_idle_stored_turn_and_refuse_a_held_one(tmp_path, m
     assert not thread.executing
 
 
+def test_upgrade_busy_owner_refuses_before_any_stop_or_start(tmp_path):
+    from agent_comms.maintenance_barrier import ReadyPhase
+    from agent_comms.restart_refusals import OwnerBusyRefusal
+    from tools.upgrade_bus import live
+
+    root = tmp_path / "bus"
+    Comms(root)
+    calls = []
+
+    class BusyStack(Stack):
+        def cli(self, root, *arguments):
+            calls.append(arguments)
+            return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
+
+        def require_idle(self, root, names):
+            assert names == ["worker"]
+            assert MaintenanceBarrier(root / "registry.json").read().phase is not ReadyPhase
+            raise OwnerBusyRefusal()
+
+    stack = BusyStack(REPO)
+    with pytest.raises(OwnerBusyRefusal):
+        live(REPO, root, "", "", (), stack, stack, None, "worker")
+    assert calls == [("threads",)]
+    assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+
+
 LIVE_DRIVER = """
 import signal, sys
 from pathlib import Path
@@ -485,6 +511,9 @@ from upgrade_bus import Stack, live, stopped
 
 
 class Owners(Stack):
+    def require_idle(self, root, names):
+        pass
+
     def cli(self, root, *arguments):
         print(' '.join(arguments), flush=True)
         return {"threads": [{"name": "worker", "role": "agent", "status": "running"}]}
@@ -536,12 +565,11 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
 @pytest.mark.parametrize("served_by,registered", [
     ("installed", True), ("other", True), ("installed", False),
 ])
-def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(
+def test_upgrade_round_trip_through_the_connector_ends_it_or_holds(
     comms, tmp_path, monkeypatch, served_by, registered,
 ):
-    """The upgrade's last step reads the bus through the running connector service over its
-    loopback endpoint. A service on another runtime than the installed one fails the upgrade
-    through its restore, and the read leaves no message behind."""
+    """Failed round trips retain the bus and maintenance hold, never reset live main.
+    The successful read leaves no message behind."""
     import site
     import socket
     import tools.upgrade_bus as upgrade_bus
@@ -616,7 +644,7 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(
         if not registered:
             with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
                 upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
-            assert len(list(failed)) == 1
+            assert not list(failed)
         elif served_by == "installed":
             report = upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
             assert json.loads(report["round_trip"]) == {
@@ -625,14 +653,15 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(
         else:
             with pytest.raises(UpgradeRefused, match=f"runs {runtimes['other']}, not the installed"):
                 upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
-            assert len(list(failed)) == 1
+            assert not list(failed)
     finally:
         service.terminate()
         service.wait(timeout=30)
     reader = Comms(comms.root)
     assert [name for name in reader.registry.snapshot().threads
             if list(reader.bus.inbox(name, CommandTarget.named(ANY_CHANNEL.name)))] == []
-    assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
+    assert (MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase) == (
+        registered and served_by == "installed")
 
 
 def test_upgrade_refuses_at_start_without_its_own_uv(tmp_path):

@@ -607,7 +607,7 @@ class AcknowledgedResult(CliResult):
 
 @dataclass(frozen=True)
 class WhoResult(CliResult):
-    who: tuple[Mapping[str, object], ...]
+    who: tuple[Annotated[ThreadRecord, WireForm], ...]
 
 
 @dataclass(frozen=True)
@@ -630,10 +630,7 @@ class ChannelsResult(CliResult):
 
 @dataclass(frozen=True)
 class ThreadsResult(CliResult):
-    threads: tuple[ThreadRecord, ...]
-
-    def to_wire(self) -> object:
-        return FieldCodec.project(self, "presence")
+    threads: tuple[Annotated[ThreadRecord, WireForm], ...]
 
 
 @dataclass(frozen=True)
@@ -1281,7 +1278,7 @@ class WhoCliCommand(CliCommand):
     help = "Presence: who is in the chat"
 
     def apply(self, ctx: Comms) -> CliResult:
-        return WhoResult(tuple(ctx.views.who()))
+        return WhoResult(ctx.views.who())
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -19,9 +19,9 @@ A live run then stops the running agent owners with the installed CLI, backs
 the bus up (tar plus a hash of every file), moves the checkout,
 relocks and syncs its stack, prepares native Pi, carries the bus, reads it
 back, and starts only the owners it stopped. A failure after the backup
-restores the bus, the route, the checkout and its stack, and restarts those
-owners. Nothing is sent and no input is replayed: owners start by the normal
-start path, which never replays uncertain inputs.
+keeps maintenance held and preserves the bus, checkout and backup for forward
+repair. It never resets live main or replaces a possibly changed bus. Nothing
+is sent and no input is replayed: owners start by the normal start path.
 """
 from __future__ import annotations
 
@@ -145,6 +145,14 @@ class Stack:
             raise UpgradeRefused(f"agent-comms {' '.join(arguments)}: "
                                  f"{completed.stdout.strip() or completed.stderr.strip()}")
         return result
+
+    def require_idle(self, root: Path, names: list[str]) -> None:
+        """The installed lifecycle reads its own turn records before any stop."""
+        run(self.python, "-c",
+            "import sys; from pathlib import Path; from agent_comms.comms import wire; "
+            "comms=wire(Path(sys.argv[1])); snapshot=comms.registry.snapshot(); "
+            "[comms.owners.require_restart_idle(snapshot.require(name)) for name in sys.argv[2:]]",
+            root, *names, cwd=self.checkout, env=self.environment())
 
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
@@ -389,6 +397,11 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(root / "registry.json")
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
+    try:
+        installed.require_idle(root, running)
+    except BaseException:
+        maintenance.clear(held)
+        raise
     lock = installed.lock
     transcripts = ExitStack()
     try:
@@ -418,20 +431,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
-        maintenance.read().phase.hold_restore(maintenance, MaintenanceOperator("upgrade-bus"),
-                                              route_readers)
-        # The failed bus keeps its hold until restore has swapped it out.
-        backup.restore()
+        state = maintenance.read()
+        state.phase.hold_for(maintenance, state, MaintenanceOperator("upgrade-bus"))
         transcripts.close()
-        run("git", "-C", checkout, "reset", "--keep", "-q", current)
-        if (backup.path / "uv.lock").exists():
-            shutil.copy2(backup.path / "uv.lock", lock)
-        installed.sync()
-        installed.prepare_native()
-        maintenance.clear(held)
-        start(installed, root, running)
-        print(f"upgrade-bus: aborted after the backup ({type(error).__name__}: {error}); "
-              f"bus restored, maintenance cleared and {running} restarted", file=sys.stderr)
+        print(f"upgrade-bus: stopped after the backup ({type(error).__name__}: {error}); "
+              f"maintenance held, checkout and bus preserved; backup: {backup.path}",
+              file=sys.stderr)
         raise
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
