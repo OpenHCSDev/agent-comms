@@ -73,9 +73,10 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
     normalized = FieldCodec.encode(entry)
     assert normalized["kind"] == "message" and normalized["message"]["kind"] == "user"
     assert "type" not in normalized and "role" not in normalized["message"]
-    assert entry.events(TranscriptProjection()) == [
-        UserTranscript("look", timestamp=STAMPED),
-        UserTranscript("[Image attachment: image/png]", timestamp=STAMPED),
+    # The entry was read from its own bytes, so its record starts at offset 0.
+    assert entry.events(TranscriptProjection(position=0)) == [
+        UserTranscript("look", timestamp=STAMPED, position=0),
+        UserTranscript("[Image attachment: image/png]", timestamp=STAMPED, position=0),
     ]
     assert entry.message.parts[1].data == "aGVsbG8="
 
@@ -133,8 +134,8 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     assert len(forward) == 3
     assert forward == list(reversed(reverse))
     assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
-    assert forward[0].entry.events(TranscriptProjection()) == []
-    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid", timestamp=STAMPED)]
+    assert forward[0].events == []
+    assert forward[1].events == [AssistantTranscript("valid", timestamp=STAMPED, position=forward[1].start)]
     assert forward[-1].entry is None and not forward[-1].complete
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
 
@@ -262,6 +263,6 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     assert walks == [tuple(record.entry.id for record in records)] and headers == [path]
     assert not active
     assert tuple(event for _, events in projected for event in events) == (
-        UserTranscript("request", timestamp=STAMPED, native_id="a" * 32),
-        AssistantTranscript("answer", timestamp=STAMPED),
+        UserTranscript("request", timestamp=STAMPED, position=records[1].start, native_id="a" * 32),
+        AssistantTranscript("answer", timestamp=STAMPED, position=records[2].start),
     )
