@@ -10,7 +10,10 @@ from .child_process import ProcessState
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, TextRepresentation
-from .thread_presentation import ThreadOwnerBinding, ThreadPresentation, InactiveThreadPresentationStatus
+from .thread_presentation import (
+    ThreadOwnerBinding, ThreadPresentation, InactiveThreadPresentationStatus,
+    WorkingThreadPresentationStatus,
+)
 
 if TYPE_CHECKING:
     from .activity import ObservedActivity
@@ -77,6 +80,10 @@ class ThreadStatus(DeclaredFamily, affix="ThreadStatus"):
         self, process: ProcessState, ordinary: ThreadPresentation, binding: ThreadOwnerBinding,
     ) -> ThreadPresentation:
         return ordinary
+
+    def with_bridge(self) -> ThreadStatus:
+        """An attached bridge supplies connected presence, not a native lifecycle."""
+        return ConnectedThreadStatus()
 
     def external_presentation(
         self, process: ProcessState, ordinary: ThreadPresentation,
@@ -166,6 +173,19 @@ class CliInboxPresence:
 
 class ConnectedThreadStatus(CliInboxPresence, RunningThreadStatus):
     """A CLI inbox whose bridge process is watching it."""
+
+    def with_bridge(self) -> ThreadStatus:
+        return self
+
+
+class CompactingThreadStatus(ConnectedThreadStatus):
+    """The bridge is still watching while its CLI compacts context."""
+
+    receiving = False
+
+    def presentation(self, title: str, activity: ObservedActivity) -> ThreadPresentation:
+        return ThreadPresentation(title, "⌛", "Compacting context",
+                                  status=WorkingThreadPresentationStatus())
 
 
 class NoBridgeThreadStatus(CliInboxPresence, StoppedThreadStatus):

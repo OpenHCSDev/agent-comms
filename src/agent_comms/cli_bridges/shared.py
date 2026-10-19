@@ -5,7 +5,6 @@ import argparse
 import asyncio
 import json
 import os
-import secrets
 import signal
 import sys
 import traceback
@@ -14,7 +13,7 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import ClassVar, Generic, Literal, Self, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar
 from collections.abc import Awaitable, Callable
 
 from metaclass_registry import RegistryConfig
@@ -36,7 +35,7 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.coordination_errors import CoordinationError
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.field_codec import FieldCodec
+from agent_comms.field_codec import FieldCodec, PathText
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
 from agent_comms.messages import InfoKind, Message, MessageKind
@@ -45,6 +44,7 @@ from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
 from agent_comms.typed_table import Column, TypedTable
 from agent_comms_hooks.watch import WatchClaim, WatchRecord
+from .monitor import SessionAttachment, MonitorService, read_monitor
 
 
 @dataclass(frozen=True)
@@ -209,6 +209,7 @@ class DeliveryRow(TypedTable):
         return Message.from_wire(json.loads(self.payload))
 
     async def finish(self, bridge: CliBridge, outcome: type[Outcome]) -> None:
+        outcome = self.outcome.followed_by(outcome)
         with bridge.db:
             replace(self, outcome=outcome).upsert(bridge.db)
         await outcome.acknowledge(bridge, self.message)
@@ -234,6 +235,9 @@ class Operation(ABC, Generic[OperationBridge]):
 
     @abstractmethod
     async def run(self, bridge: OperationBridge) -> None: ...
+
+    def transcript_source(self) -> Path:
+        raise ValueError('This command does not own a live transcript subscription')
 
     @classmethod
     def serves(cls, bridge: type[CliBridge]) -> bool:
@@ -280,21 +284,7 @@ class Inbox(Operation[OperationBridge]):
         tasks.create_task(bridge.watch())
 
     async def run(self, bridge: OperationBridge) -> None:
-        # The claim records how this watch was started, so the session's hook can
-        # name the re-arm command once the lease lapses.
-        record = WatchRecord(bridge.binding.bus, bridge.binding.root,
-                             (Path(sys.argv[0]).name, *sys.argv[1:]))
-        with WatchClaim(bridge.binding.thread).held(record):
-            from agent_comms.registration import Registration
-
-            registry = await asyncio.to_thread(
-                Registration, Path(bridge.binding.root) / 'registry.json')
-            # Retry only endpoint acquisition, never the running bridge's delivery work.
-            with ExitStack() as endpoint:
-                await bridge.comms.bus.when_open(lambda: endpoint.enter_context(
-                    registry.external_process(bridge.binding.bus, ProcessIdentity.capture(os.getpid()))))
-                async with asyncio.TaskGroup() as tasks:
-                    self.start(bridge, tasks)
+        await bridge.registered_watch(self)
 
 
 class Watch(Inbox):
@@ -302,26 +292,69 @@ class Watch(Inbox):
     def serves(cls, bridge: type[CliBridge]) -> bool:
         return issubclass(bridge, PublishesTranscript)
 
+    async def run(self, bridge: OperationBridge) -> None:
+        await bridge.watch_operation(self)
+
     def start(self, bridge: TranscriptBridge, tasks: asyncio.TaskGroup) -> None:
         super().start(bridge, tasks)
         tasks.create_task(bridge.publish_transcript())
 
 
 @dataclass(frozen=True)
+class Serve(Watch):
+    owner: ProcessIdentity
+    transcript: Annotated[Path, PathText]
+
+    @classmethod
+    def serves(cls, bridge: type[CliBridge]) -> bool:
+        return issubclass(bridge, LineMonitorBridge)
+
+    @classmethod
+    def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
+        parser.add_argument('--owner', type=json.loads, required=True)
+        parser.add_argument('--transcript', required=True)
+
+    def transcript_source(self) -> Path:
+        return self.transcript
+
+    async def run(self, bridge: LineMonitorBridge) -> None:
+        if self.transcript.stem != bridge.binding.thread:
+            raise ValueError('The live transcript belongs to another Claude session')
+        self.owner.require_ancestor_of(os.getpid())
+        await bridge.registered_watch(self)
+
+    def start(self, bridge: LineMonitorBridge, tasks: asyncio.TaskGroup) -> None:
+        super().start(bridge, tasks)
+        current = asyncio.current_task()
+        assert current is not None
+        tasks.create_task(MonitorService(bridge, self.owner, current).run())
+
+
+class Enrol(Operation):
+    @classmethod
+    def serves(cls, bridge: type[CliBridge]) -> bool:
+        return issubclass(bridge, LineMonitorBridge)
+
+    async def run(self, bridge: LineMonitorBridge) -> None:
+        WatchClaim(bridge.binding.thread).enrol(bridge.watch_record())
+        print('Session binding enrolled; SessionStart owns the bridge. Monitor runs watch.', flush=True)
+
+
+@dataclass(frozen=True)
 class IncomingFrame(ABC):
     message: Message
 
-    async def turn_start(self, send: Callable[[str, bytes], Awaitable[None]]) -> None:
+    async def turn_start(self, send: Callable[[str, tuple[bytes, ...]], Awaitable[type[Outcome]]]) -> type[Outcome]:
         """Submit this family's input on its registered session transport."""
-        await send(self.input_id, self.payload)
+        return await send(self.input_id, self.payload)
 
     @property
     def input_id(self) -> str:
         return self.message.message_id
 
     @property
-    def payload(self) -> bytes:
-        return (self.text + '\n').encode()
+    def payload(self) -> tuple[bytes, ...]:
+        return ((self.text + '\n').encode(),)
 
     @property
     def text(self) -> str:
@@ -344,6 +377,27 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
     @cached_property
     def comms(self) -> Comms:
         return Comms(Path(self.binding.root))
+
+    def watch_record(self) -> WatchRecord:
+        return WatchRecord(self.binding.bus, self.binding.root,
+                           (Path(sys.argv[0]).name, *sys.argv[1:]))
+
+    async def registered_watch(self, operation: Inbox) -> None:
+        from agent_comms.registration import Registration
+        registry = await asyncio.to_thread(
+            Registration, Path(self.binding.root) / 'registry.json')
+        with ExitStack() as endpoint:
+            self.input = await self.comms.bus.when_open(lambda: endpoint.enter_context(
+                self.registration(registry)))
+            with WatchClaim(self.binding.thread).held(self.watch_record()):
+                async with asyncio.TaskGroup() as tasks:
+                    operation.start(self, tasks)
+
+    def registration(self, registry):
+        return registry.external_process(self.binding.bus, ProcessIdentity.capture(os.getpid()))
+
+    async def watch_operation(self, operation: Watch) -> None:
+        await self.registered_watch(operation)
 
     @abstractmethod
     async def show_sent(self, result: SendResult) -> None:
@@ -464,7 +518,7 @@ class MonitorProbe(MonitorFrame):
     token: str
 
     async def confirm(self, bridge: LineMonitorBridge, record: ObservedMonitor) -> None:
-        bridge.confirm_probe(self)
+        await bridge.confirm_probe(self)
 
 
 class MonitorPart(MonitorFrame):
@@ -514,44 +568,60 @@ class TranscriptConfirmsDelivery:
 
 
 class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
-    """Monitor delivery requires the same live transcript subscription."""
+    """Session-owned subscription and delivery journal, with replaceable readers."""
 
     incoming_frame: ClassVar[type[IncomingFrame]]
     window_bytes: ClassVar[int]
-    PROBE_NOTICE_SECONDS: ClassVar[float] = 15.0
 
     def __init__(self, options: Options, binding: Binding, db: CoordinationStore) -> None:
         super().__init__(options, binding, db)
-        self.probe = MonitorProbe(session=binding.thread, token=secrets.token_hex(24))
-        self.monitor_ready = asyncio.Event()
-        self.pending_parts: dict[tuple[str, int], int] = {}
-        self.window_changed = asyncio.Condition()
-        self.write_line = ExplicitWatchAcknowledgment.line_output(sys.stdout)
+        self.reader: SessionAttachment | None = None
+        self.reader_changed = asyncio.Condition()
+
+    def watch_record(self) -> WatchRecord:
+        command = (str(Path(sys.argv[0]).absolute()), Watch.__name__.lower(),
+                   '--state', str(self.options.state.absolute()))
+        return WatchRecord(self.binding.bus, self.binding.root, command)
+
+    def registration(self, registry):
+        return registry.external_input(self.binding.bus, ProcessIdentity.capture(os.getpid()),
+                                       self.frame, self.send_input)
+
+    def frame(self, message: Message) -> IncomingFrame:
+        if self.reader is None:
+            raise ConnectionResetError('No attached input transport')
+        return self.reader.frame(self, message)
+
+    async def send_input(self, identity: str, payloads: tuple[bytes, ...]) -> type[Outcome]:
+        if self.reader is None:
+            raise ConnectionResetError('No attached input transport')
+        return await self.reader.send(self, identity, payloads)
+
+    async def watch_operation(self, operation: Watch) -> None:
+        await read_monitor(WatchClaim(self.binding.thread))
+
+    async def accept(self, message: Message) -> None:
+        # Admission precedes DeliveryRow persistence. Detachment never creates
+        # an attempt for a message that has not reached an attached reader.
+        await self.prepare_delivery()
+        await super().accept(message)
 
     async def prepare_delivery(self) -> None:
-        # The probe is on stdout before the wait: no later write exists to flush it.
-        print(self.probe.model_dump_json(), flush=True)
-        print('Waiting for this session to observe the monitor probe; inbox remains unread.',
-              file=sys.stderr, flush=True)
-        # The harness owns notification scheduling. Missing proof never opens
-        # the inbox; the watch's existing cancellation owns this wait's lifetime.
-        try:
-            await asyncio.wait_for(self.monitor_ready.wait(), self.PROBE_NOTICE_SECONDS)
-        except TimeoutError:
-            # A line-lagging filter (grep aliased to ugrep) holds the last line until another
-            # arrives; this notice says the wait out loud and releases a held probe.
-            print(f'Monitor probe not observed after {self.PROBE_NOTICE_SECONDS:g}s; '
-                  'inbox remains unread until this session observes it.', flush=True)
-            await self.monitor_ready.wait()
+        async with self.reader_changed:
+            await self.reader_changed.wait_for(
+                lambda: self.reader is not None and self.reader.ready.is_set()
+                and not self.reader.writer.is_closing())
 
-    def confirm_probe(self, probe: MonitorProbe) -> None:
-        if probe == self.probe:
-            self.monitor_ready.set()
+    async def confirm_probe(self, probe: MonitorProbe) -> None:
+        async with self.reader_changed:
+            if self.reader is not None and self.reader.confirm_probe(probe):
+                self.reader.ready.set()
+                self.reader_changed.notify_all()
+                print('Fresh Monitor probe observed; delivery admitted.', file=sys.stderr, flush=True)
 
     async def part_observed(self, message_id: str, number: int) -> None:
-        async with self.window_changed:
-            self.pending_parts.pop((message_id, number), None)
-            self.window_changed.notify_all()
+        if self.reader is not None:
+            await self.reader.observed(message_id, number)
 
     @staticmethod
     def encode(text: str) -> str:
@@ -559,25 +629,20 @@ class LineMonitorBridge(TranscriptConfirmsDelivery, TranscriptBridge[Options]):
         return json.dumps(text, ensure_ascii=False)
 
     async def deliver(self, message: Message) -> type[Outcome]:
-        parts = self.incoming_frame(message).parts
-        with self.db:
-            DeliveryRow.update(self.db, where='id=?', parameters=(message.message_id,), monitor=ReceivingMonitor(len(parts)))
-        for number, part in enumerate(parts, 1):
-            line = self.encode(part)
-            size = len((line + '\n').encode('utf-16-le'))
-            async with self.window_changed:
-                await self.window_changed.wait_for(
-                    lambda: not self.pending_parts
-                    or sum(self.pending_parts.values()) + size <= self.window_bytes)
-                self.pending_parts[message.message_id, number] = size
-                self.write_line(line)
-        return EmittedOutcome
+        if self.reader is None or not self.reader.ready.is_set():
+            raise RuntimeError('Input delivery was not admitted')
+        try:
+            return await self.input.turn_start(message)
+        except ConnectionError:
+            print(f'Input detached during {message.message_id}; attempt preserved, no replay.',
+                  file=sys.stderr, flush=True)
+            return UnconfirmedOutcome
 
     async def show_sent(self, result: SendResult) -> None:
-        self.write_line(self.encode(self.sent_text(result)))
+        print(self.encode(self.sent_text(result)), flush=True)
 
     async def report_failure(self, text: str) -> None:
-        self.write_line(self.encode(text))
+        print(text, file=sys.stderr, flush=True)
 
 
 def run_bridge(bridge_type: type[CliBridge[BridgeOptions]], options: BridgeOptions) -> None:

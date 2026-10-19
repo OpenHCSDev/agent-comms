@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .cli_bridges.shared import IncomingFrame
     from .messages import Message
+    from .cli_protocol import Outcome
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -23,7 +24,7 @@ from .registry_document import RegistrySnapshot, UserThreadLookup
 from .registry_store import RegistryEdit, RegistryEntryRevision, RegistryStore
 from .routing import TurnRouting
 from .store_files import SharedLock, _store_lock
-from .thread_identity import GenerationCounter, TurnId
+from .thread_identity import GenerationCounter, OwnerIdentity, TurnId
 from .thread_status import (
     ConnectedThreadStatus, NoBridgeThreadStatus, RunningThreadStatus, ThreadStatus,
 )
@@ -72,11 +73,11 @@ class SeveralProjectThreads(ProjectThreadSelection):
 class RegisteredInput:
     """An external process's input capability, retained for its registration lifetime."""
 
-    frame: type[IncomingFrame]
-    send: Callable[[str, bytes], Awaitable[None]]
+    frame: Callable[[Message], IncomingFrame]
+    send: Callable[[str, tuple[bytes, ...]], Awaitable[type[Outcome]]]
 
-    async def turn_start(self, message: Message) -> None:
-        await self.frame(message).turn_start(self.send)
+    async def turn_start(self, message: Message) -> type[Outcome]:
+        return await self.frame(message).turn_start(self.send)
 
 
 class Registration:
@@ -122,10 +123,23 @@ class Registration:
 
     @contextmanager
     def external_input(self, name: str, process: ProcessIdentity,
-                       frame: type[IncomingFrame], send: Callable[[str, bytes], Awaitable[None]]):
+                       frame: Callable[[Message], IncomingFrame],
+                       send: Callable[[str, tuple[bytes, ...]], Awaitable[type[Outcome]]]):
         """Keep the declared input behavior with the endpoint that can actually invoke it."""
         with self.external_process(name, process):
             yield RegisteredInput(frame, send)
+
+    def observe_external_status(
+        self, owner: OwnerIdentity, process: ProcessIdentity, status: ThreadStatus,
+    ) -> None:
+        """An observation changes only the bridge lease it actually witnessed."""
+        with self.store.editing() as edit:
+            entry = edit.document.entry_if_present(owner.incarnation.name)
+            if entry is None or not entry.owned_by(owner, process) or not process.alive():
+                return
+            entry.thread.execution.require_external()
+            edit.document.statuses[entry.thread.name] = status.with_bridge()
+            edit.commit()
 
     def attach_native_session(self, original: RegistryOwner, session_file: str) -> RegistryOwner:
         """Publish an observed native source under its original executable lease.

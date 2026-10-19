@@ -32,7 +32,7 @@ _IN_MOVE_SELF = 0x00000800
 _IN_Q_OVERFLOW = 0x00004000
 _IN_IGNORED = 0x00008000
 _MASK = (
-    _IN_CLOSE_WRITE | _IN_MOVED_FROM | _IN_MOVED_TO | _IN_DELETE
+    _IN_CREATE | _IN_CLOSE_WRITE | _IN_MOVED_FROM | _IN_MOVED_TO | _IN_DELETE
     | _IN_DELETE_SELF | _IN_MOVE_SELF
 )
 _HEADER = struct.Struct("=iIII")
@@ -303,8 +303,7 @@ def _open_file_watcher[WatchT: NativeFileWatch](
         watch = add(
             fd, os.fsencode(directory),
             _MASK
-            | (_IN_MODIFY if watched.modified else 0)
-            | (_IN_CREATE if watched.reopen else 0),
+            | (_IN_MODIFY if watched.modified else 0),
         )
         if watch < 0:
             error = OSError(ctypes.get_errno(), f"inotify_add_watch failed for {directory}")

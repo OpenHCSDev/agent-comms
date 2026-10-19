@@ -62,9 +62,9 @@ class ClaudeInputFrame(IncomingFrame):
         return str(uuid5(NAMESPACE_URL, self.message.message_id))
 
     @property
-    def payload(self) -> bytes:
-        return (json.dumps({'type': 'user', 'uuid': self.input_id,
-                            'message': {'role': 'user', 'content': self.text}}) + '\n').encode()
+    def payload(self) -> tuple[bytes, ...]:
+        return ((json.dumps({'type': 'user', 'uuid': self.input_id,
+                             'message': {'role': 'user', 'content': self.text}}) + '\n').encode(),)
 
     @staticmethod
     def command(executable: str, session: str, arguments: tuple[str, ...]) -> tuple[str, ...]:
@@ -75,6 +75,10 @@ class ClaudeInputFrame(IncomingFrame):
 
 class ClaudeMonitorFrame(IncomingFrame):
     """Claude Monitor caps lines at 500 and joined batches at 3000 UTF-16 units."""
+    @property
+    def payload(self) -> tuple[bytes, ...]:
+        return tuple((json.dumps(part, ensure_ascii=False) + '\n').encode() for part in self.parts)
+
     EVENT_CHARS = 500
     BATCH_CHARS = 3000
     HEADER = 'Comms in'

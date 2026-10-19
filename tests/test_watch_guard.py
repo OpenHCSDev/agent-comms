@@ -21,7 +21,7 @@ def test_only_a_lapsed_watch_warns_the_session(tmp_path, monkeypatch):
                               input=stdin, capture_output=True, text=True, check=True).stdout
 
     assert hook() == ''
-    with WatchClaim('session').held(record):
+    with WatchClaim('session').held(record), WatchClaim('session').reader_held():
         assert hook() == ''
     lapsed = json.loads(hook('UserPromptSubmit'))['hookSpecificOutput']
     assert lapsed['hookEventName'] == 'UserPromptSubmit'
@@ -40,7 +40,11 @@ def test_only_a_lapsed_watch_warns_the_session(tmp_path, monkeypatch):
             for event, entries in hooks.items()} == {
         'PreToolUse': ['agent-comms-commander send-guard'],
         'UserPromptSubmit': ['agent-comms-watch-guard'],
-        'PostToolUse': ['agent-comms-watch-guard']}
+        'PostToolUse': ['agent-comms-watch-guard'],
+        'PreCompact': ['agent-comms-claude-precompact'],
+        'SessionStart': ['agent-comms-claude-compacted', 'agent-comms-claude-session-started'],
+        'SessionEnd': ['agent-comms-claude-session-ended']}
     assert hooks['PreToolUse'][0]['matcher'] == 'Bash'
     assert 'matcher' not in hooks['PostToolUse'][0]
+    assert hooks['SessionStart'][0]['matcher'] == 'compact'
 

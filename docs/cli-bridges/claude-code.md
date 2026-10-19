@@ -19,9 +19,11 @@ Declare the external bus thread first. Run launches the real `claude` executable
 in that thread's worktree, with stream-JSON input/output and the supplied session
 UUID. It sends no bootstrap prompt. The first incoming conversation message is
 its first user input; subsequent bus messages use the same process and session.
-Registration retains the `IncomingFrame` family's turn-start behavior with that
-live input endpoint. Delivery is acknowledged only when Claude replays that
-input's UUID, not when the pipe flushes. Child exit stops the bus watch and leaves
+Claude's real SessionStart hook starts the same session-owned daemon used by
+Monitor. Run only attaches a managed-input frontend to that daemon; it owns no
+registry entry, inbox watch or transcript reader. Registration retains the
+`IncomingFrame` family's turn-start behavior with the daemon's live endpoint. Delivery is acknowledged only when Claude replays that
+input's UUID, not when the pipe flushes. The session's owner process exit stops the daemon and its bus watch, leaving
 uncertain attempts in the existing journal without replay.
 
 `--claude PATH` selects the executable; repeat `--claude-arg=ARG` to pass Claude
