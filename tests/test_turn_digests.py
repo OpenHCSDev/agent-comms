@@ -39,7 +39,7 @@ def test_external_turns_preserve_interleaving_and_the_whole_selected_turn(tmp_pa
     source = comms.transcripts.external('cli')
     for turn, item, text in [('old', 'a', 'older'), ('one', 'b', 'first'),
                              ('two', 'c', 'other'), ('one', 'd', 'continued')]:
-        source.finish(turn_id=turn, item_id=item, events=(AssistantTranscript(text),))
+        source.finish(turn_id=turn, item_id=item, events=(AssistantTranscript(text, position=item),))
     answer = endpoint(comms, 'cli', 2)
     assert [turn['turn_id'] for turn in answer['turns']] == ['one', 'two']
     assert [event['text'] for event in answer['turns'][0]['events']] == ['first', 'continued']
@@ -112,7 +112,8 @@ def test_claude_file_transport_reaches_the_same_cli_and_tool_answer(tmp_path, mo
                         WatchSource.modified_file(item) for item in source.source_paths(comms.root)))) as changes:
                     async for _ in changes:
                         turns = await asyncio.to_thread(comms.transcripts.turns, 'claude', LastTurns())
-                        if any(event == AssistantTranscript('done', timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
+                        if any(event == AssistantTranscript('done', position=event.position,
+                                                                 timestamp=datetime.fromisoformat(final['timestamp']).timestamp())
                                for turn in turns.turns for event in turn.events):
                             break
         finally:

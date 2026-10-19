@@ -104,7 +104,7 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
 
-    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
+    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall | tool_declaration.UnrecordedEditCall, ...]:
         return ()
 
     def before(self, at: float) -> bool:

@@ -33,7 +33,7 @@ class EditCallFacts:
 
     @classmethod
     def capture(cls, id: str, timestamp: object, thread: str, path: str,
-                hunks: tuple[ReplacementEdit, ...], problem: str) -> EditEvidence:
+                hunks: tuple[ReplacementEdit, ...], problem: str) -> EditCall | UnrecordedEditCall:
         """Decode the source clock once; an undated edit is still evidence."""
         if timestamp is None:
             return UnrecordedEditCall(id, thread, path, hunks, problem)
@@ -66,8 +66,6 @@ class EditCall(EditCallFacts):
 class UnrecordedEditCall(EditCallFacts):
     """The source never recorded this edit's clock; no float is fabricated."""
 
-
-type EditEvidence = EditCall | UnrecordedEditCall
 
 
 class ToolDeclaration(DeclaredFamily, affix="Tool"):
@@ -105,7 +103,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         except (MalformedRecord, SelectedToolDenied):
             return None
 
-    def edit_calls(self, call_id: str, at: float, thread: str, problem: str) -> tuple[EditEvidence, ...]:
+    def edit_calls(self, call_id: str, at: object, thread: str, problem: str) -> tuple[EditCall | UnrecordedEditCall, ...]:
         return ()
 
     def reads(self) -> str:

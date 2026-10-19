@@ -13,7 +13,7 @@ from .thread_identity import ThreadIncarnation
 from .external_transcript import ExternalTranscript
 from .transcript_events import TurnDigest
 from .tool_result import ToolResult
-from .tool_declaration import EditEvidence
+from .tool_declaration import EditCall, UnrecordedEditCall
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -28,7 +28,7 @@ class ThreadTurns(ToolResult):
 
 @dataclass(frozen=True)
 class UnjudgedEdits(ToolResult):
-    edits: tuple[EditEvidence, ...]
+    edits: tuple[EditCall | UnrecordedEditCall, ...]
 
 
 class TurnBound(ABC):
@@ -117,7 +117,7 @@ class TurnDigestRead(TranscriptRead[ThreadTurns]):
 class OrderRead[Result](TranscriptRead[Result]):
     todo: Todo
 
-    def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditEvidence, ...]:
+    def edits_from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall | UnrecordedEditCall, ...]:
         judged = {verdict.tool_call_id for verdict in self.todo.verdicts}
         since = self.todo.order.at.recorded_at("An order")
         edits = {edit.id: edit for turn in reversed(turns)
@@ -127,10 +127,10 @@ class OrderRead[Result](TranscriptRead[Result]):
         return tuple(reversed(edits.values()))
 
 
-class OrderEditsRead(OrderRead[tuple[EditEvidence, ...]]):
+class OrderEditsRead(OrderRead[tuple[EditCall | UnrecordedEditCall, ...]]):
     """Original unjudged calls; external events are selected before decoding."""
 
-    def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditEvidence, ...]:
+    def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall | UnrecordedEditCall, ...]:
         return self.edits_from_turns(turns)
 
     def from_external(self, source) -> tuple[EditCall, ...]:

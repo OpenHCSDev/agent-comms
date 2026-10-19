@@ -1,6 +1,8 @@
 # P215 — keep undated edit evidence without inventing a float
 
-Status: implementation checkpoint; application acceptance still pending.
+Status: draft PR #1951, opened with the required Core order identity.
+Read-only live unjudged read/encode/presentation passed for all 24 current edits.
+Copied rotation reaches a separate missing-checkout defect; acceptance is blocked.
 
 ## Source owner
 
@@ -43,6 +45,53 @@ The recorded Check runs an infinite monitor then expects exit 0. The narrower
 reading is bounded observation of its two-minute progress, not pretending that
 an intentional infinite loop normally exits. No live monitor was launched for
 this investigation. A safely isolated copy run remains required.
+
+## Copied rotation output
+
+Copy: /home/ts/.cache/agent-scratch/pi-cn-phase7/P215-copy-1/bus.
+Used upgrade_bus.copy_bus, then read-only SQLite backups into the copy. The
+original StorageRule was serialized into the copy before using an isolated HOME,
+so HOME did not reinterpret the actual storage paths. Config/state/board writes
+were confined to that copy. No native process was started, stopped or replayed.
+
+Actual monitor output, exit 1 (traceback tail):
+
+```text
+  File "src/agent_comms/todos.py", line 358, in readings
+    base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
+  File "src/agent_comms/todos.py", line 353, in git
+    raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
+ValueError: fatal: cannot change to '/home/ts/wt/pi-plan-claims--P216': No such file or directory
+```
+
+pi-cn-phase3 already owns the ProgressSource repair in #1935 and has this actual
+copy-path reproducer. No workaround was added here. This is not a successful
+monitor run. Its complete original output is rotate.log beside the copied bus.
+
+## Source sanity
+
+Final focused batch: 6 passed in 24.76 seconds. This covers both edit-clock shapes,
+strict rejection of a null float, unchanged full hunks/presentation, the external
+Core CLI turns endpoint and actual Claude file transport. Two old fixtures omitted
+the already-required position; they now supply it. These tests are not claimed as
+rotation acceptance. Shared pytest warns about its absent timeout plugin; the
+external timeout 300 is the enforced bound. No environment or package was created.
+
+## Structural evidence
+
+Refactor-audit Package parser: 381 Core modules, 280 Toad source modules, zero
+parse omissions. No Toad consumer of the changed edit record types was found.
+The NRA parser was unavailable (missing tree_sitter); the existing refactor-audit
+parser was used instead. Census retained as P215-ast-before.txt in owned scratch.
+
+Before: one EditCall constructor at MutatingPathTool.edit_calls accepted an absent
+source clock into a required float; both OrderEditsRead paths returned that row.
+After: common EditCallFacts owns capture; the writer returns the explicit record
+cases, both readers and UnjudgedEdits declare them, and commander's shared Edit
+presentation is composed with each Core record through C3 MRO. FieldCodec's
+existing strict record/union decoder chooses the shape; no alternate codec or
+new discriminator registry exists. The overlapping alarm consumer remains staged,
+not silently claimed complete. Native and external source clocks are not changed.
 
 ## Assumed
 

@@ -1,0 +1,32 @@
+--- a/src/agent_comms/commander/judge.py
++++ b/src/agent_comms/commander/judge.py
+@@ -116,12 +116,16 @@
+ 
+ def alarm():
+     while True:
+-        late = [edit for edit in Edit.unjudged(order.COMMS, ME) if time.time() - edit.at > 300]
++        pending = Edit.unjudged(order.COMMS, ME)
++        late = [edit for edit in pending if any(time.time() - at > 300 for at in edit.dated)]
++        undated = [edit for edit in pending if not edit.dated]
++        if undated:
++            print(f'UNJUDGED {len(undated)} edits without recorded times -> judge show', flush=True)
+         if late:
+             counts: dict[str, int] = {}
+             for edit in late:
+                 counts[edit.thread] = counts.get(edit.thread, 0) + 1
+-            oldest = min(edit.at for edit in late)
++            oldest = min(at for edit in late for at in edit.dated)
+             print(f'UNJUDGED {len(late)} edits over 5 min (oldest {int((time.time() - oldest) / 60)} min): '
+                   + ', '.join(f'{t} {n}' for t, n in counts.items()) + ' -> judge show', flush=True)
+         time.sleep(60)
+--- a/src/agent_comms/transcript_events.py
++++ b/src/agent_comms/transcript_events.py
+@@ -351,7 +351,7 @@
+ 
+ @dataclass(frozen=True, kw_only=True)
+ class ToolStartTranscript(ToolTranscript):
+-    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall, ...]:
++    def edit_calls(self, thread: str, problem: str, since: float) -> tuple[tool_declaration.EditCall | tool_declaration.UnrecordedEditCall, ...]:
+         if self.before(since) or self.tool is None:
+             return ()
+         return self.tool.edit_calls(self.tool_call_id, self.timestamp, thread, problem)
