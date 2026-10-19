@@ -12,8 +12,8 @@ from typing import ClassVar
 from ..acp_failure import ProviderQuotaFailure
 from ..comms import Comms
 from ..goal_actions import OrderGoalAction
-from ..standing_rules import (DatedStandingRule, OverdueStandingRule, ReasonedStandingRule, StandingRule,
-                              UndatedStandingRule)
+from ..standing_rules import (DatedStandingRule, OverdueStandingRule, ReasonedStandingRule,
+                              StandingRule, UndatedStandingRule)
 from ..goals import Goal
 from ..threads import Thread
 from ..todos import FlatTrend, OrderProgress, PullRequests, StrikeTodo, Todo
@@ -273,10 +273,10 @@ class DeadProvider(OverdueStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[DeadProvider, ...]:
-        dead = [(unit, model) for unit in comms.registry.all_threads().values()
-                for model in CONFIG.models if unit.model == model
-                and unit.name not in CONFIG.parked | {commander}
-                and cls.failed(comms, unit) and cls.exhausted(comms, unit, model)]
+        failed = [unit for unit in comms.registry.all_threads().values()
+                  if unit.name not in CONFIG.parked | {commander} and cls.failed(comms, unit)]
+        dead = [(unit, model) for unit in failed for model in CONFIG.models
+                if unit.model == model and cls.exhausted(comms, unit, model)]
         spent = {model for _, model in dead}
         return tuple(cls(unit, working[0]) for unit, model in dead
                      if (working := [each for each in cls.following(model) if each not in spent]))
