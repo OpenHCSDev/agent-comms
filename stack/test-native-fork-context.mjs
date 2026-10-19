@@ -8,7 +8,7 @@ import {join} from 'node:path';
 const mode=process.argv[2] ?? 'fork';
 const percent=Number(process.argv[3] ?? 24);
 assert.ok(['fork','restore'].includes(mode));
-const pkg=process.env.PI_COMPACTION_TEST_PACKAGE;
+const pkg=process.env.PI_NATIVE_PACKAGE_DIR;
 assert.ok(pkg,'Matched installed native bundle required');
 const requests=[];
 const server=createServer(async(request,response)=>{
