@@ -5,7 +5,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 if TYPE_CHECKING:
     from agent_comms.presentation import CoordinationSnapshot
@@ -61,18 +61,31 @@ class ExactUnread(UnreadPresentation):
 @dataclass(frozen=True)
 class ReplyUnread(UnreadPresentation):
     count: int
-    lower_bound: bool
 
     @property
     def label(self) -> str:
-        if self.lower_bound and not self.count:
-            return ""
-        suffix = "+" if self.lower_bound else ""
-        return f"({self.count}{suffix})"
+        return f"({self.count})"
 
     @property
     def highlighted(self) -> bool:
         return bool(self.count)
+
+
+@dataclass(frozen=True)
+class CappedReplyUnread(ReplyUnread):
+    @classmethod
+    def for_count(cls, count: int) -> CappedReplyUnread:
+        return cls(count) if count else EmptyCappedReplyUnread()
+
+    @property
+    def label(self) -> str:
+        return f"({self.count}+)"
+
+
+@dataclass(frozen=True)
+class EmptyCappedReplyUnread(CappedReplyUnread):
+    count: ClassVar[int] = 0
+    label = ""
 
 
 @dataclass(frozen=True)

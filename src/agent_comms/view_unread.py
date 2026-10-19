@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from concurrent.futures import Future, ProcessPoolExecutor
 from contextlib import ExitStack, closing, contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from multiprocessing.synchronize import Event
 from pathlib import Path
 from threading import RLock
@@ -29,7 +29,7 @@ from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
 from .wire_watch import FileWatch, NativeFileWatch, WatchSource
-from .ui_model.unread import IndexingUnread, ReplyUnread, UnreadPresentation
+from .ui_model.unread import CappedReplyUnread, IndexingUnread, ReplyUnread, UnreadPresentation
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -75,7 +75,7 @@ class ReplyIndex(ReplyIndexTable, TypedTable):
 
     def counted(self, total: int, seen: int) -> Counted:
         """Coverage, not the number found, determines whether this is a lower bound."""
-        return Counted(total, self.start > seen)
+        return CappedCount(total) if self.start > seen else Counted(total)
 
     def prepare(self, revision: FileRevision, seen: int, cancelled: Event) -> ReplyIndexResult:
         """Visit at most limit newest records, stopping earlier at the read mark."""
@@ -159,7 +159,10 @@ class FileReplyCount(ABC):
     def __add__(self, other: FileReplyCount) -> FileReplyCount: ...
 
     @abstractmethod
-    def added(self, total: int, lower_bound: bool) -> FileReplyCount: ...
+    def added(self, total: int) -> FileReplyCount: ...
+
+    @abstractmethod
+    def capped(self, total: int) -> FileReplyCount: ...
 
     @abstractmethod
     def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None: ...
@@ -168,16 +171,27 @@ class FileReplyCount(ABC):
 @dataclass(frozen=True)
 class Counted(FileReplyCount):
     total: int
-    lower_bound: bool = False
 
     def __add__(self, other: FileReplyCount) -> FileReplyCount:
-        return other.added(self.total, self.lower_bound)
+        return other.added(self.total)
 
-    def added(self, total: int, lower_bound: bool) -> FileReplyCount:
-        return Counted(self.total + total, self.lower_bound or lower_bound)
+    def added(self, total: int) -> FileReplyCount:
+        return replace(self, total=self.total + total)
+
+    def capped(self, total: int) -> FileReplyCount:
+        return CappedCount(self.total + total)
 
     def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None:
-        counts[name] = ReplyUnread(self.total, self.lower_bound)
+        counts[name] = ReplyUnread(self.total)
+
+
+@dataclass(frozen=True)
+class CappedCount(Counted):
+    def __add__(self, other: FileReplyCount) -> FileReplyCount:
+        return other.capped(self.total)
+
+    def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None:
+        counts[name] = CappedReplyUnread.for_count(self.total)
 
 
 @dataclass(frozen=True)
@@ -185,7 +199,10 @@ class Indexing(FileReplyCount):
     def __add__(self, other: FileReplyCount) -> FileReplyCount:
         return self
 
-    def added(self, total: int, lower_bound: bool) -> FileReplyCount:
+    def added(self, total: int) -> FileReplyCount:
+        return self
+
+    def capped(self, total: int) -> FileReplyCount:
         return self
 
     def record(self, name: str, counts: dict[str, UnreadPresentation]) -> None:
@@ -243,7 +260,7 @@ class ReplyIndexUpdate(ReplyIndexResult):
 
 
 class ReplyPreparation:
-    """Own whether an index batch can start, publish or wake an observer."""
+    """Own source reads, their publication and completion subscriptions."""
 
     def commit(self, database: sqlite3.Connection, wanted: Collection[str]) -> None:
         pass
@@ -268,12 +285,6 @@ class ReplyPreparation:
         needed: dict[str, ReplyRead],
     ) -> ReplyPreparation:
         return self
-
-    def read_counts(
-        self, state: TranscriptReadState, viewer: str,
-        document: ReadDocument,
-    ) -> TranscriptUnread:
-        return state._counts_locked(viewer, document)
 
     def watch(
         self, previous: frozenset[Future[ReplyIndexResult]],
@@ -429,8 +440,15 @@ class TranscriptReadState(ThreadOwnedState):
 
     @property
     def preparation(self) -> ReplyPreparation:
-        """The authorized completion or its idle member for the observer's wakeup."""
+        """The source reads currently owned by this state."""
         return self._preparation
+
+    def watch(self, previous: frozenset[Future[ReplyIndexResult]],
+              on_done: Callable[[Future[ReplyIndexResult]], None]
+              ) -> frozenset[Future[ReplyIndexResult]]:
+        """Subscribe against one stable preparation while other readers may finish."""
+        with self._lock:
+            return self._preparation.watch(previous, on_done)
 
     def _close_database(self) -> None:
         self._database_resources.close()
@@ -572,12 +590,12 @@ class TranscriptReadState(ThreadOwnedState):
                 raise RuntimeError("Transcript reader is closed")
             visible = self._refresh_keys(visibility)
             try:
-                result = self._preparation.read_counts(self, viewer, document)
+                result = self._counts_locked(viewer, document, visible)
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
                     CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
-                result = self._preparation.read_counts(self, viewer, document)
+                result = self._counts_locked(viewer, document, visible)
             return TranscriptUnread(
                 {name: count for name, count in result.counts.items() if name in visible}
             )
@@ -585,12 +603,13 @@ class TranscriptReadState(ThreadOwnedState):
             self._lock.release()
 
     def _counts_locked(
-        self, viewer: str, document: ReadDocument
+        self, viewer: str, document: ReadDocument, visible: Collection[str]
     ) -> TranscriptUnread:
-        revisions = {source: revision for keys in self._thread_keys.values()
+        ordered = sorted(self._thread_keys.items(), key=lambda item: item[0] not in visible)
+        revisions = {source: revision for _, keys in ordered
                      for source, revision in keys.revisions.items()}
         if not revisions:
-            return TranscriptUnread({name: ReplyUnread(0, False) for name in self._thread_keys})
+            return TranscriptUnread({name: ReplyUnread(0) for name in self._thread_keys})
         per_file: dict[str, FileReplyCount] = {}
         seen = {}
         for source, revision in revisions.items():
