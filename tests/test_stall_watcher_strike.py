@@ -47,13 +47,13 @@ def test_a_failed_stall_pass_is_recorded_and_the_next_pass_still_runs(commander,
         if len(passes) == 1:
             raise FileNotFoundError("no commander config")
         c.goals.todos.stall_pass_succeeded()
-        raise asyncio.CancelledError
 
-    async def no_wait(seconds):
-        pass
+    async def wait(seconds):  # the watcher stops after its second pass
+        if len(passes) == 2:
+            raise asyncio.CancelledError
 
     monkeypatch.setattr(stall_watcher.StallWheelSpin, "after_stall", classmethod(after_stall))
-    monkeypatch.setattr(stall_watcher.asyncio, "sleep", no_wait)
+    monkeypatch.setattr(stall_watcher.asyncio, "sleep", wait)
     try:
         asyncio.run(stall_watcher.StallWheelSpin.watch(comms))
     except asyncio.CancelledError:

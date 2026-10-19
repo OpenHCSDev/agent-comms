@@ -128,17 +128,14 @@ class StallWheelSpin(UnownedWheelSpin, declared_name=None):
         """The running Core service makes one stall pass a minute; a pass that raises is
         recorded for the board and the next pass still runs."""
         while True:
-            stall_pass = asyncio.create_task(
-                Coordination.run_worker(lambda: cls.after_stall(comms))
+            (outcome,) = await asyncio.gather(
+                Coordination.run_worker(lambda: cls.after_stall(comms)), return_exceptions=True
             )
-            try:
-                await asyncio.wait((stall_pass,))
-            finally:
-                stall_pass.cancel()
-            if (failure := stall_pass.exception()) is not None:
-                comms.goals.todos.stall_pass_failed(
-                    StallPassFailed(time.time(), f"{type(failure).__name__}: {failure}")
-                )
+            match outcome:
+                case Exception() as failure:
+                    comms.goals.todos.stall_pass_failed(
+                        StallPassFailed(time.time(), f"{type(failure).__name__}: {failure}")
+                    )
             await asyncio.sleep(60)
 
 
