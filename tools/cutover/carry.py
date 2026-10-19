@@ -37,8 +37,8 @@ from typing import ClassVar
 
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
-from agent_comms.todos import Todo, TodoStore
 from agent_comms.store_files import _atomic_write_text
+from agent_comms.todos import Todo, TodoStore
 
 STEPS = Path("tools/cutover")
 
@@ -113,7 +113,8 @@ class RetainedBus:
     def require_applied(self, retired: frozenset[str]) -> None:
         missing = retired - set(self.applied)
         if missing:
-            raise ValueError(f"Retained bus {self.name} still needs retired steps: {sorted(missing)}")
+            raise ValueError(
+                f"Retained bus {self.name} still needs retired steps: {sorted(missing)}")
 
     @classmethod
     def record(cls, checkout: Path, root: Path) -> None:
@@ -318,7 +319,8 @@ class CarryChain:
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
-        retired_steps = frozenset(name for name in retired if Step.holds_carry(cls.source(repo, revision, name)[1]))
+        retired_steps = frozenset(
+            name for name in retired if Step.holds_carry(cls.source(repo, revision, name)[1]))
         for bus in RetainedBus.at(repo, revision):
             bus.require_applied(retired_steps)
         retired_columns = frozenset(
