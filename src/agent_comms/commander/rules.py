@@ -83,20 +83,25 @@ class RulesVerb(CommanderVerb):
 
 
 class ReviewVerb(RulesVerb):
+    help = "print the standing rules and draw the required review"
+
     def run(self) -> None:
         review(self.who)
 
 
 @dataclass(frozen=True, kw_only=True)
 class AnswerVerb(RulesVerb):
-    n: int = option()
-    text: str = option()
+    help = "answer a drawn rule for the acting commander"
+    n: int = option("n", help="the drawn rule number")
+    text: str = option("text", help="how this tick obeys or breaks that rule")
 
     def run(self) -> None:
         answer(self.n, self.text, self.who)
 
 
 class StaleVerb(RulesVerb):
+    help = "show whether the acting commander's rule review is due"
+
     def run(self) -> None:
         print('\n'.join(due.why for due in RulesDue.violations(COMMS, self.who)) or 'fresh')
 

@@ -23,7 +23,7 @@ from .field_codec import FieldCodec
 from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
-from .transcript_events import TranscriptEvent, TurnDigest
+from .transcript_events import TranscriptEvent, TurnDigest, ToolStartTranscript
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
 from .typed_table import Column, ForeignKey, Index, RealStorage, StoreWriter, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
@@ -194,7 +194,8 @@ class ExternalEventRow(TypedTable):
     call_id: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool_call_id')")})
 
     foreign_keys = (ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),)
-    indexes = (Index(("thread", "kind", "tool", "timestamp", "call_id")),)
+    indexes = (Index(("thread", "kind", "tool", "timestamp", "call_id")),
+               Index(("thread", "kind", "seq", "ordinal")),)
 
     @classmethod
     def append(cls, connection, thread, seq, events) -> None:
@@ -408,6 +409,17 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def source_paths(cls, root: Path) -> tuple[Path, ...]:
         database = cls.path_in(root)
         return database, database.with_name(database.name + "-wal")
+
+    def last_tool_call(self) -> EventTime:
+        """One indexed newest-first event read; absence remains explicitly unrecorded."""
+        with self.snapshot() as connection:
+            row = connection.execute(
+                f'SELECT timestamp FROM "{ExternalEventRow.declared_name}" '
+                'WHERE thread=? AND kind=? ORDER BY seq DESC,ordinal DESC LIMIT 1',
+                (self.lookup, ToolStartTranscript.declared_name),
+            ).fetchone()
+        return (UnrecordedEventTime() if row is None else
+                FieldCodec.decode(Annotated[EventTime, GeneratedTimestamp], row[0]))
 
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:
