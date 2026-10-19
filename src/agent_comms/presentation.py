@@ -615,7 +615,8 @@ class ThreadRecord(CliResult):
 
     @projected(view="presence")
     def activity_detail(self) -> str:
-        return self.activity.detail
+        shown = self.activity.presentation(self.thread.display_title)
+        return " · ".join(part for part in (self.activity.detail, *shown.status.details) if part)
 
 
 @dataclass(frozen=True, slots=True)

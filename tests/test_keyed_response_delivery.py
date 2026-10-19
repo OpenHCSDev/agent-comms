@@ -17,6 +17,7 @@ from agent_comms.proven_source_coverage import SourceCoverage
 from agent_comms.threads import Thread
 from agent_comms.wake_policy import BoundedTriageWake
 from test_coordination_response import _ready
+from bus_history import read_history
 
 
 @pytest.mark.asyncio
@@ -74,7 +75,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         await _accept_visible_deliveries(
             case.bus, case.root_id, case.store.session.path, lookup, 0, owner_name="sender"
         )
-        assert len(list(case.bus.full_history_page().messages)) == 2
+        assert len(read_history(case.comms)) == 2
         assert sealed_cohort_assignments(case.store, lookup) == assignments
     finally:
         case.close()
@@ -133,7 +134,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         case.bus.log.write_metadata_unlocked(marker)
         with pytest.raises((ValueError, RelationViolationError)):
             if reader == "unchecked":
-                list(case.bus.full_history_page().messages)
+                read_history(case.comms)
             else:
                 install_private_bus_checkpoint(case.bus.log)
     finally:
@@ -229,7 +230,7 @@ def test_new_policy_declaration_uses_full_and_checked_record_readers(tmp_path):
         marker.checkpoint_seal = None
         case.bus.log.write_metadata_unlocked(marker)
         case.bus.log.path.write_text(json.dumps(raw) + "\n")
-        public = list(case.bus.full_history_page().messages)
+        public = read_history(case.comms)
         assert len(public) == 1
         install_private_bus_checkpoint(case.bus.log)
         with case.bus.log.checked_read() as source:
@@ -264,7 +265,7 @@ def test_duplicate_json_key_is_typed_and_never_enters_unchecked_read(tmp_path):
         case.bus.log.path.write_text(raw)
         before = case.bus.log.path.read_bytes()
         with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
-            list(case.bus.full_history_page().messages)
+            read_history(case.comms)
         assert type(raised.value.__cause__) is MalformedRecord
         assert 'Duplicate JSON field' in str(raised.value.__cause__)
         assert case.bus.log.path.read_bytes() == before
