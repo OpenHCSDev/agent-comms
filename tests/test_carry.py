@@ -533,6 +533,7 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(
     from agent_comms.channels import ANY_CHANNEL
     from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
 
+    comms.registry.declare(comms.registry.new_thread("user", frozenset(), str(comms.root)))
     comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
     if registered:
         reviews = RuleReviews(comms.root)
