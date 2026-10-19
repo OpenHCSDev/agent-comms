@@ -73,7 +73,7 @@ from .task_sources import (
     TaskScopeSelection, OriginalTaskChange,
 )
 from .order_work import OrderWork
-from .turn_digests import LastTurns, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
+from .turn_digests import LastTurns, OrderEditCountRead, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
 from .tool_output import (
@@ -774,17 +774,23 @@ class CommsUnjudgedTool(ThreadReadTool):
     label = "Unjudged edits"
     description = "Read original edit calls since each open order, excluding that order's recorded verdicts."
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
-        commander = comms.registry.require(caller.subject(self.thread)).incarnation
-        edits = []
-        for todo in comms.goals.todos.held_for_commander(commander):
+    @classmethod
+    def readers(cls, comms: Comms, commander: str, read_type=OrderEditsRead):
+        actor = comms.registry.require(commander).incarnation
+        for todo in comms.goals.todos.held_for_commander(actor):
             assignment = todo.held()
             holder = comms.registry.require(assignment.owner)
             if holder.incarnation != assignment.owner_identity:
                 raise ValueError(f"Order {todo.id} holder incarnation no longer exists")
-            read = TurnDigestRead(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")))
-            edits.extend(read.unjudged(todo))
-        return UnjudgedEdits(tuple(edits))
+            yield read_type(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")), todo)
+
+    @classmethod
+    def count(cls, comms: Comms, commander: str) -> int:
+        return sum(read.read() for read in cls.readers(comms, commander, OrderEditCountRead))
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> UnjudgedEdits:
+        return UnjudgedEdits(tuple(edit for read in self.readers(comms, caller.subject(self.thread))
+                                  for edit in read.read()))
 
 
 @dataclass(frozen=True, kw_only=True)

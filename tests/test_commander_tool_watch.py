@@ -25,6 +25,11 @@ def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
     assert turns["worker"] == ["edit a.py: -old text +new", "write b.py: body line", "bash ls -la"]
 
 
+def test_coordination_call_uses_its_presentation_record(tool_watch):
+    call = tool_watch.decoded('comms_threads', {}, 'coordination-1')
+    assert tool_watch.digest_line('comms_threads', {}, call).strip() == 'comms_threads'
+
+
 def test_a_line_core_refuses_is_reported_with_its_file_and_offset(tool_watch, commander, capsys):
     comms, _ = commander
     whole = json.dumps({"type": "message", "id": "m1", "timestamp": "2026-10-18T22:00:00.000Z",

@@ -9,11 +9,27 @@ from math import isfinite
 from typing import TYPE_CHECKING, TypeVar
 
 from .declared_family import DeclaredFamily
+from .field_codec import FieldCodec, FieldRepresentation
 
 if TYPE_CHECKING:
     from .transcript_events import TranscriptEvent
 
 Event = TypeVar("Event", bound="TranscriptEvent")
+
+
+class GeneratedTimestamp(FieldRepresentation):
+    """Read a generated SQL timestamp as its recorded or unrecorded fact."""
+
+    accepts_null = True
+
+    @classmethod
+    def decode(cls, value: object) -> EventTime:
+        timestamp = FieldCodec.decode(float | None, value)
+        return UnrecordedEventTime() if timestamp is None else RecordedEventTime(timestamp)
+
+    @classmethod
+    def encode(cls, value: object) -> object:
+        raise TypeError("A generated timestamp is read from its event, never written")
 
 
 @dataclass(frozen=True)

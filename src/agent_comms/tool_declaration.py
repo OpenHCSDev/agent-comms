@@ -56,10 +56,7 @@ class ToolDeclaration(DeclaredFamily, affix="Tool"):
         if cls.family_discriminator in arguments:
             raise SelectedToolDenied("Native arguments cannot contain a family selector")
         selected = {cls.family_discriminator: cls.declared_name}
-        try:
-            return FieldCodec.decode(cls, {**selected, **arguments})
-        except MalformedRecord as error:
-            raise SelectedToolDenied(f"Invalid {cls.declared_name} arguments: {error}") from error
+        return FieldCodec.decode(cls, {**selected, **arguments})
 
     @classmethod
     def record(cls, name: str, arguments: object) -> ToolDeclaration | None:
