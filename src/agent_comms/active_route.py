@@ -136,8 +136,6 @@ def resolve_comms_route(root: CommsRoute | Path | str | None = None) -> CommsRou
         return root
     if root is not None:
         return LocalRoute(Path(root).expanduser().absolute())
-    if "AGENT_COMMS_ROOT" in os.environ:
-        return LocalRoute(Path(os.environ["AGENT_COMMS_ROOT"]).expanduser().absolute())
     return read_active_route() or LocalRoute(Path.home() / ".agent-comms")
 
 
