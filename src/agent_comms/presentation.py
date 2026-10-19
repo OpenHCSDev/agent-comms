@@ -41,7 +41,8 @@ from .notification_assignment import NotificationAssignment
 from .notification_progress import DeliveryProgress, HumanReadProgress, ReadDelivery
 from .pi_counts import PiCount
 from .private_path import FileRevision
-from .read_basis import AnonymousViewer, ChannelDisplayScope, DisplayViewer, NamedViewer, ReadCursor
+from .read_basis import (AnonymousViewer, CapturedSelection, ChannelDisplayScope, DisplayViewer,
+                         NamedViewer)
 from .read_ledger import ReadLedger
 from .recorded_bus import RecordedBusIdentity
 from .registry_document import DEFAULT_ROSTER, RosterVisibility
@@ -69,7 +70,7 @@ if TYPE_CHECKING:
     from .message_bus import MessageBus
     from .messages import Message
     from .notification_assignment import NotificationAssignmentRead
-    from .read_ledger import ReadDocument, ReadLedger
+    from .read_ledger import ReadLedger
     from .registration import Registration
     from .registry_document import RegistrySnapshot
     from .registry_provenance import RegistryProvenance
@@ -349,65 +350,6 @@ class SentMessageOutcome(MessageNotification):
     message: Message = field(kw_only=True)
 
 
-@dataclass(frozen=True, slots=True)
-class DisplaySelection:
-    """One captured registry/catalog/read basis for local human presentation."""
-
-    registry: RegistrySnapshot
-    catalog: CatalogDocument
-    viewer: DisplayViewer
-    seen: ReadCursor
-    document: ReadDocument
-
-    @classmethod
-    def capture(
-        cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
-        reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
-    ) -> DisplaySelection:
-        viewer = viewer.resolve(snapshot)
-        return cls(snapshot, catalog, viewer, viewer.cursor(reads, snapshot, document), document)
-
-    @classmethod
-    @contextmanager
-    def reading(
-        cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: DisplayViewer,
-    ) -> Iterator[DisplaySelection]:
-        """Borrow the original identity resources and read the ledger once.
-
-        Finish reading the ledger before yielding: painted acknowledgement may
-        write that same ledger while identity and membership remain acquired.
-        """
-        with registry.store.reading() as document, catalog.reading() as channels:
-            with reads.reading() as read_document:
-                selected = cls.capture(
-                    document.snapshot(), channels, reads, read_document, viewer
-                )
-            yield selected
-
-    @property
-    def channels(self) -> Channels:
-        return self.catalog.views(self.registry.threads)
-
-    @property
-    def scopes(self) -> tuple[ChannelDisplayScope, ...]:
-        return tuple(
-            ChannelDisplayScope.capture(channel, self.registry)
-            for channel in self.channels.values()
-        )
-
-    @property
-    def viewer_names(self) -> frozenset[str]:
-        return self.viewer.names(self.registry)
-
-    def require_viewer(self) -> str:
-        return self.viewer.require_name(self.registry)
-
-    def scope(self, target: str) -> ChannelDisplayScope:
-        channel = self.catalog.require_channel(target, self.registry.threads)
-        return ChannelDisplayScope.capture(channel, self.registry)
-
-
 class ChannelReadMark(ABC):
     """A read request carries its own source cut and displayed-message selection."""
 
@@ -425,7 +367,7 @@ class ReadAll(ChannelReadMark):
     @contextmanager
     def reading(self, presentation, target, viewer):
         with presentation.bus.log.opened_wire_snapshot() as source:
-            with DisplaySelection.reading(
+            with CapturedSelection.reading(
                 presentation.registry, presentation.catalog, presentation.bus.reads,
                 NamedViewer(viewer),
             ) as basis:
@@ -444,7 +386,7 @@ class ReadThrough(ChannelReadMark):
 
     @contextmanager
     def reading(self, presentation, target, viewer):
-        with DisplaySelection.reading(
+        with CapturedSelection.reading(
             presentation.registry, presentation.catalog, presentation.bus.reads,
             NamedViewer(viewer),
         ) as basis:
@@ -478,7 +420,7 @@ class BusPresentation:
         return index
 
     @contextmanager
-    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[DisplaySelection, WireSnapshot]]:
+    def snapshot(self, viewer: NamedViewer) -> Iterator[tuple[CapturedSelection, WireSnapshot]]:
         """Check the display index before borrowing the bus-owned source cut."""
         self.display_index(viewer.name)
         with self.bus.snapshot(viewer) as selected:
@@ -488,7 +430,7 @@ class BusPresentation:
         self, viewer: str, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
-        with DisplaySelection.reading(
+        with CapturedSelection.reading(
             self.registry, self.catalog, self.bus.reads, NamedViewer(viewer)
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
@@ -513,14 +455,15 @@ class BusPresentation:
         with ExitStack() as resources:
             with _store_lock(self._wire_lock_path, mode=SharedLock()):
                 source = resources.enter_context(self.bus.log.opened_wire_snapshot())
-                with DisplaySelection.reading(
+                with CapturedSelection.reading(
                     self.registry, self.catalog, self.bus.reads, viewer
                 ) as basis:
                     scope = basis.scope(target.name)
             # Reading identity is separate from preparing pages. Both
             # DM and channel pages borrow the same original reader and source cut.
             page = ConversationMessagePageRequest(scope, bounds).read_opened(source)
-            return replace(page, display_scope=basis.viewer.displayed_scope(scope, page, basis, self))
+            displayed = basis.viewer.displayed_scope(scope, page, basis, self.bus)
+            return replace(page, display_scope=displayed)
 
     def mark_channel_read(
         self,
@@ -534,7 +477,7 @@ class BusPresentation:
     def display_view_metrics(
         self,
         source: WireSnapshot,
-        basis: DisplaySelection,
+        basis: CapturedSelection,
     ) -> tuple[Mapping[str, ChannelActivity], Mapping[str, int]]:
         """Activity and human unread from one validated, already-opened bus boundary.
 
