@@ -13,7 +13,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 from .cli_result import CliResult
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .goals import Goal, NoGoal
 from .message_reference import MessageReference
 from .native_session_reopen import NativeSessionIdentity
 from .peer_relevance import AlwaysListed, GoalShown, PeerRelevance
@@ -901,12 +900,12 @@ class PeerState:
 
     @classmethod
     def from_view(cls, view: ThreadView, relation: PeerRelation, goals) -> PeerState:
-        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else NoGoal()
+        goal = view.thread.goal.active() if relation.relevance.grants(GoalShown) else goal_records.NoGoal()
         return cls(
             view.thread.name,
             relation.relevance,
             relation.note,
-            goal.instructions(goal.order.todos(goals, view.thread.incarnation, goal.id)) if goal.is_set() else None,
+            goal.require().instructions(goal.require().order.todos(goals, view.thread.incarnation, goal.require().id)) if goal.is_set() else None,
         )
 
 
@@ -954,13 +953,16 @@ class CoordinationSegment(InstructionSegment):
             peers=json.dumps(FieldCodec.encode(self.peers), separators=(",", ":")),
         )
 
+from . import goals as goal_records
+
+
 @dataclass(frozen=True, kw_only=True)
 class GoalSegment(InstructionSegment):
-    goal: Goal
+    goal: goal_records.Goal
     orders_text: str = ""
 
     @classmethod
-    def capture(cls, owner: Thread, goal: Goal, goals) -> GoalSegment:
+    def capture(cls, owner: Thread, goal: goal_records.Goal, goals) -> GoalSegment:
         todos = goal.order.todos(goals, owner.incarnation, goal.id)
         orders_text = goal.order.instructions(todos)
         revision = hashlib.sha256(json.dumps(FieldCodec.encode((goal, orders_text))).encode()).hexdigest()

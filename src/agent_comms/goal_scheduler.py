@@ -91,6 +91,7 @@ class GoalScheduler:
                 goal = thread.goal.active()
                 if not goal.is_set():
                     return
+                goal = goal.require()
                 if not self.comms.goals.goal_wait(thread.name).allows_routed_input():
                     return
                 if self.pending_goal_origins.get(thread.name) == goal.id:
@@ -133,7 +134,7 @@ class GoalScheduler:
             SetGoalAction(text=text, expect=GoalPrecondition(expected_owner=ProcessIdentity.capture(os.getpid()))),
             actor=OwnerInvocable,
         ))
-        assert goal
+        goal = goal.require()
         await self.schedule_goal(session_id)
         return goal
 
@@ -160,7 +161,7 @@ class GoalScheduler:
         ))
         assert edited is not None
         await self.sessions.config.sync_thread(session_id)
-        return edited
+        return edited.require()
 
     async def update_goal(
         self, session_id: str, action: type[GoalAction], goal_id: str, expected_revision: int
@@ -215,7 +216,7 @@ class GoalScheduler:
         # turn finishes; reserved/claimed attempts remain unretryable above.
         await self.schedule_goal(session_id)
         await self.sync_goal_execution(session_id, name)
-        return resumed
+        return resumed.require()
 
     def in_standby(self, session_id: str) -> bool:
         snapshot = self.goal_snapshots.get(session_id)

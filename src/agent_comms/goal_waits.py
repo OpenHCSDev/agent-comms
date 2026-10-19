@@ -7,7 +7,6 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 
-from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
 from .goal_presentation import (
     GoalExecution,
@@ -16,16 +15,17 @@ from .goal_presentation import (
     IdleGoalExecution,
     ThreadGoalExecution,
 )
-from .goals import Goal, GoalDeclaration
 from .input_attempt import StoredInput, UnresolvedInput
 from .locked_store import LockedStore, RootFile
-from .registry_document import RegistrySnapshot
 from .thread_identity import RecordedThreadIncarnation
 from .thread_owned_state import ThreadOwnedState
-from .wire_log import WireLog
 
 if TYPE_CHECKING:
+    from .bus_publication import CommittedDelivery
     from .agent_activity import AgentActivity
+    from .goals import Goal, GoalDeclaration
+    from .registry_document import RegistrySnapshot
+    from .wire_log import WireLog
     from .threads import Thread
 
 
@@ -317,7 +317,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         """Resolve absence once beside the goal/wait acquisition."""
         if not goal.is_set():
             return IdleGoalExecution()
-        return cls.for_goal(goal, rows).project(goal, snapshot, agents)
+        return cls.for_goal(goal.require(), rows).project(goal.require(), snapshot, agents)
 
     @staticmethod
     def closed_wait_group(
@@ -343,10 +343,10 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
             seen.add(name)
             thread = snapshot.threads[name]
             goal = thread.goal.active()
-            wait = rows.get(goal.id) if goal.is_set() else None
+            wait = rows.get(goal.require().id) if goal.is_set() else None
             if wait is not None and (
                 not goal.is_set()
-                or not wait.current_for(goal, thread.incarnation.require_recorded())
+                or not wait.current_for(goal.require(), thread.incarnation.require_recorded())
             ):
                 wait = None
             dependencies = targets if name == owner else (wait.targets if wait is not None else ())
@@ -360,13 +360,13 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
                     continue
                 peer_goal = peer.goal.active()
                 peer_wait = (
-                    rows.get(peer_goal.id)
+                    rows.get(peer_goal.require().id)
                     if peer_goal.is_set()
                     else None
                 )
                 if peer_wait is not None and (
                     not peer_goal.is_set()
-                    or not peer_wait.current_for(peer_goal, peer.incarnation.require_recorded())
+                    or not peer_wait.current_for(peer_goal.require(), peer.incarnation.require_recorded())
                 ):
                     peer_wait = None
                 if agents.is_working(target.incarnation, snapshot):

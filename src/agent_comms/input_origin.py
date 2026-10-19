@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import field, dataclass
 from typing import TYPE_CHECKING, Annotated
 
-from .bus_publication import HumanOrigin
+from . import bus_publication
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .goals import GoalCheckpoint
+from . import goals
 from .message_reference import MessageReference
 from .thread_identity import ClaimedIdentity
 from .wire_metadata import WireRootIdText
@@ -97,10 +97,10 @@ class HumanInputOrigin(InputOrigin):
     """
 
     root_id: Annotated[str, WireRootIdText]
-    author: HumanOrigin
+    author: bus_publication.HumanOrigin
     claim_scope: ClaimedIdentity = field(metadata={"wire_name": 'admission'})
     project: str
-    goal: GoalCheckpoint
+    goal: goals.GoalCheckpoint
 
     @classmethod
     def capture(cls, comms: Comms, claim_scope: ClaimedIdentity) -> HumanInputOrigin:
@@ -115,7 +115,7 @@ class HumanInputOrigin(InputOrigin):
             root_id = comms.bus.log.read_metadata_unlocked().wire_root_id
             root_id = WireRootIdText.decode(root_id)
             user = comms.messaging._user_identity_under_wire_lock(owner.worktree)
-            return cls(root_id, HumanOrigin(user.name, user.created_at, user.worktree),
+            return cls(root_id, bus_publication.HumanOrigin(user.name, user.created_at, user.worktree),
                        claim_scope, owner.worktree, owner.goal.captured)
 
     @property

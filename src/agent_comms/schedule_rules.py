@@ -93,7 +93,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.goal.active()
                 if goal.is_set():
-                    pending = [turn for turn in pending if turn.goal_id == goal.id]
+                    pending = [turn for turn in pending if turn.goal_id == goal.require().id]
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)
@@ -115,7 +115,7 @@ class WakeScheduleCheck(SessionScheduleCheck):
                     pending[0].require_dependency_wake(error)
                     await Coordination.run_worker(partial(inputs.comms.goals.block_goal_after_failed_turn,
                         owner.name,
-                        started_goal=goal,
+                        started_goal=goal.require(),
                         expected_worktree=owner.worktree,
                         diagnostic=(
                             "Standby wake launch authority unavailable; inspect the UNKNOWN "

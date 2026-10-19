@@ -8,20 +8,21 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Literal
 
+from . import goal_waits, retained_task_facts, task_sources, turn_context
 from .child_process import ExitedOutcome
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord, NullMember, RecordMember, SubclassUnion
 from .goal_states import ActiveGoal, GoalState
 from .registration_inheritance import RegistrationInheritance
+from .text_digest import TextDigest
 from .thread_identity import RecordedThreadIncarnation, ThreadIncarnation
 from .ui_model.goal import GoalDisplay
 
 if TYPE_CHECKING:
     from .goal_presentation import ThreadGoalExecution
-
-if TYPE_CHECKING:
     from .goal_management import Goals
+    from .threads import Thread
     from .todos import Todo
 
 
@@ -136,8 +137,6 @@ class GoalMentionSource:
     bindings: tuple[GoalMentionBinding, ...]
 
     def __post_init__(self) -> None:
-        from .text_digest import TextDigest
-
         GoalRevision(self.goal_id, self.text_revision)
         TextDigest(self.text_digest)
         RecordedThreadIncarnation(self.owner_name, self.owner_created_at)
@@ -147,9 +146,7 @@ class GoalMentionSource:
         return GoalRevision(self.goal_id, self.text_revision)
 
     @property
-    def digest(self):
-        from .text_digest import TextDigest
-
+    def digest(self) -> TextDigest:
         return TextDigest(self.text_digest)
 
     @property
@@ -367,63 +364,72 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
         return self
 
     @property
-    @abstractmethod
-    def shows_document(self) -> bool: ...
+    def can_control(self) -> bool:
+        return self.visible
 
     @property
-    @abstractmethod
-    def shows_progress(self) -> bool: ...
+    def shows_document(self) -> bool:
+        return self.visible
 
     @property
-    @abstractmethod
-    def objective(self) -> str: ...
+    def shows_progress(self) -> bool:
+        return False
 
     @property
-    @abstractmethod
-    def progress(self) -> str: ...
+    def objective(self) -> str:
+        return ""
+
+    @property
+    def progress(self) -> str:
+        return ""
 
     def unavailable_heading(self) -> str:
         return "Goal state unavailable"
 
-    def task_scope(self, project):
-        from .task_sources import TurnTaskScope
-        return TurnTaskScope(project=project)
+    def task_scope(self, project: str) -> task_sources.TaskScope:
+        return task_sources.TurnTaskScope(project=project)
 
-    def context_segments(self, thread, goals):
+    def context_segments(self, thread: Thread, goals: Goals) -> tuple[turn_context.ContextSegment, ...]:
         return ()
 
-    def task_facts(self):
+    def task_facts(self) -> tuple[retained_task_facts.ExactTaskFact, ...]:
         return ()
 
-    def wake_context(self):
+    def wake_context(self) -> dict[str, object] | None:
         return None
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return self
 
-    def require_replacement(self, goals, owner) -> None:
-        pass
-
-    def require_order_slot(self, goal_id: str) -> None:
+    def require_replacement(self, goals: Goals, owner: ThreadIncarnation) -> None:
         pass
 
     def require(self) -> Goal:
         raise RelationViolationError("No goal is set for this thread.")
 
-    @abstractmethod
-    def require_id(self, goal_id: str) -> Goal: ...
+    def require_id(self, goal_id: str) -> Goal:
+        raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
 
-    @abstractmethod
-    def reported_id(self) -> str | None: ...
+    def reported_id(self) -> str | None:
+        return None
 
-    @abstractmethod
-    def require_state(self, expected: GoalState) -> None: ...
+    def require_state(self, expected: GoalState) -> None:
+        raise ValueError("This goal is no longer active; refresh its state.")
 
-    @abstractmethod
-    def wait(self, waits): ...
+    def wait(self, waits: goal_waits.GoalWaits) -> goal_waits.GoalWait:
+        return goal_waits.NoGoalWait()
 
-    @abstractmethod
-    def clear_wait(self, waits) -> bool: ...
+    def clear_wait(self, waits: goal_waits.GoalWaits) -> bool:
+        return False
+
+    def standby(self, execution: ThreadGoalExecution) -> bool:
+        return False
+
+    def heading(self, execution: ThreadGoalExecution) -> str:
+        return "No current goal"
+
+    def action_failure(self, error: Exception) -> str:
+        return "This goal has been cleared."
 
     def require_active(self) -> Goal:
         goal = self.require()
@@ -454,54 +460,7 @@ class GoalDeclaration(GoalDisplay, SubclassUnion, RegistrationInheritance["GoalD
 
 @dataclass(frozen=True)
 class NoGoal(NullMember, GoalDeclaration):
-    def require_id(self, goal_id: str) -> Goal:
-        raise RelationViolationError("This goal was replaced or cleared; refresh its state.")
-
-    def reported_id(self) -> None:
-        return None
-
-    def require_state(self, expected: GoalState) -> None:
-        raise ValueError("This goal is no longer active; refresh its state.")
-
-    def wait(self, waits):
-        from .goal_waits import NoGoalWait
-        return NoGoalWait()
-
-    def clear_wait(self, waits) -> bool:
-        return False
-
-    @property
-    def can_control(self) -> bool:
-        return False
-
-    @property
-    def visible(self) -> bool:
-        return False
-
-    @property
-    def shows_document(self) -> bool:
-        return False
-
-    @property
-    def shows_progress(self) -> bool:
-        return False
-
-    @property
-    def objective(self) -> str:
-        return ""
-
-    @property
-    def progress(self) -> str:
-        return ""
-
-    def standby(self, execution: ThreadGoalExecution) -> bool:
-        return False
-
-    def heading(self, execution: ThreadGoalExecution) -> str:
-        return "No current goal"
-
-    def action_failure(self, error: Exception) -> str:
-        return "This goal has been cleared."
+    visible = False
 
 
 @dataclass(frozen=True)
@@ -535,10 +494,6 @@ class Goal(RecordMember, GoalDeclaration):
         return not self.state.active and super().defers_following_to(current)
 
     @property
-    def shows_document(self) -> bool:
-        return True
-
-    @property
     def shows_progress(self) -> bool:
         return self.progress != Goal.progress
 
@@ -547,18 +502,9 @@ class Goal(RecordMember, GoalDeclaration):
         return self.text
 
     def details_heading(self, execution: ThreadGoalExecution) -> str:
-        heading = self.heading(execution)
-        if self.standby(execution):
-            return f"{heading} · {execution.state.view.standby_detail(execution)}"
-        return heading
+        return execution.details_heading(self.heading(execution))
 
-    @property
-    def can_control(self) -> bool:
-        return True
-
-    @property
-    def visible(self) -> bool:
-        return True
+    visible = True
 
     def standby(self, execution: ThreadGoalExecution) -> bool:
         return execution.waiting_for(self)
@@ -573,27 +519,20 @@ class Goal(RecordMember, GoalDeclaration):
     def unavailable_heading(self) -> str:
         return "Goal state unavailable · last confirmed snapshot"
 
-    def task_scope(self, project):
-        from .task_sources import GoalTaskScope
-        return GoalTaskScope(project=project, goal=self.checkpoint)
+    def task_scope(self, project: str) -> task_sources.TaskScope:
+        return task_sources.GoalTaskScope(project=project, goal=self.checkpoint)
 
-    def context_segments(self, thread, goals):
-        from .turn_context import GoalSegment
-        return (GoalSegment.capture(thread, self, goals),)
+    def context_segments(self, thread: Thread, goals: Goals) -> tuple[turn_context.ContextSegment, ...]:
+        return (turn_context.GoalSegment.capture(thread, self, goals),)
 
-    def task_facts(self):
-        from .retained_task_facts import GoalTaskFact
-        return (GoalTaskFact(self),)
+    def task_facts(self) -> tuple[retained_task_facts.ExactTaskFact, ...]:
+        return (retained_task_facts.GoalTaskFact(self),)
 
-    def wake_context(self):
+    def wake_context(self) -> dict[str, object]:
         return {"text": self.text, "status": self.state.declared_name, "progress": self.progress}
 
     def continued_by(self, current: GoalDeclaration) -> GoalDeclaration:
         return current.matching(self.id)
-
-    def require_order_slot(self, goal_id: str) -> None:
-        if self.id != goal_id:
-            self.state.require_order_slot()
 
     def require(self) -> Goal:
         return self
@@ -610,10 +549,10 @@ class Goal(RecordMember, GoalDeclaration):
         if self.state != expected:
             raise ValueError(self.state.activity_refusal())
 
-    def wait(self, waits):
+    def wait(self, waits: goal_waits.GoalWaits) -> goal_waits.GoalWait:
         return waits.for_goal(self, waits.read())
 
-    def clear_wait(self, waits) -> bool:
+    def clear_wait(self, waits: goal_waits.GoalWaits) -> bool:
         return waits.clear(self.id)
 
     def matching(self, goal_id: str) -> GoalDeclaration:
@@ -629,16 +568,16 @@ class Goal(RecordMember, GoalDeclaration):
     def captured(self) -> GoalCheckpoint:
         return PresentGoalCheckpoint(self.checkpoint)
 
-    def instructions(self, todos) -> str:
+    def instructions(self, todos: tuple[Todo, ...]) -> str:
         return self.render_instructions(self.order.instructions(todos))
 
     def render_instructions(self, orders_text: str) -> str:
         return "\n\n".join(part for part in (self.text, orders_text) if part)
 
-    def require_order(self, goals, owner) -> None:
+    def require_order(self, goals: Goals, owner: ThreadIncarnation) -> None:
         self.order.require_order(self, goals, owner)
 
-    def require_replacement(self, goals, owner) -> None:
+    def require_replacement(self, goals: Goals, owner: ThreadIncarnation) -> None:
         self.order.require_replacement(self, goals, owner)
 
     def after_failed_turn(self, diagnostic: str) -> Goal:

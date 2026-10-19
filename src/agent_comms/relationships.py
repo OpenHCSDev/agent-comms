@@ -725,7 +725,7 @@ class ThreadRelationships:
             goal = owner.goal.active()
             if not goal.is_set():
                 continue
-            source = goal.mention_source
+            source = goal.require().mention_source
             # Missing historical evidence grants no contact or current-name binding.
             if source is None:
                 continue

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .goals import Goal
+from . import goals
 from .input_attempt import StoredInput
 from .messages import Message
 from .message_reference import MessageReference
@@ -182,7 +182,7 @@ class ClaimTaskFact(ExactTaskFact):
 
 @dataclass(frozen=True)
 class GoalTaskFact(ExactTaskFact):
-    source: Goal
+    source: goals.Goal
 
 
 @dataclass(frozen=True)

@@ -17,11 +17,7 @@ from .goal_states import (
     PausedGoal,
     UnrecordedBlockGoal,
 )
-from .goals import (
-    Goal,
-    GoalCheckpoint,
-    GoalDeclaration,
-)
+from . import goals
 from .thread_identity import RecordedThreadIncarnation
 from .thread_presentation import ThreadPresentation
 
@@ -57,9 +53,6 @@ class StateExecutionPresentation(ExecutionPresentation):
 
 class StandbyExecutionPresentation(ExecutionPresentation):
     waiting = True
-
-    def standby_detail(self, execution: GoalExecution) -> str:
-        return self.render(execution)[1]
 
     def waiting_presentation(self, execution: GoalExecution, ordinary: ThreadPresentation) -> ThreadPresentation:
         return execution.presentation(ordinary.title)
@@ -128,10 +121,13 @@ class ThreadGoalExecution(SubclassUnion):
     def standby(self) -> bool: ...
 
     @abstractmethod
-    def waiting_for(self, goal: Goal) -> bool: ...
+    def waiting_for(self, goal: goals.Goal) -> bool: ...
 
     @abstractmethod
-    def validate_goal(self, goal: GoalCheckpoint) -> None: ...
+    def validate_goal(self, goal: goals.GoalCheckpoint) -> None: ...
+
+    def details_heading(self, heading: str) -> str:
+        return heading
 
 
 @dataclass(frozen=True)
@@ -152,11 +148,14 @@ class GoalExecution(RecordMember, ThreadGoalExecution):
     def standby(self) -> bool:
         return self.state.view.waiting
 
-    def waiting_for(self, goal: Goal) -> bool:
+    def waiting_for(self, goal: goals.Goal) -> bool:
         return goal.state.active and self.goal_id == goal.id and self.standby()
 
-    def validate_goal(self, goal: GoalCheckpoint) -> None:
+    def validate_goal(self, goal: goals.GoalCheckpoint) -> None:
         goal.require_identity(self.goal_id)
+
+    def details_heading(self, heading: str) -> str:
+        return f"{heading} · {self.state.view.render(self)[1]}" if self.standby() else heading
 
 
 @dataclass(frozen=True)
@@ -169,10 +168,10 @@ class IdleGoalExecution(NullMember, ThreadGoalExecution):
     def standby(self) -> bool:
         return False
 
-    def waiting_for(self, goal: Goal) -> bool:
+    def waiting_for(self, goal: goals.Goal) -> bool:
         return False
 
-    def validate_goal(self, goal: GoalCheckpoint) -> None:
+    def validate_goal(self, goal: goals.GoalCheckpoint) -> None:
         pass
 
 
@@ -183,7 +182,7 @@ class GoalSnapshot:
     The execution, when present, schedules exactly this goal.
     """
 
-    goal: GoalDeclaration
+    goal: goals.GoalDeclaration
     execution: ThreadGoalExecution
 
     @classmethod

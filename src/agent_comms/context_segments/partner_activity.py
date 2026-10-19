@@ -36,6 +36,7 @@ class PartnerGoalChange:
         goal = entry.after
         if not goal.is_set():
             return cls(peer, entry.observed_at, None, None, "")
+        goal = goal.require()
         return cls(peer, entry.observed_at, goal.checkpoint, type(goal.state), goal.progress)
 
 

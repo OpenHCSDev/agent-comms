@@ -18,6 +18,7 @@ from .goal_actions import BlockedGoalAction, GoalPrecondition
 from .goal_attempts import GoalAttemptError, GoalAttemptStore, LaunchPermit, StaleAttemptError
 from .goal_failure_observation import FailedTurnObservation
 from .goal_states import ActiveGoal, CompletedGoal, PausedGoal
+from .goals import NoGoal
 from .mro_dispatch import MroDispatch, handles
 from .store_files import _store_lock
 
@@ -127,7 +128,7 @@ class TurnGoalAccount:
     def provider_usage(self, event: events.ProviderUsage) -> None:
         goal = self.comms.registry.require(self.thread_name).goal
         goal_id = goal.active().reported_id()
-        permit = self.originated.get(goal_id)
+        permit = self.originated.get(goal_id) if goal_id is not None else None
         if (
             permit is None
             and self.permit is not None
@@ -149,8 +150,9 @@ class TurnGoalAccount:
         with _store_lock(self.comms._wire_lock_path):
             owner = self.comms.registry.snapshot().require(self.owner.name)
             goal = owner.goal
-            if not goal.is_set() or goal.id in self.originated:
+            if not goal.is_set() or goal.require().id in self.originated:
                 return
+            goal = goal.require()
             store = self.comms.goals.open_goal_store()
             self.originated[goal.id] = None
             generation = store.require_generation(goal.id)
@@ -171,19 +173,19 @@ class TurnGoalAccount:
     def block_current(self, diagnostic: str) -> None:
         self.comms.goals.block_goal_after_failed_turn(
             self.thread_name,
-            started_goal=self.owner.goal,
+            started_goal=self.owner.goal.require(),
             expected_worktree=self.owner.worktree,
             diagnostic=diagnostic,
         )
 
     def current_active_goal(self) -> GoalDeclaration:
         if self.permit is None:
-            return None
+            return NoGoal()
         owner = self.comms.registry.require(self.thread_name)
         return owner.continuation_goal(self.owner)
 
     def done(self, event: events.Done) -> None:
-        if self.current_active_goal() is None:
+        if not self.current_active_goal().is_set():
             return
         if not event.ok:
             self.block_current("Backend turn failed; inspect local diagnostics before resuming.")
@@ -196,12 +198,13 @@ class TurnGoalAccount:
     def settle_original(self, terminal: events.Done | None) -> None:
         if self.permit is None:
             return
-        if terminal is None and self.current_active_goal() is not None:
+        if terminal is None and self.current_active_goal().is_set():
             self.block_current("Backend turn ended without a result; inspect local diagnostics.")
         store = self.comms.goals.open_goal_store()
-        current = self.comms.registry.require(self.thread_name).goal.matching(self.owner.goal.id)
+        current = self.comms.registry.require(self.thread_name).goal.matching(self.owner.goal.require().id)
         if terminal is not None and terminal.ok:
             if current.is_set():
+                current = current.require()
                 result = VerifiedGoalSettlement(store, self.permit, current, self.turn)
                 result.dispatch_sync(current.state)
         if self.permit.has_verified_progress(store):
@@ -212,7 +215,7 @@ class TurnGoalAccount:
             observation = FailedTurnObservation.from_terminal(
                 self.permit.reservation,
                 owner=self.owner,
-                goal=self.owner.goal,
+                goal=self.owner.goal.require(),
                 lease=self.lease,
                 turn_id=self.turn.value,
                 claim_scope=self.lease.claimed_generation,
@@ -237,6 +240,7 @@ class TurnGoalAccount:
             store = self.comms.goals.open_goal_store()
             if terminal is not None and terminal.ok:
                 if current.is_set():
+                    current = current.require()
                     result = OriginGoalSettlement(store, permit, current, self.turn)
                     result.dispatch_sync(current.state)
             if permit is None or not permit.has_verified_progress(store):
@@ -254,6 +258,7 @@ class TurnGoalAccount:
                             attempt_id=generation.attempt_id,
                         )
                 if current.is_set():
+                    current = current.require()
                     FailedGoalOrigin(self.comms, self.thread_name, current).dispatch_sync(
                         current.state
                     )

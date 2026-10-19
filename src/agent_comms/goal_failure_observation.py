@@ -255,7 +255,7 @@ def read_failed_turn_projection(
     try:
         # Resolve lifecycle eligibility before reading the ledger; active goals
         # must not surface a historical failure, even from a damaged store.
-        goal.state.failure_projection("")
+        goal.require().state.failure_projection("")
     except FailureNotObserved as error:
         return unavailable(str(error))
     if type(claim_scope) is not int or claim_scope <= 0:

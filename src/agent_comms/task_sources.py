@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
 from .field_codec import FieldCodec
-from .goals import GoalRevision
+from . import goals
 from .message_reference import MessageReference
 from .thread_identity import (
     RecordedThreadIncarnation,
@@ -57,7 +57,7 @@ class TaskScope(DeclaredFamily, affix="TaskScope"):
 
 @dataclass(frozen=True, kw_only=True)
 class GoalTaskScope(TaskScope):
-    goal: GoalRevision
+    goal: goals.GoalRevision
 
     def require_context(self, owner: Thread) -> None:
         owner.goal.require_id(self.goal.id).require_active()

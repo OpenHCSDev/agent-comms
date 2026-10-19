@@ -221,7 +221,7 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
         return ActiveGoal()
 
     def before_publish(self, goal: GoalDeclaration, ctx: GoalActionContext) -> None:
-        assert goal
+        goal = goal.require()
         thread = ctx.thread
         report_turn = ctx.report_turn
         review = ctx.goals._goal_input_review(thread, goal.id, self.wait_for)
@@ -383,6 +383,7 @@ class ReplacementGoalAction(GoalAction):
     def before_publish(self, goal: GoalDeclaration, ctx: GoalActionContext) -> None:
         goal = ctx.thread.goal
         if goal.is_set():
+            goal = goal.require()
             # Revoke a protected goal before removing or replacing its
             # registry identity. If the registry write then fails, the
             # remaining visible goal is safely unlaunchable.
@@ -412,6 +413,7 @@ class SetGoalAction(ReplacementGoalAction, OwnerInvocable, RuntimeInvocable):
     def change(self, ctx: GoalActionContext) -> Goal:
         current = ctx.thread.goal.matching(self.goal_id)
         if current.is_set():
+            current = current.require()
             if (current.text, current.order) != (self.text.strip(), self.order):
                 raise ValueError("Goal identity already has different instructions.")
             return ctx.thread.goal.require()

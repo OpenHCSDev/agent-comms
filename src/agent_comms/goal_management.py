@@ -220,6 +220,7 @@ class Goals:
             goal = owner.goal.active()
             if not goal.is_set():
                 return ()
+            goal = goal.require()
             waits = self.waits
             rows = waits.read()
             wait = rows.get(goal.id)
@@ -291,14 +292,15 @@ class Goals:
                 goal = owner.goal.active()
                 if (
                     not goal.is_set()
-                    or goal.id != goal_id
-                    or not wait.current_for(goal, owner.incarnation.require_recorded())
+                    or goal.require().id != goal_id
+                    or not wait.current_for(goal.require(), owner.incarnation.require_recorded())
                     or any(
                         self.agents.is_working(target.incarnation, snapshot)
                         for target in wait.targets
                     )
                 ):
                     continue
+                goal = goal.require()
                 if wait.has_reply(self.bus.log, owner.incarnation.require_recorded()):
                     continue
                 diagnostic = (
@@ -349,7 +351,7 @@ class Goals:
         """Called under the send-boundary wire lock after reserving an attempt."""
         goal = self.registry.require(name).goal.active()
         return bool(
-            goal.is_set() and self.waits.clear(goal.id, wait_id=wait_id)
+            goal.is_set() and self.waits.clear(goal.require().id, wait_id=wait_id)
         )
 
     def consume_reply_wait(self, owner: RegistryOwner, reference: MessageReference) -> bool:
@@ -364,6 +366,7 @@ class Goals:
             goal = current.continuation_goal(owner.thread)
             if not goal.is_set():
                 return False
+            goal = goal.require()
             wait = self.waits.for_goal(goal, self.waits.read())
             if not wait.owner_matches(current.incarnation.require_recorded()):
                 return False
@@ -404,7 +407,7 @@ class Goals:
             current = thread.goal.matching(started_goal.id)
             if thread.worktree != expected_worktree or not current.is_set():
                 return thread.goal
-            blocked = current.after_failed_turn(diagnostic)
+            blocked = current.require().after_failed_turn(diagnostic)
             if blocked is current:
                 return current
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
@@ -424,7 +427,7 @@ class Goals:
             current = thread.goal
             if thread.worktree != expected_worktree or not current.is_set() or current != expected_goal:
                 return current
-            blocked = current.after_unverified_completion(diagnostic)
+            blocked = current.require().after_unverified_completion(diagnostic)
             if blocked is current:
                 return current
             self.registry.register(replace(thread, goal=blocked), self.registry.status(thread.name))
