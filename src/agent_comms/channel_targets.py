@@ -33,7 +33,7 @@ class ResolvedChannel:
 def exact_stored_target(name: str) -> bool:
     from .channels import BuiltinChannelView
 
-    return BuiltinChannelView.decode(name).exact_stored_target() if name in BuiltinChannelView.names() else True
+    return BuiltinChannelView.member_named(name).exact_stored_target() if name in BuiltinChannelView.names() else True
 
 
 class CommandTarget(ABC):
