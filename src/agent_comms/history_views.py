@@ -104,7 +104,7 @@ class ThreadPoll(CliResult):
     ledger: Annotated[LedgerDocument, WireForm]
     peers: tuple[ThreadView, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.project(self, "presence")
 
 

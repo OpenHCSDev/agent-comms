@@ -765,7 +765,7 @@ def test_committed_send_reports_correction_failure_to_tool_and_cli(commander, mo
     decoded = PublishedMessageToolDetails.from_wire(reply)
     assert decoded.id == decoded.message.source.message_id
     assert 'P563 forced correction write failure' in decoded.correction.error
-    cli = SendCliCommand(sender='worker', target='lead', body='A separate fresh CLI message').apply(comms).encoded()
+    cli = SendCliCommand(sender='worker', target='lead', body='A separate fresh CLI message').apply(comms).to_wire()
     assert 'was sent' in cli['message']
     assert 'P563 forced correction write failure' in cli['correction']['error']
     assert cli['id'] in cli['notices'][0]

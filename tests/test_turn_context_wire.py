@@ -89,9 +89,9 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert recent == (first, second) and not limited
     assert reopened.bus.pending_counts_all(['Alice','Bob'])['Alice']==2
     recorded = TurnContextCliCommand(thread='Alice',turn=1)
-    assert len(recorded.encode_result(recorded.apply(reopened))['manifests'])==1
+    assert len(recorded.apply(reopened).to_wire()['manifests'])==1
     difference = DiffContextCliCommand(thread='Alice')
-    assert difference.encode_result(difference.apply(reopened))['turn']['occurrence']['generation']==2
+    assert difference.apply(reopened).to_wire()['turn']['occurrence']['generation']==2
 
 
 def test_observation_family_rejects_message_fields_and_preview(tmp_path):

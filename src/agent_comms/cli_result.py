@@ -23,7 +23,7 @@ class CliResult(DeclaredReply):
     def exit_code(self) -> int:
         return 0
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         """The CLI's JSON; a record with its own wire form overrides it."""
         return FieldCodec.encode(self)
 

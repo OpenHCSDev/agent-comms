@@ -59,7 +59,7 @@ from .exporting import (
     RecentLimit,
     SelectableWireExportFormat,
 )
-from .field_codec import FieldCodec, PathText, compile_decoder
+from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .presentation import CountedRead, InboxRead, ThreadRecord, UncountedRead
 from .harness_install import Harness, HarnessInstalled
@@ -350,7 +350,7 @@ class TargetOutcome:
 class TargetCompleted(TargetOutcome):
     target: str
     command: CliCommand
-    result: CliResult
+    result: Annotated[CliResult, WireForm]
     successful: ClassVar[bool] = True
 
     def reconnect_targets(self) -> tuple[str, ...]:
@@ -538,7 +538,7 @@ class ThreadPinnedResult(CliResult):
 class TargetCatalogResult(CliResult):
     actions: tuple[TargetAction, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return {'actions': [action.encode() for action in self.actions]}
 
 
@@ -546,7 +546,7 @@ class TargetCatalogResult(CliResult):
 class MessageSentResult(CliResult):
     sent: SendResult
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         message_id = self.sent.message.message_id
         return {'id': message_id, 'message': f'Message {message_id} was sent',
                 'correction': FieldCodec.encode(self.sent.correction),
@@ -586,7 +586,7 @@ class ConstraintDroppedResult(CliResult):
 class InboxResult(CliResult):
     messages: tuple[Message, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return {"messages": [message.to_wire() for message in self.messages]}
 
 
@@ -622,7 +622,7 @@ class ChannelsResult(CliResult):
 class ThreadsResult(CliResult):
     threads: tuple[ThreadRecord, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.project(self, "presence")
 
 
@@ -683,7 +683,7 @@ class InstallResult(CliResult):
     config: str
     harnesses: Mapping[str, HarnessInstalled]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         # Each harness's installation sits beside the config path on the wire.
         return {"config": self.config,
                 **{name: FieldCodec.encode(installed)
@@ -895,12 +895,9 @@ class CliCommand(
     def run(self, ctx: Comms, output: TextIO) -> int:
         """Run this command and write its declared result."""
         result: CliResult = self.apply(ctx)
-        json.dump(self.encode_result(result), output, indent=2)
+        json.dump(result.to_wire(), output, indent=2)
         output.write("\n")
         return result.exit_code()
-
-    def encode_result(self, result: CliResult) -> object:
-        return result.encoded()
 
     @classmethod
     def editor_arguments(cls, values: dict[str, str | None]) -> dict[str, object]:
