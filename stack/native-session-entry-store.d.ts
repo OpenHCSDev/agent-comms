@@ -14,6 +14,7 @@ export declare class UnavailableStore extends StoreAvailability {
 }
 
 export declare class EntryMetadata {
+    static indexVersion: number;
     static initialSettings: {model: EntryMetadata['model']; thinkingLevel: string};
     contextSettings?: {model: EntryMetadata['model']; thinkingLevel: string};
     inheritSettings(parent?: {model: EntryMetadata['model']; thinkingLevel: string}): EntryMetadata;
@@ -22,6 +23,7 @@ export declare class EntryMetadata {
     parentId: string | null;
     type: SessionEntry['type'];
     timestamp: string;
+    time: number;
     readonly parentSequence?: number;
     sequence: number;
     offset: number;

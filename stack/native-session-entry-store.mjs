@@ -13,6 +13,7 @@ function revision(stat) {
 
 /** One entry's selectors, never its message body or summary. */
 export class EntryMetadata {
+    static indexVersion = 4;
     static initialSettings = Object.freeze({model: null, thinkingLevel: 'off'});
     inheritSettings(parent) {
         if (!this.contextSettings && parent) this.contextSettings = {
@@ -26,6 +27,7 @@ export class EntryMetadata {
         this.parentId = entry.parentId;
         this.type = entry.type;
         this.timestamp = entry.timestamp;
+        this.time = Date.parse(entry.timestamp);
         this.sequence = sequence;
         this.offset = offset;
         this.length = length;
@@ -174,7 +176,8 @@ export class EntryStore {
         const pending = [...roots];
         while (pending.length) {
             const node = pending.pop();
-            node.children.sort((a, b) => new Date(a.metadata.timestamp).getTime() - new Date(b.metadata.timestamp).getTime());
+            if (node.children.length > 1)
+                node.children.sort((a, b) => a.metadata.time - b.metadata.time);
             pending.push(...node.children);
         }
         return roots;
@@ -371,9 +374,10 @@ export class DiskEntryStore extends EntryStore {
         const info = lstatSync(directory);
         if (!info.isDirectory() || info.uid !== process.getuid() || (info.mode & 0o077))
             throw new Error('Native metadata index directory is not private');
-        for (const suffix of ['', '-wal', '-shm'])
-            rmSync(join(directory, 'entries-v2.sqlite' + suffix), {force: true});
-        const index = join(directory, 'entries-v3.sqlite');
+        for (let version = 2; version < EntryMetadata.indexVersion; version++)
+            for (const suffix of ['', '-wal', '-shm'])
+                rmSync(join(directory, `entries-v${version}.sqlite${suffix}`), {force: true});
+        const index = join(directory, `entries-v${EntryMetadata.indexVersion}.sqlite`);
         try { closeSync(openSync(index, 'ax', 0o600)); }
         catch (error) { if (error.code !== 'EEXIST') throw error; }
         const indexInfo = lstatSync(index);
