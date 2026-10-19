@@ -176,6 +176,11 @@ class BusPageIndex(TypedStore):
 
     def sync(self, opened: WireSnapshot) -> bool:
         """Advance the source supplied by its writer; never acquire another bus lock."""
+        # Coverage admission opened a reader. Retire it before the writer so
+        # SQLite can checkpoint on writer close, instead of leaving a cold
+        # read-only attachment to reconstruct the entire WAL on every query.
+        self._resources.close()
+        self.__dict__.pop('connection', None)
         revision = opened.revision
         size = opened.complete_prefix.boundary
         while size:

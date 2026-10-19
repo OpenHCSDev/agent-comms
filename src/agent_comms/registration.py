@@ -112,7 +112,7 @@ class Registration:
         Native session identity and context proof remain with their producers.
         """
         with _store_lock(self.store.path.parent / "wire", mode=SharedLock()), self.store.editing() as edit:
-            change = edit.document.prepare_native_source(original, session_file)
+            change = edit.prepare_native_source(original, session_file)
             change = self._commit_registration(edit, change)
             # The document owns the next turn's selection. Publishing an
             # observed source must not rewrite this authorized turn's settings.
@@ -277,9 +277,8 @@ class Registration:
 
     def live_owner_with_claim(self, name: str) -> tuple[Thread, int]:
         """Read the stored process input generation, independent of metadata revisions."""
-        with self.store.reading() as document:
-            owner = RegistryOwner.capture_local(document.snapshot(), name)
-            return owner.thread, owner.claimed_generation
+        owner = RegistryOwner.capture_local(self.snapshot(), name)
+        return owner.thread, owner.claimed_generation
 
     def lease_live_turn_with_claim(
         self, expected: Thread, turn_id: str, *, expected_generation: int
@@ -289,7 +288,7 @@ class Registration:
         turn = TurnId.for_registration(turn_id)
         generation = GenerationCounter.require_positive(expected_generation)
         with self.store.editing() as edit:
-            owner = RegistryOwner.capture_local(edit.document.snapshot(), expected.name)
+            owner = RegistryOwner.capture_local(edit.original.snapshot, expected.name)
             owner.require_claim(expected, generation)
             self._assert_maintenance_open_unlocked()
             leased, _ = edit.lease_turn(owner.thread, turn.value, None)
@@ -309,7 +308,7 @@ class Registration:
         turn = TurnId.for_registration(turn_id)
         generation = GenerationCounter.require_positive(expected_owner_generation)
         with self.store.editing() as edit:
-            snapshot = edit.document.snapshot()
+            snapshot = edit.original.snapshot
             owner = RegistryOwner.capture_local(snapshot, expected.name)
             owner.require_exact(snapshot, expected, generation)
             owner.thread.turn_record.read().require_idle()
@@ -329,7 +328,7 @@ class Registration:
         """Atomic local begin-turn, never reviving a stopped or replaced owner."""
         turn = TurnId.for_registration(turn_id)
         with self.store.editing() as edit:
-            owner = RegistryOwner.capture_local(edit.document.snapshot(), name)
+            owner = RegistryOwner.capture_local(edit.original.snapshot, name)
             owner.thread.turn_record.read().require_idle()
             self._assert_maintenance_open_unlocked()
             result = edit.lease_turn(owner.thread, turn.value, routing)
@@ -402,8 +401,8 @@ class Registration:
 
     def snapshot(self) -> RegistrySnapshot:
         """Read related declarations and statuses from exactly one store revision."""
-        with self.store.reading() as document:
-            return document.snapshot()
+        with self.store.reading_snapshot() as snapshot:
+            return snapshot
 
     def active_threads(self) -> Mapping[str, Thread]:
         with self.store.reading() as document:

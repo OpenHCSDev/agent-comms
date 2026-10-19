@@ -9,6 +9,7 @@ import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
+from functools import cached_property
 from pathlib import Path
 from typing import ClassVar
 
@@ -17,7 +18,9 @@ from .field_codec import FieldCodec
 from .locked_store import LockedStore
 from .private_path import FileRevision
 from .private_registry_guard import PrivateRegistryGuard, PublicRegistry, RegistryPrivacy
-from .registry_document import RegistryDocument, RegistryEntry
+from .registry_document import RegistryDocument, RegistryEntry, RegistrySnapshot
+from .registration_change import NativeSourcePublication
+from .native_input_owner import RegistryOwner
 from .routing import TurnRouting
 from .store_files import SharedLock
 from .thread_identity import TurnIdentity
@@ -25,7 +28,7 @@ from .threads import Thread
 from .turn_lease import ActiveTurn, StoredTurnRecord
 
 
-@dataclass(frozen=True, slots=True)
+@dataclass(frozen=True)
 class RegistryRevision:
     """A registry file revision: its document and the raw rows it was decoded from.
 
@@ -35,6 +38,10 @@ class RegistryRevision:
     revision: FileRevision | None
     document: RegistryDocument
     raw: dict
+
+    @cached_property
+    def snapshot(self) -> RegistrySnapshot:
+        return RegistrySnapshot.capture(self.document)
 
 
 @dataclass(frozen=True, slots=True)
@@ -74,7 +81,15 @@ class RegistryCache:
 class RegistryEdit:
     store: RegistryStore
     document: RegistryDocument
-    original: RegistryDocument
+    original: RegistryRevision
+
+    def prepare_native_source(self, owner: RegistryOwner, session_file: str) -> NativeSourcePublication:
+        current = owner.require_source_snapshot(self.original.snapshot)
+        status = self.document.statuses[current.name]
+        return NativeSourcePublication(
+            thread=replace(current, session_file=session_file), status=status,
+            previous=current, previous_status=status,
+        )
 
     def lease_turn(
         self,
@@ -105,9 +120,9 @@ class RegistryEdit:
         return leased, self.document.owners.generations[current.name]
 
     def commit(self) -> None:
-        if self.document != self.original:
+        if self.document != self.original.document:
             self.store.save_unlocked(self.document)
-            self.original = self.document.copy()
+            self.original = self.store.read_revision_unlocked()
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,26 +141,44 @@ class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
         return RegistryDocument()
 
     def _read_unlocked(self) -> RegistryDocument:
+        return self.read_revision_unlocked().document
+
+    def read_revision_unlocked(self) -> RegistryRevision:
         self.private_guard_unlocked()  # before even a cache hit
         revision = FileRevision.capture(self.path)
-        if revision is None:
-            return self.empty()
         entry = self.cache.entry
         if entry is not None and entry.revision == revision:
-            return entry.document
+            return entry
         with self.cache.decoding:
             entry = self.cache.entry
             if entry is not None and entry.revision == revision:
-                return entry.document
-            raw = json.loads(self.path.read_text())
-            if entry is None:
-                document = self._decode(raw)
+                return entry
+            if revision is None:
+                raw, document = {}, self.empty()
             else:
-                document = self._bind_document(
-                    RegistryDocument.from_wire(raw, (entry.raw, entry.document))
-                )
-            self.cache.entry = RegistryRevision(revision, document, raw)
-            return document
+                raw = json.loads(self.path.read_text())
+                if entry is None or entry.revision is None:
+                    document = self._decode(raw)
+                else:
+                    document = self._bind_document(
+                        RegistryDocument.from_wire(raw, (entry.raw, entry.document))
+                    )
+            entry = RegistryRevision(revision, document, raw)
+            self.cache.entry = entry
+            return entry
+
+    def read_snapshot_unlocked(self) -> RegistrySnapshot:
+        revision = self.read_revision_unlocked()
+        # Shared readers may be the first to ask for this revision's snapshot.
+        # Use the existing decode mutex for that one construction, not the
+        # whole caller's read lifetime.
+        with self.cache.decoding:
+            return revision.snapshot
+
+    @contextmanager
+    def reading_snapshot(self) -> Iterator[RegistrySnapshot]:
+        with self.locked(mode=SharedLock()):
+            yield self.read_snapshot_unlocked()
 
     @property
     def guard_path(self) -> Path:
@@ -195,8 +228,8 @@ class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
     @contextmanager
     def editing(self) -> Iterator[RegistryEdit]:
         with self.locked():
-            original = self._read_unlocked()
-            yield RegistryEdit(self, original.copy(), original)
+            original = self.read_revision_unlocked()
+            yield RegistryEdit(self, original.document.copy(), original)
 
     def save_unlocked(self, document: RegistryDocument) -> None:
         raw = self._encode(document)

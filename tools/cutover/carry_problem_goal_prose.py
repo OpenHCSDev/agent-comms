@@ -15,7 +15,8 @@ from .carry import Carried, Carry
 from agent_comms.goal_mentions import bind_goal_mentions
 from agent_comms.goals import Goal, ProblemGoalOrder
 from agent_comms.registry_document import RegistryDocument
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry_store import RegistryRevision, RegistryStore
+from agent_comms.private_path import FileRevision
 
 
 class ProblemGoalProse(Carry):
@@ -30,7 +31,9 @@ class ProblemGoalProse(Carry):
             return Carried(0)
         changed = 0
         with store.locked():
-            document = RegistryDocument.from_wire(json.loads(store.path.read_text()))
+            raw = json.loads(store.path.read_text())
+            original = RegistryRevision(FileRevision.capture(store.path), RegistryDocument.from_wire(raw), raw)
+            document = original.document.copy()
             for name, thread in document.threads.items():
                 goal = thread.goal
                 if not isinstance(goal, Goal) or not isinstance(goal.order, ProblemGoalOrder):
@@ -40,7 +43,7 @@ class ProblemGoalProse(Carry):
                 changed += 1
                 revision = goal.revision + 1
                 source = bind_goal_mentions(
-                    ProblemGoalOrder.text, goal.id, revision, thread, document.snapshot()
+                    ProblemGoalOrder.text, goal.id, revision, thread, original.snapshot
                 )
                 text = replace(
                     goal,
