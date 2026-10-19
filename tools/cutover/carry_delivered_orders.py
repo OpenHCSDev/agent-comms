@@ -9,7 +9,6 @@ closes, as its delivery closes it now. Production readers accept only the new sc
 from __future__ import annotations
 
 import json
-from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -38,7 +37,8 @@ class DeliveredOrders(carry.TodoRows):
 
     @classmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
-        counts: Counter[str] = Counter()
+        installed: list[SavedOrder] = []
+        open_delivered: list[SavedOrder] = []
         with cls.todo_rows(root, apply=apply) as db:
             if db:  # todo_rows yields no connection for a bus without a todo store
                 installed = cast(
@@ -62,7 +62,6 @@ class DeliveredOrders(carry.TodoRows):
                         parameters=(row.id,),
                         order=FieldCodec.decode(ProblemOrder, {**order, "kind": "delivered"}),
                     )
-                    counts["installed"] += 1
                 states = TodoState.open_names()
                 open_delivered = cast(
                     "list[SavedOrder]",
@@ -83,8 +82,8 @@ class DeliveredOrders(carry.TodoRows):
                         assignment=None,
                         revision=row.revision + 1,
                     )
-                    counts["closed"] += 1
-        return cls.carried(root, sum(counts.values()), dict(counts), apply=apply)
+        counts = {"installed": len(installed), "closed": len(open_delivered)}
+        return cls.carried(root, sum(counts.values()), counts, apply=apply)
 
 
 if __name__ == "__main__":
