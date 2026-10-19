@@ -93,12 +93,11 @@ class TurnDigestRead(ConversationPreparation):
 
     def unjudged(self, todo) -> tuple[EditCall, ...]:
         """Each native call once, judged only by this order's own verdicts."""
-        judged = {verdict.tool_call_id for verdict in todo.verdicts}
         since = todo.order.at.recorded_at("An order")
         edits = {edit.id: edit for turn in reversed(self.read().turns)
                  for event in turn.events
                  for edit in event.edit_calls(self.thread.name, todo.id, since)
-                 if edit.id not in judged}
+                 if not any(verdict.judges(edit.id) for verdict in todo.verdicts)}
         return tuple(reversed(edits.values()))
 
     def native(self) -> tuple[TurnDigest, ...]:

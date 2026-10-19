@@ -1432,7 +1432,8 @@ def test_a_done_report_with_no_claim_is_refused_and_a_merged_claim_passes_claim_
 
 def test_merge_without_verdict_has_no_review_status_and_only_the_reviewer_sets_one(commander, tmp_path, monkeypatch):
     """The connector's reviewer accepting a PR head sets one review status on that head, the
-    status the PR merges on; the commander and a thread merely named like it set none."""
+    status the PR merges on, and records the verdict only after GitHub took it; the commander
+    and a thread merely named like it set none."""
     from agent_comms.connector import CALLER
     comms, lead = commander
     comms.registry.declare(comms.registry.new_thread(CALLER.name, frozenset(), str(tmp_path), created_at=3.0))
@@ -1440,7 +1441,8 @@ def test_merge_without_verdict_has_no_review_status_and_only_the_reviewer_sets_o
     statuses = tmp_path / 'statuses'
     gh = tmp_path / 'bin' / 'gh'
     gh.parent.mkdir()
-    gh.write_text(f'#!/bin/sh\necho "$@" >> {statuses}\n')
+    refusing = tmp_path / 'refusing'
+    gh.write_text(f'#!/bin/sh\n[ -e {refusing} ] && {{ echo refused >&2; exit 1; }}\necho "$@" >> {statuses}\n')
     gh.chmod(0o755)
     monkeypatch.setenv('PATH', f'{gh.parent}:{os.environ["PATH"]}')
     head = 'b' * 40
@@ -1449,7 +1451,7 @@ def test_merge_without_verdict_has_no_review_status_and_only_the_reviewer_sets_o
         todo = comms.goals.todos.get('P1')
         return CommsVerdictTool(id='P1', operation=ReviewedHeadVerdict(
             todo.revision, comms.registry.require(caller.name).incarnation, todo.assignment,
-            'review-1', quote='Repair the existing owner', head=head)).apply(comms, caller)
+            quote='Repair the existing owner', head=head)).apply(comms, caller)
 
     for refused in (lead, ThreadCaller(CALLER.name)):
         with pytest.raises(TodoError, match="Only the connector's reviewer"):
@@ -1460,6 +1462,11 @@ def test_merge_without_verdict_has_no_review_status_and_only_the_reviewer_sets_o
             comms.goals.todos.get('P1').revision, comms.registry.require(CALLER.name).incarnation,
             comms.goals.todos.get('P1').assignment, 'review-1', quote='Repair the existing owner')
         ).apply(comms, CALLER)
+    refusing.touch()
+    with pytest.raises(ValueError, match='refused'):
+        review(CALLER)
+    assert not statuses.exists() and comms.goals.todos.get('P1').verdicts == ()
+    refusing.unlink()
     assert review(CALLER).todo.verdicts[-1].head == head
     assert statuses.read_text().splitlines() == [
         f'api --method POST repos/openhcsdev/agent-comms/statuses/{head} -f state=success '
