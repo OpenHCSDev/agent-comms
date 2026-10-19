@@ -15,7 +15,6 @@ import hashlib
 import json
 import os
 import stat
-import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -48,9 +47,27 @@ MANIFEST = _resource_root() / "pi-native.sha256"
 OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
 
 
+PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"
+
+
+def pin_id() -> str:
+    return hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
+
+
+def pinned_package_in(root: Path) -> Path:
+    """Where this pin's built package sits under a root laid out as stack/ is."""
+    return root / f".pi-native-{pin_id()}" / PACKAGE_LAYOUT
+
+
 def pinned_location() -> Path:
-    build = hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
-    return MANIFEST.parent / f".pi-native-{build}" / "node_modules/@earendil-works/pi-coding-agent"
+    return pinned_package_in(MANIFEST.parent)
+
+
+def native_environment(cache: Path) -> Path:
+    """This pin's test environment under a StorageRule.native_cache root, shared by digest: its
+    manifest beside its built artifact, laid out as stack/ is. stack/bin/pi-native-test-env
+    builds it; the live install never does."""
+    return cache / pin_id()
 
 
 def pinned_native_package() -> Path:
@@ -384,6 +401,15 @@ class VerifiedNativePackage:
         return self.path / "dist/cli.js"
 
     @classmethod
+    def from_environment(cls, cache: Path) -> VerifiedNativePackage:
+        """Acquire this checkout's declared test environment once, not the live install."""
+        environment = native_environment(cache)
+        manifest = environment / MANIFEST.name
+        if manifest.read_bytes() != MANIFEST.read_bytes():
+            raise NativePackageError("Native environment and source pins disagree")
+        return cls.acquire(pinned_package_in(environment))
+
+    @classmethod
     def acquire(cls, root: Path) -> VerifiedNativePackage:
         """Acquire the pinned artifact only through safe private launch ancestry."""
         root = root.absolute()  # Do not resolve away symlink components.
@@ -403,21 +429,3 @@ def verify_native_package(root: Path) -> VerifiedNativePackage:
     """Verify the entire copied package against the repository-owned commitment."""
     return VerifiedNativePackage(root)
 
-
-if __name__ == "__main__":
-    if len(sys.argv) == 4 and sys.argv[1] == "--share-resources":
-        print(json.dumps(share_native_resources(Path(sys.argv[2]), Path(sys.argv[3]))), file=sys.stderr)
-    elif len(sys.argv) == 4 and sys.argv[1] == "--install-sources":
-        install_declared_sources(Path(sys.argv[2]), Path(sys.argv[3]))
-    elif len(sys.argv) == 3 and sys.argv[1] == "--digest":
-        print(package_tree_digest(Path(sys.argv[2])))
-    elif len(sys.argv) == 3 and sys.argv[1] == "--write-manifest":
-        write_native_manifest(Path(sys.argv[2]))
-    elif len(sys.argv) == 2:
-        verify_native_package(Path(sys.argv[1]))
-    else:
-        raise SystemExit(
-            "Usage: python -m agent_comms.native_package [--digest|--write-manifest] PACKAGE_DIR | "
-            "--share-resources NEW_PACKAGE DEPLOYMENTS | "
-            "--install-sources PACKAGE_DIR SNAPSHOT_ROOT"
-        )

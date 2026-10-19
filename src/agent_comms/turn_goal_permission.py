@@ -1,9 +1,13 @@
 """The goal authority captured by an original or freshly accepted owner input."""
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
-from .goals import Goal, GoalDeclaration
+if TYPE_CHECKING:
+    from .goals import Goal, GoalDeclaration
 
 
 class TurnGoalPermission(ABC):

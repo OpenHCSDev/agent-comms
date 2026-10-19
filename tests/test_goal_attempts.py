@@ -6,23 +6,22 @@ import multiprocessing
 import os
 import sqlite3
 import tempfile
-from agent_comms.goal_attempts import ProviderUsageTotal
 from collections.abc import Iterator
 from pathlib import Path
 from queue import Empty
 
 import pytest
 
+from agent_comms.diagnostics import FailureReason
 from agent_comms.goal_attempts import (
     GoalAttemptSchema,
     GoalAttemptStore,
+    ProviderUsageTotal,
     ReservationConflictError,
     StaleAttemptError,
     StorageUncertainError,
     UnresolvedAttemptError,
 )
-from agent_comms.diagnostics import FailureReason
-from agent_comms.typed_table import StringEnumStorage
 from agent_comms.goal_generation import (
     BlockedGeneration,
     CancelledGeneration,
@@ -30,6 +29,8 @@ from agent_comms.goal_generation import (
     ReadyGeneration,
     ReservedGeneration,
 )
+from agent_comms.pi_counts import PiCount
+from agent_comms.typed_table import StringEnumStorage
 
 pytestmark = pytest.mark.skipif(
     os.name != "posix", reason="POSIX fork and directory fsync crash instrumentation."
@@ -425,7 +426,7 @@ def test_provider_reported_responses_are_attributed_once_and_survive_reopen(stor
     assert totals.responses == 2
     assert totals.input_tokens == 140
     assert totals.output_tokens == 30
-    assert totals.total_tokens == 170
+    assert totals.total_tokens == PiCount.from_wire(170)
     assert str(totals.cost_total) == "0.3"
 
 

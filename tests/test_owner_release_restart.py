@@ -21,7 +21,7 @@ from agent_comms.child_process import (
 
 
 @pytest.mark.asyncio
-async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_path):
+async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_path, native_runtime_package):
     """Actual installed workers; retained failure is observation, never input."""
     import asyncio
     import hashlib
@@ -46,7 +46,7 @@ async def test_installed_idle_worker_retains_state_across_runtime_restart(tmp_pa
     names = {row.owner for row in original_document.rows.values()}
     assert len(names) == 1
     name = names.pop()
-    async with native_backend_fixture(tmp_path) as native, AsyncExitStack() as resources:
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native, AsyncExitStack() as resources:
         comms = Comms(native.root)
 
         async def retire_owned_worker():

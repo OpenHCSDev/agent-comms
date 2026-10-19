@@ -1,5 +1,5 @@
 """Acquired original native fixture shared by pytest and installed drivers."""
-from agent_comms.native_package import pinned_native_package
+from agent_comms.native_package import VerifiedNativePackage
 
 import asyncio
 import json
@@ -32,9 +32,10 @@ async def wait_for(predicate):
 
 
 class NativeBackendFixture:
-    def __init__(self, root, project, session, provider, config):
+    def __init__(self, root, project, session, provider, config, package: VerifiedNativePackage):
         self.root, self.project, self.session, self.provider = root, project, session, provider
         self.config = config
+        self.package = package
         self.persistent = PersistentPiSession()
         self.starts = []
         self.children = []
@@ -42,7 +43,7 @@ class NativeBackendFixture:
 
     async def author_history(self):
         """The SDK authors saved rows; no provider or acknowledgement is invented."""
-        package = str(pinned_native_package())
+        package = str(self.package.path)
         result = await BoundedRun.run(
             ("node", "--input-type=module", "-e", """
 import {pathToFileURL} from 'node:url';
@@ -157,6 +158,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 str(self.project),
                 root=self.root, session_file=str(self.session),
                 persistent_session=self.persistent,
+                package=self.package,
                 steering_queue=queue,
                 native_start=self.started,
                 **options,
@@ -182,7 +184,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
 
 
 @asynccontextmanager
-async def native_backend_fixture(tmp_path):
+async def native_backend_fixture(tmp_path, *, package: VerifiedNativePackage):
     root, project, config = (tmp_path / name for name in ("wire", "project", "config"))
     project.mkdir(mode=0o700)
     config.mkdir(mode=0o700)
@@ -243,7 +245,7 @@ async def native_backend_fixture(tmp_path):
         "AGENT_COMMS_NATIVE_CONFIG_DIR": str(config),
         "PI_CODING_AGENT_DIR": str(config),
     }
-    owner = NativeBackendFixture(root, project, session, provider, config)
+    owner = NativeBackendFixture(root, project, session, provider, config, package)
     with patch.dict(os.environ, environment):
         try:
             yield owner

@@ -221,8 +221,11 @@ class TypeErrors(CheckedRevision):
 
     @staticmethod
     def environment(root: str) -> dict[str, str]:
-        """Module names start at the source directory, as they do when the package is installed."""
-        return {**os.environ, "MYPYPATH": Path(root).parts[0]}
+        """Module names start at the source directory, as they do when the package is installed.
+        Tools import the same revision's ``src`` (``upgrade_bus.py`` puts it first), never the
+        installed one."""
+        paths = dict.fromkeys((Path(root).parts[0], "src"))
+        return {**os.environ, "MYPYPATH": os.pathsep.join(paths)}
 
 
 class SourceLines(Measure):

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# Build or reuse the test environment of this checkout's native pin, shared by pin
+# digest, and print the interpreter line to gate with. Never reads the live install.
+set -euo pipefail
+umask 077
+usage='Usage: pi-native-test-env [--python PATH] [--cache DIR] [--from BUILT_STACK_DIR]'
+stack_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+repo_root=$(cd -- "$stack_root/.." && pwd)
+# The stack environment `uv sync --project stack` installs, as prepare-pi-native uses.
+python="$stack_root/.venv/bin/python"
+cache=()
+built=$stack_root
+while [[ $# -gt 0 ]]; do
+    [[ $# -ge 2 ]] || { printf '%s\n' "$usage" >&2; exit 1; }
+    case "$1" in
+        --python) python=$2 ;;
+        --cache) mkdir -p -- "$2"; cache=(--cache "$(cd -- "$2" && pwd)") ;;
+        --from) built=$(cd -- "$2" && pwd) ;;
+        *) printf '%s\n' "$usage" >&2; exit 1 ;;
+    esac
+    shift 2
+done
+if [[ ! -x "$python" ]]; then
+    printf 'The stack environment is unavailable; run uv sync --project %s or pass --python.\n' "$stack_root" >&2
+    exit 1
+fi
+# The checkout's own agent_comms reads the checkout's own pin and owns its layout.
+export PYTHONPATH="$repo_root/src"
+manifest="$stack_root/pi-native.sha256"
+native() { "$python" -m agent_comms.cli_native_package "$@"; }
+environment=$(native environment "${cache[@]}")
+
+verify() (
+    cd -- "$(native package "$1")"
+    sha256sum --check --status "$manifest" && native verify "$PWD"
+)
+
+if [[ ! -e "$environment" ]]; then
+    if [[ ! -e "$(native package "$built")" ]]; then
+        "$stack_root/bin/prepare-pi-native" --python "$python" >&2
+        built=$stack_root
+    fi
+    build=$(native build "$built")
+    mkdir -p -- "$(dirname -- "$environment")"
+    stage=$(mktemp -d "$environment.stage.XXXXXXXX")
+    trap 'rm -rf -- "$stage"' EXIT
+    cp -- "$manifest" "$stage/pi-native.sha256"
+    cp -a --reflink=auto -- "$build" "$stage/"
+    verify "$stage"
+    mv -- "$stage" "$environment"
+    trap - EXIT
+fi
+verify "$environment"
+printf 'PYTHONPATH=src %s -m pytest --native-cache %s\n' "$python" "$(dirname -- "$environment")"

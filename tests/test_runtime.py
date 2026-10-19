@@ -1,11 +1,10 @@
 """Single-owner attachment and idle wakeup through real processes and sockets."""
 
-from agent_comms.pi_vocabulary import HighThinkingLevel
 import asyncio
-import logging
-from contextlib import suppress
 import json
+import logging
 import os
+from contextlib import suppress
 from dataclasses import replace
 from types import SimpleNamespace
 
@@ -23,11 +22,13 @@ from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import Comms, wire
 from agent_comms.field_codec import FieldCodec
 from agent_comms.owner_protocol import OwnerAnnouncement, OwnerReady, OwnerResult, OwnerUpdate
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_vocabulary import HighThinkingLevel
 from agent_comms.runtime import RuntimeProxy, RuntimeServer, present_session, socket_path
+from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.thread_management import ForkSpec
 from agent_comms.threads import Thread
 from delivery_owner_fixture import canonical_agent
-from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @pytest.fixture
@@ -50,8 +51,8 @@ def test_owner_cursor_scope_rebases_only_attachment_session_alias():
     from agent_comms.acp_extension import (
         CursorAdvancedUpdate,
         CursorEnvelope,
-        LiveCursorScope,
         EmptyCursorObservation,
+        LiveCursorScope,
         decode_updates,
         encode_updates,
     )
@@ -179,12 +180,12 @@ async def test_long_wire_path_supports_subscription_prompt_and_cancel(tmp_path, 
 
         async def compact_context(runner, session_id, instructions):
             compact_calls.append((session_id, instructions))
-            return PlacedCompaction("summary", "first-kept", 1200)
+            return PlacedCompaction("summary", "first-kept", PiCount.from_wire(1200))
 
         monkeypatch.setattr("agent_comms.manual_compaction_bridge.compact_context", compact_context)
         assert FieldCodec.decode(
             CompactionOutcome, await proxy.request("compact", instructions="focus")
-        ) == PlacedCompaction("summary", "first-kept", 1200)
+        ) == PlacedCompaction("summary", "first-kept", PiCount.from_wire(1200))
         assert compact_calls == [(response.session_id, "focus")]
         with pytest.raises(ValueError, match="not registered"):
             RuntimeProxy(client, "missing-thread", path)

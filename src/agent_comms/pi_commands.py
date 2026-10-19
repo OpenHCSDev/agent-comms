@@ -220,7 +220,7 @@ class GetState(SessionSnapshot, NativeQuery):
             session.model_name = state.model.display_name
             session.session_name = state.session_name
             session.active_session_file = state.session_file or session.active_session_file
-            session.usage.size = state.model.context_window
+            state.model.context_window.observe_size(session.usage)
             yield state.agent_info(session)
 
 
@@ -237,7 +237,7 @@ class GetSessionStats(SessionSnapshot, NativeQuery):
             if context is not None:
                 context.token_total.confirm(session.usage)
                 if not session.native.attestation.uncertain:
-                    session.usage.size = context.context_window or session.usage.size
+                    context.context_window.update_size(session.usage)
             yield session.context_info()
             if session.persistent_session is None:
                 session.finished = True

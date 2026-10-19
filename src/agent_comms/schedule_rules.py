@@ -93,7 +93,8 @@ class WakeScheduleCheck(SessionScheduleCheck):
                 state = inputs.state(session_id)
                 pending, state.pending_turns = state.pending_turns, []
                 goal = owner.goal.active()
-                goal.project(lambda current: self._retain_goal_turns(pending, current), lambda: None)
+                for current in goal:
+                    self._retain_goal_turns(pending, current)
                 if not pending:
                     continue
                 pending, remaining = ScheduledTurn.take_batch(pending)

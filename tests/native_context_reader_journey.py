@@ -1,5 +1,6 @@
 """Original acquired SDK context reader through the installed owner RPC."""
-from agent_comms.native_package import pinned_native_package
+from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.storage_rules import StorageRule
 
 import argparse
 import asyncio
@@ -32,7 +33,7 @@ async def read_original_context(
             seed_root = fixture.root.parent / 'recorded-sdk-source'
             seed = await asyncio.create_subprocess_exec(
                 'node', str(Path(__file__).with_name('native_turn_context_contract.mjs')),
-                str(pinned_native_package()), str(seed_root), '--recorded-readers',
+                str(fixture.package.path), str(seed_root), '--recorded-readers',
                 stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
             )
             output, error = await seed.communicate()
@@ -157,13 +158,13 @@ async def read_original_context(
         "child_exited": not prepared_child.alive()}), flush=True)
 
 
-async def run(root, sdk_source_path=None):
+async def run(root, sdk_source_path=None, *, package: VerifiedNativePackage):
     root.mkdir(mode=0o700)
     started = time.monotonic()
     acknowledgement = {"python": sys.executable, "scope": "Authored SDK recorded root/mixed/child installed RPC reads",
                "model_request_capture": False, "new_native_inputs": 0}
     try:
-        async with native_backend_fixture(root) as fixture:
+        async with native_backend_fixture(root, package=package) as fixture:
             await read_original_context(fixture, recorded_readers=True, sdk_source_path=sdk_source_path)
             acknowledgement["provider_calls"] = fixture.provider.posts
         acknowledgement["state"] = "SCOPED_PASS"
@@ -179,6 +180,8 @@ async def run(root, sdk_source_path=None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path)
+    parser.add_argument("--native-cache", type=Path, default=StorageRule.native_cache)
     parser.add_argument("--sdk-source", type=Path, help="Borrow an already completed original SDK capture without rerunning it")
     args = parser.parse_args()
-    asyncio.run(run(args.root.resolve(), args.sdk_source))
+    asyncio.run(run(args.root.resolve(), args.sdk_source,
+                    package=VerifiedNativePackage.from_environment(args.native_cache)))

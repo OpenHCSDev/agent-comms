@@ -17,11 +17,11 @@ from agent_comms.child_process import ProcessIdentity
 from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.native_arguments import NativeArguments
+from agent_comms.pi_counts import PiCount
+from agent_comms.pi_durable_backend import DurableDatabase, PiDurableBackend
 from agent_comms.pi_native_backend import PI_0_85_1_EVENT_KINDS, PiNativeBackend, PiSessionFile
-from agent_comms.pi_durable_backend import PiDurableBackend, DurableDatabase
 from agent_comms.threads import Thread
 from agent_comms.unstarted_runtime import UnstartedRuntime
-
 
 # -- registry ---------------------------------------------------------------
 
@@ -103,7 +103,7 @@ def test_validation_names_missing_roles_and_abstract_methods():
     with pytest.raises(ab.BackendDeclarationError) as error:
         ab.validate_backends([HalfBackend])
     message = str(error.value)
-    for role in ("ReportsContext", "ConfiguresModel"):
+    for role in ("ConfiguresModel",):
         assert role in message
     assert "leaves methods abstract" in message
     for method in ("compact", "run_turn", "abort", "close_idle"):
@@ -332,10 +332,9 @@ for line in sys.stdin:
 @pytest.mark.usefixtures("native_rpc_fixture")
 @pytest.mark.skipif(sys.platform == "win32", reason="executes a POSIX script")
 async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_path, comms, monkeypatch):
-    from agent_comms.native_session_reopen import NativeSessionIdentity
-
     # The stub is not a verified Pi package; its saved header is the session's identity.
     from agent_comms.native_pi import NativePiRpcLaunch
+    from agent_comms.native_session_reopen import NativeSessionIdentity
 
     # The stub is not a verified Pi package: its saved header is the session's
     # identity, and its acquired launch is the one a retained child is reused under.
@@ -381,11 +380,9 @@ async def test_pi_rpc_stream_converts_to_agent_events_through_the_backend(tmp_pa
         assert starts == ["ping"]
         assert backend.child_state.retained
 
-        usage = await backend.context_usage(thread)
-        assert usage == ab.ContextUsage(tokens=321, window=1000)
         outcome = await backend.compact(thread, "keep the plan")
         assert outcome == ab.PlacedCompaction(
-            summary="summary of keep the plan", first_kept="k1", tokens_before=900,
+            summary="summary of keep the plan", first_kept="k1", tokens_before=PiCount.from_wire(900),
         )
         assert published and published[0][0] == "owner"
     finally:

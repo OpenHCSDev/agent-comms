@@ -11,6 +11,7 @@ from typing import BinaryIO, ClassVar, Generic, TypeVar, TYPE_CHECKING
 from abc import ABC, abstractmethod
 
 from .field_codec import FieldCodec, MalformedRecord
+from .locked_store import RuntimeFile
 from .private_path import FileRevision
 from .store_files import _atomic_write_text, _store_lock
 
@@ -132,12 +133,13 @@ class AppendCheckpoint:
 Checkpoint = TypeVar("Checkpoint", bound=AppendCheckpoint)
 
 
-class AppendProjectionStore(Generic[Checkpoint]):
+class AppendProjectionStore(RuntimeFile, Generic[Checkpoint]):
     """Publish a prepared prefix without retaining its source's writer lock.
 
     AppendCheckpoint owns prefix validity. A projection may lag its source;
     readers validate it again. Serialization happens before the projection lock,
-    and publication never rolls a farther valid saved prefix backwards.
+    and publication never rolls a farther valid saved prefix backwards. A
+    projection is disposable, so no carry writes it.
     """
 
     record_type: type[Checkpoint]
