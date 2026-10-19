@@ -19,8 +19,7 @@ from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
-from .private_path import FileRevision, ObservedPath
-from .recorded_bus import RecordedBus
+from .private_path import FileRevision
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
 from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
 
@@ -173,14 +172,6 @@ class BusPageIndex(TypedStore):
         finally:
             if not borrowed and self.connection.in_transaction:
                 self.connection.execute("ROLLBACK")
-
-    def replaced_by(self, source: ObservedPath) -> bool:
-        """Only a different file retires the saved offsets; stale rows do not."""
-        if source.shows_no_bus() or not self.path.exists():
-            return False
-        with self.snapshot():
-            saved = BusPageSource.one(self.connection, singleton=1)
-            return saved is not None and not RecordedBus(saved.revision.identity).matches(source)
 
     def sync(self, opened: WireSnapshot) -> bool:
         """Advance the source supplied by its writer; never acquire another bus lock."""
