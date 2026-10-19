@@ -31,6 +31,7 @@ from agent_comms.child_process import (
     TimedOutOutcome,
 )
 from agent_comms.field_codec import FieldCodec
+from agent_comms.launch_runtime import LaunchRuntime
 
 # The grandchild ignores TERM, so the owner must force retirement even after
 # the group leader exits. Publishing both identities proves they really ran.
@@ -523,7 +524,7 @@ def test_parent_pipe_cleanup_closes_after_real_exception():
     with (
         pytest.raises(ValueError, match="caller failed"),
         Platform.current().launch(
-            (sys.executable, "-c", "import time; time.sleep(60)"), ()
+            (sys.executable, "-c", "import time; time.sleep(60)"), (), LaunchRuntime.running()
         ) as launch,
         launch.spawn(stdout=subprocess.PIPE, stderr=subprocess.PIPE) as child,
     ):

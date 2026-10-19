@@ -137,13 +137,12 @@ class RuntimeChildrenStore(RootFile, ChildRegistration, LockedStore[RuntimeChild
 
     @classmethod
     @contextmanager
-    def launching(cls, runtime: LaunchRuntime, environment: dict[str, str] | None):
-        source = os.environ if environment is None else environment
+    def launching(cls, runtime: LaunchRuntime):
         store = cls.at(runtime.prefix)
         with store.locked():
             children = store._read_unlocked()
             children.require_open()
-            yield RuntimeChildReservation(store, children, ChildInitiator.capture(dict(source)))
+            yield RuntimeChildReservation(store, children, ChildInitiator.capture(dict(os.environ)))
 
     def finished(self, identity: ProcessIdentity) -> None:
         self.update(lambda children: children.finished(identity))

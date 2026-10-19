@@ -857,7 +857,7 @@ class ChildLaunch(ABC):
         stderr=subprocess.DEVNULL,
     ) -> ParentedProcess:
         """Record the parent's process handle before the platform allows exec."""
-        with self.children_store.launching(self.runtime, env) as reservation:
+        with self.children_store.launching(self.runtime) as reservation:
             process = subprocess.Popen(
                 self.argv, cwd=cwd, env=env, stdin=stdin, stdout=stdout,
                 stderr=stderr, **self.options,
@@ -873,7 +873,7 @@ class ChildLaunch(ABC):
         return child
 
     async def spawn_async(self, *, cwd, env, stdio: ChildStdio) -> AttachedChild:
-        with self.children_store.launching(self.runtime, env) as reservation:
+        with self.children_store.launching(self.runtime) as reservation:
             process = await asyncio.create_subprocess_exec(
                 *self.argv, cwd=cwd, env=env, **stdio.options, **self.options,
             )
