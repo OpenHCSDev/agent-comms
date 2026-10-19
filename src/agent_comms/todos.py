@@ -1723,7 +1723,6 @@ class StrikeTodo(TodoOperation):
         current.require_commander(self.actor)
         current.require_assignment(self.previous)
         _text(self.reason, "Strike reason", 2000)
-        StrikeReason(self.reason)
         if any(self.repeats(recorded) for recorded in current.live_strikes(self.previous.owner)):
             return current
         return replace(current, strikes=(*current.strikes, self), revision=current.revision + 1)
@@ -1850,7 +1849,7 @@ class SupersededVerdict(OrderVerdict):
 @dataclass(frozen=True)
 class SendBackVerdict(OrderVerdict):
     """The tool call goes back; the same write strikes the holder and revises the order Goal."""
-    reason: StrikeReason
+    reason: str
     evidence: tuple[Evidence, ...] = field(default=(), metadata={"wire_omit_default": True})
 
     def prepare(self, goals: Goals, current: Todo) -> Self:
@@ -1859,10 +1858,10 @@ class SendBackVerdict(OrderVerdict):
 
     @property
     def line(self) -> str:
-        return f"Sent back: {self.reason.text}"
+        return f"Sent back: {self.reason}"
 
     def judged(self, current: Todo) -> Todo:
-        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason.text,
+        strike = StrikeTodo(self.expected_revision, self.actor, self.previous, self.reason,
                             self.at, evidence=self.evidence)
         return strike.apply(current)
 
