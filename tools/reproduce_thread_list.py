@@ -1,21 +1,27 @@
 """Real scratch-bus sidebar observation concurrent with registry publication."""
+from __future__ import annotations
+
 import argparse
-import json
 import faulthandler
+import json
 import multiprocessing as mp
-from dataclasses import replace
 import time
+from dataclasses import replace
+from multiprocessing.queues import Queue
+from multiprocessing.synchronize import Event
 from pathlib import Path
 
 from agent_comms.cli_bridges.claude import ClaudeTranscript
 from agent_comms.comms import Comms
 from agent_comms.storage_rules import StorageRoots
-from agent_comms.threads import Thread
 from agent_comms.thread_status import StoppedThreadStatus
+from agent_comms.threads import Thread
 from agent_comms.ui_model.observation import ObserveSidebar, SidebarObserved, SidebarUnreadable
 
 
-def writer(root, stop, ready, result, imports, dump_after):
+def writer(
+    root: Path, stop: Event, ready: Event, result: Queue[int], imports: bool, dump_after: float,
+) -> None:
     if dump_after:
         faulthandler.dump_traceback_later(dump_after)
     comms = Comms(root)
@@ -37,7 +43,7 @@ def writer(root, stop, ready, result, imports, dump_after):
     result.put(count)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument('root', type=Path)
     parser.add_argument('--seconds', type=float, default=120)
