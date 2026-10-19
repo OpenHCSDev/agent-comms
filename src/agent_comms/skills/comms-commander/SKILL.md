@@ -75,7 +75,7 @@ Update the board row, move on. One line per unit touched.
 - Merging two owners because fields match today: merge only when every required answer agrees in every reachable state.
 - "Tests pass": passing runs cannot reveal outside supply. The app has to show it working.
 
-- **Every slop claim carries its formal statement.** Send-backs and orders saying "slop" carry `--slop/--fact/--at/--derive/--by` or a `Slop:` line; the tools refuse them otherwise.
+- **Every slop claim cites the pinned pattern catalog and carries its formal statement.** Send-backs use `--slop PATTERN-ID --fact WORDS --at PATH:LINE --derive MECHANISM --by PATH:LINE`; orders use `Slop: PATTERN-ID; fact WORDS; at PATH:LINE; derive MECHANISM on PATH:LINE`. PATTERN-ID must exist in the packaged refactor-audit submodule's catalog. The tools refuse unknown IDs and malformed lines.
 - **Never fault inheritance itself.** "Inherits two classes" and "prefer composition" are dogma and the tools refuse them.
 - **Eliminate forwarding by fixing the hierarchy.** Fold a false owner into the real one, or compose the providers as parents. Never keep forwarders or move the routes to consumers.
 - **Factor into the parent.** Siblings keep only irreducible differences; residue shared across parents becomes a capability mixin.
