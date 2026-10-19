@@ -102,13 +102,7 @@ class Messaging:
 
     def _answered_by(self, owner: Thread, target: str) -> tuple[MessageReference, ...]:
         """What this owner's message to target answers among its running turn's inputs."""
-        from .input_disposition import InputDispositions
-
-        for lease in owner.turn_leases():
-            inputs = InputDispositions(self.root).in_turn(lease.turn_id)
-            with self.bus.log.checked_read() as source:
-                return inputs.answered_by(lease, source, self.registry.snapshot(), target)
-        return ()
+        return owner.turn_record.read().answered_by(self, owner, target)
 
     def initialize_private_initial_protocol(self, *, history: Sequence[Message] = ()) -> str:
         """Initialize a fresh root; selected public history grants no delivery."""

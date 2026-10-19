@@ -46,10 +46,10 @@ class RegistryClaimCheck(RegistryIdentityCheck):
     """
 
     def model_matches(self) -> bool:
-        return self.expected.has_turn_lease() or super().model_matches()
+        return self.expected.turn_record.read().selection_matches(self.actual.model, self.expected.model)
 
     def thinking_matches(self) -> bool:
-        return self.expected.has_turn_lease() or super().thinking_matches()
+        return self.expected.turn_record.read().selection_matches(self.actual.thinking_level, self.expected.thinking_level)
 
 
 class RunningTurnRegistryCheck(RegistryClaimCheck):
@@ -64,7 +64,7 @@ class RunningTurnRegistryCheck(RegistryClaimCheck):
     def worktree_matches(self) -> bool:
         return super().worktree_matches() or (
             self.actual.project_resume_due
-            and self.actual.holds_turn(self.expected.require_turn_lease())
+            and self.actual.turn_record.read().held_by(self.expected.require_turn_lease())
             and self.actual.ran_in(self.expected.worktree)
         )
 

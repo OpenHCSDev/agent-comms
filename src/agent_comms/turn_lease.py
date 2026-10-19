@@ -216,6 +216,26 @@ class IdleTurn(TurnDeclaration, declared_name=None):
             and thread.last_finished_turn_id == turn.value
         )
 
+    def selection_matches(self, actual, expected) -> bool:
+        return actual == expected
+
+    def answered_by(self, messaging, owner, target):
+        return ()
+
+    async def observe_compaction(self, runner, session_id, owner, event):
+        pass
+
+    async def cancel_turn(self, runner, session_id, owner):
+        pass
+
+    def report_wait_turn(self):
+        from .goal_waits import IdleReportTurn
+
+        return IdleReportTurn()
+
+    def matches_report(self, turn_id: str, generation: int) -> bool:
+        return False
+
     def notify_failure(self, messaging: Messaging, name: str) -> None:
         pass
 
@@ -269,6 +289,43 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     @property
     def report_turn(self) -> str:
         return self.id
+
+    def selection_matches(self, actual, expected) -> bool:
+        return True
+
+    def answered_by(self, messaging, owner, target):
+        from .input_disposition import InputDispositions
+
+        lease = owner.require_turn_lease()
+        inputs = InputDispositions(messaging.root).in_turn(self.id)
+        with messaging.bus.log.checked_read() as source:
+            return inputs.answered_by(lease, source, messaging.registry.snapshot(), target)
+
+    async def observe_compaction(self, runner, session_id, owner, event):
+        # The runner imports the declaration; defer the reverse behavior dependency.
+        from .turn_runner import CompactionObservation
+
+        await CompactionObservation(
+            runner, session_id, owner.require_turn_lease(), self.phase
+        ).dispatch(event)
+
+    async def cancel_turn(self, runner, session_id, owner):
+        from .turn_phase import CancellingPhase
+
+        await runner.transition_turn(session_id, owner.require_turn_lease(), CancellingPhase())
+
+    def report_wait_turn(self):
+        from .goal_waits import IdleReportTurn, RunningReportTurn
+
+        if self.claimed_generation is None or self.turn_generation is None:
+            return IdleReportTurn()
+        return RunningReportTurn(self.id, self.turn_generation)
+
+    def matches_report(self, turn_id: str, generation: int) -> bool:
+        return self.claimed_generation is not None and (self.id, self.turn_generation) == (
+            turn_id,
+            generation,
+        )
 
     def require_active(self) -> ActiveTurn:
         return self

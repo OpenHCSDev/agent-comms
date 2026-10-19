@@ -6,7 +6,6 @@ import json
 import os
 import time
 from dataclasses import dataclass, field, fields, replace
-from collections.abc import Iterator
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -412,18 +411,6 @@ class Thread(ThreadProvenance):
         resolved = replace(self, name=canonical_name, **inherited)
         return self if resolved == self else resolved
 
-    def turn_leases(self) -> Iterator[TurnLeaseFence]:
-        """The declaration supplies its live witnesses, after owner validation."""
-        return self.turn_record.leases(
-            self.incarnation, self.process_identity, self.turn_generation
-        )
-
-    def has_turn_lease(self) -> bool:
-        return any(self.turn_leases())
-
-    def holds_turn(self, lease: TurnLeaseFence) -> bool:
-        return any(current == lease for current in self.turn_leases())
-
     def require_turn_lease(self) -> TurnLeaseFence:
         return self.turn_record.require_lease(
             self.incarnation,
@@ -434,7 +421,9 @@ class Thread(ThreadProvenance):
     def has_authored_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:
         return any(
             (lease.identity, lease.turn_id) == (identity, turn.value)
-            for lease in self.turn_leases()
+            for lease in self.turn_record.leases(
+                self.incarnation, self.process_identity, self.turn_generation
+            )
         )
 
     def has_observed_task_turn(self, identity: TurnIdentity, turn: TurnId) -> bool:

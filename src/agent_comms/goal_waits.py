@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Iterable, Sequence
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .bus_publication import CommittedDelivery
 from .declared_family import DeclaredFamily
+from .field_codec import NullMember, RecordMember, SubclassUnion
 from .goal_presentation import (
     GoalExecution,
     GoalExecutionState,
@@ -28,6 +29,30 @@ if TYPE_CHECKING:
     from .registry_document import RegistrySnapshot
     from .agent_activity import AgentActivity
     from .threads import Thread
+
+
+class ReportTurn(SubclassUnion, affix="ReportTurn"):
+    @abstractmethod
+    def matches_current(self, turn) -> bool: ...
+
+
+@dataclass(frozen=True)
+class IdleReportTurn(NullMember, ReportTurn):
+    def matches_current(self, turn) -> bool:
+        return False
+
+
+@dataclass(frozen=True)
+class RunningReportTurn(RecordMember, ReportTurn):
+    turn_id: str
+    generation: int
+
+    def __post_init__(self):
+        if not self.turn_id or type(self.generation) is not int or self.generation <= 0:
+            raise ValueError("A reporting turn requires a recorded ID and generation")
+
+    def matches_current(self, turn) -> bool:
+        return turn.matches_report(self.turn_id, self.generation)
 
 
 class GoalWait(ABC):
@@ -83,54 +108,19 @@ class RecordedGoalWait(GoalWait):
     after_seq: int
     targets: tuple[GoalWaitTarget, ...]
     owner: RecordedThreadIncarnation
-    # An idle dependency has no turn generation at the moment of declaration.
-    target_turn_generations: tuple[int | None, ...]
-    # Runtime declarations outside a turn explicitly carry no reporting turn.
-    report_turn_id: str | None
-    report_turn_generation: int | None
+    report_turn: ReportTurn
 
     @classmethod
-    def capture(cls, goal_id, wait_id, revision, after_seq, targets, *, owner, snapshot):
-        """Capture wait-record metadata, never an optional executable lease."""
-        generations = {
-            target.incarnation: lease.identity.generation
-            for target in targets
-            for lease in snapshot.require(target.incarnation.name).turn_leases()
-        }
-        result = cls(
+    def capture(cls, goal_id, wait_id, revision, after_seq, targets, *, owner):
+        return cls(
             goal_id,
             wait_id,
             revision,
             after_seq,
             targets,
             owner.incarnation.require_recorded(),
-            tuple(generations.get(target.incarnation) for target in targets),
-            None,
-            None,
+            owner.turn_record.read().report_wait_turn(),
         )
-        for lease in owner.turn_leases():
-            result = replace(
-                result,
-                report_turn_id=lease.turn_id,
-                report_turn_generation=lease.identity.generation,
-            )
-        return result
-
-    def __post_init__(self) -> None:
-        if len(self.target_turn_generations) != len(self.targets) or any(
-            generation is not None and (type(generation) is not int or generation <= 0)
-            for generation in self.target_turn_generations
-        ):
-            raise ValueError("A wait requires its owner incarnation and aligned target turns.")
-        if (self.report_turn_id is None) != (self.report_turn_generation is None) or (
-            self.report_turn_id is not None
-            and (
-                not self.report_turn_id
-                or type(self.report_turn_generation) is not int
-                or self.report_turn_generation <= 0
-            )
-        ):
-            raise ValueError("A reporting turn requires both its ID and generation.")
 
     def allows_routed_input(self) -> bool:
         return False
@@ -442,10 +432,8 @@ class GoalWaits(ThreadOwnedState, TypedStore):
                     # A persisted wait does not make a *new* live owner turn
                     # part of the old wait graph. It may send the reply before
                     # its turn finishes; only the reporting turn belongs here.
-                    if peer_wait is None or not any(
-                        (peer_wait.report_turn_id, peer_wait.report_turn_generation)
-                        == (lease.turn_id, lease.identity.generation)
-                        for lease in peer.turn_leases()
+                    if peer_wait is None or not peer_wait.report_turn.matches_current(
+                        peer.turn_record.read()
                     ):
                         return ()
                 if peer_wait is not None:

@@ -7,6 +7,7 @@ import pytest
 from agent_comms.comms import wire
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.field_codec import FieldCodec
+from agent_comms.errors import RelationViolationError
 from agent_comms.threads import Thread
 from agent_comms.turn_lease import FinishedTurnFence, NoFinishedTurn
 
@@ -28,7 +29,7 @@ def test_activity_start_failure_cannot_clear_replacement_turn(tmp_path, monkeypa
     with pytest.raises(OSError, match="activity publication failed"):
         # Publication follows a real phase change, not an unchanged default phase.
         comms.agents.begin_turn("owner", "same-id", "changed preparation detail")
-    assert comms.registry.require("owner").holds_turn(replacement[0])
+    assert comms.registry.require("owner").turn_record.read().held_by(replacement[0])
 
 
 def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
@@ -43,7 +44,7 @@ def test_old_lease_cannot_clear_same_id_after_delete_rebind(tmp_path):
     saved = comms.registry.store.path.read_bytes()
     assert comms.registry.release_turn(original) == (False, NoFinishedTurn())
     assert comms.registry.store.path.read_bytes() == saved
-    assert comms.registry.require("owner").holds_turn(successor)
+    assert comms.registry.require("owner").turn_record.read().held_by(successor)
     assert isinstance(comms.agents.finish_turn(successor), FinishedTurnFence)
 
 
@@ -67,4 +68,5 @@ def test_unattested_saved_turn_remains_data_without_a_lease(tmp_path, *, thread_
         FieldCodec.decode(Thread, FieldCodec.encode(retained))
     )
     assert restored.turn_record.read() == expected
-    assert not restored.has_turn_lease()
+    with pytest.raises(RelationViolationError):
+        restored.require_turn_lease()

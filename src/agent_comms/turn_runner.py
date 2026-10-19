@@ -127,8 +127,7 @@ class TurnRunner:
         if name is None:
             return
         thread = await Coordination.run_worker(partial(self.comms.registry.require, name))
-        for lease in thread.turn_leases():
-            await CompactionObservation(self, session_id, lease, thread.turn_record.read().phase).dispatch(event)
+        await thread.turn_record.read().observe_compaction(self, session_id, thread, event)
 
     def backend_for(self, session_id: str, thread: Thread) -> AgentBackend:
         """This session's backend, created for the thread's declared backend on first use."""
@@ -240,8 +239,7 @@ class TurnRunner:
         if task is not None:
             current = await Coordination.run_worker(partial(self.comms.registry.require, name)) if name else None
             if current is not None:
-                for lease in current.turn_leases():
-                    await self.transition_turn(session_id, lease, CancellingPhase())
+                await current.turn_record.read().cancel_turn(self, session_id, current)
             task.cancel()
             await asyncio.gather(task, return_exceptions=True)
         # Selected handling may be the original inbox task. Retire only that

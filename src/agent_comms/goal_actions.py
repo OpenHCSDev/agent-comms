@@ -317,7 +317,6 @@ class StandbyGoalAction(TransitionGoalAction, ModelInvocable, RuntimeInvocable):
                 ctx.goals.bus.log.latest_sequence(),
                 wait_targets,
                 owner=thread,
-                snapshot=snapshot,
             )
         )
 
