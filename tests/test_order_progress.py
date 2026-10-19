@@ -146,6 +146,58 @@ def test_order_due_moves_the_deadline_in_core_and_on_the_record(commander, comma
     assert 'P1 order order-P1 due ' in (tmp_path / 'narrative.md').read_text()
 
 
+class HeldSource:
+    """A source holding one commit before any remote, one pushed commit, one open and one merged PR."""
+    since = 100.0
+
+    def commits(self, *excluded):
+        yield {('--remotes',): ('a' * 40, 1000.0), ('origin/HEAD',): ('e' * 40, 1000.0)}[excluded]
+
+    def requests(self, state):
+        return {'open': [PullRequest(7, 'fix/p1', 'b' * 40, updated_at=1000.0)],
+                'merged': [PullRequest(8, 'fix/p1', 'f' * 40, merge='c' * 40, merged_at=200.0)]}[state]
+
+
+class EmptySource:
+    since = 100.0
+
+    def commits(self, *excluded):
+        return iter(())
+
+    def requests(self, state):
+        return []
+
+
+MOVED = time.strftime('%H:%M', time.localtime(1000.0))
+
+
+@pytest.mark.parametrize('member, line, stalls_at, untouched_at', [
+    (CommittedProgress, f'committed aaaaaaaaa at {MOVED}, not pushed', 1900, None),
+    (PushedProgress, f'pushed eeeeeeeee at {MOVED}, no PR', 1900, None),
+    (OpenPrProgress, 'PR #7 open at bbbbbbbbb', 1900, 1300),
+    (MergedProgress, 'merged as ccccccccc, record done', None, None),
+])
+def test_each_found_member_says_from_its_class_whether_it_stalls_and_is_untouched(
+        member, line, stalls_at, untouched_at):
+    (progress,) = member.found(HeldSource())
+    assert tuple(member.found(EmptySource())) == ()
+    assert progress.line == line
+    for now in (1300, 1301, 1900, 1901, 10 ** 9):
+        assert progress.stalled(100.0, now) is (stalls_at is not None and now > stalls_at)
+        assert progress.untouched(now) is (untouched_at is not None and now > untouched_at)
+
+
+@pytest.mark.parametrize('progress, line, stalls_at', [
+    (NoCommitProgress(), 'no commit since the order', 700),
+    (UnreadProgress('gh failed'), 'progress unread: gh failed', None),
+])
+def test_unfound_progress_says_from_its_class_whether_it_stalls(progress, line, stalls_at):
+    assert progress.line == line
+    for now in (700, 701, 10 ** 9):
+        assert progress.stalled(100.0, now) is (stalls_at is not None and now > stalls_at)
+        assert not progress.untouched(now)
+
+
 @pytest.mark.parametrize('progress, now, stalled', [
     (NoCommitProgress(), 100 + 600, False),
     (NoCommitProgress(), 100 + 601, True),
