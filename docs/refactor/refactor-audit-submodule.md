@@ -24,11 +24,25 @@ Existing audit `Package.load` parsed 15 script modules with zero omissions befor
 
 ## Owned disposable output
 
-- `/home/ts/wt/pi-audit-sub--P1/.artifacts/refactor-audit-submodule`: small build/archive/install verification output owned by pi-audit-sub; remove after verification.
-- `/home/ts/wt/pi-audit-sub-clone-proof`: disposable recursive clone owned by pi-audit-sub; remove after evidence is recorded.
+- `/home/ts/wt/pi-audit-sub--P1/.artifacts/refactor-audit-submodule`: 19 MiB of build/archive/install verification output owned by pi-audit-sub. Removed after verification and zero lsof borrowers. Generated audit bytecode and the temporary upstream PR body were removed too; concise results are retained here.
+- `/home/ts/wt/pi-audit-sub-clone-proof`: never created. StorageRule refused `git clone --recurse-submodules` before execution (git clone forbidden), then also refused `git worktree add` because this path is not a registered checkout of pi-audit-sub. No clone workaround is used or clone success claimed.
 
 The resource helper `/home/ts/bin/agent-resource-check` is absent. Direct snapshot: approximately 26 GiB disk available, 6.9 GiB memory available, swap already in use. Checks are serial and reuse installed dependencies and cached build tools; no parallel fleet or large suite is started.
 
 ## Verification
 
-Pending recursive clone, real isolated installation, and distribution checks. No merge, live installation, launcher switch, restart or provider call is authorized or claimed by this change.
+- Standalone pin: `3f27eeffc662220a7b786348595198ee31b5cc51` (candidate head of upstream PR #2).
+- Upstream: all 10 unittests passed, including the preserved HedgeCheck through the existing Check family. No AST parse omissions among all 15 production script modules.
+- Built wheel and sdist with cached Hatch tools and the installed Python 3.14. Each contains all 40 tracked submodule files, byte-equal to the pinned checkout, with zero missing or extra skill files (including no .git or pycache).
+- Ran the real `agent-comms install --project "$PWD"` command against isolated HOME and bus roots, once from source and once from the pip-installed wheel (`pip --no-index --no-deps --target ...`). Registered the private commander first, as CommanderConfig.write requires; an initial empty-bus attempt refused before creating links. All three detected harnesses installed successfully.
+- Source install: `.claude/skills/refactor-audit`, `.codex/skills/refactor-audit` and `.config/opencode/skills/refactor-audit` each resolve directly to `/home/ts/wt/pi-audit-sub--P1/src/agent_comms/skills/refactor-audit`. Wheel install: the same three links resolve to the skill resource in that isolated installed wheel. SKILL.md and both representative script files were read through every link and matched the pinned source bytes. SKILL.md SHA256: `ba682d1d35631eac8046608564607e0f89193fe503b42f9dd36935768537f1b5`.
+- Ran `scripts/debt_census.py --repo "$PWD" --root src/agent_comms_hooks` through the wheel-installed Claude skill link. It parsed and measured all three real hook modules successfully. This verifies the installed skill tool path; it is not an audit of unrelated Core behavior.
+- `git diff --check` passed. Normal development/CI installers no longer point to the historical NRA copy.
+
+The requested fresh recursive clone proof is blocked by StorageRule, not passed. A reviewer can run:
+
+```bash
+git clone --recurse-submodules --single-branch --branch feat/refactor-audit-submodule https://github.com/OpenHCSDev/agent-comms.git /home/ts/wt/refactor-audit-review
+```
+
+No merge, live installation, launcher switch, restart, active-session write or provider call ran. The user-managed synced tree and P202 checkout remain in their owners' custody; no development worktree was made a live skill installation.
