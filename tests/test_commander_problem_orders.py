@@ -37,7 +37,7 @@ from agent_comms.todos import (AwaitingFirstCall, VerdictAudience, OrderMessage,
     ApplicationOrderRun, RecordedCommitDelivery, MechanicalOrderRun, TodoStore,
     LateObservedFirstCall, OperationDelivery, OrderedHunt,
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
-    AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
+    AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
 from agent_comms.turn_context import GoalSegment
 
@@ -132,7 +132,7 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
     assert rows[0].deadline == RecordedEventTime(3000)
 
 
-def test_strike_time_and_clean_ordered_hunts_belong_to_problem(commander):
+def test_strike_time_and_clean_ordered_hunts_keep_their_owners(commander):
     comms, caller = commander
     todo = create(commander, 'P1')
     actor = comms.registry.require('lead').incarnation
@@ -144,10 +144,9 @@ def test_strike_time_and_clean_ordered_hunts_belong_to_problem(commander):
     why = 'This source reads the same rows on every event without changing any owned fact.'
     for hunt in (CleanHunt(FileLine(__file__, 1), why, RecordedEventTime(600)),
                  OrderedHunt(FileLine(__file__, 1), why, RecordedEventTime(700), 'order-P1')):
-        current = comms.goals.todos.get('P1')
-        CommsTodoTool(id='P1', operation=RecordHuntTodo(current.revision, actor, hunt)).apply(comms, caller)
+        comms.goals.todos.record_hunt(actor, hunt)
         assert FieldCodec.decode(Hunt, FieldCodec.encode(hunt)) == hunt
-    assert len(comms.goals.todos.get('P1').hunts) == 2
+    assert len(comms.goals.todos.hunts_for_commander(actor)) == 2
 
 
 def test_delivery_checks_once_and_preserves_the_units_goal(commander):
@@ -394,8 +393,8 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
     assert 'Due' not in sent and due not in sent  # the deadline stays the commander's fire line
 
-    script.hunt(f'{__file__}:1', 'P1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
-    assert [h.sent for h in comms.goals.todos.get('P1').hunts] == [sent_back.order.id]
+    script.hunt(f'{__file__}:1', 'the counter is reread per event and the order replaces it with one read', sent_back.order.id)
+    assert [h.sent for h in comms.goals.todos.hunts_for_commander(comms.registry.require('lead').incarnation)] == [sent_back.order.id]
 
     (repo / 'count.txt').write_text('1\n')
     git('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-qam', 'fix')
@@ -451,8 +450,9 @@ def test_a_strike_and_a_clean_hunt_land_on_their_problem_argument_not_one_the_wh
     create(commander, 'P2', owner='worker', deadline=time.time() + 3600)
     script.strike('worker', 'P2', 'P1 was compared with this miss: P2 left its count at zero and reported it fixed')
     assert [script.struck(comms.goals.todos.get(pid), 'worker') for pid in ('P1', 'P2')] == [0, 1]
-    script.hunt(f'{__file__}:1', 'P2', 'P1 rereads the counter per event; this read of the P2 path found it clean', None)
-    assert [len(comms.goals.todos.get(pid).hunts) for pid in ('P1', 'P2')] == [0, 1]
+    why = 'P1 rereads the counter per event; this read of the P2 path found it clean'
+    script.hunt(f'{__file__}:1', why)
+    assert comms.goals.todos.hunts_for_commander(comms.registry.require('lead').incarnation)[0].why == why
     done = replace(comms.goals.todos.get('P2'), state=DoneTodoState)
     with pytest.raises(TodoError, match='P2 is done'):
         done.state.require_open(done)
@@ -1222,7 +1222,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
 
 VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
-    'superseded': "e1:ab --line one --why why --by m2",
+    'superseded': "e1:ab --line one --why 'The task moved to a different implementation owner' --by m2",
     'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
             " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
 }
@@ -1234,6 +1234,10 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     assert set(judge.VerdictVerb.names()) == set(VERDICT_LINES)
     create(commander, 'P1')
+    comms.registry.declare(comms.registry.new_thread('replacement', frozenset(), str(comms.root), created_at=3.0))
+    replacing = create(commander, 'P2', owner='replacement')
+    CommsTodoTool(id='P2', operation=OrderMessage(replacing.revision,
+        comms.registry.require('lead').incarnation, 'm2')).apply(comms, caller)
     for name, line in VERDICT_LINES.items():
         argv = [name, *shlex.split(line)]
         for at in [i for i, token in enumerate(argv)

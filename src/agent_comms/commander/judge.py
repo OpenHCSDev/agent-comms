@@ -20,7 +20,7 @@ from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
 from ..comms import Comms
-from ..todos import AcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, SlopKind, Derivation, SupersededVerdict
+from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, SlopKind, Derivation, SupersededVerdict
 from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec
 from ..tool_caller import ThreadCaller
@@ -124,10 +124,10 @@ class JudgeVerb(CommanderVerb):
 @dataclass(frozen=True, kw_only=True)
 class ShowVerb(JudgeVerb):
     help = "every unit's unjudged edits in full, beside its current orders"
-    thread: str | None = option("thread", nargs="?", default=None)
+    thread: str = option("thread", nargs="?", default="")
 
     def selects(self, edit: Edit) -> bool:
-        return self.thread is None or edit.thread == self.thread
+        return not self.thread or edit.thread == self.thread
 
     def run(self) -> None:
         show([edit for edit in Edit.unjudged(order.COMMS, ME) if self.selects(edit)])
@@ -146,7 +146,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     correct-maintenance results. Each member's required options are the facts its verdict carries."""
     ids: tuple[str, ...] = option("ids", nargs="+", metavar="ID:CODE")
     why: str = option()
-    msg: str | None = option(default=None, help="BUSID of my order message to the unit")
+    msg: str = option(default="", help="BUSID of my order message to the unit")
     lines: tuple[str, ...] = option(
         "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
@@ -162,7 +162,7 @@ class VerdictVerb(JudgeVerb, RuledVerb):
     def run(self) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        orders = {todo.id: todo for todo in order.held_orders() if self.msg is None or todo.sent_in(self.msg)}
+        orders = {todo.id: todo for todo in order.held_orders() if not self.msg or todo.sent_in(self.msg)}
         edits = {edit.id: edit for edit in Edit.unjudged(order.COMMS, ME) if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
@@ -191,11 +191,15 @@ class VerdictVerb(JudgeVerb, RuledVerb):
 class OkVerb(VerdictVerb):
     help = "the edit serves the order"
     serves: str = option(help="exact words of the order")
-    no_owner: str | None = option("--no-owner", default=None, help="12+ words with because and absolute file:line")
+    no_owner: str = option("--no-owner", default="", help="12+ words with because and absolute file:line")
+    peer: str = option("--peer", default="", help="another sender's retained order message to the unit")
 
     def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        return AcceptedVerdict(todo.revision, order.COMMS.registry.require(ME).incarnation,
-                               todo.held(), edit_id, quote=self.serves)
+        actor = order.COMMS.registry.require(ME).incarnation
+        if self.peer:
+            return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit_id,
+                                       quote=self.serves, peer=self.peer)
+        return AcceptedVerdict(todo.revision, actor, todo.held(), edit_id, quote=self.serves)
 
     def check_edits(self, edits: list[Edit]) -> None:
         for edit in edits:

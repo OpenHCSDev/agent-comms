@@ -41,7 +41,7 @@ from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding,
+                     OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
 from .config import CommanderConfig, Repo
@@ -397,9 +397,10 @@ def problem(text, unit, due, order_file, where, disk=False):
     print(pid)
 
 
-def close(pid, works, artifact):
+def close(pid, works, artifact=''):
     """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
-    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=artifact), COMMS)
+    evidence = artifact or COMMS.goals.todos.get(pid).order.closing_artifact()
+    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence), COMMS)
     board()
     print(f'{pid} closed')
 
@@ -484,7 +485,6 @@ def done(pid, sha, delivered=None, screenshot='', seen='', repo=''):
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
     unit = todo.assignment.owner
-    todo.order.run.require_artifact(seen or screenshot)
     if repo and Path(repo).resolve() != Path(todo.order.check.directory).resolve():
         sys.exit('Refused: --repo must name the recorded order check directory.')
     repo = todo.order.check.directory
@@ -502,7 +502,9 @@ def done(pid, sha, delivered=None, screenshot='', seen='', repo=''):
         COMMS.registry.storage_rule.require_quota(thread)
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
-    delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered)
+    evidence = FileDeliveryEvidence(seen or screenshot) if seen or screenshot else NoDeliveryEvidence()
+    delivery = (OperationDelivery(evidence=evidence) if operation else
+                CommitDelivery(commit=sha, delivered_commit=delivered or sha, evidence=evidence))
     claim = WorkingClaim(seen or screenshot) if operation else MergedClaim(delivered or sha)
     call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
@@ -540,29 +542,21 @@ def first_calls():
 HUNT_ROOTS = [(str(repo.checkout), repo.source) for repo in CONFIG.repos]
 
 
-def hunt(where, pid, why, sent=None):
-    """A hot-path read with a verdict, recorded on open problem ``pid``; HuntVerb declares its
-    file:line, problem, reason and outcome."""
+def hunt(where, why, sent=''):
+    """Record the commander's source read, whether or not it became an order."""
     path, _, line = where.rpartition(':')
     if not os.path.exists(path) or not line.isdigit() or int(line) > sum(1 for _ in open(path)):
         sys.exit(f'Refused: {where} is not a real file:line')
     if len(why.split()) < 10:
         sys.exit('Refused: say what the code does per event or per history row, and the fix or why it is clean (10+ words)')
-    todo = COMMS.goals.todos.get(pid)
-    todo.state.require_open(todo)
-    if sent and todo.order.id != sent:
-        sys.exit(f'Refused: {sent} is not the open order of {pid}; send it first. '
-                 + HuntVerb.usage())
     ref, at = FileLine(os.path.realpath(path), int(line)), RecordedEventTime(time.time())
-    call(CommsTodoTool(id=todo.id, operation=RecordHuntTodo(
-        todo.revision, COMMS.registry.require(ME).incarnation,
-        OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))))
+    COMMS.goals.todos.record_hunt(COMMS.registry.require(ME).incarnation,
+        OrderedHunt(ref, why, at, sent) if sent else CleanHunt(ref, why, at))
     print(f'hunt recorded: {where} -> {sent or "clean"}')
 
 
 def hunts():
-    history = COMMS.goals.todos.history_for_commander(COMMS.registry.require(ME).incarnation)
-    return [h for t in history for h in t.hunts]
+    return COMMS.goals.todos.hunts_for_commander(COMMS.registry.require(ME).incarnation)
 
 
 def next_hunt():
@@ -1009,7 +1003,7 @@ class CloseVerb(OrderVerb, RuledVerb):
     help = "the fix works in the app; Core closes the problem"
     pid: str = option("pid")
     works: str = option("--works")
-    artifact: str = option("--artifact")
+    artifact: str = option("--artifact", default="", help="defaults to the file recorded by done --seen")
 
     def run(self) -> None:
         close(self.pid, self.works, self.artifact)
@@ -1019,12 +1013,11 @@ class CloseVerb(OrderVerb, RuledVerb):
 class HuntVerb(OrderVerb, LoadedVerb):
     help = "a hot-path read with a verdict: file:line, what scales or repeats, and the order it became"
     where: str = option("where", metavar="FILE:LINE")
-    pid: str = option("pid", help="the open problem the hunt is recorded on")
     why: str = option("--why")
-    sent: str | None = option("--sent", default=None, group="outcome", metavar="ORDER",
+    sent: str = option("--sent", default="", group="outcome", metavar="ORDER",
                               help="the open order the hunt became")
     clean: bool = option("--clean", default=False, group="outcome",
-                         help="no order; the hunt is recorded on its problem")
+                         help="the inspected code needs no order")
 
     @classmethod
     def due(cls, where: str | None) -> str:
@@ -1032,7 +1025,7 @@ class HuntVerb(OrderVerb, LoadedVerb):
                 f'or slop, then {cls.usage()}')
 
     def run(self) -> None:
-        hunt(self.where, self.pid, self.why, self.sent)
+        hunt(self.where, self.why, self.sent)
 
 
 class NextHuntVerb(OrderVerb, declared_name="next-hunt"):

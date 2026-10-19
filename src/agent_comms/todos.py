@@ -44,9 +44,32 @@ if TYPE_CHECKING:
     from .goal_management import Goals
 
 
+@dataclass(frozen=True)
+class DeliveryEvidence(DeclaredFamily, affix="DeliveryEvidence"):
+    def artifact(self) -> str:
+        raise ValueError("No application evidence was supplied at delivery; pass --artifact FILE.")
+
+
+@dataclass(frozen=True)
+class NoDeliveryEvidence(DeliveryEvidence):
+    pass
+
+
+@dataclass(frozen=True)
+class FileDeliveryEvidence(DeliveryEvidence):
+    path: str
+
+    def artifact(self) -> str:
+        if not Path(self.path).is_file():
+            raise ValueError("Delivery evidence must name an existing file.")
+        return self.path
+
+
 @dataclass(frozen=True, kw_only=True)
 class OrderDelivery(DeclaredFamily, affix="Delivery"):
     at: EventTime = field(default_factory=UnrecordedEventTime)
+    evidence: DeliveryEvidence = field(default_factory=NoDeliveryEvidence,
+                                      metadata={"wire_omit_default": True})
 
     @property
     def work(self) -> str:
@@ -1032,6 +1055,9 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
         return ()
 
+    def closing_artifact(self) -> str:
+        raise ValueError("Only a delivered order has closing evidence.")
+
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
         raise ValueError("This problem already has an order; drop it before linking another.")
 
@@ -1249,6 +1275,9 @@ class DeliveredProblemOrder(CheckedProblemOrder):
             raise ValueError("The order already records a different delivery.")
         return self
 
+    def closing_artifact(self) -> str:
+        return self.delivery.evidence.artifact()
+
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
@@ -1313,8 +1342,8 @@ class Hunt(DeclaredFamily, affix="Hunt"):
             raise ValueError("Describe the inspected code and verdict in ten or more words.")
         self.at.require_recorded("A hunt")
 
-    def require_order(self, order):
-        pass
+    def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+        self.where.require_exists()
 
 
 @dataclass(frozen=True)
@@ -1326,9 +1355,18 @@ class CleanHunt(Hunt):
 class OrderedHunt(Hunt):
     sent: str
 
-    def require_order(self, order):
-        if self.sent != order.id:
-            raise ValueError("The hunt must name this problem's current order.")
+    def require_commander(self, store: TodoStore, commander: ThreadIncarnation) -> None:
+        super().require_commander(store, commander)
+        if not any(todo.order.id == self.sent or todo.sent_in(self.sent)
+                   for todo in store.held_for_commander(commander)):
+            raise ValueError("The hunt must name this commander's current order.")
+
+
+@dataclass(frozen=True)
+class HuntRecord(TypedTable):
+    id: str = field(metadata={"sql": Column(primary_key=True)})
+    commander: ThreadIncarnation
+    hunt: Hunt
 
 
 class TodoError(ValueError):
@@ -1630,11 +1668,36 @@ class AcceptedVerdict(OrderVerdict):
             raise ValueError('Added branches need --no-owner: 12+ words with because and an absolute file:line.')
     line = "Accepted"
 
-    def judged(self, current: Todo) -> Todo:
+    def require_quote(self, text: str) -> None:
         quoted = " ".join(self.quote.split())
-        order = " ".join(current.order.instructions(current).split())
-        if len(quoted.split()) < 4 or quoted not in order:
+        if len(quoted.split()) < 4 or quoted not in " ".join(text.split()):
             raise ValueError("Quote 4+ words of the order this tool call carries out.")
+
+    def judged(self, current: Todo) -> Todo:
+        self.require_quote(current.order.instructions(current))
+        return current
+
+
+@dataclass(frozen=True)
+class PeerAcceptedVerdict(AcceptedVerdict):
+    peer: str
+
+    def prepare(self, goals, current):
+        with goals.bus.log.opened_wire_snapshot() as source:
+            messages = [message for message, _ in source.public_records()
+                        if message.message_id == self.peer]
+        if len(messages) != 1:
+            raise ValueError("The peer order message is absent from retained history.")
+        message, = messages
+        if (message.sender == self.actor.name or
+                (message.target != current.holder and
+                 current.holder not in {mention.name for mention in message.mentions})):
+            raise ValueError("--peer must name another sender's message to this unit.")
+        self.require_quote(message.body)
+        return self
+
+    def judged(self, current: Todo) -> Todo:
+        # prepare checked the quote against its retained peer message, not our order.
         return current
 
 
@@ -1780,19 +1843,6 @@ class RecordFirstCallTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class RecordHuntTodo(TodoOperation):
-    actor: ThreadIncarnation
-    hunt: Hunt
-
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
-        self.hunt.where.require_exists()
-        self.hunt.require_order(current.order)
-        return replace(current, hunts=(*current.hunts, self.hunt), revision=current.revision + 1)
-
-
-@dataclass(frozen=True)
 class DeliverTodo(TodoOperation):
     actor: ThreadIncarnation
     delivery: OrderDelivery
@@ -1885,7 +1935,6 @@ class Todo(TypedTable):
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
     strikes: tuple[StrikeTodo, ...] = ()
-    hunts: tuple[Hunt, ...] = ()
     voided: tuple[VoidStrikeTodo, ...] = ()
     released: tuple[ReleaseTodo, ...] = ()
     verdicts: tuple[OrderVerdict, ...] = ()
@@ -1975,8 +2024,8 @@ class Todo(TypedTable):
         """Only the latest recorded send names this order, not an earlier replacement."""
         return bool(self.messages) and self.messages[-1].message_id == message_id
 
-    def require_replacement(self, message_id: str | None) -> None:
-        if message_id is None or not self.sent_in(message_id):
+    def require_replacement(self, message_id: str) -> None:
+        if not self.sent_in(message_id):
             raise ValueError(f"{self.holder} already holds {self.id}; pass --replaces with its current message.")
 
     @classmethod
@@ -2062,7 +2111,19 @@ class TodoStore(TypedStore):
 
     root: Path
     filename: ClassVar[str] = "todos.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo,)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (Todo, HuntRecord)
+
+    def record_hunt(self, commander: ThreadIncarnation, hunt: Hunt) -> HuntRecord:
+        hunt.require_commander(self, commander)
+        recorded = HuntRecord(uuid4().hex, commander, hunt)
+        with self.writing() as db:
+            recorded.upsert(db)
+        return recorded
+
+    def hunts_for_commander(self, commander: ThreadIncarnation) -> tuple[Hunt, ...]:
+        with self.snapshot() as db:
+            return tuple(record.hunt for record in HuntRecord.select(db)
+                         if record.commander == commander)
 
     def resolve_order(self, commander: ThreadIncarnation, unit: str, message: str) -> Todo:
         found = [t for t in self.held_by(commander, unit)
