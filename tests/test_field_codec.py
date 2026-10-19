@@ -4,7 +4,7 @@ from typing import Annotated, ClassVar
 
 import pytest
 
-from agent_comms.declared_family import DeclaredFamily
+from agent_comms.declared_family import DeclaredFamily, UnknownFamilyMember
 from agent_comms.field_codec import (
     FieldCodec, InlineRecord, JsonShapeFamily, JsonShapeMember, MalformedRecord, NullMember, PathText, SubclassUnion,
     RecordedTimestamp, TimestampText, TextRepresentation, WireValue,
@@ -38,6 +38,15 @@ def test_transient_plan_excludes_fields_before_decoder_or_value_access():
     assert set(FieldCodec.value_schema(Record)["properties"]) == {"value"}
     with pytest.raises(MalformedRecord, match="Unknown fields"):
         FieldCodec.decode(Record, {"value": "kept", "local": {}})
+
+
+def test_record_exclusion_uses_the_selected_plan_and_refuses_conflicting_claims():
+    @dataclass
+    class Record:
+        value: str = field(metadata={"wire_transient": True, "wire_context": True})
+
+    with pytest.raises(TypeError, match="exactly one declared field plan"):
+        FieldCodec.record_fields(Record)
 
 
 def test_field_plan_discovers_a_new_flag_without_changing_the_selector():
@@ -372,7 +381,7 @@ def test_family_refusal_keeps_its_own_message_once(annotation, data):
     with pytest.raises(MalformedRecord) as refused:
         FieldCodec.decode(annotation, data)
     assert str(refused.value) == "Unknown Choice name: 'absent'"
-    assert type(refused.value.__cause__) is ValueError
+    assert type(refused.value.__cause__) is UnknownFamilyMember
     assert str(refused.value.__cause__) == str(refused.value)
 
 
