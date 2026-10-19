@@ -1571,7 +1571,7 @@ class DoneTodoState(TodoState):
 
 
 @dataclass(frozen=True)
-class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
+class TodoCommand(Command, DeclaredFamily, affix="TodoOperation"):
     expected_revision: int
 
     def __post_init__(self) -> None:
@@ -1581,15 +1581,16 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
     def prepare(self, goals, current):
         return self
 
-    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
-        current.require_commander(actor)
-
     def record(self, goals: Goals, problem: str) -> Todo:
         """Write this operation; one that also revises the holder's Goal routes through it."""
         return goals.apply_problem(problem, self)
 
     @abstractmethod
     def apply(self, current: Todo) -> Todo: ...
+
+
+class TodoOperation(TodoCommand, declared_name=None):
+    """Commands the ordinary commander's tools accept."""
 
 
 @dataclass(frozen=True)
@@ -1659,7 +1660,7 @@ class VerdictAudience:
 
 
 @dataclass(frozen=True)
-class OrderVerdict(TodoOperation, declared_name=None):
+class OrderVerdict(TodoCommand, declared_name=None):
     """The commander's verdict on one tool call the holder made for its order, kept on the order."""
     audience: ClassVar[type[VerdictAudience]] = VerdictAudience
     actor: ThreadIncarnation
@@ -1673,25 +1674,19 @@ class OrderVerdict(TodoOperation, declared_name=None):
     @abstractmethod
     def line(self) -> str: ...
 
-    def require_actor(self, current: Todo) -> None:
-        current.require_commander(self.actor)
-
-    def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
-        raise TodoError("The connector reviewer accepts a PR head, not an edit verdict.")
-
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        self.require_actor(current)
         current.require_assignment(self.previous)
         judged = self.judged(current)
         return replace(judged, verdicts=(*judged.verdicts, self), revision=current.revision + 1)
 
 
 @dataclass(frozen=True)
-class ToolCallVerdict(OrderVerdict, declared_name=None):
+class ToolCallVerdict(OrderVerdict, TodoOperation, declared_name=None):
     tool_call_id: str
 
     def apply(self, current: Todo) -> Todo:
+        current.require_commander(self.actor)
         _text(self.tool_call_id, "Judged tool call ID", 200)
         return super().apply(current)
 
@@ -1736,12 +1731,6 @@ class ReviewedHeadVerdict(QuotedVerdict):
     @property
     def line(self) -> str:
         return f"Reviewed head {self.head}"
-
-    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
-        raise TodoError("Only the connector reviewer records a PR-head verdict.")
-
-    def require_actor(self, current: Todo) -> None:
-        """reviewed checked the connector's registered reviewer before recording."""
 
     def reviewed(self, goals: Goals, problem: str, reviewer: ThreadIncarnation) -> Todo:
         if self.actor != reviewer:
@@ -2380,7 +2369,7 @@ class TodoStore(TypedStore):
             current.require_assignment(proposed.assignment)
             return current
 
-    def apply(self, todo_id: str, command: TodoOperation) -> Todo:
+    def apply(self, todo_id: str, command: TodoCommand) -> Todo:
         with self.writing() as db:
             current = self._current(db, todo_id)
             result = command.apply(current)

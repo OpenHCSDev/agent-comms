@@ -64,7 +64,7 @@ from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
-                    OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
+                    OrderProgress, ToolCallVerdict, PlainText, PullRequests, StrikeReason, Todo,
                     TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
@@ -737,11 +737,9 @@ class CommsVerdictTool(CommsTodoTool):
     description = ("Record the commander's verdict on one tool call the holder made for its "
                    "order: an accepted verdict quotes 4+ words of the order; a send-back strikes "
                    "the holder and revises its Goal in the same write.")
-    operation: OrderVerdict = tool_field("Edit verdict, or the connector reviewer's PR-head verdict")
-
-    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
-        todo = caller.judged(comms, self.id, self.operation)
-        return TodoChanged(todo, todo.strike_count)
+    operation: ToolCallVerdict = tool_field(
+        "Accepted or send-back verdict on the judged tool call ID"
+    )
 
 
 @dataclass(frozen=True, kw_only=True)
