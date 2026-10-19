@@ -74,7 +74,8 @@ class HistoryView(ABC):
 class ConversationObservation:
     """A first observation has no selection and therefore always reads."""
 
-    def capture(self, stores: WireRevision, read: Callable[[], ConversationRevision]) -> ConversationRevision:
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision:
         return read()
 
     def display_changed_before(self, later: ConversationRevision) -> bool:
@@ -88,7 +89,8 @@ class ConversationRevision(ConversationObservation):
     stores: WireRevision
     selection: DisplayIdentity
 
-    def capture(self, stores: WireRevision, read: Callable[[], ConversationRevision]) -> ConversationRevision:
+    def capture(self, stores: WireRevision,
+                read: Callable[[], ConversationRevision]) -> ConversationRevision:
         return (type(self)(stores, self.selection) if stores.selection_reusable_from(self.stores)
                 else read())
 
@@ -115,7 +117,8 @@ class ConversationHistoryView:
             views.revision(), partial(cls._read_revision, views, target, worktree))
 
     @classmethod
-    def _read_revision(cls, views: HistoryViews, target: str, worktree: str) -> ConversationRevision:
+    def _read_revision(cls, views: HistoryViews, target: str,
+                       worktree: str) -> ConversationRevision:
         worktree = str(Path(worktree).resolve())
         viewer = views.messaging.user_identity(worktree).name
         with views.registry.store.reading(views.bus, views.bus.log, views.channels.catalog):
