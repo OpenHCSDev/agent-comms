@@ -83,6 +83,31 @@ class FieldPlan:
     value: ValueDecoder[object]
     annotation: object
     declared: Field
+    metadata_flag: ClassVar[str | None] = None
+    _plans: ClassVar[list[type[FieldPlan]]] = []
+
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        FieldPlan._plans.append(cls)
+
+    @classmethod
+    def claims(cls, declared: Field, annotation: object) -> bool:
+        return cls.metadata_flag is not None and bool(declared.metadata.get(cls.metadata_flag))
+
+    @classmethod
+    def excludes_from_records(cls, declared: Field) -> bool:
+        return False
+
+    @classmethod
+    def from_declaration(cls, declared: Field, key: str, annotation: object) -> FieldPlan:
+        metadata = declared.metadata
+        return cls(
+            name=declared.name, key=key,
+            required=bool(metadata.get("wire_required")),
+            reject_null=bool(metadata.get("wire_nonnull")),
+            choices=metadata.get("wire_choices"),
+            value=compile_decoder(annotation), annotation=annotation, declared=declared,
+        )
 
     def contribute(self, fields):
         fields.append(self)
@@ -164,8 +189,41 @@ class FieldPlan:
         return default
 
 
-class ContextFieldPlan(FieldPlan):
+class DeclaredFieldPlan(FieldPlan):
+    """The value representation declares its plan; ordinary fields declare this one."""
+
+    @classmethod
+    def claims(cls, declared: Field, annotation: object) -> bool:
+        representation = FieldCodec._representation(annotation)[1] or FieldRepresentation
+        return super().claims(declared, annotation) or representation.field_plan is cls
+
+
+class TransientFieldPlan(DeclaredFieldPlan):
+    """A process-local field never enters a record or compiles a wire decoder."""
+
+    metadata_flag = "wire_transient"
+
+    @classmethod
+    def excludes_from_records(cls, declared: Field) -> bool:
+        return cls.claims(declared, None)
+
+
+class MissingNoneFieldPlan(DeclaredFieldPlan):
+    """Wire absence is None, independently of the constructor's default factory."""
+
+    metadata_flag = "wire_absent_none"
+
+    def omitted(self, value: object) -> bool:
+        return value is None or super().omitted(value)
+
+    def captured(self, data: object) -> dict[str, object]:
+        return {self.name: super().captured(data).get(self.name)}
+
+
+class ContextFieldPlan(DeclaredFieldPlan):
     """A constructor value supplied by the caller, never by wire data."""
+
+    metadata_flag = "wire_context"
 
     def contribute(self, fields: list[FieldPlan]) -> tuple[str, ...]:
         return ()
@@ -188,18 +246,22 @@ class ContextFieldPlan(FieldPlan):
         return {self.name: self.value.decode(context[self.name])}
 
 
-class BoundFieldPlan(FieldPlan):
+class BoundFieldPlan(DeclaredFieldPlan):
     """A nested record receives its context from declared sibling fields."""
+
+    metadata_flag = "wire_bind"
 
     def decoded_bound(
         self, data: dict[str, object], context: Mapping[str, object]
     ) -> dict[str, object]:
-        bound = {name: data[source] for name, source in self.declared.metadata["wire_bind"].items()}
+        bound = {name: data[source] for name, source in self.declared.metadata[self.metadata_flag].items()}
         return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, bound))
 
 
-class InlineFieldPlan(FieldPlan):
+class InlineFieldPlan(DeclaredFieldPlan):
     """An InlineRecord type's or ``wire_inline`` field's keys, written beside its parent's."""
+
+    metadata_flag = "wire_inline"
 
     @cached_property
     def inlined(self) -> type:
@@ -230,6 +292,11 @@ class InlineFieldPlan(FieldPlan):
 class InlineFamilyPlan(InlineFieldPlan):
     """An inlined family member: its tag, then the keys of whichever member it is."""
 
+    @classmethod
+    def claims(cls, declared: Field, annotation: object) -> bool:
+        return (super().claims(declared, annotation)
+                and isinstance(annotation, type) and issubclass(annotation, DeclaredFamily))
+
     @cached_property
     def family(self) -> type[DeclaredFamily]:
         return cast(type[DeclaredFamily], self.inlined)
@@ -251,7 +318,7 @@ class FieldRepresentation(ABC):
     ordinary JSON. All record structure remains owned by FieldCodec.
     """
 
-    field_plan: ClassVar[type[FieldPlan]] = FieldPlan
+    field_plan: ClassVar[type[FieldPlan]] = DeclaredFieldPlan
     accepts_null = False
     # True when the wire value is one external JSON shape decoded by from_wire
     # rather than the representation's own validated decode.
@@ -727,7 +794,8 @@ class FieldCodec(Sealed):
         # Declarations are immutable for this process; cache only their derived
         # schema, never decoded rows, registry membership or document revisions.
         declared = [(field, FieldCodec.wire_key(field)) for field in fields(cls)
-                    if field.init and not field.metadata.get("wire_transient")]
+                    if field.init and not any(
+                        plan.excludes_from_records(field) for plan in FieldPlan._plans)]
         keys = [key for _, key in declared]
         if any(not isinstance(key, str) or not key for key in keys):
             raise TypeError("Wire field names must be nonempty strings.")
@@ -994,15 +1062,8 @@ class FieldCodec(Sealed):
         hints = cls._types(record)
         computed = {member.wire_name for member in cls._projections(record, "wire").values()}
         entries = tuple(
-            cls._field_plan(field, hints[field.name])(
-                name=field.name,
-                key=key,
-                required=bool(field.metadata.get("wire_required")),
-                reject_null=bool(field.metadata.get("wire_nonnull")),
-                choices=field.metadata.get("wire_choices"),
-                value=compile_decoder(hints[field.name]),
-                annotation=hints[field.name],
-                declared=field,
+            cls._field_plan(field, hints[field.name]).from_declaration(
+                field, key, hints[field.name]
             )
             for field, key in declared
         )
@@ -1026,16 +1087,13 @@ class FieldCodec(Sealed):
             accepted_keys=frozenset(wire_keys) | computed,
         )
 
-    @classmethod
-    def _field_plan(cls, field: Field[object], annotation: object) -> type[FieldPlan]:
-        if field.metadata.get("wire_context"):
-            return ContextFieldPlan
-        if field.metadata.get("wire_bind"):
-            return BoundFieldPlan
-        if not field.metadata.get("wire_inline"):
-            return (cls._representation(annotation)[1] or FieldRepresentation).field_plan
-        family = isinstance(annotation, type) and issubclass(annotation, DeclaredFamily)
-        return InlineFamilyPlan if family else InlineFieldPlan
+    @staticmethod
+    def _field_plan(field: Field[object], annotation: object) -> type[FieldPlan]:
+        claimed = {plan for plan in FieldPlan._plans if plan.claims(field, annotation)}
+        selected = claimed - {base for plan in claimed for base in plan.__mro__[1:]}
+        if len(selected) != 1:
+            raise TypeError(f"Field {field.name} must have exactly one declared field plan: {selected}")
+        return selected.pop()
 
     @staticmethod
     @cache

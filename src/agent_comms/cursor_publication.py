@@ -172,9 +172,6 @@ class CursorPublication:
             if defer_busy and current == scope:
                 raise
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
-        except (OSError, ValueError, sqlite3.Error, CoordinationError, KeyError):
-            current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
-            return CursorEnvelope(current, revision, UnavailableCursorObservation())
         current = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         if current != scope:
             return CursorEnvelope(current, revision, UnavailableCursorObservation())
@@ -222,7 +219,7 @@ class CursorPublication:
             )
         except (OSError, RuntimeError):
             delivery.published = None
-            return
+            raise
         delivery.published = observed
 
     async def refresh(self, session_id: str, thread_name: str) -> None:

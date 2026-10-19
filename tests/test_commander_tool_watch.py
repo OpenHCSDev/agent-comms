@@ -5,6 +5,8 @@ import collections
 import importlib
 import json
 
+import pytest
+
 from agent_comms.native_tool_call import CodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.todos import StorageStrikeTodo
@@ -30,13 +32,13 @@ def test_coordination_call_digests_its_arguments():
     assert call.digest() == 'comms_threads {}'
 
 
-def test_a_line_core_refuses_is_reported_with_its_file_and_offset(tool_watch, commander, capsys):
+def test_a_malformed_line_raises_instead_of_skipping_history(tool_watch, commander):
     comms, _ = commander
     whole = json.dumps({"type": "message", "id": "m1", "timestamp": "2026-10-18T22:00:00.000Z",
                         "message": {"role": "user", "content": "hello"}})
     data = f'{whole}\n{{"type": "message"\n'.encode()
-    tool_watch.follow(comms.registry, collections.defaultdict(list), "worker", "session.jsonl", 7, data)
-    assert capsys.readouterr().out.startswith(f"REFUSED session.jsonl@{7 + len(whole) + 1}: ")
+    with pytest.raises(json.JSONDecodeError):
+        tool_watch.follow(comms.registry, collections.defaultdict(list), "worker", "session.jsonl", 7, data)
 
 
 def test_storage_watch_judges_only_core_units(tool_watch, commander, monkeypatch):

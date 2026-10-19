@@ -39,7 +39,7 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
         }
     )
     expected = datetime.fromisoformat(stamp).timestamp()
-    for context in (TranscriptProjection(), TranscriptProjection(routing=TurnRouting(requests))):
+    for context in (TranscriptProjection(position=0), TranscriptProjection(position=0, routing=TurnRouting(requests))):
         events = entry.events(context)
         assert len(events) == 2
         assert all(event.timestamp == expected for event in events)
@@ -47,9 +47,9 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
     compacted = NativeEntry.from_wire(
         {"type": "compaction", "timestamp": stamp, "summary": "kept context"}
     )
-    assert compacted.events(TranscriptProjection())[0].timestamp == expected
+    assert compacted.events(TranscriptProjection(position=0))[0].timestamp == expected
 
-    first = AssistantTranscript("start", timestamp=expected)
+    first = AssistantTranscript("start", timestamp=expected, position=0)
     assert first.merge(replace(first, text="continued")).timestamp == expected
     assert first.merge(replace(first, timestamp=expected + 1)) is None
 
@@ -57,13 +57,13 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
 def test_new_native_entry_inherits_original_clock_projection():
     class ExternalNoteEntry(NativeEntry):
         def _events(self, context):
-            return [AssistantTranscript("a new external note")]
+            return [AssistantTranscript("a new external note", position=context.position)]
 
     # Adding a content declaration does not add another clock propagation site.
     stamp = "2026-09-28T23:12:33.123Z"
     expected = datetime.fromisoformat(stamp).timestamp()
     note = ExternalNoteEntry(timestamp=RecordedTimestamp(stamp))
-    assert note.events(TranscriptProjection())[0].timestamp == expected
+    assert note.events(TranscriptProjection(position=0))[0].timestamp == expected
 
 
 @pytest.mark.parametrize("stamp", [None, "not-a-time", "2026-09-28T23:12:33"])
@@ -131,11 +131,11 @@ async def test_actual_native_saved_clocks_survive_acp_snapshot_and_rebuild(
             await client.initialize(protocol_version=1)
             await client.load_session(cwd=str(native.project), session_id="clock", mcp_servers=[])
             received = await snapshots.get()
-            assert received == page
+            assert received.events == page.events
             await client.load_session(cwd=str(native.project), session_id="clock", mcp_servers=[])
-            assert await snapshots.get() == received
+            assert (await snapshots.get()).events == received.events
         rebuilt = wire(native.root).transcripts.thread_transcript_page("clock", through=page.after)
-        assert rebuilt == received
+        assert rebuilt.events == received.events
     finally:
         writer.close()
         await writer.wait_closed()

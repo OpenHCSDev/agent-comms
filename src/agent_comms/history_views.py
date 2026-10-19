@@ -419,14 +419,14 @@ class HistoryViews:
         return WireRevision.capture(self, expiry_tick=int(time.time()))
 
     def who(self) -> tuple[ThreadView, ...]:
-        """Presence: who is in the chat, with status and unread counts."""
+        """Presence records; their owner supplies the wire representation."""
         views = self._presence_views()
         pending = CountedRead().counts(self.bus, tuple(view.thread.name for view in views))
         return tuple(replace(view, pending=pending[view.thread.name]) for view in views)
 
-    def presence(self) -> Sequence[Mapping]:
-        """Presence without viewer-specific unread scans."""
-        return [FieldCodec.project(view, "presence") for view in self._presence_views()]
+    def presence(self) -> tuple[ThreadView, ...]:
+        """Presence records without viewer-specific unread scans."""
+        return tuple(self._presence_views())
 
     def _presence_views(self):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)

@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, fields, is_dataclass, replace
 from functools import singledispatch
 from typing import TYPE_CHECKING, Annotated, Any, ClassVar, Literal, Union, get_args, get_origin
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .native_file_artifact import NativeFileArtifact
 from .native_session_reopen import NativeSessionIdentity
@@ -297,7 +297,7 @@ class PiContent(PiPayload, DeclaredFamily, affix="Content"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownContent
 
 
@@ -384,7 +384,7 @@ class ProviderTransportStage(PiPayload, DeclaredFamily, affix="Stage"):
     def from_text(cls, value: str):
         try:
             member = cls.member_named(value)
-        except ValueError:
+        except UnknownFamilyMember:
             return UnrecognizedTransportStage(value)
         return member()
 
@@ -484,7 +484,7 @@ class PiDiagnostic(PiPayload, DeclaredFamily, affix="Diagnostic"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownDiagnostic
 
     def refine_model_request_failure(self, failure):
@@ -603,7 +603,7 @@ class PiMessage(PiPayload, DeclaredFamily, affix="Message"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownMessage
 
     @property
@@ -806,7 +806,7 @@ class PiDelta(PiPayload, DeclaredFamily, affix="Delta"):
     def wire_member(cls, value):
         try:
             return cls.member_named(value.get(cls.wire_tag))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownDelta
 
     def events(self):

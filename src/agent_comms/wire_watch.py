@@ -208,8 +208,6 @@ class NativeFileWatch(FileWatch):
                         self.invalid = True
         except BlockingIOError:
             pass
-        except OSError:
-            self.invalid = True
         return frozenset(changed)
 
     def close(self) -> None:

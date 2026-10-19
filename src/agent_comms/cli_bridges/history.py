@@ -150,7 +150,7 @@ class JsonLines:
         except ValueError:
             try:
                 json.loads(raw)
-            except ValueError:
+            except json.JSONDecodeError:
                 yield HistoryNotice(damage)
                 return
             raise
@@ -158,20 +158,14 @@ class JsonLines:
 
     def earlier_request(self, stream: BinaryIO, start: int) -> str:
         for offset, raw in self.reverse_lines(stream, start):
-            try:
-                record = self.decode_line(raw, offset)
-            except ValueError:
-                continue
+            record = self.decode_line(raw, offset)
             if text := record.request():
                 return text
         return ''
 
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         for offset, raw in self.reverse_lines(stream, boundary):
-            try:
-                record = self.decode_line(raw, offset)
-            except ValueError:
-                continue  # Decoded again, with its notice or failure, when read forward.
+            record = self.decode_line(raw, offset)
             if record.begins_history():
                 return offset
         return 0
