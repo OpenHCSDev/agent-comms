@@ -199,7 +199,7 @@ class RequestFailure:
     def error_data(self):
         return {"agentCommsFailure": FieldCodec.encode(self)}
 
-    def request_error(self, error_type: Callable[[object], Exception]) -> Exception:
+    def request_error(self, error_type: Callable[[dict[str, object]], Exception]) -> Exception:
         return error_type(self.error_data())
 
     @classmethod
@@ -216,9 +216,13 @@ class NativeTurnOutcome(ABC):
     async def publish(self, client, session_id: str) -> NativeTurnOutcome: ...
 
     @abstractmethod
-    def raise_if_failed(self, error_type: Callable[[object], Exception]) -> None: ...
+    def raise_if_failed(
+        self, error_type: Callable[[dict[str, object]], Exception],
+    ) -> None: ...
 
-    def raise_fault(self, cause: Exception, error_type: Callable[[object], Exception]) -> NoReturn:
+    def raise_fault(
+        self, cause: Exception, error_type: Callable[[dict[str, object]], Exception],
+    ) -> NoReturn:
         """Without a completed failure, preserve the original fault."""
         raise cause
 
@@ -228,7 +232,7 @@ class UnresolvedNativeTurnOutcome(NativeTurnOutcome):
     async def publish(self, client, session_id: str) -> NativeTurnOutcome:
         raise RuntimeError("Native completion has not been resolved at its input boundary")
 
-    def raise_if_failed(self, error_type: Callable[[object], Exception]) -> None:
+    def raise_if_failed(self, error_type: Callable[[dict[str, object]], Exception]) -> None:
         raise RuntimeError("Native completion has not been resolved at its input boundary")
 
 
@@ -237,7 +241,7 @@ class SuccessfulNativeTurnOutcome(NativeTurnOutcome):
     async def publish(self, client, session_id: str) -> NativeTurnOutcome:
         return self
 
-    def raise_if_failed(self, error_type: Callable[[object], Exception]) -> None:
+    def raise_if_failed(self, error_type: Callable[[dict[str, object]], Exception]) -> None:
         pass
 
 
@@ -288,10 +292,12 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         # returns False when nobody accepted the notification.
         return replace(self, request=replace(self.request, notification_published=accepted is not False))
 
-    def raise_fault(self, cause: Exception, error_type: Callable[[object], Exception]) -> NoReturn:
+    def raise_fault(
+        self, cause: Exception, error_type: Callable[[dict[str, object]], Exception],
+    ) -> NoReturn:
         raise self.request.request_error(error_type) from cause
 
-    def raise_if_failed(self, error_type: Callable[[object], Exception]) -> NoReturn:
+    def raise_if_failed(self, error_type: Callable[[dict[str, object]], Exception]) -> NoReturn:
         raise self.request.request_error(error_type)
 
 
