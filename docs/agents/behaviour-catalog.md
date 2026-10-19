@@ -5,18 +5,18 @@ Generated from `agent_comms.behaviour_patterns` by
 
 Each behaviour failure pattern is declared once in Core with its signature (what it looks like in state, readable without trusting a report) and the existing checks that enforce it. Patterns in code, rather than in behaviour, are the refactor-audit skill's catalog (`refactor-audit/references/patterns/README.md`).
 
-The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) names ten failures; each pattern cites the ones it checks:
+The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md) names these failures; each pattern cites the ones it checks:
 
-- [Failure 1](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): no pattern checks it yet
-- [Failure 2](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): no pattern checks it yet
-- [Failure 3](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): no pattern checks it yet
-- [Failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): `uncounted_check`
-- [Failure 5](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): no pattern checks it yet
-- [Failure 6](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): no pattern checks it yet
-- [Failure 7](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): `board_disagrees`, `uncounted_check`
-- [Failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): `plain_text`, `undeclared_audience`
-- [Failure 9](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): no pattern checks it yet
-- [Failure 10](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md): no pattern checks it yet
+- [Failure 1](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It rewrote the framework instead of questioning its own design: no pattern checks it yet
+- [Failure 2](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It added states instead of removing them: no pattern checks it yet
+- [Failure 3](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It wrote down the right principle and then violated it: no pattern checks it yet
+- [Failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It measured the wrong thing and reported it as progress: `uncounted_check`
+- [Failure 5](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It redefined "the real app" until something passed: no pattern checks it yet
+- [Failure 6](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It ignored direct orders: no pattern checks it yet
+- [Failure 7](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It described its intentions as its accomplishments: `board_disagrees`, `uncounted_check`
+- [Failure 8](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It drowned the work in ceremony: `plain_text`, `undeclared_audience`
+- [Failure 9](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It merged over its own checks and broke things in circles: no pattern checks it yet
+- [Failure 10](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It invented rules and blamed them on Tristan: no pattern checks it yet
 
 ## plan_idle
 

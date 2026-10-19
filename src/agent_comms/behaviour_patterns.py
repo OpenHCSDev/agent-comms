@@ -70,12 +70,64 @@ class PatternSource(ABC):
     def cite(self) -> str: ...
 
 
-@dataclass(frozen=True)
-class PostmortemFailure(PatternSource):
-    number: int
+class PostmortemFailure(PatternSource, DeclaredFamily, affix="Failure"):
+    """A failure the Codex postmortem names; a pattern that checks it cites an instance."""
+
+    number: ClassVar[int]
+    title: ClassVar[str]
 
     def cite(self) -> str:
         return f"[Codex postmortem, failure {self.number}]({POSTMORTEM})"
+
+
+class RewroteFrameworkFailure(PostmortemFailure):
+    number = 1
+    title = "It rewrote the framework instead of questioning its own design"
+
+
+class AddedStatesFailure(PostmortemFailure):
+    number = 2
+    title = "It added states instead of removing them"
+
+
+class ViolatedPrincipleFailure(PostmortemFailure):
+    number = 3
+    title = "It wrote down the right principle and then violated it"
+
+
+class MeasuredWrongThingFailure(PostmortemFailure):
+    number = 4
+    title = "It measured the wrong thing and reported it as progress"
+
+
+class RedefinedRealAppFailure(PostmortemFailure):
+    number = 5
+    title = 'It redefined "the real app" until something passed'
+
+
+class IgnoredOrdersFailure(PostmortemFailure):
+    number = 6
+    title = "It ignored direct orders"
+
+
+class IntentionsAsAccomplishmentsFailure(PostmortemFailure):
+    number = 7
+    title = "It described its intentions as its accomplishments"
+
+
+class CeremonyFailure(PostmortemFailure):
+    number = 8
+    title = "It drowned the work in ceremony"
+
+
+class MergedOverChecksFailure(PostmortemFailure):
+    number = 9
+    title = "It merged over its own checks and broke things in circles"
+
+
+class InventedRulesFailure(PostmortemFailure):
+    number = 10
+    title = "It invented rules and blamed them on Tristan"
 
 
 @dataclass(frozen=True)
@@ -121,11 +173,13 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
     def catalog(cls) -> str:
         members = cls.members_with(BehaviourPattern)
         cited = {
-            failure: [m.declared_name for m in members if PostmortemFailure(failure) in m.sources]
-            for failure in range(1, 11)
+            failure: [
+                m.declared_name for m in members if any(isinstance(s, failure) for s in m.sources)
+            ]
+            for failure in PostmortemFailure.members_with(PostmortemFailure)
         }
         failures = "".join(
-            f"- [Failure {failure}]({POSTMORTEM}): "
+            f"- [Failure {failure.number}]({POSTMORTEM}), {failure.title}: "
             + (", ".join(f"`{name}`" for name in names) if names else "no pattern checks it yet")
             + "\n"
             for failure, names in cited.items()
@@ -139,7 +193,7 @@ class BehaviourPattern(DeclaredFamily, affix="Pattern"):
             " looks like in state, readable without trusting a report) and the existing checks"
             " that enforce it. Patterns in code, rather than in behaviour, are the refactor-audit"
             " skill's catalog (`refactor-audit/references/patterns/README.md`).\n\n"
-            f"The [Codex postmortem]({POSTMORTEM}) names ten failures; each pattern cites the"
+            f"The [Codex postmortem]({POSTMORTEM}) names these failures; each pattern cites the"
             " ones it checks:\n\n"
             f"{failures}\n" + "\n".join(member.section() for member in members)
         )
@@ -159,7 +213,7 @@ class BoardDisagreesPattern(BehaviourPattern):
         "An open order's progress reads no commit while a pull request linked to it has merged."
     )
     checks = (RuleCheck(BoardDisagrees),)
-    sources = (ProblemFix("P170", "c9c0c04db"), PostmortemFailure(7))
+    sources = (ProblemFix("P170", "c9c0c04db"), IntentionsAsAccomplishmentsFailure())
 
 
 class TacticalCommandPattern(BehaviourPattern):
@@ -180,13 +234,13 @@ class PlainTextPattern(BehaviourPattern):
         VerbRefusal(order.refuse),
         ToolRefusal(DirectorCaller.require_directive),
     )
-    sources = (CommanderRule("Hate jargon."), PostmortemFailure(8))
+    sources = (CommanderRule("Hate jargon."), CeremonyFailure())
 
 
 class UndeclaredAudiencePattern(BehaviourPattern):
     signature = "A send to a channel, which reaches many threads, names no thread as its audience."
     checks = (ToolRefusal(ChannelTarget.addressed),)
-    sources = (Commit("dc4fb3bfa"), PostmortemFailure(8))
+    sources = (Commit("dc4fb3bfa"), CeremonyFailure())
 
 
 class RepeatedStrikePattern(BehaviourPattern):
@@ -223,7 +277,11 @@ class UncountedCheckPattern(BehaviourPattern):
         VerbRefusal(NoIntegerPrinted),
         VerbRefusal(order.correct_check),
     )
-    sources = (ProblemFix("P114", "d889df612"), PostmortemFailure(4), PostmortemFailure(7))
+    sources = (
+        ProblemFix("P114", "d889df612"),
+        MeasuredWrongThingFailure(),
+        IntentionsAsAccomplishmentsFailure(),
+    )
 
 
 class StrikeOnNamedProblemPattern(BehaviourPattern):
