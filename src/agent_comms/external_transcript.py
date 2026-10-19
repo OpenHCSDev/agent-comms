@@ -10,24 +10,22 @@ item finishes is the thread's activity, reported through Core's activity log.
 
 from __future__ import annotations
 
-import json
-
 from collections.abc import Generator, Iterator
 from contextlib import closing, contextmanager
 from sqlite3 import Connection
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import Annotated, TYPE_CHECKING, ClassVar
 from uuid import uuid4
 
 from .declared_family import DeclaredFamily
 from .field_codec import FieldCodec
-from .recorded_time import EventTime, RecordedEventTime, UnrecordedEventTime
+from .recorded_time import EventTime, GeneratedTimestamp, UnrecordedEventTime
 from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
-from .typed_table import Column, ForeignKey, Index, JsonStorage, TypedRow, TypedStore, TypedTable
+from .typed_table import Column, ForeignKey, Index, RealStorage, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
@@ -189,13 +187,8 @@ class ExternalEventRow(TypedTable):
     seq: int = field(metadata={"sql": Column(primary_key=True)})
     ordinal: int = field(metadata={"sql": Column(primary_key=True)})
     event: TranscriptEvent
-    time: EventTime = field(metadata={"sql": Column(storage=JsonStorage, generated=(
-        "CASE WHEN json_extract({event}, '$.timestamp') IS NULL THEN '"
-        + json.dumps(FieldCodec.encode(UnrecordedEventTime()), separators=(',', ':'))
-        + "' ELSE json_object('kind', '" + RecordedEventTime.declared_name
-        + "', 'at', json_extract({event}, '$.timestamp')) END"))})
-    timestamp: float | None = field(metadata={"sql": Column(
-        generated="json_extract({time}, '$.at')")})
+    timestamp: Annotated[EventTime, GeneratedTimestamp] = field(metadata={"sql": Column(
+        storage=RealStorage, nullable=True, generated="json_extract({event}, '$.timestamp')")})
     kind: str = field(metadata={"sql": Column(generated="json_extract({event}, '$.kind')")})
     tool: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool.tool')")})
     call_id: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool_call_id')")})
@@ -206,7 +199,7 @@ class ExternalEventRow(TypedTable):
     @classmethod
     def append(cls, connection, thread, seq, events) -> None:
         for ordinal, event in enumerate(events):
-            cls(thread, seq, ordinal, event, UnrecordedEventTime(), None, "", None, None).insert(connection)
+            cls(thread, seq, ordinal, event, UnrecordedEventTime(), "", None, None).insert(connection)
 
     @classmethod
     def unjudged_query(cls, thread, todo):
@@ -218,20 +211,19 @@ class ExternalEventRow(TypedTable):
         judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
         placeholders = lambda values: ",".join("?" for _ in values)
         since = todo.order.at.recorded_at("An order")
-        # An unrecorded time stays unrecorded: never substitute a sibling's
-        # time or the order time. The query names that declared state explicitly.
+        # SQL NULL is the original undated fact, decoded through FieldCodec
+        # as UnrecordedEventTime when a row is read. No time is substituted.
         table = cls.declared_name
-        time_field = next(field for field in cls._fields() if field.name == "time")
         selected = f'u.thread=? AND u.kind=? AND u.tool IN ({placeholders(tools)})'
         # Two ranges keep timestamp in the index search, rather than scanning
         # every historical edit to evaluate an OR for each row.
         where = (
             f'e.rowid IN (SELECT u.rowid FROM "{table}" u WHERE {selected} AND u.timestamp>=? '
             f'UNION ALL SELECT u.rowid FROM "{table}" u WHERE {selected} '
-            'AND u.timestamp IS NULL AND u.time=?)'
+            'AND u.timestamp IS NULL)'
         )
         scope = (thread, ToolStartTranscript.declared_name, *tools)
-        parameters = (*scope, since, *scope, time_field.encode(UnrecordedEventTime()))
+        parameters = (*scope, since, *scope)
         if judged:
             where += f' AND e.call_id NOT IN ({placeholders(judged)})'
             parameters += judged
@@ -360,7 +352,6 @@ class StoreRead(TranscriptSource):
             'row_number() OVER (PARTITION BY e.call_id ORDER BY e.seq DESC,e.ordinal DESC) AS latest '
             f'FROM "{ExternalEventRow.declared_name}" e WHERE {where}) '
             'WHERE latest=1 ORDER BY seq DESC,ordinal DESC', parameters)) as rows:
-            from .field_codec import FieldCodec
             for encoded, in rows:
                 event = FieldCodec.decode(TranscriptEvent, FieldCodec.parse(encoded))
                 yield from event.edit_calls(todo.held().owner, todo.id,

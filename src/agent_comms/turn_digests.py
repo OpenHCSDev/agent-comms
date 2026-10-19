@@ -88,6 +88,9 @@ class TranscriptRead[Result](ConversationPreparation):
     thread: Thread
     bound: TurnBound
 
+    def read(self) -> Result:
+        return self.thread.execution.prepare_conversation(self)
+
     def native(self) -> Result:
         turns = self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)
         return self.from_turns(turns)
@@ -105,9 +108,6 @@ class TranscriptRead[Result](ConversationPreparation):
 
 class TurnDigestRead(TranscriptRead[ThreadTurns]):
     """Read this unit's own records, never its inherited conversation display."""
-
-    def read(self) -> ThreadTurns:
-        return self.thread.execution.prepare_conversation(self)
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> ThreadTurns:
         return ThreadTurns(self.thread.incarnation, turns)
@@ -130,9 +130,6 @@ class OrderRead[Result](TranscriptRead[Result]):
 class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
     """Original unjudged calls; external events are selected before decoding."""
 
-    def read(self) -> tuple[EditCall, ...]:
-        return self.thread.execution.prepare_conversation(self)
-
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> tuple[EditCall, ...]:
         return self.edits_from_turns(turns)
 
@@ -142,9 +139,6 @@ class OrderEditsRead(OrderRead[tuple[EditCall, ...]]):
 
 class OrderEditCountRead(OrderRead[int]):
     """Load needs a count, never external event bodies or edit hunks."""
-
-    def read(self) -> int:
-        return self.thread.execution.prepare_conversation(self)
 
     def from_turns(self, turns: tuple[TurnDigest, ...]) -> int:
         return len(self.edits_from_turns(turns))
