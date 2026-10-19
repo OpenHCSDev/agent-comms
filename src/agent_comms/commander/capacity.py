@@ -11,13 +11,10 @@ from __future__ import annotations
 
 import math, os, sys, time
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
+from ..comms import Comms
 from . import order
 from .config import CommanderConfig
-
-if TYPE_CHECKING:
-    from ..comms import Comms
 
 FORKS = f'{CommanderConfig.installed().state}/forks'
 PER_COMMANDER = 6
@@ -48,7 +45,6 @@ class Load:
         from . import judge
         actor, now = comms.registry.require(commander).incarnation, time.time()
         owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
-        # owed is pending, so a passed deadline is the whole of lateness
         return cls(len(owed), sum(t.deadline.recorded_at("An order deadline") < now for t in owed),
                    len(judge.Edit.unjudged(comms, commander)), tuple(live_forks()))
 
