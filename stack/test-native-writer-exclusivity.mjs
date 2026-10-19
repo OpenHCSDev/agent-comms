@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Blocker-3 contract: a single-writer rule backed by the shared per-session lock.
 // Four concurrent processes race to append to one native session; exactly one
 // may commit a prefix of its burst, other writers refuse BEFORE mutation, and the

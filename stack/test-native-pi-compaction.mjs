@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Pi's own compaction engine on the prepared package: threshold before a tracked
 // input, overflow recovery of a tracked input, and manual /compact with the
 // thread's task brief. Local SSE fixture only; no network, credentials or paid calls.

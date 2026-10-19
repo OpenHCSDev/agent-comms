@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Real restored/forked native context -> first local-provider reply. No paid calls.
 import assert from 'node:assert/strict';
 import {createServer} from 'node:http';

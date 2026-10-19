@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Isolated contract tests for the draft boundary module; NOT canonical/PR77 E2E clearance.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';

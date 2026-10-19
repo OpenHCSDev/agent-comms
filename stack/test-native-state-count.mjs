@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // End validation for the shared selected-entry count. No native input/provider.
 import assert from 'node:assert/strict';
 import {appendFileSync, mkdtempSync, writeFileSync} from 'node:fs';

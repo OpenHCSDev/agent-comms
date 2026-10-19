@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 // Provider-free adversarial loader/fork/snapshot tests; disposable package only.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
