@@ -208,7 +208,7 @@ class StoppedOwnerFailure(CoordinationError):
         self.operation = operation
 
     def recover(self) -> tuple[OwnerRestartResult, ...]:
-        """The original operation alone can certify recovery while RAM survives."""
+        """Use the same restart operation to recover processes while its state is in memory."""
         return self.stopped.recover(self.operation)
 
     def abandon(self) -> None:

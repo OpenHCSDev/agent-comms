@@ -232,7 +232,7 @@ class NotificationAssignment(NotificationSource):
     def for_deliveries(
         cls, originals: Iterable[CommittedDelivery], records: Iterable[NotificationAssignment],
     ) -> Iterator[tuple[CommittedDelivery, tuple[NotificationSource, ...]]]:
-        """Match one acquired window by its original source and recipient identities."""
+        """Match notification assignments to messages and their recorded recipients."""
         by_recipient = {}
         for record in records:
             key = (record.assignment.source, record.assignment.recipient_lookup)

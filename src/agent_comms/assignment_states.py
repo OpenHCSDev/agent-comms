@@ -197,9 +197,9 @@ class PendingNotification:
 
     @classmethod
     def extend_selection(cls, predicate: str, alias: str) -> str:
-        # A bound deferred claim was settled with replay proof and remains the
-        # original source of its next execution attempt. Unbound UNKNOWN input
-        # never enters this selection.
+        # A deferred assignment already linked to an execution may be selected
+        # for that execution's next attempt after replay was checked. UNKNOWN
+        # input without an execution link is never selected.
         deferred = sql_literal(DeferredAssignment)
         return (
             f"({predicate} OR ({alias}.disposition={deferred} "

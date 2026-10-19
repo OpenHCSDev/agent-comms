@@ -23,10 +23,10 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SelectedSession:
-    """Selected native source before its first original input is written.
+    """Hold the chosen native session before writing its first input.
 
-    directory is an acquired private launch/tool resource. It is not a claim
-    that an already selected saved journal lives in that directory.
+    The directory is reserved for launch files and tools. A previously selected
+    saved journal may live elsewhere.
     """
     directory: Path
 

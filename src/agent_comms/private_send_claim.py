@@ -253,11 +253,11 @@ class PrivateSendClaim(PromptBoundary):
                 reserved.sent_owner_claimed_generation.record(
                     reserved, db, self.owner.claimed_generation, identity
                 )
-            # ExitStack commits/closes the coordinator before releasing shared registry/wire locks. No bus publication
-            # resource is borrowed: the selected claim and prompt are already
-            # certified originals, and this grant changes only their SQL/input
-            # records. No payload byte is
-            # eligible until all of that retirement has returned successfully.
+            # ExitStack commits and closes the database before releasing the
+            # registry and bus locks. The selected claim and prompt were already
+            # checked, so this step changes only their database and input records.
+            # It does not publish to the bus. Do not write any prompt bytes until
+            # all of these operations have finished successfully.
 
     async def send_prompt(self, turn: TrackedTurnSession) -> None:
         stdin = turn.native.proc.stdin

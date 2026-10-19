@@ -256,11 +256,11 @@ class SelectedParticipant(MroDispatch):
 
     @staticmethod
     async def sources(bus, store, root_id, assignments, identity) -> tuple[SelectedSource, ...]:
-        """Borrow one original certificate for the already sealed pending batch.
+        """Read the pending batch from the bus and check its saved acknowledgements.
 
-        Initial acceptance owns writes. Selection verifies every original sealed
-        acknowledgement through that same validator, without re-entering acceptance. Both
-        read resources close before any native preparation or provider request.
+        Accepting input writes the records. Selecting it checks those records
+        without accepting it again. Close both the bus and database reads before
+        preparing the native session or making a provider request.
         """
         def capture():
             # Capture source pointers and bytes before opening the SQL snapshot,

@@ -1,4 +1,4 @@
-"""Declared bounded queries consume original sources without owning delivery state."""
+"""Read limited pages of stored messages without changing their delivery state."""
 
 from __future__ import annotations
 

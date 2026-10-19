@@ -63,7 +63,7 @@ class ArchivedAccess(WireAccess):
     def verify_checkpoint(self, bus, marker, db, stream, path, *, mode):
         from .private_bus_checkpoint import CertifiedSourceRead, PrefixCertificate, _tail
 
-        # The immutable certificate binds the original bytes and sidecar, not
+        # The saved check binds the bus bytes and index file, not
         # the current writer's disposable index membership. No recovery writes
         # or suffix adoption are permitted in an archived source.
         saved = PrefixCertificate.read_witness(db)

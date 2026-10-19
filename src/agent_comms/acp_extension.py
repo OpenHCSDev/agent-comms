@@ -497,10 +497,10 @@ class QueueProjection(DeclaredFamily, affix="QueueProjection"):
     def feedback(self, supported: bool) -> str: ...
 
     def without_scope(self) -> None:
-        """Unavailable/pending observations do not certify a live scope."""
+        """Do not offer queue access while its state is missing or still loading."""
 
     def capture_human_input(self, comms, acquire_scope: Callable[[], QueueScope]) -> HumanInputOrigin:
-        """Pending/unavailable observations cannot certify original ingress."""
+        """Refuse input until the queue's current state has been read."""
         raise ValueError(self.feedback(True))
 
 

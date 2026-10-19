@@ -394,7 +394,7 @@ class OpenedWireSnapshot(WireSnapshot):
 
 @dataclass(frozen=True, slots=True, kw_only=True)
 class ConversationSourceWindowRequest:
-    """One bounded indexed conversation selection from a certified wire cut."""
+    """Select a limited page of conversation messages from a checked bus index."""
 
     limit: int
     ascending: bool
@@ -472,10 +472,10 @@ class SequencedSnapshotOpening(CurrentSnapshotOpening):
 
 
 class SavedPrefixOpening(SnapshotOpening):
-    """Capture bytes only; the saved checkpoint must verify its own original prefix.
+    """Capture bytes for the saved index to check against its recorded prefix.
 
-    This never certifies the current tail or grants publication/input authority.
-    An interrupted later append cannot invalidate an already verified prefix.
+    Do not check the current tail or grant permission to publish or submit input.
+    An interrupted later append does not invalidate previously checked bytes.
     """
 
     @contextmanager
@@ -530,7 +530,7 @@ class WireLog(StoreLockOwner):
 
     @contextmanager
     def certified_read(self, *, blocking: bool = True, contention: StoreLockContention | None = None):
-        """Borrow the original source verified by the canonical reader barrier."""
+        """Open the bus and index under a shared lock and check that they agree."""
         with self.locked(mode=SharedLock(), blocking=blocking, contention=contention) as lock:
             with self._certified_source(lock) as source:
                 yield source
@@ -588,11 +588,11 @@ class WireLog(StoreLockOwner):
             return request.read_opened(source)
 
     def addressed_sources(self, lookup: str, after_seq: int = 0) -> Iterator[CommittedDelivery]:
-        """Borrow bounded pages from one original committed append-only cut.
+        """Read limited pages of committed messages without including later appends.
 
-        A later append cannot extend this iteration. Each page captures exact
-        original pointers and bytes inside certification; validation and all
-        consumer work occur after releasing the bus locks.
+        Capture row locations and bytes while checking each page against the
+        bus index, then release the bus locks before validating the messages
+        or passing them to the caller.
         """
         request = AddressedPage(lookup=lookup, after_seq=after_seq)
         with self.certified_read() as source:
@@ -607,7 +607,7 @@ class WireLog(StoreLockOwner):
                 _, captured, more = source.addressed_page(self, request, prefix=witness)
 
     def record_context(self, manifest) -> None:
-        """Append the context records chosen by the certified entry owner."""
+        """Append context entries and their manifest after checking which are new."""
         previous = RecordedContextManifestSources.latest(self, manifest.thread)
         with self.locked() as lock:
             marker = self.private_marker_unlocked()
@@ -620,11 +620,11 @@ class WireLog(StoreLockOwner):
 
     @contextmanager
     def retained_sources(self, name: str, registry):
-        """Borrow one certified wire/registry/input cut for retained readers.
+        """Read saved task text with matching bus, registry and input state.
 
-        Capture original bytes under the existing wire/bus/registry/input cut,
-        then release the bus locks before decoding. This is an observation, never
-        permission to start input or compact history.
+        Copy the stored bytes while holding the needed locks, then release
+        the bus locks before decoding. Reading does not grant permission to
+        submit input or compact history.
         """
         from .exporting import WireExportBoundary
         from .input_disposition import InputDispositions
@@ -678,7 +678,7 @@ class WireLog(StoreLockOwner):
             path = path.parent
 
     def claim_projection(self) -> ClaimProjection:
-        """Read current ownership from the canonical certified checkpoint."""
+        """Read the current resource claims from the checked bus index."""
         with self.certified_read() as source:
             return source.claim_projection()
 
@@ -711,7 +711,7 @@ class WireLog(StoreLockOwner):
         *,
         on_row: Callable[[int, bytes, WireRecord], None] | None = None,
     ) -> Iterator[WireRecord]:
-        """Entire strict stream; later corruption cannot certify an earlier append."""
+        """Read the whole file strictly; reject corruption even after the requested append."""
         scan = WireScan(metadata)
         if not self.path.exists():
             return
@@ -829,7 +829,7 @@ class WireLog(StoreLockOwner):
         self, *,
         opening: SnapshotOpening = SequencedSnapshotOpening(),
     ):
-        """Capture registered indexes before opening their original source cut."""
+        """Capture the index list before opening the bus snapshot those indexes will use."""
         prepared = self._prepare_append_indexes()
         with ExitStack() as resources:
             with opening.capture(self, resources) as opened:
@@ -848,8 +848,8 @@ class WireLog(StoreLockOwner):
     def verified_snapshot(self) -> Iterator[Iterator[WireRecord]]:
         """Run the strict WireScan after releasing the bus locks.
 
-        Uncertified streams retain the same complete validation algorithm.
-        This resource is a fixed read, not permission to append or start input.
+        Streams without a saved index still get the same complete validation.
+        Reading this snapshot does not grant permission to append or submit input.
         """
         with self.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             yield opened.records()
@@ -871,7 +871,7 @@ class WireLog(StoreLockOwner):
             return opened.messages_for_references(references)
 
     def deliveries_for_references(self, references):
-        """One canonical lock/certificate lifetime for a visible source window."""
+        """Keep the bus lock and checked index open together while reading a message window."""
         if not references:
             return ()
         with self.certified_read() as source:
@@ -884,11 +884,11 @@ class WireLog(StoreLockOwner):
             return self.committed_sequence_unlocked(lock)
 
     def committed_sequence_unlocked(self, lock: StoreLock) -> int:
-        """Read the committed cut from the resource acquired by this barrier.
+        """Read the last committed sequence from the bus opened by this lock.
 
-        The certificate's global through_seq is not the addressed page's
-        latest_source_seq or a marker reservation. The existing read barrier
-        refuses private claim streams without their required certificate.
+        Use through_seq from the checked index, not a page's latest_source_seq
+        or a reserved marker sequence. Refuse private claim streams when their
+        required index check is missing.
         """
         if lock.source is not None:
             return lock.certified_read().committed_sequence()

@@ -179,8 +179,8 @@ class Goals:
             sequences=sequences, limit=len(sequences), ascending=True,
         )
         earlier = request.capture_many(self.bus.log, lookup, (request,))[0] if sequences else ()
-        # Keep older UNKNOWNs, but discover unreserved replies only after this
-        # dependency scope's recorded wait. Certification owns both identities.
+        # Keep older UNKNOWN inputs, but look for new replies only after this
+        # dependency's recorded wait. Capture checks both participant identities.
         replies = {
             InputDispositions.bus_key(original.message, thread): original.message
             for original in chain(

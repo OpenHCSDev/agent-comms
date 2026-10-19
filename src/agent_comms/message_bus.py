@@ -220,7 +220,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
     def _pending_projection(
         self, source: WireSnapshot, basis: CapturedSelection, names: Sequence[str],
     ) -> Mapping[str, Mapping[str, int]]:
-        """Bulk delivery counts from one original source, namespace and ledger."""
+        """Count deliveries using the same bus, registrations and read positions."""
         actors = {name: basis.registry.canonical_name(name) for name in names}
         deliveries = {
             actor: DeliveryScope.capture(actor, basis.registry, basis.catalog)
@@ -235,7 +235,7 @@ class MessageBus[Writes: Publisher](StoreLockOwner):
 
     def pending_counts_opened(self, source: WireSnapshot,
                               selection: CapturedSelection) -> Mapping[str, int]:
-        """Borrow the caller's original source, namespace and sparse reads."""
+        """Count unread messages using the caller's bus, registrations and read positions."""
         actor = selection.require_viewer()
         seen = selection.seen(source)
         delivery = DeliveryScope.capture(actor, selection.registry, selection.catalog)

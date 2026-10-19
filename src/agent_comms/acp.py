@@ -320,7 +320,7 @@ class CommsAgent(SessionEffects, InputEffects, TurnEffects):
         return self._comms.owners.require_private_launch().wire_root_id
 
     def _private_nk_marker(self) -> str:
-        """Require the configured, certified root before any selected request."""
+        """Check that the bus belongs to the configured root before a request runs."""
         configured_root_id = self.configured_root_id
         with self._comms.bus.log.certified_read() as source:
             if source.marker.root_id != configured_root_id:

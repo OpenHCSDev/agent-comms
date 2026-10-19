@@ -1,12 +1,13 @@
-"""Append-writer-maintained private bus prefix certificate.
+"""Keep a checked SQLite index of the private bus bytes written so far.
 
-The JSONL bus remains authoritative. Only the canonical private WireLog writer may
-advance this certificate, after bus and directory fsync under the bus lock. The
-fsynced bus marker independently seals the SQLite inode revision and certificate;
-SQL index contents are never trusted on bus revision alone. A pending writer
-intent forces a complete canonical rebuild; a changed bus revision with a final,
-unchanged sidecar requires full prefix hashing before suffix adoption. Unexpected
-sidecar changes deny, not silently rebuild. This is not native input or an ACK.
+The JSONL file is the record of messages. Only WireLog's private writer may
+advance the index after flushing the bus and its directory under the bus lock.
+The saved bus marker binds the SQLite file identity and checked byte range;
+a matching bus revision alone does not make the SQL rows trustworthy.
+An unfinished write requires rebuilding the index. If only the bus has grown,
+hash the saved prefix before indexing the added bytes. Reject unexpected changes
+to the index file instead of silently rebuilding. Reading this index neither
+submits native input nor marks a message handled.
 """
 
 from __future__ import annotations
@@ -109,7 +110,7 @@ class PrefixWitness(PrefixSeal):
             raise RelationViolationError("Private bus checkpoint append lost its prefix fence.")
 
     def require_read_window(self, selected: PrefixWitness) -> None:
-        """An original read cut must remain in this certified append-only source."""
+        """Require the selected read to stay within this bus's checked byte range."""
         if self.source_identity != selected.source_identity:
             raise RelationViolationError("Addressed window changed its original source.")
         if selected.offset > self.offset or selected.through_seq > self.through_seq:
@@ -151,13 +152,13 @@ class CertifiedSourceRead:
             raise RelationViolationError("Conversation source needs a current certificate.")
 
     def install_at(self, bus: WireLog) -> PrefixWitness:
-        """Install a verified carry under the destination's canonical lock.
+        """Install checked replacement history while holding the destination's bus lock.
 
-        The maintenance caller first checks history preservation against its
-        immutable original. Both roots must already have current certificates
-        and identical non-seal marker facts. Candidate bytes are copied, never
-        moved: its evidence remains usable if destination publication fails.
-        No retired row decoder or second certificate algorithm belongs here.
+        Maintenance first checks that the replacement preserves the saved history.
+        Both buses must have current checked indexes and matching marker fields
+        apart from their index checks. Copy rather than move the replacement
+        bytes, so they remain available if publication fails. Use the current
+        decoder and index-checking code rather than a separate upgrade reader.
         """
         self.require_current()
         if bus.path.resolve() == self.path.resolve():
@@ -221,7 +222,7 @@ class CertifiedSourceRead:
         PublicMessages.require_unused(self.connection, sender, message_id)
 
     def claim(self, resource: str) -> ClaimOwner | None:
-        """One current normalized resource, through the certified checkpoint."""
+        """Look up the current claim for a resource in the checked index."""
         self.require_open_prefix()
         return ResourceClaims.owner_for(self.connection, resource)
 
@@ -239,12 +240,11 @@ class CertifiedSourceRead:
         return ResourceClaims.all_claims(self.connection)
 
     def capture_sources(self, rows: tuple[WireSourcePointer[OriginalSource], ...]) -> Iterator[OriginalSource]:
-        """Lend bounded original bytes, not this lock/connection, to decoding.
+        """Copy selected row bytes without keeping the lock or database open to decode them.
 
-        The returned iterator owns only the original pointers, copied bytes and
-        root selected by this certificate. It is a read snapshot, never a
-        permission to write or start a turn. Capture must finish while locks are held;
-        decoding can finish after those locks are released.
+        The iterator holds only row locations, copied bytes and the checked bus
+        identity. It cannot grant permission to write or start a turn. Copy the
+        bytes under the locks; decode them after releasing those locks.
         """
         return (resource.value for resource in self.capture_resources(rows))
 
@@ -252,11 +252,11 @@ class CertifiedSourceRead:
         self, rows: tuple[WireSourcePointer[OriginalSource], ...], *,
         previous: tuple[CapturedWireSource[OriginalSource], ...] = (),
     ) -> Iterator[CapturedWireSource[OriginalSource]]:
-        """Revalidate exact originals, then decode only changed selected resources.
+        """Check selected rows again and decode only those whose bytes changed.
 
-        Original bytes, rather than a global observation revision or derived
-        signature, decide reuse. Certification and pointer selection still run
-        on every acquisition. Decoding retains no SQLite or publication lock.
+        Compare row bytes directly to decide reuse, rather than a shared revision
+        or calculated signature. Check the bus and select row locations on every
+        read. Decoding uses copied bytes without needing a database or bus lock.
         """
         self.require_current()
         captured = tuple((row, row.read_bytes(self.stream)) for row in rows)
@@ -319,7 +319,7 @@ class CertifiedSourceRead:
         return original
 
     def _addressed_after(self, bus: WireLog, lookup: str, after_seq: int) -> sqlite3.Cursor:
-        """Select one recipient's newer rows from this certified address index."""
+        """Select a recipient's newer message sequences from the checked address index."""
         self.require_current()
         self.require_marker(bus.private_marker_unlocked())
         try:
@@ -332,10 +332,9 @@ class CertifiedSourceRead:
             raise RelationViolationError("Certified addressed index is unavailable.") from error
 
     def addressed_sequences(self, bus: WireLog, lookup: str, after_seq: int) -> tuple[int, ...]:
-        """Every committed addressed sequence in this certificate, without bytes.
+        """Return committed message sequences for a recipient without reading message bytes.
 
-        Callers that consume the selected rows consult the index, then capture
-        and decode only those originals.
+        Callers use the index to select rows, then read and decode only those rows.
         """
         rows = SqlValue.for_annotation(int).read(self._addressed_after(bus, lookup, after_seq))
         self.require_current()
@@ -344,11 +343,11 @@ class CertifiedSourceRead:
     def addressed_page(
         self, bus: WireLog, request: AddressedPage, *, prefix: PrefixWitness | None = None,
     ):
-        """Read a bounded original addressed window through this one certificate.
+        """Read a limited page of a recipient's messages from the checked index.
 
-        The query carries no input/ACK authority. Capture resolves the page and
-        addressed high-water through one current seal. Its decoder lends only
-        the bounded original bytes; no connection or stream survives capture.
+        Reading neither submits input nor marks messages handled. The page and
+        last addressed sequence come from the same checked bus state. Return
+        only the selected bytes, without leaving a connection or file open.
         """
         self.require_current()
         self.require_marker(bus.private_marker_unlocked())
@@ -404,12 +403,12 @@ class CertifiedSourceRead:
         ascending: bool,
         sequences: tuple[int, ...] = (),
     ):
-        """Read a bounded conversation from the existing certified source index.
+        """Read a limited conversation page from the existing checked index.
 
-        Sender and recipients come from the original frozen audience, never today's
-        name binding. Capture holds the bus lock; decoding owns its bounded original bytes.
-        This read cannot install or repair
-        a checkpoint, grant delivery, or advance any native-input cursor.
+        Use the sender and recipients recorded when each message was sent, not
+        today's registrations. Copy the selected bytes under the bus lock and
+        decode that copy. Reading cannot install or repair the index, deliver
+        messages, or advance a native session's input position.
         """
         self.require_current()
         if sequences:
@@ -486,12 +485,12 @@ class CertifiedSourceRead:
         return tuple(rows)
 
     def context_entry_references(self, references):
-        """Candidate entry identities already recorded in this certified cut."""
+        """Find which candidate context entries are already in the checked index."""
         self.require_current()
         return frozenset(row.reference for row in self.context_entry_rows(references))
 
     def context_records(self, manifest, previous=None):
-        """Choose new entry rows and one turn row from this certified index."""
+        """Choose context entries not yet stored and a manifest for this turn."""
         from .wire_record import (
             AuthoredObservationWireRecord,
             ContextEntryManifestWireObservation,
@@ -636,7 +635,7 @@ class ResourceClaims(CheckpointTable, TypedTable):
 
 @dataclass(frozen=True, kw_only=True)
 class WireSourcePointer(Generic[OriginalSource], ABC):
-    """Original byte geometry and capture shared by certified source members."""
+    """Locate and read a stored row by its byte offset and length."""
 
     offset: int = field(metadata={"sql": Column(check="offset>=0")})
     length: int = field(metadata={"sql": Column(check="length>0")})
@@ -645,7 +644,7 @@ class WireSourcePointer(Generic[OriginalSource], ABC):
     def decode_bytes(self, raw: bytes, root_id: str) -> OriginalSource: ...
 
     def read_bytes(self, stream) -> bytes:
-        """Capture this original row while the certificate's stream is held."""
+        """Read this row from the open bus file and check its length and newline."""
         try:
             stream.seek(self.offset)
             raw = stream.read(self.length)
@@ -762,7 +761,7 @@ class ContextEntrySources(WireSourcePointer[ContextEntryManifest], CheckpointTab
 
 @dataclass(frozen=True)
 class ContextManifestCursor(ABC):
-    """A cut in one certified source; direction belongs to the cut's type."""
+    """Locate a context manifest in one bus; subclasses choose the read direction."""
 
     source: PrefixSource
     offset: int
@@ -959,9 +958,9 @@ class RecordedContextManifestSources(
                     source.connection, owners)
                 newer = AfterContextManifest(prefix.source_identity, rows[-1].offset).available(
                     source.connection, owners)
-            # The certificate verifies the append-only prefix; carry installs
-            # replace the inode. A retained pointer from this same source is
-            # immutable, so a refresh reads only newly recorded turns.
+            # The saved check covers the bus bytes read so far; moving an archive
+            # replaces the file. Rows from the same unchanged file can be reused,
+            # so a refresh needs to read only newly recorded turns.
             retained = {item.pointer: item for item in previous
                         if item.source == prefix.source_identity}
             captured = tuple((row, row.read_bytes(source.stream)) for row in rows
@@ -1101,10 +1100,10 @@ class PrefixCertificate(CheckpointTable, TypedTable):
 
     @classmethod
     def read_witness(cls, db: sqlite3.Connection) -> PrefixWitness:
-        """Decode the original certificate through its own declaration.
+        """Check the saved SQL schema and decode the record of checked bus bytes.
 
-        Derived index membership belongs to the mutable writer. An immutable
-        archive retains this same certificate and its original sealed sidecar.
+        Only the writer changes which rows are indexed. A read-only archive
+        keeps the same saved check and the index file it names.
         """
         actual = SQLiteSchemaObject.read(db.execute(
             "SELECT name,sql FROM sqlite_master WHERE name=?", (FieldCodec.encode(cls),),
@@ -1217,13 +1216,13 @@ def _index_row(db: sqlite3.Connection, offset: int, raw: bytes,
 
 
 def install_private_bus_checkpoint(bus: WireLog, *, _bus_locked: bool = False) -> PrefixWitness:
-    """Explicitly certify the complete current private bus without rewriting it.
+    """Check the whole private bus and install its index without rewriting messages.
 
-    The canonical writer lock excludes appenders throughout the one-time scan.
-    Build the existing certificate/index schema off-path, then publish its inode
-    and durable marker binding. Before publication a failure leaves no active
-    sidecar; after publication an uncertain marker write retains the sidecar and
-    existing read barrier denies access rather than trusting an unsealed index.
+    Hold the writer lock to prevent appends during the scan. Build the index
+    in a separate file, then publish it and save the bus marker naming that file.
+    Failure before publication leaves no active index. If saving the marker
+    has an uncertain outcome after publication, keep the index file but refuse
+    reads until the marker and index have been checked together.
     """
     if bus.path.name != "bus.jsonl":
         raise ValueError("Canonical private WireLog required")
@@ -1361,9 +1360,9 @@ class WritableCheckpoint:
 
 
 def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWitness:
-    """The durability owner verifies its already opened source and certificate."""
+    """Flush the open bus and check its index against the saved marker."""
     # Exclusive recovery may adopt bytes left visible by an interrupted append.
-    # Make those bytes durable before publishing a repaired certificate.
+    # Flush those bytes before publishing a repaired index check.
     os.fsync(stream.fileno())
     _directory_sync(bus.path)
     saved = _saved(db)
@@ -1485,7 +1484,7 @@ def append_private_bus_checkpoint_unlocked(
     raw: bytes,
     record: WireRecord,
 ) -> PrefixWitness:
-    """Append one certified row only AFTER the canonical bus/parent fsync."""
+    """Index one appended row only after flushing the bus and its parent directory."""
     path = _path(bus.path)
     # WireLog owns UNKNOWN classification: it performed the bus fsync and is
     # this operation's sole production caller. Preserve the actual failure here.

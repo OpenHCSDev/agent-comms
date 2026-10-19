@@ -853,7 +853,7 @@ class InputDrain(InputObservation):
         await self.input_refused(session_id, input_id)
 
     def finish_original_inputs(self, keys: tuple[str, ...]) -> InputDocument:
-        """The joined retirement owns the original input and its wire cut."""
+        """Settle the selected inputs under the bus lock before turn cleanup finishes."""
         with _store_lock(self.comms._wire_lock_path):
             return self.dispositions.settle_unbound(keys)
 
@@ -872,9 +872,9 @@ class InputDrain(InputObservation):
             if original is not None:
                 await Coordination.run_worker(partial(self.finish_original_inputs, original.keys))
         finally:
-            # Cancellation joins the original input write before retiring loop
-            # capabilities. No callback delivery is required to burn a grant or
-            # retain accepted queued input for the next distinct turn.
+            # Even after cancellation, wait for the input write before releasing
+            # turn resources. Closing permissions and saving accepted queued
+            # input for the next turn do not depend on callback delivery.
             state.following = {}
             remaining, state.queued = state.queued, {}
             for item in remaining.values():

@@ -283,7 +283,7 @@ class NativeTranscript(TranscriptSource):
             return proof.corroborate(self.path.absolute(), header, user)
 
     def inputs_for(self, records) -> tuple:
-        """Each record's original input, found in one reverse walk for the batch.
+        """Find the user input behind each record in one reverse walk for the batch.
 
         Parent IDs are followed back from the latest record; every intervening
         record is visited once for the whole batch, and the walk stops when each
@@ -321,7 +321,7 @@ class NativeTranscript(TranscriptSource):
         return tuple(found)
 
     def input_for(self, record: NativeRecord):
-        """The native record and its parent chain own the original input."""
+        """Follow the native record's parents to find the user input that started it."""
         return self.inputs_for((record,))[0]
 
     def publication_input(self, *, after: int, through: int):
