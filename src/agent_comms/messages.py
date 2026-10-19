@@ -6,7 +6,7 @@ import builtins
 import hashlib
 import re
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field, fields, replace
 from enum import StrEnum
 from pathlib import Path
@@ -28,7 +28,10 @@ from .ui_model.message_category import InboundCategory, MessageCategory, OtherCa
 from .wake_policy import BoundedTriageWake, PassiveWake
 
 if TYPE_CHECKING:
+    from .private_bus_checkpoint import ClaimCommits
+    from .retained_task_facts import ExactTaskFact
     from .threads import Thread
+    from .typed_table import TypedTable
 
 
 class SendableMessageKind:
@@ -378,9 +381,13 @@ class Message:
 
     def checkpoint_rows(self, previous_sequence: int):
         """The envelope declares both publication and optional claim facts."""
-        from .private_bus_checkpoint import PublicMessages
+        from .private_bus_checkpoint import ClaimCommits, PublicMessages
 
         yield PublicMessages(self.seq, previous_sequence, self.sender, self.message_id)
+        yield from self.claim_rows(ClaimCommits)
+
+    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
+        return ()
 
     def require_claim_transition(self) -> ClaimTransition:
         raise RelationViolationError("Original wire message has no claim transition")
@@ -442,7 +449,7 @@ class Message:
         public = {
             key: value for key, value in data.items() if key not in ("id", PRIVATE_WIRE_FIELD)
         }
-        kind = FieldCodec.decode(type[MessageKind], public['type'])
+        kind = MessageKind.member_named(public[FieldCodec.record_key(Message, 'type')])
         return FieldCodec.decode(kind.message_record(), {"ts": 0.0, **public})
 
     @classmethod
@@ -508,15 +515,13 @@ class ClaimMessage(Message):
                 or transition.message_id != self.message_id):
             raise RelationViolationError('Claim transition does not bind this message.')
 
-    def checkpoint_rows(self, previous_sequence: int):
-        from .private_bus_checkpoint import ClaimCommits
-        yield from super().checkpoint_rows(previous_sequence)
-        yield ClaimCommits(self.claim_transition)
+    def claim_rows(self, table: type[ClaimCommits]) -> tuple[TypedTable, ...]:
+        return (table(self.claim_transition),)
 
     def require_claim_transition(self) -> ClaimTransition:
         return self.claim_transition
 
-    def retained_task_facts(self):
+    def retained_task_facts(self) -> Iterator[ExactTaskFact]:
         from .retained_task_facts import ClaimTaskFact
         yield from super().retained_task_facts()
         yield ClaimTaskFact(self)
@@ -524,7 +529,4 @@ class ClaimMessage(Message):
     def require_retained_claim(self, claimed_after_seq: int) -> None:
         """The envelope carries its own committed claim facts."""
 
-    @property
-    def publication_snapshot(self) -> Message:
-        return Message(**{item.name: getattr(self, item.name)
-                          for item in fields(Message)}).publication_snapshot
+

@@ -54,10 +54,10 @@ from .store_files import _atomic_write_text, _store_lock
 from .wake import ControlClassification, resolve_wake_cohort
 
 if TYPE_CHECKING:
-
     from .coordination_session import NativeBoundary
     from .private_bus_checkpoint import CheckedRead
     from .registration import Registration
+    from .threads import Thread
 
 from .catalog_document import CatalogDocument
 from .catalog_store import ChannelCatalog
@@ -168,11 +168,16 @@ class ClaimWrites(PrivateWrites):
     def _publish_acquisition_unlocked(
         self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, owner: Thread,
         resource: str, claim: ClaimScope, *, activity: ActivityClocks,
-    ) -> WakeClaims:
-        return self._publish_claim_transition_unlocked(
-            bus_lock, snapshot, ClaimNoticeKind.claimed(owner),
-            partial(WakeClaims, incarnation=str(owner.created_at), claims=(resource,),
-                    generation=Id128Text.mint(), claim_scope=claim), activity=activity)
+    ) -> ClaimOwner:
+        def publish() -> ClaimOwner:
+            transition = self._publish_claim_transition_unlocked(
+                bus_lock, snapshot, ClaimNoticeKind.claimed(owner),
+                partial(WakeClaims, incarnation=str(owner.created_at), claims=(resource,),
+                        generation=Id128Text.mint(), claim_scope=claim), activity=activity)
+            return transition.claimed(resource)
+        with bus_lock.current_source(self.log, self.log.private_marker_unlocked()) as source:
+            previous = source.claim(resource)
+        return previous.acquire(claim, snapshot, publish)
 
     def _publish_claim_transition_unlocked[Change: ClaimTransition](
         self, bus_lock: WireStoreLock, snapshot: RegistrySnapshot, message: Message,

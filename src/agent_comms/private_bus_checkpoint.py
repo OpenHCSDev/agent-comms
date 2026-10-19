@@ -35,6 +35,8 @@ from .envelope_claim_transitions import (
     ClaimProjection,
     ClaimTransition,
     ClaimTransitionError,
+    ResourceClaim,
+    UnclaimedResource,
 )
 from .errors import HumanClaimBlockedError, RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
@@ -233,7 +235,7 @@ class CheckedRead:
             )
         PublicMessages.require_unused(self.connection, sender, message_id)
 
-    def claim(self, resource: str) -> ClaimOwner | None:
+    def claim(self, resource: str) -> ResourceClaim:
         """Look up the current claim for a resource in the checked index."""
         self.require_open_prefix()
         return ResourceClaims.owner_for(self.connection, resource)
@@ -618,12 +620,11 @@ class ResourceClaims(CheckpointTable, TypedTable):
                            deferred=True, on_delete="CASCADE"),)
 
     @classmethod
-    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ClaimOwner | None:
-        original = ClaimCommits.one(
+    def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
+        originals = ClaimCommits.select(
             db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
-            parameters=(resource,),
-        )
-        return original.transition.claimed(resource) if original is not None else None
+            parameters=(resource,))
+        return next((row.transition.claimed(resource) for row in originals), UnclaimedResource())
 
     @classmethod
     def all_claims(cls, db: sqlite3.Connection) -> ClaimProjection:

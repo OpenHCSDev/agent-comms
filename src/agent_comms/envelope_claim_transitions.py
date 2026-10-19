@@ -12,7 +12,7 @@ from __future__ import annotations
 import stat
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterator, Mapping
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Annotated, ClassVar, Literal
@@ -144,38 +144,43 @@ class ClaimScope(SubclassUnion, ABC, affix=""):
         GenerationCounter.require_positive(self.owner_claimed_generation)
         TurnId.for_registration(self.turn_id)
 
+    def reuses(self, other: ClaimScope) -> bool:
+        return self == other
+
     def belongs_to(self, attempt: AttemptRecord) -> bool:
         return False
 
 
 @dataclass(frozen=True)
 class NativeClaim(RecordMember, ClaimScope):
-    """A tool acquisition belongs to one admitted ordinary native input."""
+    """A tool acquisition belongs to one ordinary native input."""
 
     input_id: Annotated[str, BoundedText]
+
+    def reuses(self, other: ClaimScope) -> bool:
+        return replace(self, operation_id=other.operation_id) == other
 
 
 @dataclass(frozen=True)
 class WakeClaim(RecordMember, ClaimScope):
     """A selected N/K execution bound into the durable resource-claim row."""
 
-    wire_root_id: str
+    wire_root_id: Annotated[str, Id128Text]
     source_seq: int
     source_message_id: Annotated[str, BoundedText]
     wake_assignment_id: Annotated[str, BoundedText] = field(metadata={"wire_name": "wake_claim_id"})
     wake_revision: int
-    recipient_lookup: str
+    recipient_lookup: Annotated[str, Id128Text]
     execution_id: Annotated[str, BoundedText]
     participant_generation: int
     attempt_ordinal: int
-    version: int = field(default=1, metadata={"wire_required": True})
+    version: Literal[1] = field(default=1, metadata={"wire_required": True})
 
     def belongs_to(self, attempt: AttemptRecord) -> bool:
+        # The attempts table's primary key fixes its immutable participant identity.
         return (
             self.execution_id == attempt.execution_id
             and self.attempt_ordinal == attempt.attempt_ordinal
-            and self.recipient_lookup == attempt.owner_lookup
-            and self.participant_generation == attempt.owner_generation
         )
 
     @property
@@ -194,17 +199,8 @@ class WakeClaim(RecordMember, ClaimScope):
 
     def __post_init__(self) -> None:
         super().__post_init__()
-        Id128Text.decode(self.wire_root_id)
-        Id128Text.decode(self.recipient_lookup)
         try:
-            FieldCodec.decode(Literal[1], self.version)
-            AssignmentBinding(
-                self.wake_assignment_id,
-                self.wake_revision,
-                self.recipient_lookup,
-                self.source,
-                self.execution_id,
-            )
+            self.binding
             GenerationCounter.require_positive(self.participant_generation)
             if FieldCodec.decode(int, self.attempt_ordinal) <= 0:
                 raise ValueError("attempt ordinal must be positive")
@@ -231,14 +227,24 @@ class ClaimRelease:
 
 
 @dataclass(frozen=True)
-class ClaimTransition(SubclassUnion, ABC, affix=""):
-    """One original resource transition; its member declares what it changes."""
-
-    max_resources: ClassVar[int] = 32
+class ClaimIdentity:
     owner: Annotated[str, BoundedText]
     incarnation: Annotated[str, BoundedText]
     seq: Annotated[int, EnvelopeSequence]
     message_id: Annotated[str, BoundedText]
+
+
+@dataclass(frozen=True)
+class AcquiringClaim(ClaimIdentity):
+    generation: Annotated[str, Id128Text]
+    claim_scope: ClaimScope = field(metadata={"wire_name": "admission"})
+
+
+@dataclass(frozen=True)
+class ClaimTransition(ClaimIdentity, SubclassUnion, ABC, affix=""):
+    """One original resource transition; its member declares what it changes."""
+
+    max_resources: ClassVar[int] = 32
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
@@ -282,15 +288,8 @@ class ClaimTransition(SubclassUnion, ABC, affix=""):
 
 
 @dataclass(frozen=True)
-class WakeClaims(RecordMember, ClaimTransition):
+class WakeClaims(AcquiringClaim, RecordMember, ClaimTransition):
     claims: tuple[Annotated[str, ResourcePathText], ...]
-    generation: Annotated[str, Id128Text]
-    claim_scope: ClaimScope = field(metadata={"wire_name": "admission"})
-
-    def __post_init__(self) -> None:
-        super().__post_init__()
-        if not self.claims:
-            raise ClaimTransitionError("Acquisition requires resources.")
 
     @property
     def resources(self) -> tuple[str, ...]:
@@ -301,11 +300,7 @@ class WakeClaims(RecordMember, ClaimTransition):
             raise ClaimTransitionError("Resource is not part of this acquisition.")
         return ClaimOwner(
             resource=resource,
-            **{
-                declared.name: getattr(self, declared.name)
-                for declared in fields(ClaimOwner)
-                if declared.name != "resource"
-            },
+            **{declared.name: getattr(self, declared.name) for declared in fields(AcquiringClaim)},
         )
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:
@@ -337,19 +332,29 @@ class ReleasedClaims(RecordMember, ClaimTransition):
         return ClaimProjection(self.seq, self.remaining(previous, self.releases))
 
 
+class ResourceClaim:
+    def acquire(
+        self, scope: ClaimScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+    ) -> ClaimOwner:
+        return publish()
+
+
 @dataclass(frozen=True)
-class ClaimOwner:
+class UnclaimedResource(ResourceClaim):
+    """A checked resource has not been acquired."""
+
+
+@dataclass(frozen=True)
+class ClaimOwner(AcquiringClaim, ResourceClaim):
     resource: Annotated[str, ResourcePathText]
-    owner: Annotated[str, BoundedText]
-    incarnation: Annotated[str, BoundedText]
-    generation: Annotated[str, Id128Text]
-    seq: Annotated[int, EnvelopeSequence]
-    message_id: Annotated[str, BoundedText]
 
     def __post_init__(self) -> None:
         FieldCodec.require_fields(self)
 
-    claim_scope: ClaimScope = field(metadata={"wire_name": "admission"})
+    def acquire(
+        self, scope: ClaimScope, registry: RegistrySnapshot, publish: Callable[[], ClaimOwner]
+    ) -> ClaimOwner:
+        return self if self.claim_scope.reuses(scope) and self.live(registry) else publish()
 
     def live(self, registry: RegistrySnapshot) -> bool:
         incarnation = RecordedThreadIncarnation(self.owner, float(self.incarnation))
