@@ -102,7 +102,7 @@ UV = Path.home() / ".local/state/agent-comms/upgrade-bus/uv"
 """The uv the installer runs, kept in the installer's own state."""
 
 
-def run(*command: str | Path, cwd: Path | None = None, env: Mapping[str, str] = os.environ) -> str:
+def run(*command: str | Path, cwd: Path = REPO, env: Mapping[str, str] = os.environ) -> str:
     print("+", " ".join(map(str, command)), file=sys.stderr, flush=True)
     completed = subprocess.run(
         [str(part) for part in command], cwd=cwd, env=env, capture_output=True, text=True
@@ -1020,7 +1020,11 @@ def runtime_references(runtimes: list[Path]) -> Mapping[Path, list[int]]:
         try:
             if process.stat().st_uid != os.getuid():
                 continue
-            contents = [(process / name).read_bytes() for name in ("environ", "cmdline", "maps")]
+            contents = [
+                (process / "environ").read_bytes(),
+                (process / "cmdline").read_bytes(),
+                (process / "maps").read_bytes(),
+            ]
             contents += [
                 os.fsencode(link.readlink()) for link in (process / "cwd", process / "exe")
             ]
