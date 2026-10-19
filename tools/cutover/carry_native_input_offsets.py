@@ -6,9 +6,11 @@ sessions and shared proof journals are read only; no input is replayed.
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 from agent_comms.coordinated_runtime_schema import _schema, _digest
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.native_entries import NativeEntry, SessionEntry
 from agent_comms.native_pi import PrivateEvidenceRead
 from agent_comms.native_runtime_input import NativeRuntimeInput, NativeRuntimeSchemaMeta
@@ -52,7 +54,7 @@ class NativeInputOffsets(Carry):
         path = root / 'coordination.sqlite3'
         if not path.exists():
             return Carried(0)
-        with sqlite3.connect(f'file:{path}?mode=ro', uri=True) as db:
+        with closing(CoordinationStore.read_snapshot(path)) as db:
             version, digest = db.execute('SELECT version,ddl_digest FROM native_runtime_schema_meta').fetchone()
             if version == 7:
                 from agent_comms.coordinated_runtime_schema import assert_native_runtime_schema
@@ -80,7 +82,7 @@ class NativeInputOffsets(Carry):
                 rows.extend(NativeRuntimeInput.read(db.execute(
                     f'SELECT {columns} FROM native_runtime_input WHERE input_id=?', (start, input_id))))
         if apply:
-            with sqlite3.connect(path, timeout=0) as db:
+            with closing(sqlite3.connect(path, timeout=0)) as db, db:
                 db.execute('PRAGMA foreign_keys=OFF')
                 db.execute('BEGIN EXCLUSIVE')
                 rewrite_table(db, NativeRuntimeInput, rows)
@@ -88,7 +90,7 @@ class NativeInputOffsets(Carry):
                               [NativeRuntimeSchemaMeta(singleton=1, ddl_digest=_digest(_schema()))])
                 if db.execute('PRAGMA foreign_key_check').fetchone() is not None:
                     raise ValueError('Native offset carry violates original foreign keys')
-        return Carried(max(1, len(rows)), rewritten=('coordination.sqlite3',))
+        return Carried(len(rows), rewritten=('coordination.sqlite3',))
 
 
 if __name__ == '__main__':

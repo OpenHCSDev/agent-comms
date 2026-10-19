@@ -126,9 +126,9 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
         return entry
 
     @classmethod
-    def input_evidence(cls, raw: dict) -> NativeEntry | None:
+    def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
         """Non-input entries do not contribute a tracked input proof."""
-        return None
+        return ()
 
     @classmethod
     def read_evidence(cls, session_file):
@@ -186,16 +186,14 @@ class ImportedSessionWriter:
 
 
 class NativeEvidenceState(ABC):
-    """An acquired header and the earliest admitted committed input cut."""
+    """A read header and the earliest required input position."""
 
     @abstractmethod
     def read(self, reader): ...
 
     def observe_inputs(self, reader, inputs):
-        from .native_pi import NativePiUnavailable
-
         if not inputs:
-            raise NativePiUnavailable('Native input evidence requires a committed byte offset')
+            raise MalformedRecord('Native input evidence requires a committed byte offset')
         minimum = min(item.session_entry_start for item in inputs)
         reader.header()
         reader.source.start_at(minimum)
@@ -337,9 +335,13 @@ class NativeEvidenceRead:
             self.close()
             raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
 
-    def observe(self, *inputs):
-        """A full-history acquisition already includes every admitted input."""
+    def observe(self):
+        """Read the full history."""
         return self._observe(reverified=False)
+
+    def read_input(self, location):
+        self.observe()
+        return self.tracked(location.input_id)
 
     def stopped_input(self, input_id: str):
         """Read only this input's contiguous branch, ending at the next input.
@@ -416,11 +418,13 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
     def observe(self, *inputs):
         return self.state.observe_inputs(self, inputs)
 
+    def read_input(self, location):
+        self.observe(location)
+        return self.tracked(location.input_id)
+
     def decode_rows(self, rows):
         for row in rows:
-            entry = NativeEntry.wire_member(row).input_evidence(row)
-            if entry is not None:
-                yield entry
+            yield from NativeEntry.wire_member(row).input_evidence(row)
 
 
 class NativeEvidenceScope(ExitStack):
@@ -445,9 +449,11 @@ class NativeEvidenceScope(ExitStack):
             raise
 
     def observe_inputs(self, contexts):
-        """Admit each source's complete required cut before the first corroboration."""
+        """Read each source from its first required input before checking any input."""
         for path in {context.session_file for context in contexts}:
-            self.for_source(path).observe(*(context for context in contexts if context.session_file == path))
+            self.for_source(path).observe(*(
+                context for context in contexts if context.session_file == path
+            ))
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()
@@ -482,8 +488,8 @@ class SessionEntry(NativeEntry):
     })
 
     @classmethod
-    def input_evidence(cls, raw: dict) -> NativeEntry:
-        return cls.from_evidence(raw)
+    def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
+        return (cls.from_evidence(raw),)
 
     def require_header(self) -> None:
         if not self.id:
@@ -499,15 +505,15 @@ class SessionEntry(NativeEntry):
 @dataclass(frozen=True, kw_only=True)
 class MessageEntry(NativeEntry):
     @classmethod
-    def input_evidence(cls, raw: dict) -> NativeEntry | None:
+    def input_evidence(cls, raw: dict) -> tuple[NativeEntry, ...]:
         message = raw.get("message")
         if not isinstance(message, dict):
             raise MalformedRecord("Native message evidence requires an object")
         if message.get("inputId") is not None:
             # Same strict original user/content/digest decoding, including the
             # rejection of tracked IDs hidden in another message role.
-            return cls.from_evidence(raw)
-        return None
+            return (cls.from_evidence(raw),)
+        return ()
 
     message: PiMessage
     is_message = True

@@ -191,7 +191,6 @@ class NativeContextRecord(NativeInputCommit):
         return record
 
     def __post_init__(self):
-        super(NativeContextRecord, self).__post_init__()
         Sha256Text.decode(self.llm_context_digest)
         if not 0 < self.request_generation <= 2**53 - 1:
             raise ValueError("Native context generation is outside its native range")
@@ -357,9 +356,9 @@ class NativeContextProof(NativeContextRecord, NativeInputLocation):
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
             location = NativeInputLocation(input_id, row.session_id, row.session_entry_id,
                                            session_entry_start=session_entry_start)
-            header, _entries = evidence.observe(location)
-            entry = evidence.tracked(input_id)
-            return row.corroborate(session_file, header, entry, session_entry_start=session_entry_start)
+            entry = evidence.read_input(location)
+            return row.corroborate(session_file, evidence.header(), entry,
+                                   session_entry_start=session_entry_start)
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -707,7 +706,7 @@ class PrivateEvidenceRead:
         self.stream.close()
 
     def reverify(self) -> None:
-        """Reacquire the canonical inode; the acquired reader restores its admitted cut."""
+        """Reopen the source; its reader restores the required input position."""
         self.close()
         self.stream = self._open_stream(self.path)
         self.identity = FileIdentity.from_stat(os.fstat(self.stream.fileno()))
@@ -813,7 +812,7 @@ class PrivateEvidenceRead:
         self._commit_snapshot(size, revision)
 
     def start_at(self, offset: int) -> None:
-        """Admit a recorded byte boundary after checking the pinned source revision."""
+        """Seek to a recorded boundary after checking the original source revision."""
         FieldCodec.decode(int, offset)
         size, revision = self._capture_append()
         if not 0 < offset < size or os.pread(self.stream.fileno(), 1, offset - 1) != b'\n':

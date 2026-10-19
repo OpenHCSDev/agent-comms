@@ -18,7 +18,9 @@ from agent_comms.private_runtime_schema import PrivateRuntimeSchema
 from .coordination_errors import StaleFence, IdentityConflict
 from .field_codec import FieldCodec, MalformedRecord
 from .native_claim_epoch import NativeClaimEpoch, UnrecordedNativeClaim
-from .native_input_record import NativeInputRecord, NativeInputContext, NativeInputExecution
+from .native_input_record import (
+    NativeInputRecord, NativeInputContext, NativeInputExecution, NativeInputLocation,
+)
 from .selected_triage import SelectedTriage, RecordedTriageText
 from .typed_table import Column, IntegerStorage, TypedRow, TypedTable
 
@@ -115,13 +117,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         """Recover the original committed acknowledgement, never manufacture it from a path."""
         from .native_pi import NativeContextProof
 
-        reference = self.reference.require_recorded()
-        return NativeContextProof(
-            reference.input_id, reference.session_id, self.session_entry_id,
-            reference.request_generation, self.llm_context_digest, self.committed_at_ms,
-            self.require_session_identity().path,
-            session_entry_start=self.session_entry_start,
-        )
+        self.reference.require_recorded()
+        values = {item.name: getattr(self, item.name)
+                  for item, _wire in FieldCodec.record_fields(NativeContextProof)}
+        values['session_file'] = self.require_session_identity().path
+        return FieldCodec.construct(NativeContextProof, values)
 
     @property
     def execution(self) -> NativeInputExecution:
@@ -230,7 +230,9 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_id: str | None = None
     session_file: str | None = None
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
-    session_entry_start: int | None = field(default=None, metadata={"native_context": int})
+    session_entry_start: int | None = field(default=None, metadata=dict(
+        NativeInputLocation.__dataclass_fields__["session_entry_start"].metadata, native_context=int,
+    ))
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
     committed_at_ms: int | None = field(default=None, metadata={"native_context": int})
@@ -246,10 +248,11 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         "(session_id IS NULL AND session_file IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
         "AND length(session_file)>0 AND {sent_owner_claimed_generation} IS NOT NULL)",
-        "(session_entry_id IS NULL AND session_entry_start IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
+        "(session_entry_id IS NULL AND session_entry_start IS NULL AND request_generation IS NULL "
+        "AND llm_context_digest IS NULL "
         "AND committed_at_ms IS NULL) OR "
         "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 "
-        "AND session_entry_start IS NOT NULL AND session_entry_start>0 AND request_generation>0 "
+        "AND session_entry_start IS NOT NULL AND request_generation>0 "
         "AND length(llm_context_digest)=64 AND committed_at_ms>0 AND session_id IS NOT NULL)",
         "stage='triage' OR verdict IS NULL",
     )
