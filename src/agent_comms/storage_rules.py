@@ -345,7 +345,7 @@ class ShellSource(shlex.shlex):
 
     def __init__(self, command: str) -> None:
         self.source_stream = StringIO(command)
-        super().__init__(self.source_stream, posix=False, punctuation_chars='<>\n')
+        super().__init__(self.source_stream, posix=False, punctuation_chars=';&|><()\n')
         self.whitespace = ' \t\r'
         self.whitespace_split = True
 
@@ -380,7 +380,10 @@ class ShellSource(shlex.shlex):
                 elif cls.newline in word and delimiters:
                     # shlex may look one character beyond the newline; keep
                     # the original header, not the lookahead into literal data.
-                    end = command.rfind(cls.newline, 0, lex.source_stream.tell()) + 1
+                    end = lex.source_stream.tell()
+                    for _ in range(word.count(cls.newline)):
+                        end = command.rfind(cls.newline, 0, end)
+                    end += 1
                     body.append(command[:end])
                     lines = iter(command[end:].splitlines(keepends=True))
                     for delimiter, tabs in delimiters:

@@ -176,6 +176,8 @@ def test_inherited_decoder_is_collected_once_in_a_diamond(tmp_path, monkeypatch)
     ("cat << -EOF\n'unclosed data\n-EOF\nmkdir target", 'WriteStorageEffect'),
     ("cat <<'P'Y\n'unclosed data\nPY\nmkdir target", 'WriteStorageEffect'),
     ('cat <<\'P\'"Y"\n\'unclosed data\nPY\nmkdir target', 'WriteStorageEffect'),
+    ("cat <<''\n\nmkdir target", 'WriteStorageEffect'),
+    ("cat <<EOF; printf ready\n'input\nEOF\nmkdir target", 'WriteStorageEffect'),
 ])
 def test_program_decoders_preserve_command_shapes(tmp_path, command, kind):
     effects = shell_storage_effects(command, tmp_path)
