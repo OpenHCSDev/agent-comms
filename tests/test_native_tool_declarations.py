@@ -1,16 +1,15 @@
 """One tool declaration controls presentation without granting coding authority."""
 
 from dataclasses import dataclass
-from pathlib import Path
 import asyncio
 import json
 
 import acp
 import pytest
-from acp.schema import ToolCallStart
+from acp.schema import ToolCallStart, TextContentBlock
 
 import agent_comms.agent_events as events
-import agent_comms.backend as backend
+from agent_comms.turn_progress import TurnProgress
 from agent_comms.comms import Comms
 from agent_comms.native_tools import BashTool, CodingTool, EditTool, ReadTool, WriteTool
 from agent_comms.tool_declaration import ReplacementEdit
@@ -236,34 +235,22 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
             await writer.wait_closed()
 
     monkeypatch.setattr(native.provider, "handle", request_read)
-    async with asyncio.timeout(25):
-        records = [
-            event
-            async for event in backend.stream_agent_events(
-                "pi",
-                [
-                    "--provider",
-                    "response-local",
-                    "--model",
-                    "fixture",
-                    "--thinking",
-                    "off",
-                    "--offline",
-                    "--no-extensions",
-                    "--no-skills",
-                    "--no-context-files",
-                    "--no-prompt-templates",
-                    "--tools",
-                    "read",
-                ],
-                "Read owned.txt once and answer",
-                str(native.project),
-                root=Path(str(native.project)), session_file=str(native.session),
-                persistent_session=native.persistent,
-                native_start=native.started,
-            )
-        ]
-    assert records[-1].ok, records[-1]
+    records = []
+    consume = TurnProgress.consume
+
+    async def observed(progress, event):
+        records.append(event)
+        await consume(progress, event)
+
+    monkeypatch.setattr(TurnProgress, "consume", observed)
+    await native.author_history()
+    original_inputs = len(native.saved_inputs())
+    async with native.open_owner(runtime_enabled=True, native_options=()) as (agent, session):
+        async with asyncio.timeout(25):
+            await agent.prompt(session, [TextContentBlock(
+                type="text", text="Read owned.txt once and answer",
+            )])
+    assert any(isinstance(event, events.Done) and event.ok for event in records), records
     starts = [event for event in records if isinstance(event, events.ToolStart)]
     ends = [event for event in records if isinstance(event, events.ToolEnd)]
     assert len(starts) == len(ends) == 1
@@ -273,7 +260,7 @@ async def test_actual_native_read_tool_reaches_official_acp_with_declared_presen
     expected_title = f"Read {source}"
     assert starts[0].kind == "read" and starts[0].title == expected_title
     assert ends[0].ok and "ACTUAL_READ_CONTENT" in ends[0].output
-    assert len(native.starts) == len(native.saved_inputs()) == 1
+    assert len(native.saved_inputs()) == original_inputs + 1
     assert native.provider.posts == 2 and source.read_text() == "ACTUAL_READ_CONTENT\n"
 
     owner, received = acp_tools
