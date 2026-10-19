@@ -228,7 +228,8 @@ class HeldRuntimePublication(RuntimePublication, MaintainedOwnerCutover):
             snapshot.require_owner_process(original.identity, original.process)
 
     def complete(self, stopped: StoppedOwnerBatch) -> tuple[OwnerRestartResult, ...]:
-        request = StoppedPublication(self, stopped.handoff, self.maintenance_hold,
+        request = StoppedPublication(RuntimePublication(self.runtime, self.links),
+                                     stopped.handoff, self.maintenance_hold,
                                      self.carries.checkout)
         result = subprocess.run([
             self.runtime / 'bin/python', '-I', '-B', '-c',
