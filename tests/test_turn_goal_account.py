@@ -26,6 +26,13 @@ from stored_inputs import stored_inputs
 pytestmark = pytest.mark.usefixtures("fake_native_catalog")
 
 
+@pytest.fixture
+def comms(comms):
+    """Turn acquisition launches an owner on the declared private protocol."""
+    comms.messaging.initialize_private_initial_protocol()
+    return comms
+
+
 def test_goal_settlement_and_new_state_subclass_use_same_durable_owner(tmp_path):
     class SpecializedPausedGoal(PausedGoal):
         pass
@@ -135,7 +142,7 @@ async def test_acquired_claim_and_lease_retire_on_each_pre_native_failure(
         with pytest.raises(RuntimeError, match="injected acquired resource failure"):
             await execution.run()
         assert store.snapshot(goal.id).lifecycle == expected_state
-        assert not comms.registry.require(name).active_turn.executing
+        assert not comms.registry.require(name).executing
         assert owner.inputs.state(session.session_id).inbox is None
         assert owner.inputs.state(session.session_id).first_source is None
         assert not owner.inputs.input_keys(session.session_id)
