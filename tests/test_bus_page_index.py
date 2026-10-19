@@ -44,7 +44,7 @@ def retained_source(root, count, *, access=ArchivedAccess()):
         install_private_bus_checkpoint(comms.bus.log, _bus_locked=True)
     with comms.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         with BusPageIndex(comms.bus.log.path) as index:
-            assert index.sync(opened)
+            assert index.covers(opened)
     marker = comms.bus.log.read_metadata_unlocked(required=True)
     marker.access = access
     comms.bus.log.write_metadata_unlocked(marker)
@@ -64,23 +64,18 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
         bus.incoming_page('b', after=6)
     with BusPageIndex(bus.log.path) as index:
         index.invalidate()
-        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
-            index.sync(opened)  # explicit administrative rebuild, never a reader repair
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
     for member in CoordinationStore.files(path):
         member.unlink(missing_ok=True)
-    with pytest.raises(StaleBusPageIndexError):
-        bus.incoming_page('b', after=6)
-    assert not path.exists()
+    assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
+    assert path.exists()
+    for member in CoordinationStore.files(path):
+        member.unlink(missing_ok=True)
     with closing(sqlite3.connect(path)) as db, db:  # an earlier declaration
         db.execute(f'CREATE TABLE "{BusPageRow.declared_name}" ("seq" INTEGER NOT NULL, '
                    '"offset" INTEGER NOT NULL, PRIMARY KEY ("seq")) STRICT')
     with pytest.raises(StaleBusPageIndexError):
         bus.incoming_page('b', after=6)
-    with bus.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as opened:
-        with BusPageIndex(bus.log.path) as index:
-            index.sync(opened)
-    assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
 
     archive = retained_source(tmp_path / 'archive', 9)
     assert [message.seq for message in archive.incoming_page('b', after=6).messages] == [9]
@@ -110,36 +105,34 @@ def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, openin
     assert decoded == [7, 150]
 
 
-def test_stale_readers_do_not_write_and_the_next_append_builds_offsets(tmp_path):
+def test_parallel_readers_receive_repaired_offsets_once(tmp_path, monkeypatch):
     bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
     with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         message, _ = next(opened.public_records())
     with BusPageIndex(bus.log.path) as index:
         index.invalidate()
-    readers_ready = threading.Barrier(3)
-    captured = threading.Semaphore(0)
+    readers_ready = threading.Barrier(2)
+    sync = BusPageIndex.sync
+    repairs = []
+
+    def record_repair(index, opened):
+        repairs.append(opened.revision)
+        return sync(index, opened)
+
+    monkeypatch.setattr(BusPageIndex, 'sync', record_repair)
 
     def read_reference():
         with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             with BusPageIndex(bus.log.path) as index:
-                assert not index.covers(opened)
-                captured.release()
-                readers_ready.wait(timeout=5)
-                return opened.messages_for_references((message.reference,))
+                assert index.covers(opened)
+            readers_ready.wait(timeout=5)
+            return opened.messages_for_references((message.reference,))
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         readers = (executor.submit(read_reference), executor.submit(read_reference))
-        # A SQLite writer does not turn stale readers into competing writers.
-        for _ in readers:
-            assert captured.acquire(timeout=5)
-        with closing(CoordinationStore.writer(bus.log.path.with_name('bus_page_index.sqlite3'))) as db, db:
-            db.execute('BEGIN IMMEDIATE')
-            readers_ready.wait(timeout=5)
-            for reader in readers:
-                with pytest.raises(StaleBusPageIndexError):
-                    reader.result(timeout=5)
-    appended = Comms(bus.log.path.parent).messaging.send('a', 'b', 'append owns the offsets').message
-    assert appended in bus.incoming_page('b', after=0).messages
+        for reader in readers:
+            assert reader.result(timeout=5) == (message,)
+    assert len(repairs) == 1
     with BusPageIndex(bus.log.path) as index:
         with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             assert index.covers(opened)
