@@ -7,9 +7,10 @@ import pytest
 
 from agent_comms.repo import Repo
 from agent_comms.field_codec import FieldCodec
+from agent_comms.plan_phases import RecordPlanePhase
 from agent_comms.todos import (CheckedProblemOrder, DoneTodoState, MergedProblemOrder, OperationDelivery,
                                MergedPullRequest, PullRequests, UnorderedProblemOrder)
-from agent_comms.tools import CommsOrderDoneTool
+from agent_comms.tools import CommsOrderDoneTool, CommsOrderServeTool
 from agent_comms.recorded_time import RecordedEventTime
 from cutover.carry_merged_orders import MergedOrders
 from test_commander_problem_orders import working
@@ -29,6 +30,8 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
                           delivery=OperationDelivery(at=RecordedEventTime(500)),
                           claims=working(comms)).apply(comms, caller)
         todo = comms.goals.todos.get(todo.id)
+    CommsOrderServeTool(problem=todo.id, serves=RecordPlanePhase).apply(comms, caller)
+    todo = comms.goals.todos.get(todo.id)
     original = todo.order
     commit(unit)
     git(unit, 'switch', '-q', 'main')
@@ -70,6 +73,8 @@ def test_installed_merge_closes_pending_or_delivered_order_once(
                for item in fields(CheckedProblemOrder))
     assert closed.order.id == original.id
     assert "original" not in FieldCodec.encode(closed.order)
+    assert closed.order.phase is RecordPlanePhase
+    assert RecordPlanePhase.serving((closed,)) == (closed,)
     assert closed.strikes == todo.strikes
     assert FieldCodec.decode(type(closed), FieldCodec.encode(closed)) == closed
 

@@ -1331,12 +1331,15 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def checked(self) -> CheckedProblemOrder:
         raise ValueError("This problem has no checked order.")
 
+    @property
+    def phase(self) -> type[OrderPhase]:
+        return UnplannedPhase
+
+    def for_phase(self, phase: type[OrderPhase]) -> ProblemOrder:
+        raise ValueError("Only a checked order can declare a plan phase.")
+
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
-
-    def reissued(self, at: float) -> PendingProblemOrder:
-        """This order sent again at ``at`` to a new owner, its first-call window kept."""
-        raise ValueError("Only an undelivered order can change owner.")
 
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
@@ -1417,6 +1420,13 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     deletes: OrderDeletion = field(
         default_factory=NoOrderDeletion, metadata={"wire_omit_default": True})
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
+
+    @property
+    def phase(self) -> type[OrderPhase]:
+        return self.serves
+
+    def for_phase(self, phase: type[OrderPhase]) -> CheckedProblemOrder:
+        return replace(self, serves=phase)
 
     def __post_init__(self):
         problems = []
@@ -2173,7 +2183,7 @@ class ServeTodo(TodoOperation):
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
-        return replace(current, order=replace(current.order, serves=self.serves),
+        return replace(current, order=current.order.for_phase(self.serves),
                        revision=current.revision + 1)
 
 

@@ -2,7 +2,7 @@
 
 This family is the one owner of the plan's order and dependencies;
 ``plans/commander-native-plan.md`` points here. An order names the phase it
-serves in ``ProblemOrder.serves``; an order outside the plan serves
+serves through ``ProblemOrder.phase``; an order outside the plan serves
 ``UnplannedPhase``. A phase is done only when its declared full-phase task is accepted; closing
 related subtasks does not establish completion of the phase.
 """
@@ -33,7 +33,7 @@ class PlanPhase(OrderPhase, declared_name=None):
 
     @classmethod
     def serving(cls, todos: Iterable[Todo]) -> tuple[Todo, ...]:
-        return tuple(todo for todo in todos if todo.order.serves is cls)
+        return tuple(todo for todo in todos if todo.order.phase is cls)
 
     @classmethod
     def done(cls, todos: Iterable[Todo]) -> bool:
