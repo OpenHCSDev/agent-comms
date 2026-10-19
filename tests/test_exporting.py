@@ -1,4 +1,4 @@
-from bus_history import history
+from bus_history import read_history
 import hashlib
 import json
 import math
@@ -291,7 +291,7 @@ def test_wire_snapshot_excludes_appends_after_its_fixed_boundary(tmp_path):
 
     assert through == 1
     assert [item.body for item in snapshot] == ["captured"]
-    assert [item.body for item in history(comms)] == ["captured", "too late"]
+    assert [item.body for item in read_history(comms)] == ["captured", "too late"]
 
 
 def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_path):

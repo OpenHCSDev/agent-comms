@@ -1,5 +1,5 @@
 """Installed selected coding journey through real CLI/tools; localhost responses only."""
-from bus_history import history
+from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 from agent_comms.native_package import pinned_native_package
 
@@ -156,7 +156,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(
             assert result.publications
             assert elapsed >= seconds
             assert provider.posts == 2
-            assert history(comms)[-1].body == provider.text
+            assert read_history(comms)[-1].body == provider.text
         else:
             async with asyncio.timeout(20):
                 while not (tmp_path / "native-started").exists():

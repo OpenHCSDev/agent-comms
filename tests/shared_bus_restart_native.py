@@ -3,7 +3,7 @@
 Only the localhost provider is controlled. Worker, registry, bus, selected
 claim_scope, native process, source proof and response publication remain real.
 """
-from bus_history import history
+from bus_history import read_history
 from conftest import publish_initial
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import argparse
@@ -177,7 +177,7 @@ async def configured_pure_channel(arguments):
 
     def read_original_bus():
         started = time.perf_counter()
-        history = history(service)
+        history = read_history(service)
         with service.bus.opened_activity():
             service.bus.pending_counts_all(names)
         return {'seconds': time.perf_counter() - started, 'messages': len(history)}
@@ -1072,12 +1072,12 @@ async def run(arguments):
                 cancelled_assignment = WakeAssignment.one(db,assignment_id=retained.assignment_id)
                 assert retained == cancelled_input
                 assert cancelled_assignment.lifecycle.declared_name=='deferred'
-            replies = history(service, '#team')
+            replies = read_history(service, '#team')
             assert any(reply.sender==names[0] and reply.body=='Unique controlled native reply.'
                        for reply in replies)
             assert provider.posts == 2
         elif arguments.wave_size > 1:
-            replies = [message for message in history(service, '#team')
+            replies = [message for message in read_history(service, '#team')
                        if message.sender == names[0]]
             assert len(replies) == 2
             assert replies[0].body == 'Combined wave answer: ' + '; '.join(

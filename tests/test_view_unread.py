@@ -1,4 +1,4 @@
-from bus_history import history
+from bus_history import read_history
 from agent_comms.channel_targets import CommandTarget
 from agent_comms.read_basis import NamedViewer
 import os
@@ -137,5 +137,5 @@ def test_crashed_sender_reopen_does_not_hide_unpainted_any_mode_dm():
         assert child.returncode == 9
         reopened = wire(root)
         reopened.channels.set_channel_any_mode("#team", True)
-        assert [message.seq for message in history(reopened)] == [1, 2]
+        assert [message.seq for message in read_history(reopened)] == [1, 2]
         assert reopened.views.viewer_snapshot(str(root)).channel_unread["#team"] == 2

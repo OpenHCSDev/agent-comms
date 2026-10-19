@@ -1,6 +1,6 @@
 """One original decision/correction journey through declared tools and wire ownership."""
 
-from bus_history import history
+from bus_history import read_history
 from agent_comms.bus_publication import AgentOrigin
 from agent_comms.messages import NoticeRole
 import os
@@ -159,7 +159,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     monkeypatch.setenv("AGENT_COMMS_THREAD", owner.name)
     exact = "Never replay UNKNOWN.\nPreserve λ and original /artifacts/source."
     result = invoke_tool(comms, "comms_constraint", {"text": exact, "to": "#team"})
-    original = history(comms)[0]
+    original = read_history(comms)[0]
     assert isinstance(original.task, Constraint)
     assert original.body == exact and original.task.author == owner.incarnation
     assert original.task.source_turn == owner.turn_identity
@@ -181,7 +181,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     corrected = invoke_tool(comms, "comms_constraint", {
         "text": "Keep UNKNOWN; preserve /artifacts/approved instead.", "to": "#team",
         "change": {"kind": "correction", "original": result["reference"]}})
-    rows = history(comms)
+    rows = read_history(comms)
     with comms.bus.log.certified_read() as source:
         facts = tuple(source.retained_task_facts(owner.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(owner, comms.registry.snapshot())
@@ -206,7 +206,7 @@ def test_constraint_original_wording_scope_correction_and_human_authority(comms,
     comms.registry.register(replace(renamed, goal=Goal("Replacement scope", "new-goal", published_seq=0)))
     assert retained.current_authored_sources(comms.registry.require(renamed.name),
                                             comms.registry.snapshot()) == ()
-    assert history(comms)[0] == original
+    assert read_history(comms)[0] == original
 
 
 def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypatch):
@@ -215,7 +215,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "Keep /artifacts/exact-root", "rejected": ["Use /scratch/guess-root"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
-    original = history(comms)[0]
+    original = read_history(comms)[0]
     assert original.reference == FieldCodec.decode(type(original.reference), first["reference"])
     assert original.task.author == alpha.incarnation
     assert original.task.source_turn == alpha.turn_identity
@@ -224,7 +224,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     correction = invoke_tool(comms, "comms_decision", {
         **request, "chosen": "Keep /artifacts/certified-root", "change": {"kind": "correction", "original": first["reference"]},
     })
-    rows = history(comms)
+    rows = read_history(comms)
     assert len(rows) == 2 and rows[0] == original
     assert rows[1].task.change.original == original.reference
     assert correction["reference"] == FieldCodec.encode(rows[1].reference)
@@ -262,7 +262,7 @@ def test_original_choice_correction_and_authority_survive_reopen(comms, monkeypa
     assert bus.read_bytes() == before
     from agent_comms.comms import Comms
 
-    assert history(Comms(comms.root)) == rows
+    assert read_history(Comms(comms.root)) == rows
     schema = next(tool for tool in NativeRequestTools.catalog() if tool["name"] == "comms_decision")
     assert set(schema["parameters"]["required"]) == {"chosen", "rejected", "to"}
     assert "author" not in schema["parameters"]["properties"]
@@ -278,7 +278,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     request = {"chosen": "/artifacts/exact", "rejected": ["/scratch/guess"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
     invoke_tool(comms, "comms_decision", request)
-    originals = history(comms)
+    originals = read_history(comms)
     assert originals[0].body == originals[1].body
     assert originals[0].reference != originals[1].reference
     comms.registry.rename("alpha", "renamed-alpha")
@@ -292,7 +292,7 @@ def test_equal_text_choices_keep_original_identity_through_rename_and_goal_repla
     with comms.bus.log.certified_read() as source:
         facts = tuple(source.retained_task_facts(renamed.incarnation))
     retained = RetainedTaskFacts(facts).for_owner(renamed, snapshot)
-    rows = history(comms)
+    rows = read_history(comms)
     assert tuple(fact.source.reference for fact in retained.facts) == tuple(row.reference for row in rows)
     assert retained.current_authored_sources(renamed, snapshot) == (rows[2], rows[1])
     assert tuple(fact.source.reference for fact in retained.facts
@@ -322,7 +322,7 @@ def test_stale_goal_scope_cannot_publish_even_through_original_publisher(comms):
     message = Message("alpha", "#team", declaration.text, InfoKind, task=declaration)
     with pytest.raises(ValueError, match="goal changed"):
         comms.bus.publisher.publish_ordinary(message, origin=AgentOrigin())
-    assert not history(comms)
+    assert not read_history(comms)
 
 
 @pytest.mark.parametrize("chosen,rejected", [("", ("B",)), ("A", ()), ("A", ("A",)), ("A", ("B", "B"))])
@@ -331,7 +331,7 @@ def test_invalid_alternatives_do_not_publish(comms, monkeypatch, chosen, rejecte
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     with pytest.raises(ValueError):
         invoke_tool(comms, "comms_decision", {"chosen": chosen, "rejected": list(rejected), "to": "#team"})
-    assert not history(comms)
+    assert not read_history(comms)
 
 
 def test_turn_scope_correction_cannot_revive_a_finished_turn_choice(comms, monkeypatch):
@@ -361,7 +361,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "/artifacts/old", "rejected": ["/scratch/guess"], "to": "#team"}
     first = invoke_tool(comms, "comms_decision", request)
-    original = history(comms)[0]
+    original = read_history(comms)[0]
     declaration = UserTaskSupersession(CorrectionTaskChange(original.reference))
     before = (comms.root / "bus.jsonl").read_bytes()
     with pytest.raises(RelationViolationError, match="human sender"):
@@ -389,7 +389,7 @@ def test_exact_user_supersession_cannot_be_impersonated_or_overridden_by_peer_ch
     from agent_comms.comms import Comms
 
     reopened = Comms(comms.root)
-    assert history(reopened)[1] == corrected
+    assert read_history(reopened)[1] == corrected
 
 
 def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, monkeypatch):
@@ -409,7 +409,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
     monkeypatch.setenv("AGENT_COMMS_THREAD", "alpha")
     request = {"chosen": "PRIVATE_ORIGINAL_CHOICE", "rejected": ["PRIVATE_ALTERNATIVE"], "to": "beta"}
     first = invoke_tool(comms, "comms_decision", request)
-    original = history(comms)[0]
+    original = read_history(comms)[0]
     supersession = comms.messaging.send_user_message(
         "#team", "Retract that declared choice, without revealing its private text.",
         worktree=owner.worktree,
@@ -419,7 +419,7 @@ def test_cross_audience_corrections_capture_only_eligible_owned_lineage(comms, m
         **request, "chosen": "PUBLIC_LATER_CHOICE", "rejected": ["PUBLIC_ALTERNATIVE"],
         "to": "#team", "change": {"kind": "correction", "original": first["reference"]},
     })
-    later = history(comms)[-1]
+    later = read_history(comms)[-1]
     wire_before = (comms.root / "bus.jsonl").read_bytes()
     captured = {
         name: comms.bus.log.retained_context(name, comms.registry).retained

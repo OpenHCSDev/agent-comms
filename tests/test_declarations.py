@@ -1,5 +1,5 @@
 
-from bus_history import history
+from bus_history import read_history
 import json
 import os
 import subprocess
@@ -604,7 +604,7 @@ def test_canonical_bus_reopens_and_pages_routes_without_materializing_history(tm
     assert [row.seq for row in messages] == [1, 2, 3]
     assert len({row.message_id for row in messages}) == 3
     reopened = Comms(tmp_path)
-    assert history(reopened) == messages
+    assert read_history(reopened) == messages
     reopened.registry.rename("a", "renamed")
     monkeypatch.setattr(reopened.bus.log, "full_history_snapshot", lambda: pytest.fail("full scan"))
     newest = reopened.views.history_page(CommandTarget.named("b"), PageBounds(limit=1), viewer="renamed")

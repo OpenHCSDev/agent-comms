@@ -1,6 +1,6 @@
 """Native edit evidence survives RPC, ACP, paging and transcript serialization."""
 
-from bus_history import history
+from bus_history import read_history
 import json
 from agent_comms.tool_caller import NoThreadCaller
 import sys
@@ -175,7 +175,7 @@ def test_successful_send_preserves_original_publication_in_live_and_saved_conten
         "from": "sender", "to": "recipient", "body": "Original private publication"}, caller=NoThreadCaller())
     raw = {"content": [{"type": "text", "text": json.dumps(published)}], "details": published}
     result = PiToolResult.from_wire(raw)
-    message, = history(comms)
+    message, = read_history(comms)
     assert result.sent_message(True) == SentTranscript.from_message(message)
     assert result.sent_message(False) is None
     saved = ToolResultMessage.from_wire({

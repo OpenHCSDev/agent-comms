@@ -14,7 +14,7 @@ from agent_comms.wake_candidate_index import ProjectionUnavailableError, WakeCan
 from agent_comms.wire_log import CurrentSnapshotOpening, WireLog
 from agent_comms.wire_metadata import WireMetadata
 from agent_comms.wire_record import WireRecord, WireScan
-from bus_history import history
+from bus_history import read_history
 
 
 def _row(size: int, newline: bool) -> bytes:
@@ -159,7 +159,7 @@ def test_unknown_segment_only_blocks_its_own_thread(tmp_path, other):
     with comms.bus.log.locked():
         metadata = comms.bus.log.read_metadata_unlocked(required=True)
         comms.bus.log.append_private_unlocked(metadata, row)
-    assert history(comms) == [message]
+    assert read_history(comms) == [message]
     RecordedContextManifestSources.for_owner(comms.bus.log, other, comms.registry)
     decoded = WireRecord.public_from_wire(row)
     assert FieldCodec.encode(decoded) == row

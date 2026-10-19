@@ -1,5 +1,5 @@
 """Original sealed messaging survives silent context rows through every projection."""
-from bus_history import history
+from bus_history import read_history
 from conftest import publish_initial
 import hashlib
 
@@ -68,21 +68,21 @@ def test_silent_manifest_continuous_original_message_and_cold_projection(tmp_pat
     assert comms.bus.log.path.read_bytes().startswith(raw)
     assert b'PRIVATE INPUT' not in comms.bus.log.path.read_bytes()[len(raw):]
     assert comms.bus.log.latest_sequence()==first.seq
-    assert len(history(comms))==1
+    assert len(read_history(comms))==1
     assert _page(comms,lookup)[0].offset>prior[0].offset
     assert _page(comms,lookup)[1:]==prior[1:]
     with comms.bus.opened_activity() as clocks:
         assert clocks.channels==activity
     assert comms.bus.pending_counts_all(['Alice','Bob'])==pending
     assert comms.bus.awareness_segments(comms.registry.require('Alice'), ())==awareness
-    assert history(comms)==[first]
+    assert read_history(comms)==[first]
     with comms.bus.log.full_history_snapshot() as (_, messages):
         assert list(messages)==[first]
     second=publish_initial(comms, 'sender','#team','@Alice next original message')
     assert second.seq==first.seq+1
     comms.bus.log.record_context(manifest(comms.registry.require('Alice'),2))
     reopened=Comms(comms.root)
-    assert history(reopened)==[first,second]
+    assert read_history(reopened)==[first,second]
     assert len(_page(reopened,lookup)[1])==2
     monkeypatch.setattr(type(reopened.relationships), "RECENT_MESSAGES", 2)
     recent, limited = reopened.relationships._recent_messages()

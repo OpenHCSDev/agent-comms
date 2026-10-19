@@ -8,7 +8,7 @@ and the answer was never delivered.
 
 from __future__ import annotations
 
-from bus_history import history
+from bus_history import read_history
 from conftest import publish_initial
 import asyncio
 import json
@@ -124,7 +124,7 @@ async def test_direct_message_answered_in_plain_text_is_delivered(tmp_path, nati
                 while native.provider.posts < 1 or agent.turns.turn_state(session).active.phase.busy:
                     await asyncio.sleep(0.01)
             replies = [
-                (m.target, m.body) for m in history(comms) if m.sender == session
+                (m.target, m.body) for m in read_history(comms) if m.sender == session
             ]
             assert replies == [("sender", "Blocked: the edit did not run.")]
             assert not comms.registry.require(session).active_turn.executing

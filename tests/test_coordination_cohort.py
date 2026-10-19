@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from bus_history import history
+from bus_history import read_history
 from conftest import publish_initial
 import hashlib
 import json
@@ -99,8 +99,8 @@ def test_private_initial_opt_in_full_n_observer_and_exact_public_projection(tmp_
     assert set(raw[PRIVATE_WIRE_FIELD]) == {"kind", "version", "initial"}
     assert raw[PRIVATE_WIRE_FIELD]["kind"] == "initial"
     assert raw["seq"] == message.seq and raw["id"] == message.message_id
-    assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in history(comms))
-    assert [item.seq for item in history(comms, bounds=PageBounds(max_bytes=32))] == [
+    assert all(PRIVATE_WIRE_FIELD not in item.to_wire() for item in read_history(comms))
+    assert [item.seq for item in read_history(comms, bounds=PageBounds(max_bytes=32))] == [
         message.seq
     ]
     verified = comms.bus.log.read_delivery_cohort(root_id, message.seq)
@@ -129,7 +129,7 @@ def test_initial_sideband_never_enters_export_or_public_page_budget(tmp_path: Pa
     first = publish_initial(comms, "sender", "#team", "first @Alice")
     second = publish_initial(comms, "sender", "#team", "second @Bob")
     budget = sum(len(json.dumps(message.to_wire()).encode()) + 1 for message in (first, second))
-    page = history(comms, bounds=PageBounds(max_bytes=budget))
+    page = read_history(comms, bounds=PageBounds(max_bytes=budget))
     assert [item.seq for item in page] == [first.seq, second.seq]
     output = tmp_path / "public.jsonl"
     comms.views.export_wire(
@@ -321,7 +321,7 @@ def test_keyed_response_replay_after_initial_row_and_receipt_backed_page(tmp_pat
             exact_target=case.reply_target, owner_witness=case.witness,
         )
         assert case.bus.log.read_keyed_response(intent) == first
-        assert [m.seq for m in history(case.comms)] == [case.origin_seq, first.seq]
+        assert [m.seq for m in read_history(case.comms)] == [case.origin_seq, first.seq]
         delivery = case.bus.log.read_delivery_cohort(case.root_id, first.seq)
         assert delivery.audience.canonical_members == {"sender"}
         assert delivery.decisions[0].wake_mode.triage

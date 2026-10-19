@@ -1,6 +1,6 @@
 """Real bus/SQL reply delivery, awareness and missing-native-proof boundaries."""
 
-from bus_history import history
+from bus_history import read_history
 from agent_comms.wake_candidate_index import RebuildIndex
 from agent_comms.wire_record import WireRecord
 
@@ -75,7 +75,7 @@ async def test_reply_has_frozen_awareness_and_selected_native_barrier(tmp_path: 
         await _accept_visible_deliveries(
             case.bus, case.root_id, case.store.session.path, lookup, 0, owner_name="sender"
         )
-        assert len(history(case.comms)) == 2
+        assert len(read_history(case.comms)) == 2
         assert sealed_cohort_assignments(case.store, lookup) == assignments
     finally:
         case.close()
@@ -134,7 +134,7 @@ def test_canonical_response_reader_rejects_invalid_receipt(tmp_path, field, valu
         case.bus.log.write_metadata_unlocked(marker)
         with pytest.raises((ValueError, RelationViolationError)):
             if reader == "uncertified":
-                history(case.comms)
+                read_history(case.comms)
             else:
                 install_private_bus_checkpoint(case.bus.log)
     finally:
@@ -230,7 +230,7 @@ def test_new_policy_declaration_uses_full_and_certified_record_readers(tmp_path)
         marker.checkpoint_seal = None
         case.bus.log.write_metadata_unlocked(marker)
         case.bus.log.path.write_text(json.dumps(raw) + "\n")
-        public = history(case.comms)
+        public = read_history(case.comms)
         assert len(public) == 1
         install_private_bus_checkpoint(case.bus.log)
         with case.bus.log.certified_read() as source:
@@ -265,7 +265,7 @@ def test_duplicate_json_key_is_typed_and_never_enters_uncertified_read(tmp_path)
         case.bus.log.path.write_text(raw)
         before = case.bus.log.path.read_bytes()
         with pytest.raises(StoredHistoryUnreadable, match="Malformed public bus row") as raised:
-            history(case.comms)
+            read_history(case.comms)
         assert type(raised.value.__cause__) is MalformedRecord
         assert 'Duplicate JSON field' in str(raised.value.__cause__)
         assert case.bus.log.path.read_bytes() == before

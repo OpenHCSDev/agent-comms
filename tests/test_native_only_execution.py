@@ -1,6 +1,6 @@
 """Retained native execution, refusal, and canonical headless/runtime behavior."""
 
-from bus_history import history
+from bus_history import read_history
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
 import asyncio
 import os
@@ -197,7 +197,7 @@ async def test_headless_uses_existing_owner_runtime_and_owner_project(tmp_path, 
                     "headless", [{"type": "text", "text": "!relay #all headless native route"}]
                 )
                 assert response.stop_reason == "end_turn"
-                assert [m.body for m in history(comms, "#all")] == [
+                assert [m.body for m in read_history(comms, "#all")] == [
                     "headless native route"
                 ]
                 assert not comms.registry.require("headless").active_turn.executing

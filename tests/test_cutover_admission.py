@@ -1,6 +1,6 @@
 """Runtime rebuilds retain history without re-admitting pre-cutover inputs."""
 
-from bus_history import history
+from bus_history import read_history
 import json
 
 import pytest
@@ -77,7 +77,7 @@ async def test_reset_rebuild_and_reopen_never_readmit_old_pending_input(tmp_path
         assert coverage.covered_seq == 0
         assert coverage.injected_source_seqs == ()
         assert coverage.blocked_seq == fresh.seq  # Selection is not native proof.
-        assert history(reopened) == [old, fresh]
+        assert read_history(reopened) == [old, fresh]
 
 
 def test_persisted_marker_cannot_omit_claim_authority(tmp_path):
@@ -99,7 +99,7 @@ def test_archived_snapshot_preserves_rows_and_refuses_new_publication(tmp_path):
     attached = reader.bus.history.attach(source.root)
     snapshot = Comms(attached.root)
     before = snapshot.bus.log.path.read_bytes()
-    assert [message.message_id for message in history(snapshot)] == [sent]
+    assert [message.message_id for message in read_history(snapshot)] == [sent]
     with pytest.raises(RelationViolationError, match="read-only"):
         snapshot.messaging.send("alice", "bob", "must never append").message.message_id
     assert snapshot.bus.log.path.read_bytes() == before

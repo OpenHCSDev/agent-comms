@@ -1,6 +1,6 @@
 """Fresh production bootstrap wakes a real native owner before and after restart."""
 
-from bus_history import history
+from bus_history import read_history
 from agent_comms.pi_vocabulary import OffThinkingLevel
 import json
 import os
@@ -129,7 +129,7 @@ def test_production_peer_wake_and_restart(tmp_path, monkeypatch, base_only_owner
         )
 
     def replies():
-        return [message for message in history(comms) if message.sender == "recipient"]
+        return [message for message in read_history(comms) if message.sender == "recipient"]
 
     try:
         comms.owners.start("recipient")
