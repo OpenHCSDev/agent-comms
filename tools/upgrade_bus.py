@@ -57,6 +57,15 @@ from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOpera
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
+HOLD_TRANSCRIPTS = """import sys
+from contextlib import closing
+from agent_comms.coordination_database import CoordinationStore
+with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as writer:
+    writer.execute("BEGIN IMMEDIATE")
+    print("held", flush=True)
+    sys.stdin.read()
+    writer.execute("ROLLBACK")
+"""
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
 
 
@@ -91,17 +100,25 @@ def transcripts_held(root: Path) -> Iterator[None]:
     """Bridges publish their CLI's items outside Core's maintenance refusal, so the operator
     holds the transcript store's writer: a bridge's write waits, then fails busy and is
     republished when its watch starts. A carry that needs this store fails the same way in
-    the rehearsal, before the backup."""
+    the rehearsal, before the backup.
+
+    SQLite's write lock is a POSIX record lock: the whole process owns it, and closing any
+    descriptor on the store's files drops it. The backup's tar and ``bus_files`` read those
+    files raw, so a separate holder process owns the hold."""
     path = ExternalTranscript.path_in(root)
     if not path.exists():
         yield
         return
-    with closing(CoordinationStore.writer(path, isolation_level=None)) as writer:
-        writer.execute("BEGIN IMMEDIATE")
-        try:
-            yield
-        finally:
-            writer.execute("ROLLBACK")
+    holder = subprocess.Popen([sys.executable, "-c", HOLD_TRANSCRIPTS, path],
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True,
+                              env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
+    try:
+        if holder.stdout.readline() != "held\n":
+            raise UpgradeRefused(f"Could not hold the transcript store {path}")
+        yield
+    finally:
+        holder.stdin.close()
+        holder.wait()
 
 
 def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
@@ -247,7 +264,8 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
             steps = [*before_stop(copy, pending, stack, revisions),
                      *carry_all(copy, pending, stack, revisions)]
             files = carried(copy, before, steps)
-        return {"steps": steps, "files": files, "read": stack.verify(copy)}
+            read = stack.verify(copy)
+        return {"steps": steps, "files": files, "read": read}
 
 
 @dataclass
@@ -276,11 +294,13 @@ class Backup:
         with tarfile.open(self.path / "bus.tar") as archive:
             archive.extractall(staged, filter="tar")
         failed = self.root.with_name(f".{self.root.name}.failed-{time.strftime('%Y%m%dT%H%M%S')}")
-        os.rename(self.root, failed)
-        os.rename(staged / self.root.name, self.root)
-        staged.rmdir()
-        if self.files() != bus_files(self.root):
-            raise UpgradeRefused(f"The restored bus differs from the backup; the failed bus is at {failed}")
+        with transcripts_held(staged / self.root.name):
+            os.rename(self.root, failed)
+            os.rename(staged / self.root.name, self.root)
+            staged.rmdir()
+            if self.files() != bus_files(self.root):
+                raise UpgradeRefused(
+                    f"The restored bus differs from the backup; the failed bus is at {failed}")
         if (self.path / "active-route.json").exists():
             shutil.copy2(self.path / "active-route.json", self.route)
         print(f"Restored the bus; the failed one is kept at {failed}", file=sys.stderr)
@@ -374,11 +394,12 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         installed.prepare_native()
         steps = carry_all(root, pending, staged, revisions)
         files = carried(root, backup.files(), steps)
-        transcripts.close()
         read = installed.verify(root)
-    except BaseException as error:
         transcripts.close()
+    except BaseException as error:
+        # The failed bus keeps its hold until restore has swapped it out.
         backup.restore()
+        transcripts.close()
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
