@@ -27,6 +27,22 @@ from agent_comms.tools import ReadTool, ToolRequest, invoke_tool
 LIST = {"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 
 
+def test_real_connector_refusals_and_replaced_source():
+    """The actual serve entrypoint, curl transport and production maintenance thread."""
+    import os
+    import subprocess
+    import sys
+
+    project = Path(__file__).resolve().parents[1]
+    environment = {**os.environ, "PYTHONPATH": str(project / "src")}
+    proof = subprocess.run(
+        [sys.executable, "-X", "faulthandler", str(project / "tests/verify_connector_live.py")],
+        env=environment, capture_output=True, text=True, timeout=60,
+    )
+    assert proof.returncode == 0, proof.stdout + proof.stderr
+    assert "same maintenance thread completed normally" in proof.stdout
+
+
 @pytest.mark.parametrize("served_by,registered", [
     ("installed", True), ("other", True), ("installed", False),
 ])

@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
+from .errors import ToolRefusedError
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, TypedStore, TypedTable
 
@@ -56,7 +57,9 @@ class DrawnRuleReviewEntry(RuleReviewEntry):
 
     def __post_init__(self) -> None:
         if not self.drawn or not 0 <= self.cited <= len(self.drawn):
-            raise ValueError("A review draws at least one rule and cites at most every drawn rule.")
+            raise ToolRefusedError(
+                "A review draws at least one rule and cites at most every drawn rule."
+            )
 
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
         DrawnRule.delete(db, reviewer=reviewer)
@@ -76,7 +79,7 @@ class AnsweredRuleReviewEntry(RuleReviewEntry):
 
     def __post_init__(self) -> None:
         if len(self.text.split()) < self.least_words:
-            raise ValueError(
+            raise ToolRefusedError(
                 f"Say in {self.least_words}+ words what this tick does about the rule,"
                 " naming a unit, problem or file."
             )
@@ -84,9 +87,9 @@ class AnsweredRuleReviewEntry(RuleReviewEntry):
     def write(self, db: sqlite3.Connection, reviewer: str) -> None:
         drawn = DrawnRule.select(db, reviewer=reviewer, n=self.n)
         if not drawn:
-            raise ValueError(f"{reviewer} has no review that drew rule {self.n}.")
+            raise ToolRefusedError(f"{reviewer} has no review that drew rule {self.n}.")
         if drawn[0].cited and not re.search(r"\S+\.py:\d+|P\d+", self.text):
-            raise ValueError(
+            raise ToolRefusedError(
                 "A correct-maintenance answer names the file:line or P-number it was applied to."
             )
         RuleAnswer(reviewer, self.n, self.text).upsert(db)

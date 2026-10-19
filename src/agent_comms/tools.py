@@ -29,7 +29,7 @@ from .channel_targets import ChannelTarget, CommandTarget
 from .channels import ANY_CHANNEL, Channel, SavedView, ViewKind, ViewMatch, ViewPredicate
 from .declared_family import DeclaredFamily
 from .display_order import ChannelSort, ThreadSort
-from .errors import RelationViolationError
+from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, MalformedRecord
 from .launch_runtime import LaunchRuntime
 from .goal_actions import (
@@ -73,6 +73,7 @@ from .tool_caller import ToolCaller, ThreadCaller, NoThreadCaller, ThreadListing
 from .cli_result import ToolCatalogResult
 from .tool_result import ToolResult
 from .send_result import CorrectionResult, SendResult
+from .coordination_tables.refusals import SendRefusal
 from .task_sources import (
     CurrentTaskScopeSelection, Constraint, Decision, Subtask, TaskAttachment, TaskChange,
     TaskScopeSelection, OriginalTaskChange,
@@ -86,6 +87,9 @@ from .tool_output import MAX_INLINE_OUTPUT_BYTES
 if TYPE_CHECKING:
     from .comms import Comms
 
+
+class ToolArgumentsRefusedError(MalformedRecord, ToolRefusedError):
+    """Bad external tool arguments, not malformed stored state or a broken implementation."""
 
 
 def _omitted_when_absent(default=None, **metadata):
@@ -329,11 +333,13 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
-            raise ValueError(f"Unknown tool argument: {cls.family_discriminator}")
+            raise ToolArgumentsRefusedError(f"Unknown tool argument: {cls.family_discriminator}")
         try:
             request = FieldCodec.decode(cls, {**arguments, cls.family_discriminator: cls.declared_name})
         except MalformedRecord as error:
-            raise MalformedRecord(f"Invalid {cls.declared_name} arguments: {error}") from error
+            raise ToolArgumentsRefusedError(
+                f"Invalid {cls.declared_name} arguments: {error}"
+            ) from error
         return FieldCodec.encode(caller.invoke(request, comms).to_wire())
 
     @abstractmethod
@@ -674,7 +680,7 @@ class CommsResumeGoalTool(ThreadToolRequest):
         )
         goal = goal.require()
         if not goal.state.active or goal.progress != progress:
-            raise ValueError("Goal changed during resume; refresh its state.")
+            raise ToolRefusedError("Goal changed during resume; refresh its state.")
         return GoalRead(goal)
 
 
@@ -746,7 +752,9 @@ class CommsUnjudgedTool(ThreadReadTool):
             assignment = todo.held()
             holder = comms.registry.require(assignment.owner)
             if holder.incarnation != assignment.owner_identity:
-                raise ValueError(f"Order {todo.id} holder incarnation no longer exists")
+                raise ToolRefusedError(
+                    f"Order {todo.id} holder incarnation no longer exists"
+                )
             yield read_type(comms.root, holder, TurnsSince(todo.order.at.recorded_at("An order")), todo)
 
     @classmethod
@@ -784,9 +792,11 @@ class CommsCorrectWordingTool(ThreadToolRequest):
         orders = [todo.id for todo in comms.goals.todos.for_commander(actor)
                   if todo.holder == self.unit]
         if not orders:
-            raise ValueError(f"{self.unit} holds no open order from {caller.name}.")
+            raise ToolRefusedError(f"{self.unit} holds no open order from {caller.name}.")
         if not (words := PlainText.found(self.text)):
-            raise ValueError(f"Message {self.message_id} is plain; there is nothing to correct.")
+            raise ToolRefusedError(
+                f"Message {self.message_id} is plain; there is nothing to correct."
+            )
         result = comms.messaging.send(
             caller.name, self.unit,
             f"Correction, no strike, on {', '.join(orders)}: message {self.message_id} used "
@@ -1027,6 +1037,25 @@ class CommsRenameSelfTool(ThreadToolRequest):
         return comms.threads.rename_self(self.new_name, caller=caller)
 
 
+@dataclass(frozen=True)
+class SendRefusalsRead(ToolResult):
+    refusals: tuple[SendRefusal, ...]
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsSendRefusalsTool(ReadTool, ToolRequest):
+    label = "Comms Send Refusals"
+    description = "Read original refused-send outcomes; reading records no new outcome."
+    sender: str = tool_field("Sender to filter; empty reads all senders", default="")
+    target: str = tool_field("Target to filter; empty reads all targets", default="")
+    limit: int = tool_field("Maximum recent refusals, between 1 and 200", default=50)
+
+    def apply(self, comms: Comms, caller: ToolCaller) -> SendRefusalsRead:
+        return SendRefusalsRead(SendRefusal.recent(
+            comms.root, sender=self.sender, target=self.target, limit=self.limit
+        ))
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsSendTool(ToolRequest):
     label = "Comms Send"
@@ -1049,9 +1078,13 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        caller.require_directive(comms, self.body)
-        body = VerdictAudience(self.audience).addressed(self.target, self.body)
-        result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        try:
+            caller.require_directive(comms, self.body)
+            body = VerdictAudience(self.audience).addressed(self.target, self.body)
+            result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
+        except ToolRefusedError as error:
+            SendRefusal.record(comms.root, self.sender, self.target, error)
+            raise
         caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
 
@@ -1116,7 +1149,7 @@ class CommsConstraintTool(CommsAuthoredTaskTool):
 
     def original_body(self, declaration):
         if not self.text.strip():
-            raise ValueError("An authored constraint requires exact nonempty wording")
+            raise ToolRefusedError("An authored constraint requires exact nonempty wording")
         return self.text
 
 
@@ -1133,7 +1166,7 @@ class CommsSubtaskTool(CommsAuthoredTaskTool):
 
     def declaration(self, owner):
         if not self.text.strip():
-            raise ValueError("A subtask observation requires its exact description")
+            raise ToolRefusedError("A subtask observation requires its exact description")
         return Subtask.from_claim(owner, self.scope, self.change, completed=self.completed)
 
     def original_body(self, declaration):
@@ -1187,7 +1220,7 @@ class CommsInboxTool(ToolRequest):
     def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
         if not (target := self.target.strip()):
-            raise ValueError("An inbox target cannot be empty.")
+            raise ToolRefusedError("An inbox target cannot be empty.")
         standby = self.standby
         review = (
             comms.goals.goal_input_review(thread, standby.goal_id, standby.wait_for)
@@ -1368,7 +1401,7 @@ def invoke_context_tool(
 ) -> dict[str, JsonValue]:
     tool = ToolRequest.member_named(name)
     if tool.context is None:
-        raise ValueError(f"Tool {name!r} is not a context action.")
+        raise ToolRefusedError(f"Tool {name!r} is not a context action.")
     bound = dict(arguments or {})
     bound.update(
         (key, binding.resolve(subject, actor)) for key, binding in tool.context_bindings().items()
