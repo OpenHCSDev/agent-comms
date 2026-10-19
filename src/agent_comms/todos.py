@@ -1150,9 +1150,10 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
     serves: type[OrderPhase] = field(default=UnplannedPhase, metadata={"wire_omit_default": True})
 
     def board_order(self, todo: Todo) -> str:
-        owner = todo.holder or f'unassigned: released from {todo.released[-1].previous.owner}: {todo.released[-1].reason.text}'
-        return (f'{self.owner.to_wire()} | {owner} | {self.id} | '
-                f'{time.strftime("%H:%M", time.localtime(todo.deadline.recorded_at("An order deadline")))}')
+        last = todo.released[-1:]
+        owner = todo.holder or f'unassigned: released from {last[0].previous.owner}: {last[0].reason.text}'
+        due = time.localtime(todo.deadline.recorded_at("An order deadline"))
+        return f'{self.owner.to_wire()} | {owner} | {self.id} | {time.strftime("%H:%M", due)}'
 
     def __post_init__(self):
         if not self.edits or not self.banned:
@@ -1969,18 +1970,18 @@ class Todo(TypedTable):
     text: str
     creator: str
     creator_created: float
-    state: type[TodoState] = field(metadata={"creation_exclude": True})
-    revision: int = field(metadata={"sql": Column(check="revision>0"), "creation_exclude": True})
+    state: type[TodoState]
+    revision: int = field(metadata={"sql": Column(check="revision>0")})
     goal: GoalReference = field(metadata={"sql": Column(storage=JsonStorage, nullable=True)})
-    assignment: Assignment | None = field(metadata={"creation_exclude": True})
+    assignment: Assignment | None
     order: ProblemOrder
     deadline: EventTime = field(default_factory=UnrecordedEventTime)
-    strikes: tuple[StrikeTodo, ...] = field(default=(), metadata={"creation_exclude": True})
-    voided: tuple[VoidStrikeTodo, ...] = field(default=(), metadata={"creation_exclude": True})
-    released: tuple[ReleaseTodo, ...] = field(default=(), metadata={"creation_exclude": True})
-    verdicts: tuple[OrderVerdict, ...] = field(default=(), metadata={"creation_exclude": True})
-    corrections: tuple[WordingCorrection, ...] = field(default=(), metadata={"creation_exclude": True})
-    messages: tuple[OrderMessage, ...] = field(default=(), metadata={"creation_exclude": True})
+    strikes: tuple[StrikeTodo, ...] = ()
+    voided: tuple[VoidStrikeTodo, ...] = ()
+    released: tuple[ReleaseTodo, ...] = ()
+    verdicts: tuple[OrderVerdict, ...] = ()
+    corrections: tuple[WordingCorrection, ...] = ()
+    messages: tuple[OrderMessage, ...] = ()
 
     @property
     def pending(self):
@@ -2092,8 +2093,19 @@ class Todo(TypedTable):
             self.require_assignee(actor, generation)
 
     def require_same_creation(self, proposed: Todo) -> None:
-        if FieldCodec.project(self, "creation") != FieldCodec.project(proposed, "creation"):
-            raise TodoConflict(self)
+        self.require_result(
+            replace(
+                self,
+                id=proposed.id,
+                repo=proposed.repo,
+                text=proposed.text,
+                creator=proposed.creator,
+                creator_created=proposed.creator_created,
+                goal=proposed.goal,
+                deadline=proposed.deadline,
+                order=proposed.order,
+            )
+        )
 
 
 def _text(value: str, label: str, limit: int) -> str:

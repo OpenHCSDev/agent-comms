@@ -96,9 +96,9 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool = False) -> int:
     for pid in sorted(problems.keys() - selected.keys()):
         location = FileLine.from_wire(problems[pid]['where'])
         try:
-            finding_repos[pid] = Repo.of(Path(location.path).parent).github
+            finding_repos[pid] = Repo.of(Path(location.file).parent).github
         except subprocess.CalledProcessError as error:
-            raise ValueError(f'{pid}: cannot read repository from recorded path {location.path}') from error
+            raise ValueError(f'{pid}: cannot read repository from recorded path {location.file}') from error
     comms = Comms(root)
     actor = comms.registry.require('claude-code')
     store = TodoStore(root)
