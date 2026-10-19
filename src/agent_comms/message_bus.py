@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 from .bus_activity_index import ActivityClocks, BusActivityIndex
 from .bus_route_counts import OpenedRouteCounts
-from .channel_targets import BuiltinChannel, ChannelTarget, CommandTarget
+from .channel_targets import ANY_CHANNEL, BuiltinChannel, ChannelTarget, CommandTarget
 from .errors import UnregisteredThreadError
 from .maintenance_barrier import MaintenanceBarrier
 from .historical_views import HistoryArchive
@@ -103,14 +103,14 @@ class MessageBus[Writes: Publisher]:
             yield basis, source
 
     def inbox(
-        self, name: str, target: str | None = None, *,
+        self, name: str, target: CommandTarget = ANY_CHANNEL, *,
         after: MessageReference | None = None,
     ) -> Sequence[Message]:
         """Read unread deliveries against a newly captured registry."""
         return list(self.inbox_at(name, self._registry.snapshot(), target, after=after).page.messages)
 
     def inbox_at(
-        self, name: str, snapshot: RegistrySnapshot, target: str | None = None, *,
+        self, name: str, snapshot: RegistrySnapshot, target: CommandTarget = ANY_CHANNEL, *,
         after: MessageReference | None = None,
     ) -> DisplayedMessagePage:
         """Read unread deliveries using the caller's captured registry.
@@ -171,12 +171,11 @@ class MessageBus[Writes: Publisher]:
                 if not maintenance.read().turn_pending:
                     return
 
-    def pending_count(self, name: str, target: str | None = None) -> int:
+    def pending_count(self, name: str, target: CommandTarget = ANY_CHANNEL) -> int:
         """Count unread messages without retaining their bodies."""
         with self.snapshot() as (basis, source):
             counts = self._pending_projection(source, basis, [name])[name]
-            selected = CommandTarget.named(BuiltinChannel.ANY.value if target is None else target)
-            return selected.pending_count(counts, basis.registry, basis.catalog)
+            return target.pending_count(counts, basis.registry, basis.catalog)
 
     def pending_counts_all(self, names: Sequence[str]) -> Mapping[str, int]:
         if not names:
@@ -307,7 +306,7 @@ class MessageBus[Writes: Publisher]:
         self, target: ChannelTarget, bounds: PageBounds = NEWEST_PAGE
     ) -> MessagePage:
         """Return one bounded page from a channel in ascending order."""
-        channel = self._channels.read().resolve(target.name)
+        channel = self._channels.read().require_channel(target.name)
         scope = channel.history_scope()
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
@@ -317,4 +316,4 @@ class MessageBus[Writes: Publisher]:
         return self.log.read_page(MessagePageRequest(scope, bounds))
 
     def channels(self) -> Sequence[str]:
-        return list(self._channels.read().views(self._registry.all_threads()))
+        return list(self._channels.read().views())

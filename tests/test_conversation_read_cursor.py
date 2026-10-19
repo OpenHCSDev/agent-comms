@@ -1,5 +1,6 @@
 from dataclasses import replace
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.comms import wire
 from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadDocument
@@ -47,8 +48,8 @@ def seed_prefix(comms, viewer, through):
 def test_real_route_counts_and_inbox_use_each_conversation(tmp_path):
     comms, messages = setup_conversations(tmp_path)
     seed_prefix(comms, "reader", messages[2].seq)
-    assert comms.bus.pending_count("reader", "#a") == 0
-    assert comms.bus.pending_count("reader", "#b") == 2
+    assert comms.bus.pending_count("reader", CommandTarget.named("#a")) == 0
+    assert comms.bus.pending_count("reader", CommandTarget.named("#b")) == 2
     assert [m.seq for m in comms.bus.inbox("reader")] == [messages[1].seq, messages[3].seq]
     basis = comms.bus.delivered("reader", tuple(m.reference for m in messages))
     assert tuple(seq for item in basis.conversations for seq in item.sequences) == (

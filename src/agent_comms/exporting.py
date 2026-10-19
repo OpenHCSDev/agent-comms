@@ -132,7 +132,7 @@ class ChannelScope(WireExportScope):
     channel: str
 
     def resolve(self, catalog: ChannelCatalog, registry: Registration) -> ResolvedExportScope:
-        channel = catalog.read().resolve(self.channel)
+        channel = catalog.read().require_channel(self.channel)
         channel.require_routable()
         return ResolvedExportScope(self, channel.history_scope().includes)
 

@@ -3,6 +3,7 @@ import re
 
 import pytest
 
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.tools import context_tool_catalog, invoke_context_tool, invoke_tool
@@ -178,8 +179,8 @@ class TestToolCatalog:
 
         assert [message["text"] for message in result["messages"]] == ["from a"]
         assert result["acknowledged"] == 1
-        assert comms.bus.pending_count("b", "a") == 0
-        assert comms.bus.pending_count("b", "c") == 1
+        assert comms.bus.pending_count("b", CommandTarget.named("a")) == 0
+        assert comms.bus.pending_count("b", CommandTarget.named("c")) == 1
 
 
 @pytest.mark.refactor_guard
@@ -208,7 +209,7 @@ def test_new_tool_owner_derives_catalog_schema_binding_and_real_invocation(comms
         include_body: bool = tool_field("Include message bodies", default=False)
 
         def apply(self, comms, caller: ToolCaller) -> InboxInspected:
-            messages = comms.bus.inbox(self.viewer, self.target)
+            messages = comms.bus.inbox(self.viewer, CommandTarget.named(self.target))
             return InboxInspected(
                 len(messages), tuple(row.body for row in messages) if self.include_body else ())
 

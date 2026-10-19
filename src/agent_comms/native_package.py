@@ -19,6 +19,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
@@ -64,10 +65,12 @@ def pinned_location() -> Path:
 
 
 def native_environment(cache: Path) -> Path:
-    """This pin's test environment under a StorageRule.native_cache root, shared by digest: its
-    manifest beside its built artifact, laid out as stack/ is. stack/bin/pi-native-test-env
-    builds it; the live install never does."""
-    return cache / pin_id()
+    """Require the pinned inputs, then key the environment by sources and manifest.
+
+    stack/bin/pi-native-test-env builds this stack-shaped directory; an installed
+    artifact is never evidence that the checkout's current sources were built.
+    """
+    return cache / NativeBuildInputs(_resource_root().parent).require_pinned(MANIFEST)
 
 
 def pinned_native_package() -> Path:
@@ -218,6 +221,8 @@ def write_native_manifest(root: Path) -> None:
     tree = package_tree_digest(root)
     lines = []
     for line in MANIFEST.read_text().splitlines():
+        if line.startswith(INPUTS_PREFIX):
+            continue
         if line.startswith(TREE_PREFIX):
             lines.append(TREE_PREFIX + tree)
         elif line and not line.startswith("#"):
@@ -225,6 +230,7 @@ def write_native_manifest(root: Path) -> None:
             lines.append(hashlib.sha256((root / path).read_bytes()).hexdigest() + "  " + path)
         else:
             lines.append(line)
+    lines.append(INPUTS_PREFIX + NativeBuildInputs(_resource_root().parent).digest(MANIFEST))
     with tempfile.NamedTemporaryFile(dir=MANIFEST.parent, prefix=".pi-native-pin-",
                                      delete=False) as stream:
         replacement = Path(stream.name)

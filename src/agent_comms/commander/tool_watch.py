@@ -6,7 +6,7 @@ long turn) prints one digest of what the unit did, for the commander to judge by
 import json, os, time, glob, collections
 from pathlib import Path
 
-from . import judge, order
+from . import order
 from .config import CommanderConfig
 from ..field_codec import MalformedRecord
 from ..native_tool_call import SelectedToolDenied
@@ -37,14 +37,6 @@ def decoded(name, args):
 def digest_line(name, args, tool):
     """What the call does, in enough detail to judge it."""
     return ToolDeclaration.call_digest(name, tool, args)
-
-
-def record_edit(thread, tool):
-    """Each edit waits for a verdict from the commander (judge); nothing judges it automatically."""
-    if not (replacements := tool and tool.replacements()):
-        return
-    judge.Edit(f'{time.time_ns():x}'[-10:], time.time(), thread, tool.path,
-               tuple(judge.Hunk(edit.old_text, edit.new_text) for edit in replacements)).append()
 
 
 STRUCK = {}  # (thread, violation) -> time of the strike, so one repeated command is one strike
@@ -104,7 +96,6 @@ def follow(registry, turns, thread, lines):
             with open(LOG, 'a') as log:
                 log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
             turns[thread].append(digest)
-            record_edit(thread, tool)
             enforce_storage(registry, thread, tool)
             if len(turns[thread]) >= 25:
                 emit(turns, thread)
