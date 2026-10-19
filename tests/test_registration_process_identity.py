@@ -54,7 +54,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     identity = ProcessIdentity.capture(os.getpid())
     assert owner.process_identity == identity
     session = tmp_path / "session.jsonl"
-    session.write_text('{"type":"session","id":"fixture"}\n')
+    session.write_text('{"type":"session","id":"fixture","timestamp":"2026-10-19T11:00:00Z"}\n')
     attached = comms.threads.attach_session(owner, str(session), process=owner.process_identity)
     assert attached.process_identity == identity
     assert wire(tmp_path).registry.require(owner.name) == attached
@@ -67,7 +67,7 @@ def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
     restored = RegistryDocument()
     restored.restore_stopped(comms.registry.snapshot(), (owner.name,))
     saved = restored.threads[owner.name]
-    assert saved.process_identity == NoProcess() and not saved.active_turn.executing
+    assert saved.process_identity == NoProcess() and not saved.turn_record.read().executing
     assert saved.incarnation == owner.incarnation and saved.session_file == str(session)
 
 
@@ -122,5 +122,6 @@ def test_active_executor_cannot_be_replaced_by_same_pid_different_birth(tmp_path
     assert comms.registry.require(owner.name) == leased
     comms.registry.declare(comms.registry.new_thread('owner', frozenset(), str(tmp_path), title='metadata'))
     current = comms.registry.require(owner.name)
-    assert current.process_identity == identity and current.active_turn == leased.active_turn
+    assert current.process_identity == identity and current.turn_record == leased.turn_record
+    assert current.turn_record.read().id == 'active-turn'
     comms.registry.release_turn(current.turn_lease)
