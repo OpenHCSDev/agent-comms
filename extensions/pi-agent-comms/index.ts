@@ -5,7 +5,6 @@
  * Python tool catalog. This adapter only translates the catalog into pi tools.
  */
 
-import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
@@ -25,7 +24,7 @@ interface ToolDeclaration {
 
 function run(args: string[], timeout = 30_000): Record<string, unknown> {
 	try {
-		const stdout = execFileSync(CLI, args, {
+		const stdout = globalThis.agentCommsLaunchRecord.runChild(CLI, args, {
 			encoding: "utf-8",
 			timeout,
 		});
@@ -52,12 +51,12 @@ function run(args: string[], timeout = 30_000): Record<string, unknown> {
 }
 
 export default function (pi: ExtensionAPI) {
-	const currentThread = globalThis.agentCommsLaunchRecord.thread?.name;
+	const currentThread = globalThis.agentCommsLaunchRecord.currentThread();
 	pi.registerFlag("comms-catalog", { type: "string", description: "Core native launch catalog" });
 	let serviceTier: unknown;
 	const forkThread = process.env.PI_PARENT_ID ? currentThread : undefined;
 	const task = process.env.PI_TASK || "";
-	const managed = globalThis.agentCommsLaunchRecord.thread?.managed;
+	const managed = globalThis.agentCommsLaunchRecord.managed;
 	pi.on("before_provider_request", (event, ctx) => {
 		if (!currentThread || !ctx.model || !SERVICE_TIER_CAPABLE_APIS.has(ctx.model.api)) return;
 		if (serviceTier !== "priority") return;

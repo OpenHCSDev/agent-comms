@@ -31,14 +31,12 @@ async function project(socket: string, request: unknown) {
 
 export default function (pi: ExtensionAPI) {
   const record = globalThis.agentCommsLaunchRecord;
-  if (!record.thread?.managed) return;
-  const socket = record.project_socket;
-  const request = record.project_request;
-  if (!socket || !request) throw new Error("Managed native launch lacks original project binding");
+  record.withProject((socket, request) => {
   pi.on("tool_call", async (event, ctx) => {
     if (event.toolName === "comms_set_project") return;
     if (resolve(await project(socket, request)) !== resolve(ctx.cwd)) {
       return { block: true, reason: "Your project directory changed. End this turn now; the runtime will automatically continue in the new directory. Do not run more tools in the old project." };
     }
+  });
   });
 }

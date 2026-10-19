@@ -42,7 +42,7 @@ class PiChild:
         with state.pop('resources', ExitStack()) as resources:
             arguments = resources.enter_context(record.arguments())
             proc = await AttachedChild.start((*argv, *arguments), cwd=cwd, env=env,
-                                             pass_fds=pass_fds, runtime=record.runtime)
+                                             pass_fds=(*pass_fds, *arguments.pass_fds), runtime=record.runtime)
             return cls(proc, PiRpcChannel(proc.stdout, event_type=event_type),
                        resources=resources.pop_all(), **state)
 
@@ -153,10 +153,7 @@ class PiSessionChild(PiChild):
     async def start(cls, key, attestation):
         launch, _ = key
         with ExitStack() as resources:
-            record = launch.record
-            if record.project_socket is not None:
-                address = resources.enter_context(PrivateSocketRole.address(record.project_socket))
-                record = replace(record, project_socket=address)
+            record = launch.record.prepare(resources)
             return await cls.start_command(launch.argv, record=record, cwd=str(launch.cwd), env=launch.env,
                 key=key, attestation=attestation, resources=resources.pop_all())
 

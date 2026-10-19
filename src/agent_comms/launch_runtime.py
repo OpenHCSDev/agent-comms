@@ -2,15 +2,15 @@
 from __future__ import annotations
 
 import json
-import hashlib
+from abc import abstractmethod
 import os
 import sys
 from contextlib import contextmanager
-from tempfile import TemporaryDirectory
+from tempfile import TemporaryFile
 from collections.abc import Callable, Mapping, MutableMapping
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, ClassVar
+from typing import Annotated, ClassVar, Self
 
 from pydantic import JsonValue
 
@@ -57,7 +57,8 @@ class LaunchRuntime:
 
 class RestoredRuntime(LaunchRuntime):
     def environment(self, source: Mapping[str, str], *, configuration: RestartEnvironment) -> dict[str, str]:
-        return dict(source)
+        return {name: value for name, value in source.items()
+                if not name.startswith("AGENT_COMMS_")}
 
 
 class ImportPath(DeclaredFamily, JsonShapeFamily, affix="ImportPath"):
@@ -148,7 +149,8 @@ class RestartEnvironment(EnvironmentRecord):
         return info.st_mtime_ns, info.st_size
 
     def apply_runtime(self, source: Mapping[str, str]) -> dict[str, str]:
-        result = dict(source)
+        result = {name: value for name, value in source.items()
+                  if not name.startswith("AGENT_COMMS_")}
         encoded = self.encode()
         for declaration in fields(self):
             if declaration.metadata.get("runtime"):
@@ -180,53 +182,167 @@ class ThreadLaunch:
 
     @classmethod
     def take_startup_input(cls) -> str | None:
-        record = LaunchRecord.current()
-        thread = record.require_thread()
-        LaunchRecord.install(replace(record, thread=replace(thread, startup_input=None)))
-        return thread.startup_input
+        return LaunchRecord.current().take_startup_input()
 
 
 @dataclass(frozen=True)
-class LaunchRecord:
-    """The sole source of Core launch facts for a process and its selected children."""
+class LaunchRoot(DeclaredFamily, affix="LaunchRoot"):
+    path: Annotated[Path, PathText]
 
-    root: Annotated[Path, PathText]
+    def __post_init__(self) -> None:
+        if not self.path.is_absolute():
+            raise ValueError("A launch requires an absolute root")
+
+    @abstractmethod
+    def route(self): ...
+
+    @abstractmethod
+    def write_scope(self): ...
+
+
+class ExplicitLaunchRoot(LaunchRoot):
+    def write_scope(self):
+        from contextlib import nullcontext
+        return nullcontext()
+
+    def route(self):
+        from .active_route import resolve_comms_route
+        return resolve_comms_route(self.path)
+
+
+class CurrentLaunchRoot(LaunchRoot):
+    @contextmanager
+    def write_scope(self):
+        from .active_route import guard_default_route_write
+        from .route_selection import RouteChanged
+        with guard_default_route_write(self.path):
+            if self.route().observe_root() != self.path:
+                raise RouteChanged("default Comms route changed before write")
+            yield
+
+    def route(self):
+        from .active_route import CommsRoute
+        return CommsRoute.current()
+
+
+@dataclass(frozen=True)
+class NativeOriginPolicy(DeclaredFamily, affix="NativeOriginPolicy"):
+    pass
+
+
+class UnrestrictedNativeOriginPolicy(NativeOriginPolicy):
+    pass
+
+
+@dataclass(frozen=True)
+class LoopbackNativeOriginPolicy(NativeOriginPolicy):
+    value: str
+
+
+@dataclass(frozen=True)
+class LaunchDebug(DeclaredFamily, affix="LaunchDebug"):
+    def configure(self) -> None:
+        pass
+
+    def append(self, text: str) -> None:
+        pass
+
+    def connection_options(self, observer):
+        return {}
+
+    async def serve(self, operation):
+        return await operation()
+
+
+class DisabledLaunchDebug(LaunchDebug):
+    pass
+
+
+@dataclass(frozen=True)
+class FileLaunchDebug(LaunchDebug):
+    path: Annotated[Path, PathText]
+
+    def configure(self) -> None:
+        import logging
+        logging.basicConfig(level=logging.DEBUG, filename=str(self.path) + ".log",
+                            format="%(asctime)s %(name)s %(levelname)s %(message)s")
+
+    def append(self, text: str) -> None:
+        with self.path.open("a") as output:
+            output.write(text)
+
+    def connection_options(self, observer):
+        return {"observers": [observer]}
+
+    async def serve(self, operation):
+        import asyncio
+        import traceback
+        async def watchdog():
+            while True:
+                await asyncio.sleep(5)
+                rows = [f"=== watchdog: {len(asyncio.all_tasks())} tasks ===\n"]
+                for task in asyncio.all_tasks():
+                    rows.append(f"{task!r}\n")
+                    for frame in task.get_stack():
+                        rows.extend(traceback.format_stack(frame))
+                self.append("".join(rows))
+        task = asyncio.create_task(watchdog())
+        try:
+            return await operation()
+        finally:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+
+@dataclass(frozen=True)
+class LaunchArguments:
+    argv: tuple[str, str]
+    pass_fds: tuple[int, ...]
+
+    def __iter__(self):
+        return iter(self.argv)
+
+
+@dataclass(frozen=True)
+class LaunchRecord(DeclaredFamily, affix="LaunchRecord"):
+    """Every launch has these facts; capabilities live on their required variants."""
+
+    root_selection: LaunchRoot
     runtime: LaunchRuntime
     configuration: RestartEnvironment
-    thread: ThreadLaunch | None
-    implicit_root: bool
     agent_bin: str
     agent_args: tuple[str, ...]
     agent_models: tuple[str, ...]
-    debug_log: Annotated[Path, PathText] | None
-    native_origin: str | None
-    login_provider: str | None
-    project_socket: Annotated[Path, PathText] | None
-    project_request: dict[str, JsonValue] | None
-    annotation_grant: MessageReference | None
+    debug: LaunchDebug = field(default_factory=DisabledLaunchDebug, kw_only=True)
+    origin: NativeOriginPolicy = field(default_factory=UnrestrictedNativeOriginPolicy, kw_only=True)
+    annotation: AnnotationPolicy = field(default_factory=lambda: DisabledAnnotationPolicy(), kw_only=True)
 
     argument: ClassVar[str] = "--comms-launch"
-    _current: ClassVar[LaunchRecord | None] = None
+    _current: ClassVar[LaunchRecord]
 
-    def __post_init__(self) -> None:
-        if not self.root.is_absolute():
-            raise ValueError("A launch record requires an absolute root")
-        if not self.agent_bin.strip():
-            raise ValueError("A launch record requires its native binary")
+    def at_root(self, path: Path) -> Self:
+        return replace(self, root_selection=ExplicitLaunchRoot(Path(path).resolve()))
+
+    @classmethod
+    def from_record(cls, record: LaunchRecord, **specific):
+        values = {item.name: getattr(record, item.name) for item in fields(LaunchRecord)}
+        values.update(specific)
+        return cls(**values)
 
     @classmethod
     def current(cls) -> LaunchRecord:
-        if cls._current is None:
-            raise LaunchRecordUnavailable("No launch record was supplied at startup")
-        return cls._current
+        try:
+            return cls._current
+        except AttributeError as error:
+            raise LaunchRecordUnavailable("No launch record was supplied at startup") from error
 
     @classmethod
     def install(cls, record: LaunchRecord) -> None:
-        cls._current = record
+        LaunchRecord._current = record
 
     @classmethod
     def read(cls, path: Path) -> LaunchRecord:
-        return FieldCodec.decode(cls, json.loads(path.read_text()))
+        return FieldCodec.decode(LaunchRecord, json.loads(path.read_text()))
 
     @classmethod
     def argument_path(cls, arguments) -> Path:
@@ -248,29 +364,78 @@ class LaunchRecord:
     @classmethod
     def for_process(cls, pid: int) -> LaunchRecord:
         arguments = [os.fsdecode(item) for item in Path(f"/proc/{pid}/cmdline").read_bytes().split(b"\0") if item]
-        return cls.read(cls.argument_path(arguments))
-
-    def write(self, path: Path | None = None) -> tuple[str, str]:
-        from .store_files import _atomic_write_text
-        payload = json.dumps(FieldCodec.encode(self), separators=(",", ":"))
-        if path is None:
-            path = self.root / "runtime" / "launch" / f"{hashlib.sha256(payload.encode()).hexdigest()}.json"
-        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-        _atomic_write_text(path, payload)
-        return self.argument, str(path)
+        path = Path(f"/proc/{pid}/fd") / cls.argument_path(arguments).name
+        return cls.read(path)
 
     @contextmanager
     def arguments(self):
-        directory = self.root / "runtime"
+        """One writer; the inherited descriptor keeps the unlinked file until child exit."""
+        directory = self.root_selection.path / "runtime"
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
-        with TemporaryDirectory(prefix="launch-", dir=directory) as temporary:
-            yield self.write(Path(temporary) / "record.json")
+        with TemporaryFile(mode="w+b", dir=directory) as stream:
+            stream.write(json.dumps(FieldCodec.encode(self), separators=(",", ":")).encode())
+            stream.flush()
+            descriptor = stream.fileno()
+            yield LaunchArguments((self.argument, f"/dev/fd/{descriptor}"), (descriptor,))
 
     def route(self):
-        from .active_route import CommsRoute, resolve_comms_route
-        return CommsRoute.current() if self.implicit_root else resolve_comms_route(self.root)
+        return self.root_selection.route()
 
     def require_thread(self) -> ThreadLaunch:
-        if self.thread is None:
-            raise CallingThreadUnavailable("This launch has no owner thread")
+        raise CallingThreadUnavailable("This launch has no owner thread")
+
+    def take_startup_input(self) -> str | None:
+        raise CallingThreadUnavailable("This launch has no startup input")
+
+    def prepare(self, resources) -> Self:
+        return self
+
+
+class CommandLineLaunchRecord(LaunchRecord):
+    @classmethod
+    def entrypoint(cls, root: LaunchRoot) -> CommandLineLaunchRecord:
+        directory = Path.home() / ".pi" / "agent"
+        return cls(root, LaunchRuntime(Path(sys.executable)),
+                   RestartEnvironment(home=str(Path.home()), path=os.environ.get("PATH"),
+                                      native_config=directory, agent_directory=directory),
+                   "pi", (), ())
+
+
+@dataclass(frozen=True)
+class OwnerLaunchRecord(LaunchRecord):
+    thread: ThreadLaunch
+
+    def require_thread(self) -> ThreadLaunch:
         return self.thread
+
+    def take_startup_input(self) -> str | None:
+        value = self.thread.startup_input
+        LaunchRecord.install(replace(self, thread=replace(self.thread, startup_input=None)))
+        return value
+
+
+@dataclass(frozen=True)
+class ProjectLaunchRecord(OwnerLaunchRecord):
+    project_socket: Annotated[Path, PathText]
+    project_request: dict[str, JsonValue]
+
+    def prepare(self, resources) -> ProjectLaunchRecord:
+        from .private_path import PrivateSocketRole
+        address = resources.enter_context(PrivateSocketRole.address(self.project_socket))
+        return replace(self, project_socket=address)
+
+
+@dataclass(frozen=True)
+class LoginLaunchRecord(LaunchRecord):
+    login_provider: str
+
+
+class AcpLaunchRecord(LaunchRecord):
+    pass
+
+
+class RestartQueueLaunchRecord(LaunchRecord):
+    pass
+
+
+from .working_memory_policy import AnnotationPolicy, DisabledAnnotationPolicy

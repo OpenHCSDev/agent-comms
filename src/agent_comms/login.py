@@ -5,7 +5,7 @@ import re
 import subprocess
 from dataclasses import replace
 from .config_options import ConfigOptions
-from .launch_runtime import LaunchRecord
+from .launch_runtime import LaunchRecord, LoginLaunchRecord
 
 
 def run_login(provider: str = "") -> int:
@@ -13,8 +13,7 @@ def run_login(provider: str = "") -> int:
     if provider and not re.fullmatch(r"[a-zA-Z0-9_-]+", provider):
         raise ValueError("Invalid provider identifier")
     package = ConfigOptions.configured().package
-    record = replace(LaunchRecord.current(), login_provider=provider, thread=None,
-                     project_socket=None, project_request=None)
+    record = LoginLaunchRecord.from_record(LaunchRecord.current(), login_provider=provider)
     env = record.runtime.environment(package.node_environment(os.environ), configuration=record.configuration)
     env.update(record.configuration.encode_native())
     command = [
@@ -30,4 +29,4 @@ def run_login(provider: str = "") -> int:
         "--no-themes",
     ]
     with record.arguments() as arguments:
-        return subprocess.call((*command, *arguments), env=env)
+        return subprocess.call((*command, *arguments), env=env, pass_fds=arguments.pass_fds)

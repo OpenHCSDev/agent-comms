@@ -17,7 +17,7 @@ async def run() -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
     record = LaunchRecord.current()
-    comms = wire(record.root)
+    comms = wire(record.root_selection.path)
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
     name = ThreadLaunch.current().name
@@ -92,7 +92,7 @@ def main() -> int:
     """
     record = LaunchRecord.startup()
     argparse.ArgumentParser(prog="agent-comms-agent", description=__doc__).parse_args()
-    wire(record.root).owners.require_private_launch()
+    wire(record.root_selection.path).owners.require_private_launch()
     with suppress(KeyboardInterrupt):
         asyncio.run(run())
     return 0

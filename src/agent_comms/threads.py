@@ -168,7 +168,8 @@ class Thread(ThreadProvenance):
         """Project this captured thread and checked project request into its child's record."""
         from .runtime_requests import ProjectRuntimeRequest
 
-        record = replace(LaunchRecord.current(), root=Path(root), implicit_root=False,
+        from .launch_runtime import OwnerLaunchRecord
+        record = OwnerLaunchRecord.from_record(LaunchRecord.current().at_root(Path(root)),
                          thread=replace(self.launch(), worktree=worktree, managed=True))
         return ProjectRuntimeRequest.for_native(snapshot, self).launch(record)
 

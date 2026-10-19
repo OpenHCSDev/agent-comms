@@ -9,8 +9,7 @@ import { pathToFileURL } from "node:url";
 // This optional launch policy guards the SDK's default fetch transport, not
 // arbitrary sockets or subprocesses. Install before importing any SDK module.
 const record = globalThis.agentCommsLaunchRecord;
-if (record.native_origin !== null) {
-  const value = record.native_origin;
+record.withOrigin(value => {
   let selected;
   try { selected = new URL(value); } catch { /* rejected below */ }
   if (!selected || selected.protocol !== "http:" ||
@@ -67,9 +66,9 @@ if (record.native_origin !== null) {
       if (transport !== guardedFetch) guardedFetch = guardFetch(transport);
     },
   });
-}
+});
 
-if (record.thread?.managed && process.argv[1]) {
+if (record.managed && process.argv[1]) {
   let entry;
   try { entry = realpathSync(process.argv[1]); } catch { /* node stdin / non-file entry */ }
   const bundled = entry && basename(dirname(entry)) === "bundle";

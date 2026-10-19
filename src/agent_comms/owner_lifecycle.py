@@ -414,12 +414,12 @@ class OwnerLifecycle:
         # Callers hold the wire lock; a phase change takes wire then registry.
         self.maintenance.assert_open_unlocked()
         record.runtime.require_available()
-        env = (record.runtime.environment(os.environ, configuration=record.configuration)
-               if environment is None else dict(environment))
+        env = record.runtime.environment(os.environ if environment is None else environment,
+                                         configuration=record.configuration)
         agent_bin = self.require_launch_authority().prepare_owner(thread, record.agent_bin, record.runtime)
-        record = replace(record, agent_bin=agent_bin, thread=initial_input.launch(thread.launch()),
-                         root=self.launch_authority.child_root, implicit_root=False)
-        arguments = record.write(self.root / "runtime" / "launch" / f"{thread.incarnation.require_recorded().lookup}.json")
+        from .launch_runtime import OwnerLaunchRecord
+        record = OwnerLaunchRecord.from_record(record.at_root(self.launch_authority.child_root),
+                         agent_bin=agent_bin, thread=initial_input.launch(thread.launch()))
         owned: Thread | None = None
 
         def reserve(identity: ProcessIdentity) -> None:
@@ -427,14 +427,14 @@ class OwnerLifecycle:
             owned = replace(thread, process_identity=identity, turn_record=NoTurnRecord())
             self.registry.register(owned, new_owner=True)
 
-        with owner_process_output(self.root, thread) as output:
+        with owner_process_output(self.root, thread) as output, record.arguments() as arguments:
             ParentedProcess.launch(
                 (str(record.runtime.interpreter), "-m", "agent_comms.worker", *arguments),
                 env=env,
                 cwd=thread.worktree,
                 output=output,
                 before_start=reserve,
-                runtime=record.runtime,
+                runtime=record.runtime, pass_fds=arguments.pass_fds,
             )
         assert owned is not None
         return owned

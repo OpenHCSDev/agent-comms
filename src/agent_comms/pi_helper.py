@@ -105,7 +105,7 @@ class PiHelper(DeclaredFamily, affix="Helper"):
                 timeout=cls.timeout_for(request),
                 cwd=cwd,
                 env=environment,
-                runtime=request.launch_runtime,
+                runtime=request.launch_runtime, pass_fds=arguments.pass_fds,
             )
         if not outcome.outcome.successful:
             raise cls.failure(request, outcome)

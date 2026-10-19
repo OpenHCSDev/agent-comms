@@ -280,14 +280,16 @@ def enqueue(comms: Comms, selection: OwnerRestartSelection, *,
 
 def _start_watcher(root: Path, target: RestartTarget) -> ParentedProcess:
     # The resident watcher inherits only its declared runtime configuration.
-    record = replace(LaunchRecord.current(), root=root.resolve(), implicit_root=False,
+    from .launch_runtime import RestartQueueLaunchRecord
+    record = RestartQueueLaunchRecord.from_record(LaunchRecord.current().at_root(root),
                      runtime=target.launch_runtime, configuration=target.runtime,
-                     agent_bin=target.agent_bin, thread=None)
-    return ParentedProcess.launch(
-        (str(record.runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve()), *record.write()),
-        env=target.runtime.encode(),
-        runtime=target.launch_runtime,
-    )
+                     agent_bin=target.agent_bin)
+    with record.arguments() as arguments:
+        return ParentedProcess.launch(
+            (str(record.runtime.interpreter), "-m", "agent_comms.restart_queue", str(root.resolve()), *arguments),
+            env=target.runtime.encode(), runtime=target.launch_runtime,
+            pass_fds=arguments.pass_fds,
+        )
 
 
 def status(comms: Comms, name: str) -> list[QueuedRestart]:

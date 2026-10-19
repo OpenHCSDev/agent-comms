@@ -370,13 +370,15 @@ class CliBridge(ExternalRuntime, DeliversInput, Generic[BridgeOptions]):
 
     async def watch_child(self) -> None:
         """One child stream; the bus owns waiting and its next attempt after a hold."""
-        record = replace(LaunchRecord.current(), root=Path(self.binding.root), implicit_root=False)
-        child = await AttachedChild.start((
-            str(record.runtime.interpreter.with_name('agent-comms')), *record.write(),
-            '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
-            '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
-            '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
-            stdio=StreamingChildStdio(input_enabled=False), runtime=record.runtime)
+        record = LaunchRecord.current().at_root(Path(self.binding.root))
+        with record.arguments() as arguments:
+            child = await AttachedChild.start((
+                str(record.runtime.interpreter.with_name('agent-comms')), *arguments,
+                '--root', self.binding.root, 'watch', '--thread', self.binding.bus,
+                '--after', json.dumps(FieldCodec.encode(DeliveryRow.resume_after(self.db))),
+                '--acknowledgment', FieldCodec.encode(ExplicitWatchAcknowledgment)),
+                stdio=StreamingChildStdio(input_enabled=False), runtime=record.runtime,
+                pass_fds=arguments.pass_fds)
         try:
             async for item in WatchLine.stream(child):
                 await item.handle(self, child)

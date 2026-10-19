@@ -180,7 +180,9 @@ class ProjectRuntimeRequest(ResultRuntimeRequest):
     def launch(self, record):
         from .runtime import socket_path
 
-        return replace(record, project_socket=socket_path(record.root, self.binding.process.pid),
+        from .launch_runtime import ProjectLaunchRecord
+        return ProjectLaunchRecord.from_record(record, thread=record.require_thread(),
+                       project_socket=socket_path(record.root_selection.path, self.binding.process.pid),
                        project_request=self.to_wire())
 
     def require_original(self, entry):

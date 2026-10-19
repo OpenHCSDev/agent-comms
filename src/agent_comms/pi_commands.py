@@ -242,7 +242,7 @@ class CatalogQuery(NativeQuery):
             with launch.record.arguments() as arguments:
                 async with BoundedRun.session(
                     (*launch.argv, *arguments), cwd=launch.cwd, env=launch.env,
-                    timeout=CATALOG_TIMEOUT, runtime=launch.record.runtime,
+                    timeout=CATALOG_TIMEOUT, runtime=launch.record.runtime, pass_fds=arguments.pass_fds,
                 ) as child:
                     yield PiRpcChannel(child.stdout), child.stdin
         except TimeoutError as error:

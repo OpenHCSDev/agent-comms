@@ -6,18 +6,15 @@ from dataclasses import dataclass
 
 from .declared_family import DeclaredFamily
 from .errors import RelationViolationError
-from .launch_runtime import LaunchRecord
 from .message_reference import MessageReference
-from .retained_task_facts import RetainedTaskFacts
-from .task_sources import AnnotationDisclosureGrant
 
 
 @dataclass(frozen=True)
 class AnnotationPolicy(DeclaredFamily, affix="AnnotationPolicy"):
     @classmethod
     def configured(cls):
-        source = LaunchRecord.current().annotation_grant
-        return DisabledAnnotationPolicy() if source is None else GrantedAnnotationPolicy(source)
+        from .launch_runtime import LaunchRecord
+        return LaunchRecord.current().annotation
 
     @abstractmethod
     def observe(self, worker, session_id, manifest, values): ...
@@ -37,6 +34,7 @@ class GrantedAnnotationPolicy(AnnotationPolicy):
         worker.start(self, session_id, manifest, values)
 
     def acquire(self, comms, incarnation):
+        from .retained_task_facts import RetainedTaskFacts
         snapshot = comms.registry.snapshot()
         owner = snapshot.require(incarnation.resolved(snapshot).name)
         with comms.bus.log.checked_read() as original:

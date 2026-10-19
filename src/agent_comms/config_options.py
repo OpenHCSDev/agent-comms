@@ -189,7 +189,7 @@ class ModelConfigOption(CatalogConfigOption):
             from .pi_commands import GetAvailableModels
 
             data = await GetAvailableModels().discover(
-                self.agent_bin, self.agent_args.argv, self.record.root, package=self.package
+                self.agent_bin, self.agent_args.argv, self.record.root_selection.path, package=self.package
             )
             values = [model.display_name for model in data.models if model.provider and model.id]
         return [
@@ -219,7 +219,7 @@ class ThinkingLevelConfigOption(CatalogConfigOption):
         from .pi_commands import GetAvailableThinkingLevels
 
         data = await GetAvailableThinkingLevels().discover(
-            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.record.root,
+            self.agent_bin, self.agent_args.with_model(thread.model).argv, self.record.root_selection.path,
             package=self.package,
         )
         levels = [member.declared_name for member in data.levels]
@@ -259,7 +259,7 @@ class ConfigOptions:
     def configured(cls) -> ConfigOptions:
         """Catalogs of the native binary, arguments and environment this process is configured with."""
         record = LaunchRecord.current()
-        package = partial(NativePiRpcLaunch.package_for_command, record.agent_bin, record.runtime, record.root)
+        package = partial(NativePiRpcLaunch.package_for_command, record.agent_bin, record.runtime, record.root_selection.path)
         return cls(record.agent_bin, NativeArguments.parse(record.agent_args), record, package)
 
     def catalog_for(self, member: type[CatalogConfigOption]) -> CatalogConfigOption:
@@ -300,7 +300,7 @@ class SessionConfigOptions(ConfigOptions):
         super().__init__(
             agent_bin,
             agent_args,
-            replace(LaunchRecord.current(), root=comms.root, implicit_root=False),
+            LaunchRecord.current().at_root(comms.root),
             partial(comms.owners.launch_authority.package_for, agent_bin),
         )
         self.comms, self.runtime, self.sessions, self.effects = comms, runtime, sessions, effects

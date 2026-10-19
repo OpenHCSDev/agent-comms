@@ -23,7 +23,7 @@ from .launch_runtime import LaunchRecord
 from dataclasses import replace
 from .child_process import AttachedChild, ChildStdio, StreamingChildStdio
 from .maintenance_barrier import MaintenanceBarrier
-from .route_selection import RouteSelection, selected_write
+from .route_selection import RouteSelection
 
 
 def _release_abandoned(task: asyncio.Future[ExitStack]) -> None:
@@ -44,7 +44,7 @@ class AcpIngress:
     attached: str | None = None
 
     def _registries(self) -> list[Path]:
-        roots = {self.selection.root}
+        roots = {self.selection.root_selection.path}
         if self.attached is not None:
             attached = Path(self.attached).expanduser()
             roots.add(attached if attached.is_absolute() else self.cwd / attached)
@@ -57,7 +57,7 @@ class AcpIngress:
 
     def _lock_prompt(self, locks: ExitStack) -> None:
         locks.enter_context(
-            selected_write(self.selection.root, implicit=self.selection.implicit)
+            self.selection.root_selection.write_scope()
         )
         self._lock_roots(locks)
 
@@ -92,12 +92,9 @@ class AcpIngress:
 
     def _project_launch(self) -> LaunchRecord:
         """Use the captured route for this client's explicit child record."""
-        from .active_route import read_active_route
-
-        # The child derives its launch from this root; only the route must not move.
-        if self.selection.implicit and read_active_route() not in (None, self.selection.route):
-            raise ValueError("ACP root changed before private launch")
-        return replace(LaunchRecord.current(), root=self.selection.root, implicit_root=False, thread=None)
+        from .launch_runtime import AcpLaunchRecord
+        return AcpLaunchRecord.from_record(
+            LaunchRecord.current().at_root(self.selection.root_selection.path))
 
     async def spawn(
         self, argv: tuple[str, ...], *, env: Mapping[str, str],
@@ -134,13 +131,14 @@ class AcpIngress:
                 with self.selection.route.hold_client_route(), ExitStack() as locks:
                     self._lock_roots(locks)
                     record = self._project_launch()
-                    arguments = record.write()
-                    process = asyncio.run_coroutine_threadsafe(
-                        AttachedChild.start(
-                            (*argv, *arguments), env=child_env, cwd=cwd, pass_fds=pass_fds, stdio=stdio,
-                            runtime=record.runtime,
-                        ), loop,
-                    ).result()
+                    with record.arguments() as arguments:
+                        process = asyncio.run_coroutine_threadsafe(
+                            AttachedChild.start(
+                                (*argv, *arguments), env=child_env, cwd=cwd,
+                                pass_fds=(*pass_fds, *arguments.pass_fds), stdio=stdio,
+                                runtime=record.runtime,
+                            ), loop,
+                        ).result()
                     process_ready.set_result(process)
                     # The caller accepts the observed process or asks for its
                     # retirement before the gate is released to maintenance.
