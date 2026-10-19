@@ -607,14 +607,15 @@ class HierarchyText(OrderWords):
 
 
 class DefectText(BluntText):
-    """A text naming a defect in a Slop: line also says, outside that line, what was stupid or wrong;
+    """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
     a text naming no defect needs no label."""
 
     SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
 
     @classmethod
     def found(cls, text: str) -> list[str]:
-        return super().found(cls.SLOP.sub(' ', text)) if cls.SLOP.search(text) else ['no defect named']
+        named = cls.SLOP.search(text)
+        return super().found(cls.SLOP.sub(' ', text)) if named else ['no defect named']
 
 
 class DirectiveText:

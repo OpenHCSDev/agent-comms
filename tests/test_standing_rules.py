@@ -168,7 +168,8 @@ def test_a_claude_ai_directive_passes_the_commanders_directive_wording_and_revie
     ):
         with pytest.raises(ValueError, match=refusal):
             send(body)
-    assert send(clean).message.body == clean
+    send(clean)
+    assert [(m.sender, m.body) for m in comms.bus.inbox("worker")] == [("claude-ai", clean)]
     later = time.time() + RulesDue.max_age + 60
     monkeypatch.setattr(time, "time", lambda: later)
     with pytest.raises(ValueError, match="last rule review was 21 min ago"):
