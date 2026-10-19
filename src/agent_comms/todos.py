@@ -19,9 +19,10 @@ from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
+from uuid import uuid4
 
 from .change_report import FileLine
-from .child_process import BoundedRun, ExitedOutcome
+from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
 from .field_codec import (
@@ -59,13 +60,14 @@ class OrderDelivery(DeclaredFamily, affix="Delivery"):
         """The order's check and every count its deletion declares run on the delivered source."""
         for each in (check, *deletes.checks):
             await self.require_source(each)
-            command = ("bash", "-c", each.command)
-            result = await BoundedRun.run(command, cwd=each.directory, timeout=120)
-            each.result.require(result)
+            each.result.require(await self.checked(each))
         return replace(self, at=await self.delivery_time(check))
 
     @abstractmethod
     async def require_source(self, check): ...
+
+    @abstractmethod
+    async def checked(self, check: OrderCheck) -> ChildResult: ...
 
     @abstractmethod
     async def delivery_time(self, check): ...
@@ -93,6 +95,9 @@ class RecordedCommitDelivery(OrderDelivery, declared_name="commit"):
     async def require_source(self, check: OrderCheck) -> None:
         raise ValueError("A commit delivery names the unit's delivered commit and the checked one.")
 
+    async def checked(self, check: OrderCheck) -> ChildResult:
+        return await asyncio.to_thread(check.at, self.commit, check.directory)
+
     async def delivery_time(self, check: OrderCheck) -> EventTime:
         return EventTime.capture(float(
             await self.run(check, "git", "show", "-s", "--format=%ct", self.delivered)))
@@ -108,13 +113,10 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         return self.delivered_commit
 
     async def require_source(self, check: OrderCheck) -> None:
-        head = (await self.run(check, "git", "rev-parse", "HEAD", f"{self.commit}^{{commit}}",
-                               f"{self.delivered}^{{commit}}")).split()
-        dirty = await self.run(check, "git", "status", "--porcelain", "--untracked-files=no")
-        if len(head) != 3 or head[0] != head[1] or dirty.strip():
-            raise ValueError("Run the order check on its clean checked commit.")
+        delivered = (await self.run(
+            check, "git", "rev-parse", f"{self.delivered}^{{commit}}")).strip()
         base = await self.run(check, "git", "merge-base", self.delivered, self.commit)
-        if base.strip() != head[2]:
+        if base.strip() != delivered:
             raise ValueError(
                 f"Delivered commit {self.delivered} is not in the checked commit {self.commit}.")
         parents = await self.run(check, "git", "rev-list", "--parents", "-n", "1", self.delivered)
@@ -132,6 +134,9 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
 class OperationDelivery(OrderDelivery):
     async def require_source(self, check):
         pass
+
+    async def checked(self, check: OrderCheck) -> ChildResult:
+        return await check.run()
 
     async def delivery_time(self, check):
         return EventTime.capture(time.time())
@@ -209,6 +214,70 @@ def _clock(at: float) -> str:
 
 
 @dataclass(frozen=True)
+class DistanceReading:
+    at: float
+    distance: int
+
+
+@dataclass(frozen=True)
+class DistanceReadings:
+    """The order's last two distance readings, oldest first: its base at the order, then its
+    newest commit. Fewer than two read, or a last reading at done, project nothing."""
+    readings: tuple[DistanceReading, ...] = ()
+
+    @property
+    def trend(self) -> DistanceTrend:
+        """Velocity across the two readings: falling projects the finish, else it is flat."""
+        last = self.readings[-2:]
+        if len(last) < 2 or not last[1].distance:
+            return UnreadTrend()
+        first, final = last
+        if final.distance >= first.distance:
+            return FlatTrend(final.distance, final.at)
+        rate = (first.distance - final.distance) / max(final.at - first.at, 1.0)
+        return MovingTrend(final.distance, final.at + final.distance / rate)
+
+
+class DistanceTrend(DeclaredFamily, affix="Trend"):
+    """What the order's distance readings say about its finish."""
+
+    @property
+    @abstractmethod
+    def projection(self) -> str: ...
+
+
+@dataclass(frozen=True)
+class MovingTrend(DistanceTrend):
+    distance: int
+    done: float
+
+    @property
+    def projection(self) -> str:
+        return f"; distance {self.distance}, projected done {_clock(self.done)}"
+
+
+@dataclass(frozen=True)
+class FlatTrend(DistanceTrend):
+    """The distance did not fall from the reading before ``since``."""
+
+    distance: int
+    since: float
+
+    @property
+    def projection(self) -> str:
+        return f"; distance {self.distance}, not falling"
+
+
+@dataclass(frozen=True)
+class UnreadTrend(DistanceTrend):
+    """Fewer than two readings, or the last one at done: nothing to project from."""
+
+    @property
+    def projection(self) -> str:
+        return ""
+
+
+@dataclass(frozen=True)
 class ProgressSource:
     """What an order's progress is read from: its unit's checkout and the repository's PRs."""
     todo: Todo
@@ -235,6 +304,32 @@ class ProgressSource:
             sha, at = line.split()
             yield sha, float(at)
 
+    def git(self, *args: str) -> str:
+        run = subprocess.run(("git", "-C", str(self.checkout), *args),
+                             capture_output=True, text=True, timeout=60)
+        if run.returncode:
+            raise ValueError(run.stderr.strip() or f"git {args[0]} failed")
+        return run.stdout
+
+    def readings(self) -> DistanceReadings:
+        """The order's base, then each branch commit since the order; the last two are read."""
+        base = self.git("merge-base", "HEAD", "origin/HEAD").strip()
+        after = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(self.since))
+        commits = [(sha, float(at)) for sha, at in (line.split() for line in reversed(self.git(
+            "log", "--first-parent", f"--since={after}", "--format=%H %ct", "HEAD",
+            "--not", base).splitlines()))]
+        points = [(base, self.since), *commits][-2:]
+        return DistanceReadings(
+            tuple(DistanceReading(at, self.distance(base, sha)) for sha, at in points))
+
+    def distance(self, base: str, sha: str) -> int:
+        """The order's Check run on ``sha`` against its N, plus its numbered edits the diff since
+        ``base`` has not touched."""
+        check = self.todo.order.check
+        touched = self.git("diff", "--name-only", base, sha).split()
+        run = check.at(sha, str(self.checkout))
+        return check.result.distance(run) + self.todo.order.untouched(touched)
+
 
 @dataclass(frozen=True)
 class OrderProgress(DeclaredFamily, affix="Progress"):
@@ -257,7 +352,15 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     @property
     @abstractmethod
-    def line(self) -> str: ...
+    def state(self) -> str: ...
+
+    @property
+    def line(self) -> str:
+        return self.state + self.distance_readings().trend.projection
+
+    def distance_readings(self) -> DistanceReadings:
+        """The order's distance readings; progress that read no commit has none."""
+        return DistanceReadings()
 
     def stalled(self, ordered: float, now: float) -> bool:
         return False
@@ -307,9 +410,13 @@ class Stalling:
 class Moving(Stalling):
     """Work last moved ``at``; it stalls 15 minutes later with no commit, push or PR change."""
     at: float = field(kw_only=True)
+    readings: DistanceReadings = field(default=DistanceReadings(), kw_only=True, compare=False)
 
     def stall_at(self, ordered: float) -> float:
         return self.at + 900
+
+    def distance_readings(self) -> DistanceReadings:
+        return self.readings
 
 
 @dataclass(frozen=True)
@@ -318,7 +425,7 @@ class NoCommitProgress(Stalling, OrderProgress):
         return tuple(MergedProgress.found(source))
 
     @property
-    def line(self) -> str:
+    def state(self) -> str:
         return "no commit since the order"
 
     def stall_at(self, ordered: float) -> float:
@@ -331,7 +438,7 @@ class UnreadProgress(OrderProgress):
     reason: str
 
     @property
-    def line(self) -> str:
+    def state(self) -> str:
         return f"progress unread: {self.reason}"
 
 
@@ -342,10 +449,11 @@ class CommittedProgress(Moving, FoundProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha[:9], at=at) for sha, at in source.commits("--remotes"))
+        return (cls(sha[:9], at=at, readings=source.readings())
+                for sha, at in source.commits("--remotes"))
 
     @property
-    def line(self) -> str:
+    def state(self) -> str:
         return f"committed {self.sha} at {_clock(self.at)}, not pushed"
 
 
@@ -356,10 +464,11 @@ class PushedProgress(CommittedProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(sha[:9], at=at) for sha, at in source.commits("origin/HEAD"))
+        return (cls(sha[:9], at=at, readings=source.readings())
+                for sha, at in source.commits("origin/HEAD"))
 
     @property
-    def line(self) -> str:
+    def state(self) -> str:
         return f"pushed {self.sha} at {_clock(self.at)}, no PR"
 
 
@@ -371,10 +480,11 @@ class OpenPrProgress(Moving, FoundProgress):
 
     @classmethod
     def found(cls, source: ProgressSource) -> Iterator[Self]:
-        return (cls(pr.number, pr.head[:9], at=pr.updated_at) for pr in source.requests("open"))
+        return (cls(pr.number, pr.head[:9], at=pr.updated_at, readings=source.readings())
+                for pr in source.requests("open"))
 
     @property
-    def line(self) -> str:
+    def state(self) -> str:
         return f"PR #{self.number} open at {self.head}"
 
     def untouched(self, now: float) -> bool:
@@ -393,7 +503,7 @@ class MergedProgress(FoundProgress):
                 if pr.merge and (pr.merged_at or 0) >= source.since)
 
     @property
-    def line(self) -> str:
+    def state(self) -> str:
         return f"merged as {self.sha}, awaiting record"
 
     def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
@@ -779,9 +889,22 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
     pending: ClassVar[bool]
     line: ClassVar[str]
+    NAMED_FILE: ClassVar[re.Pattern] = re.compile(r"([\w./-]+\.\w+):\d+")
 
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("Only an undelivered order can change owner.")
+
+    def reissued(self, at: float) -> PendingProblemOrder:
+        """This order sent again at ``at`` to a new owner, its first-call window kept."""
+        raise ValueError("Only an undelivered order can change owner.")
+
+    def untouched(self, touched: Sequence[str]) -> int:
+        """The numbered edits naming a file:line where ``touched`` changed none of those files."""
+        def changed(name: str) -> bool:
+            return any(path.endswith(name.lstrip("/")) or name.endswith("/" + path)
+                       for path in touched)
+        return sum(1 for edit in self.edits
+                   if (named := self.NAMED_FILE.findall(edit)) and not any(map(changed, named)))
 
     def copy_as[Kind: ProblemOrder](self, kind: type[Kind], **evidence) -> Kind:
         return kind(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
@@ -864,6 +987,13 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
 @dataclass(frozen=True, kw_only=True)
 class PendingProblemOrder(ProblemOrder):
+    def reissued(self, at: float) -> PendingProblemOrder:
+        window = (self.first_call_deadline.recorded_at("A first-call deadline")
+                  - self.at.recorded_at("An order"))
+        return replace(self, id=uuid4().hex[:12], at=RecordedEventTime(at),
+                       first_call_deadline=RecordedEventTime(at + window),
+                       first_call=AwaitingFirstCall())
+
     pending: ClassVar[bool] = True
     line: ClassVar[str] = "Open"
 
@@ -990,6 +1120,10 @@ class TodoConflict(TodoError):  # noqa: N818 - domain-specific conflict outcome
 
 
 class GoalReference(SubclassUnion):
+    @abstractmethod
+    def request(self) -> str:
+        """The commander's request goal this problem serves."""
+
     def require_reference(self) -> None:
         pass
 
@@ -999,7 +1133,8 @@ class GoalReference(SubclassUnion):
 
 @dataclass(frozen=True)
 class NoGoalReference(NullMember, GoalReference):
-    pass
+    def request(self) -> str:
+        raise TodoError("A problem with no request goal cannot be ordered again.")
 
 
 @dataclass(frozen=True)
@@ -1026,6 +1161,9 @@ class GoalRef(RecordMember, GoalReference):
 
     def threads(self) -> tuple[str, ...]:
         return (self.owner,)
+
+    def request(self) -> str:
+        return self.goal_id
 
 
 @dataclass(frozen=True, slots=True)

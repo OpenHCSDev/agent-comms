@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING, Annotated, ClassVar
 
 from .field_codec import FieldCodec, PathText
 from .native_tool_call import SelectedToolDenied
-from .standing_rules import StandingRule
+from .standing_rules import UndatedStandingRule
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -211,7 +211,7 @@ class StorageRule:
 
 
 @dataclass(frozen=True)
-class UnitStorage(StandingRule):
+class UnitStorage(UndatedStandingRule):
     """One unit's checkouts, derived on read from its registered worktrees; its rule judges them."""
 
     rule: StorageRule
