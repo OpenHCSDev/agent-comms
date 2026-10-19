@@ -18,7 +18,7 @@ async def run() -> None:
     # Both entry points (python -m agent_comms.worker, agent-comms-agent) run here.
     lower_priority()
     runtime = LaunchRuntime.startup()
-    comms = wire(runtime.require_root())
+    comms = wire(runtime.root)
     # Fail before attach; the check verifies the native package once.
     comms.owners.launch_authority.check()
     name = ThreadLaunch.current().name
@@ -100,7 +100,7 @@ def main() -> int:
     ).parse_args()
     name = ThreadLaunch.current().name
 
-    comms = wire(runtime.require_root())
+    comms = wire(runtime.root)
     comms.owners.require_private_launch()  # Headless execution needs a private bus root.
     thread = comms.registry.require(name)
     if thread.process_identity.alive():

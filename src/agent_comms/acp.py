@@ -490,7 +490,7 @@ def main() -> int:
 
     from .launch_runtime import LaunchRuntime
     runtime = LaunchRuntime.startup()
-    with resolve_comms_route(runtime.require_root()).hold_client_route():
+    with resolve_comms_route(runtime.root).hold_client_route():
         if "--login" in sys.argv[1:]:
             from .login import run_login
 
@@ -508,7 +508,7 @@ def main() -> int:
         # The stdio ACP client only attaches to a separately owned worker. A
         # private launch is checked before it can request an owner; the worker
         # independently repeats the same preflight.
-        comms = wire(runtime.require_root())
+        comms = wire(runtime.root)
         comms.owners.require_launch_authority()
 
         async def run() -> None:

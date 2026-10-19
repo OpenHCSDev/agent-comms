@@ -76,7 +76,7 @@ class ThreadLaunch:
 class LaunchRuntime:
     """One decoded launch for this process and explicitly selected children."""
     interpreter: Annotated[Path, PathText]
-    root: Annotated[Path, PathText] | None = None
+    root: Annotated[Path, PathText]
     thread: ThreadLaunch | None = None
     configuration: RestartEnvironment = field(default_factory=RestartEnvironment)
     agent_bin: str = "pi"
@@ -135,11 +135,6 @@ class LaunchRuntime:
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         _atomic_write_text(path, json.dumps(FieldCodec.encode(self), separators=(",", ":")))
         return self.argument, str(path)
-
-    def require_root(self) -> Path:
-        if self.root is None:
-            raise CallingThreadUnavailable('Launch record has no selected root')
-        return self.root
 
     def require_thread(self) -> ThreadLaunch:
         if self.thread is None:

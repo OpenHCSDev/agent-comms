@@ -415,7 +415,7 @@ def main() -> None:
     runtime = LaunchRuntime.startup()
     if len(sys.argv) != 1:
         raise SystemExit('usage: python -m agent_comms.restart_queue --comms-launch FILE')
-    comms = wire(runtime.require_root())
+    comms = wire(runtime.root)
     try:
         asyncio.run(run(comms))
     except (OSError, ValueError, CoordinationError) as exc:
