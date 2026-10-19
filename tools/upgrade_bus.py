@@ -26,7 +26,6 @@ start path, which never replays uncertain inputs.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import shutil
@@ -34,11 +33,9 @@ import signal
 import stat
 import subprocess
 import sys
-import tarfile
 import tempfile
 import time
 from abc import ABC, abstractmethod
-from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -48,14 +45,13 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from cutover.carry import Carried, CarryChain, CarryLedger, Step, TodoColumnCarry
+from cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
-from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
-from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator, ReadyPhase
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
@@ -63,21 +59,7 @@ from agent_comms.todos import PlannedInstallDeadline
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
 CONNECTOR = "from agent_comms.connector import main; raise SystemExit(main())"
-HOLD_TRANSCRIPTS = """import sys
-from contextlib import closing
-from agent_comms.coordination_database import CoordinationStore
-with closing(CoordinationStore.writer(sys.argv[1], isolation_level=None)) as writer:
-    writer.execute("BEGIN IMMEDIATE")
-    with open(int(sys.argv[2]), "wb") as held:
-        held.write(b"held")
-    sys.stdin.read()
-    writer.execute("ROLLBACK")
-"""
 ROUTE = Path.home() / ".local/state/agent-comms/active-route.json"
-
-
-class UpgradeRefused(Exception):
-    """The upgrade stopped before it changed anything it cannot restore."""
 
 
 def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) -> str:
@@ -87,47 +69,6 @@ def run(*command: str | Path, cwd: Path | None = None, env: dict | None = None) 
     if completed.returncode:
         raise UpgradeRefused(f"{command[0]} failed: {completed.stderr.strip() or completed.stdout.strip()}")
     return completed.stdout
-
-
-def bus_files(root: Path) -> dict[str, str]:
-    """Every regular file under the bus but its lock files and the runtime files no carry
-    writes, by content hash. A SQLite store counts once, under its database's name, by the
-    rows SQLite reads from it, so companion files that appear or vanish change nothing."""
-    paths = [path for path in sorted(set(root.rglob("*")) - RuntimeFile.paths_in(root))
-             if path.is_file() and not path.is_symlink() and not path.name.endswith(".lock")]
-    stores = {path for path in paths if CoordinationStore.is_database(path)}
-    companions = {companion for store in stores for companion in CoordinationStore.files(store)[1:]}
-    return {str(path.relative_to(root)): CoordinationStore.digest(path) if path in stores
-            else hashlib.sha256(path.read_bytes()).hexdigest()
-            for path in paths if path not in companions}
-
-
-@contextmanager
-def transcripts_held(root: Path) -> Iterator[None]:
-    """Bridges publish their CLI's items outside Core's maintenance refusal, so the operator
-    holds the transcript store's writer: a bridge's write waits, then fails busy and is
-    republished when its watch starts. A carry that needs this store fails the same way in
-    the rehearsal, before the backup.
-
-    SQLite's write lock is a POSIX record lock: the whole process owns it, and closing any
-    descriptor on the store's files drops it. The backup's tar and ``bus_files`` read those
-    files raw, so a separate holder process owns the hold."""
-    path = ExternalTranscript.path_in(root)
-    if not path.exists():
-        yield
-        return
-    ready, held = os.pipe()
-    holder = subprocess.Popen([sys.executable, "-c", HOLD_TRANSCRIPTS, path, str(held)],
-                              stdin=subprocess.PIPE, pass_fds=(held,),
-                              env={**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)})
-    os.close(held)
-    try:
-        with open(ready, "rb") as holding:
-            if not holding.read():
-                raise UpgradeRefused(f"Could not hold the transcript store {path}")
-        yield
-    finally:
-        holder.communicate()
 
 
 def carried(root: Path, before: dict[str, str], steps: list[dict]) -> dict[str, int]:
@@ -279,11 +220,9 @@ def carry_all(
     results = []
     for step in pending:
         with _store_lock(root / "wire"):
-            CarryChain.at(revisions.repo, step.chain_revision).require_next(
-                step.name, CarryLedger(root).applied())
-            result = carry(step, root, stack, revisions, "--apply")
-            CarryLedger(root).record(step.name)
-            result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
+            result = CarryLedger(root).apply(
+                CarryChain.at(revisions.repo, step.chain_revision), step.name,
+                lambda: carry(step, root, stack, revisions, "--apply"))
         results.append(result.report(step.name, True))
     return results
 
@@ -329,44 +268,6 @@ def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Rev
         # No round trip here: the copy's maintenance witness names the live root, and only the
         # live bus has the connector service the round trip proves.
         return {"steps": steps, "files": files, "read": read}
-
-
-@dataclass
-class Backup:
-    root: Path
-    route: Path
-    path: Path
-
-    @classmethod
-    def take(cls, root: Path, route: Path) -> Backup:
-        path = root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}"
-        path.mkdir(mode=0o700)
-        with tarfile.open(path / "bus.tar", "w") as archive:
-            archive.add(root, root.name)  # tarfile skips sockets
-        (path / "files.json").write_text(json.dumps(bus_files(root), indent=1))
-        if route.exists():
-            shutil.copy2(route, path / "active-route.json")
-        return cls(root, route, path)
-
-    def files(self) -> dict[str, str]:
-        return json.loads((self.path / "files.json").read_text())
-
-    def restore(self) -> None:
-        """Extract beside the bus, then swap, so a failed extract leaves the bus as it was."""
-        staged = Path(tempfile.mkdtemp(dir=self.root.parent, prefix=f".{self.root.name}.restore."))
-        with tarfile.open(self.path / "bus.tar") as archive:
-            archive.extractall(staged, filter="tar")
-        failed = self.root.with_name(f".{self.root.name}.failed-{time.strftime('%Y%m%dT%H%M%S')}")
-        with transcripts_held(staged / self.root.name):
-            os.rename(self.root, failed)
-            os.rename(staged / self.root.name, self.root)
-            staged.rmdir()
-            if self.files() != bus_files(self.root):
-                raise UpgradeRefused(
-                    f"The restored bus differs from the backup; the failed bus is at {failed}")
-        if (self.path / "active-route.json").exists():
-            shutil.copy2(self.path / "active-route.json", self.route)
-        print(f"Restored the bus; the failed one is kept at {failed}", file=sys.stderr)
 
 
 def route_readers(patience: int = 120) -> None:
@@ -494,7 +395,8 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
             installed.cli(root, "stop", "--name", name)
         route_readers()
         transcripts.enter_context(transcripts_held(root))
-        backup = Backup.take(root, ROUTE)
+        backup = Backup.take(root, ROUTE, (root,),
+            root.parent / f"{root.name}.upgrade-{time.strftime('%Y%m%dT%H%M%S')}")
     except BaseException as error:
         transcripts.close()
         maintenance.clear(held)

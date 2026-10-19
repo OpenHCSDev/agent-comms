@@ -22,6 +22,7 @@ from __future__ import annotations
 import argparse
 import ast
 import inspect
+import importlib
 import json
 import os
 import sqlite3
@@ -29,7 +30,7 @@ import subprocess
 import sys
 import tempfile
 from abc import ABC, abstractmethod
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -38,6 +39,7 @@ from typing import ClassVar
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo, TodoStore
+from agent_comms.typed_table import TypedStore
 
 STEPS = Path("tools/cutover")
 
@@ -75,6 +77,16 @@ class CarryLedger:
         if not self.path.exists():
             return ()
         return tuple(json.loads(self.path.read_text())["applied"])
+
+    def apply(self, chain: CarryChain, name: str, operation: Callable[[], Carried]) -> Carried:
+        """The caller holds the wire lock across ordering, conversion and recording."""
+        applied = self.applied()
+        chain.require_next(name, applied)
+        if name in applied:
+            return Carried(0)
+        result = operation()
+        self.record(name)
+        return replace(result, rewritten=(*result.rewritten, self.name))
 
     def record(self, name: str) -> None:
         """Called with the bus's wire lock held."""
@@ -115,6 +127,10 @@ class Carry(ABC):
         return CarryChain.at(Path(checkout), "HEAD")
 
     @classmethod
+    def backup_files(cls, root: Path) -> tuple[Path, ...]:
+        raise RuntimeError(f'{cls.name()} needs the full tools/upgrade_bus.py operation')
+
+    @classmethod
     @abstractmethod
     def carry(cls, root: Path, *, apply: bool) -> Carried:
         """Carry ``root`` with its wire lock held; on a dry run, write nothing."""
@@ -135,35 +151,43 @@ class Carry(ABC):
         parser.add_argument("--before-stop", action="store_true")
         args = parser.parse_args()
         with _store_lock(args.root / "wire"):
-            if args.apply and not args.before_stop:
-                applied = CarryLedger(args.root).applied()
-                try:
-                    cls.chain().require_next(cls.name(), applied)
-                except ValueError as error:
-                    raise SystemExit(f"{cls.name()}: {error}") from None
             if args.before_stop:
                 result = cls.before_stop(args.root, apply=args.apply)
+            elif args.apply:
+                try:
+                    result = CarryLedger(args.root).apply(
+                        cls.chain(), cls.name(), lambda: cls.carry(args.root, apply=True))
+                except ValueError as error:
+                    raise SystemExit(f"{cls.name()}: {error}") from None
             else:
-                result = cls.carry(args.root, apply=args.apply)
-                if args.apply:
-                    CarryLedger(args.root).record(cls.name())
-                    result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
+                result = cls.carry(args.root, apply=False)
         print(json.dumps(result.report(cls.name(), args.apply)))
 
 
 
-class TodoRows(Carry):
+class StoreCarry(Carry):
+    """A declared SQLite store supplies the backup boundary for its conversion."""
+    store: ClassVar[type[TypedStore]]
+
+    @classmethod
+    def backup_files(cls, root: Path) -> tuple[Path, ...]:
+        return (cls.store.path_in(root),)
+
+
+class TodoRows(StoreCarry):
     """A carry over the saved todo rows: one write transaction on the todo store that
     re-reads every row as declared, then commits on apply and rolls back otherwise."""
+
+    store = TodoStore
 
     @classmethod
     @contextmanager
     def todo_rows(cls, root: Path, *, apply: bool) -> Iterator[sqlite3.Connection | None]:
         """None when this bus has no todo store."""
-        if not TodoStore.path_in(root).exists():
+        if not cls.store.path_in(root).exists():
             yield None
             return
-        with closing(CoordinationStore.writer(TodoStore.path_in(root))) as db:
+        with closing(CoordinationStore.writer(cls.store.path_in(root))) as db:
             db.execute("BEGIN IMMEDIATE")
             try:
                 yield db
@@ -181,7 +205,7 @@ class TodoRows(Carry):
     def carried(
         cls, root: Path, changed: int, detail: Mapping[str, int], *, apply: bool
     ) -> Carried:
-        rewritten = tuple(path.name for path in root.glob(f"{TodoStore.path_in(root).name}*"))
+        rewritten = tuple(path.name for path in root.glob(f"{cls.store.path_in(root).name}*"))
         return Carried(changed, dict(detail), rewritten if changed and apply else ())
 
 
@@ -197,6 +221,18 @@ class Step:
     columns: tuple[str, ...] = ()
     """The todo column this step adds, as its ``column`` declares it."""
     after_line: int = 0
+
+    def current(self, checkout: Path) -> type[Carry]:
+        """Load current checkout tools, never a second Core source tree."""
+        if self.revision != self.chain_revision:
+            raise RuntimeError(f'{self.name} requires its historical full upgrade')
+        source = checkout / STEPS / f'{self.name}.py'
+        if source.read_bytes() != git(checkout, 'show', f'{self.revision}:{STEPS}/{source.name}'):
+            raise RuntimeError(f'Conversion source changed since planning: {source}')
+        module = importlib.import_module(f'.{self.name}', __package__)
+        if Path(module.__file__).resolve() != source.resolve():
+            raise RuntimeError('Conversion was loaded from a different checkout')
+        return getattr(module, self.declaration)
 
     @staticmethod
     def declared_columns(source: bytes) -> tuple[str, ...]:
@@ -399,7 +435,34 @@ class CarryChain:
         return tuple(step for step, applied_step in zip(self.steps, done) if not applied_step)
 
 
-class TodoColumnCarry(Carry):
+@dataclass(frozen=True)
+class PreparedCarries:
+    """Resolve current conversions and their store scope once, before stopping readers."""
+
+    chain: CarryChain
+    conversions: tuple[tuple[Step, type[Carry]], ...]
+    files: tuple[Path, ...]
+
+    @classmethod
+    def at(cls, checkout: Path, root: Path, applied: tuple[str, ...]) -> PreparedCarries:
+        revision = git(checkout, 'rev-parse', 'HEAD').decode().strip()
+        chain = CarryChain.at(checkout, revision)
+        conversions = tuple((step, step.current(checkout)) for step in chain.pending(applied))
+        files = tuple(dict.fromkeys((CarryLedger(root).path, *(path
+            for _, conversion in conversions for path in conversion.backup_files(root)))))
+        return cls(chain, conversions, files)
+
+    def apply(self, root: Path) -> None:
+        ledger = CarryLedger(root)
+        for step, conversion in self.conversions:
+            result = ledger.apply(self.chain, step.name,
+                lambda conversion=conversion: conversion.carry(root, apply=True))
+            print(json.dumps(result.report(step.name, True)), flush=True)
+            if conversion.carry(root, apply=False).changed:
+                raise RuntimeError(f'{step.name} did not finish its conversion')
+
+
+class TodoColumnCarry(TodoRows):
     """Todo rows gain one declared record column, empty; every other column stays as it was."""
 
     column: ClassVar[str]
@@ -413,7 +476,7 @@ class TodoColumnCarry(Carry):
     @classmethod
     def carry_step(cls, root: Path, step: Step, chain: CarryChain, *, apply: bool) -> Carried:
         """One column owner applies current or recovered immutable declarations."""
-        path = TodoStore.path_in(root)
+        path = cls.store.path_in(root)
         if not path.exists():
             return Carried(0)
         with closing(CoordinationStore.writer(path)) as db:

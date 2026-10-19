@@ -39,16 +39,13 @@ from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
+from tools.cutover.backup import Backup, UpgradeRefused, bus_files, transcripts_held
 from tools.upgrade_bus import (
-    Backup,
     Revisions,
     Stack,
-    UpgradeRefused,
     before_stop,
-    bus_files,
     carried,
     carry_all,
-    transcripts_held,
 )
 
 REPO = Path(__file__).resolve().parents[1]
@@ -588,7 +585,8 @@ def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms)
 
     with transcripts_held(comms.root):
         before = bus_files(comms.root)
-        backup = Backup.take(comms.root, comms.root.parent / "no-route.json")
+        backup = Backup.take(comms.root, comms.root.parent / "no-route.json",
+                             (comms.root,), comms.root.parent / 'backup')
         assert bridge_publishes(comms.root).endswith("database is locked")
         assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
         backup.restore()  # the carry aborted
