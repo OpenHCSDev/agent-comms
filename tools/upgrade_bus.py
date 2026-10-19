@@ -52,6 +52,7 @@ from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_ho
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
+from agent_comms.host_services import HostService
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
@@ -418,6 +419,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         files = carried(root, backup.files(), steps)
         read = installed.verify(root)
         maintenance.clear(held)
+        services = HostService.restart_running(installed.python)
         PlannedInstallDeadline.after(installer, time.time()).plan(root)
         transcripts.close()
     except BaseException as error:
@@ -430,7 +432,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
         raise
     start(installed, root, running)
     return {"stopped_and_started": running, "steps": steps, "files": files, "read": read,
-            "backup": str(backup.path)}
+            "services": services, "backup": str(backup.path)}
 
 
 def start(stack: Stack, root: Path, names: list[str]) -> None:
