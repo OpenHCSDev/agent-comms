@@ -73,13 +73,14 @@ class RuntimeInfoDocument(WireValue):
     """Typed observations with the existing flat root-name wire form."""
 
     observations: dict[str, AgentRuntimeInfo] = field(default_factory=dict)
+    external_json_shape = True
 
     @classmethod
     def from_wire(cls, data: object) -> RuntimeInfoDocument:
-        return cls(FieldCodec.decode(dict[str, AgentRuntimeInfo], data))
+        return cls(FieldCodec.decode_document(dict[str, AgentRuntimeInfo], data))
 
     def to_wire(self) -> object:
-        return FieldCodec.encode(self.observations, dict[str, AgentRuntimeInfo])
+        return FieldCodec.encode_document(self.observations, dict[str, AgentRuntimeInfo])
 
 
 @dataclass(frozen=True, slots=True)

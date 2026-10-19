@@ -20,6 +20,7 @@ class LedgerDocument(CliResult, WireValue):
     """The ledger's one free-form JSON document as read; its keys are its authors'."""
 
     entries: Mapping[str, object]
+    external_json_shape = True
 
     @classmethod
     def from_wire(cls, data: object) -> LedgerDocument:
