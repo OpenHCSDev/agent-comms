@@ -10,6 +10,8 @@ import asyncio
 import sqlite3
 from dataclasses import dataclass, field
 from functools import partial
+from contextlib import asynccontextmanager
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 from acp.schema import SessionInfoUpdate
@@ -58,13 +60,20 @@ class CursorDelivery:
     source_reads: NativeEvidenceScope = field(default_factory=NativeEvidenceScope, repr=False)
     observation_lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
 
+    @asynccontextmanager
+    async def reading(self) -> AsyncIterator[NativeEvidenceScope]:
+        """Serialize every borrower of this recipient's verified source."""
+        async with self.observation_lock:
+            with self.source_reads.borrow():
+                yield self.source_reads
+
     async def advance(
         self, participant: SelectedParticipant, input_id: str,
     ) -> CurrentNativeCursor | None:
         """Selected settlement borrows this recipient's serialized reader lifetime."""
-        async with self.observation_lock:
+        async with self.reading() as source_reads:
             return await NativeSourceCursor.advance_async(
-                participant.bus, source_reads=self.source_reads,
+                participant.bus, source_reads=source_reads,
                 wire_root_id=participant.root_id,
                 owner=participant.owner.thread,
                 owner_claimed_generation=participant.owner.claimed_generation,
@@ -130,7 +139,7 @@ class CursorPublication:
         advance: bool = False,
     ) -> CursorEnvelope:
         delivery = self.delivery(session_id)
-        async with delivery.observation_lock:
+        async with delivery.reading():
             return await self._observe(
                 delivery, thread_name, session_id, defer_busy=defer_busy, advance=advance
             )

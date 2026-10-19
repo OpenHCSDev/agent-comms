@@ -20,7 +20,7 @@ from .optional_awareness_projection import OptionalAwarenessProjection
 from .native_pi import NativePiUnavailable
 from .owner_fence import prepare_fence_token
 from .private_send_stage import FullNativeSend, TriageNativeSend
-from .selected_actions import BatchSelectedAction, SelectedAction
+from .selected_actions import BatchSelectedAction, NoSelectedTools, SelectedAction
 from .selected_participant import SelectedParticipant
 from .selected_request import SelectedRequest
 from .selected_result import CoordinatedTurn
@@ -277,6 +277,7 @@ class SelectedConsideration:
             result = await request.claim_scope.execute(
                 execution,
                 model=participant.model,
+                selected_tool_mode=NoSelectedTools(),
                 observe_event=participant.dispatch,
             )
             await participant.transition(PublishingPhase())

@@ -8,9 +8,8 @@ from agent_comms.comms import Comms
 from agent_comms.coordination_errors import IdentityConflict
 from agent_comms.envelope_claim_transitions import ClaimConflict, ExistingFileClaim, WakeClaim
 from agent_comms.messages import InfoKind, Message
-from agent_comms.private_bus_checkpoint import CertifiedSourceRead, ClaimCommits
+from agent_comms.private_bus_checkpoint import ClaimCommits
 from agent_comms.store_files import _store_lock
-from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
 
 
@@ -30,7 +29,11 @@ def authored(tmp_path):
 
 
 def authorized(comms, claim_scope, paths):
-    with _store_lock(comms._wire_lock_path), comms.bus.log.locked() as lock:
+    with (
+        comms.bus.opened_activity() as activity,
+        _store_lock(comms._wire_lock_path),
+        comms.bus.log.locked() as lock,
+    ):
         snapshot = comms.registry.snapshot()
         owner = snapshot.threads['owner']
         return comms.bus.publisher._publish_claim_envelope_unlocked(
@@ -38,7 +41,7 @@ def authorized(comms, claim_scope, paths):
             Message('owner', 'peer', 'authorized claim', InfoKind),
             worktree=Path(owner.worktree), incarnation=str(owner.created_at),
             claims=tuple(ExistingFileClaim(path) for path in paths),
-            claim=claim_scope,
+            claim=claim_scope, activity=activity,
         )
 
 
@@ -64,13 +67,12 @@ def test_multi_resource_claim_consumes_one_operation_even_after_release(tmp_path
     assert again.seq > claimed.seq
 
 
-def test_claim_decisions_never_read_or_decode_retained_messages(tmp_path, monkeypatch):
+def test_claim_decisions_never_scan_or_decode_bus_history(tmp_path, monkeypatch):
     comms, paths, claim_scope = authored(tmp_path)
 
     def forbidden(*args, **kwargs):
         raise AssertionError('A claim decision must not scan or decode bus history')
 
-    monkeypatch.setattr(CertifiedSourceRead, 'messages', forbidden)
     monkeypatch.setattr(WireLog, 'verified_records_unlocked', forbidden)
     first = authorized(comms, claim_scope, paths[:1])
     with pytest.raises(ClaimConflict):

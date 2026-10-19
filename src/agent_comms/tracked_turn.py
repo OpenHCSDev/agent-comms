@@ -24,7 +24,6 @@ from .maintenance_barrier import UNCOORDINATED_INGRESS, MaintenanceIngress
 from .mro_dispatch import MroDispatch, handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
-from .native_entries import NativeEntry
 from .native_package import VerifiedNativePackage
 from .native_pi import (
     NativeContextProof,
@@ -48,6 +47,7 @@ from .turn_watchdog import DEFAULT_MODEL_WAIT, TurnWait
 if TYPE_CHECKING:
     from .agent_backend import TurnInbox
     from .coordinated_runtime import NativeExecution
+    from .cursor_publication import CursorDelivery
     from .owned_send import OwnedSend
     from .pi_native_backend import PersistentPiSession
 
@@ -235,6 +235,7 @@ class TrackedTurnSession(TurnSession):
         observe_event: NativeObserver,
         request_observer: RequestObserver,
         pi_session: PersistentPiSession,
+        cursor_delivery: CursorDelivery,
         following: FollowingInputs,
     ):
         # The owner's Pi session child: an idle child left by its previous
@@ -249,6 +250,7 @@ class TrackedTurnSession(TurnSession):
             native_session=pi_session,
         )
         self.retainable = False
+        self.cursor_delivery = cursor_delivery
         self.following = following
         self.rejected_commands: list[InputRefused] = []
         self.model = model
@@ -320,6 +322,7 @@ class TrackedTurnSession(TurnSession):
             observe_event=observe_event,
             request_observer=request_observer,
             pi_session=execution.pi_session,
+            cursor_delivery=execution.cursor_delivery,
             following=following,
         )
         return await turn.complete()
@@ -473,10 +476,10 @@ class TrackedTurnSession(TurnSession):
         if event.input_id == self.command.input_id:
             self.input_commit = self.input_commit.capture(event)
             self.prompt_state = self.prompt_state.start(event)
-            self.evidence = self.ownership.enter_context(
-                NativeEntry.open_input_evidence(self.active_session_file)
-            )
-            await Coordination.run_worker(self.evidence.observe)
+            async with self.cursor_delivery.reading() as source_reads:
+                await Coordination.run_worker(lambda:
+                    source_reads.for_source(self.active_session_file).observe()
+                )
             await self.following.open(self)
 
     def forward_inbox(self, inbox: TurnInbox, sender: OwnedSend) -> None:
@@ -534,16 +537,17 @@ class TrackedTurnSession(TurnSession):
     async def context_proof(self) -> NativeContextProof:
         if not self.prompt_state.acknowledged:
             raise NativePiUnavailable("Native Pi did not commit a tracked model context")
-        # The original event consumer serializes observations. Cancellation
-        # waits for this read before closing the evidence reader.
-        return await Coordination.run_worker(partial(_verify_context,
-            self.active_session_file,
-            self.command.input_id,
-            self.native.attestation.identity.session_id,
-            self.input_commit.require(),
-            self.context_commit.require(),
-            evidence=self.evidence,
-        ))
+        # The recipient serializes this read with cursor and settlement reads.
+        # Cancellation joins the worker before its borrowed scope is released.
+        async with self.cursor_delivery.reading() as source_reads:
+            return await Coordination.run_worker(lambda: _verify_context(
+                self.active_session_file,
+                self.command.input_id,
+                self.native.attestation.identity.session_id,
+                self.input_commit.require(),
+                self.context_commit.require(),
+                evidence=source_reads.for_source(self.active_session_file),
+            ))
 
 
 

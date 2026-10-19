@@ -73,11 +73,11 @@ class SelectedSession:
             identity=NativeSessionIdentity(context.session_id, str(context.session_file)))
 
     @classmethod
-    def for_launch(cls, directory: Path, path: Path | None, package: VerifiedNativePackage) -> SelectedSession:
+    def for_launch(cls, directory: Path, path: Path | None) -> SelectedSession:
         if path is None:
             return cls(directory)
         return SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(package, str(path)))
+            identity=NativeSessionIdentity.locate(str(path)))
 
     @classmethod
     async def prepare(
@@ -102,7 +102,8 @@ class SelectedSession:
             runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
             return runtime.select_session(directory, execution)
 
-        return await Coordination.run_worker(acquire)
+        async with participant.cursor_delivery.reading():
+            return await Coordination.run_worker(acquire)
 
 
 @dataclass(frozen=True)

@@ -40,7 +40,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
     from agent_comms.coordinator import Coordination
     from agent_comms.native_child import PiSessionChild
     from agent_comms.native_fork import ForkSessionHelper, ForkSessionRequest
-    from agent_comms.native_entries import NativeEntry
+    from agent_comms.native_entries import NativeEvidenceScope
     from agent_comms.native_session_reopen import NativeSessionIdentity
     from agent_comms.selected_session import SavedSelectedSession
 
@@ -126,7 +126,7 @@ async def test_actual_selected_launch_rebuilds_source_and_auth(native_backend, m
 
     async def observe_saved_source():
         async with AsyncExitStack() as ownership:
-            evidence = ownership.enter_context(NativeEntry.open_input_evidence(session.path))
+            evidence = ownership.enter_context(NativeEvidenceScope()).for_source(session.path)
             readers.append(evidence)
 
             def observe():
