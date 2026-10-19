@@ -84,9 +84,9 @@ class RawSendCommand(GuardedCommand):
     @classmethod
     def refused(cls, words: Words, session: CommanderSession) -> tuple[str, ...]:
         pairs = set(pairwise(words))
-        targets = {value for flag, value in pairs if flag == '--to'}
-        if not ('send' in words and ('--from', order.ME) in pairs and targets & order.units()
-                and 'agent-comms-commander' not in {Path(word).name for word in words}):
+        if 'send' not in words or 'agent-comms-commander' in {Path(word).name for word in words}:
+            return ()
+        if ('--from', order.ME) not in pairs or not pairs & {('--to', unit) for unit in order.units()}:
             return ()
         return ('Raw send to a unit. Use agent-comms-commander order send '
                 '(orders, with deadline) or order say (no work).',)
