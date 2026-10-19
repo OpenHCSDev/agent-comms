@@ -148,10 +148,15 @@ def test_changed_bus_or_incomplete_tail_never_promotes_a_hint(tmp_path: Path, da
     else:
         with path.open("ab") as stream:
             stream.write(b"{incomplete")
-    with pytest.raises((ProjectionUnavailableError, ProjectionRebuildRequiredError)):
-        index.catch_up_committed_append(hint)
-    with pytest.raises((ProjectionUnavailableError, ProjectionRebuildRequiredError)):
-        _page(index, root_id, lookup, second.seq)
+    if damage == "replace":
+        assert index.catch_up_committed_append(hint).caught_up
+        assert [row.source_seq for row in _page(index, root_id, lookup, second.seq).entries] == [
+            first.seq, second.seq]
+    else:
+        with pytest.raises((ProjectionUnavailableError, ProjectionRebuildRequiredError)):
+            index.catch_up_committed_append(hint)
+        with pytest.raises((ProjectionUnavailableError, ProjectionRebuildRequiredError)):
+            _page(index, root_id, lookup, second.seq)
 
 
 def test_foreign_root_is_rejected(tmp_path: Path) -> None:

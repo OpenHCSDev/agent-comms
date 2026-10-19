@@ -15,7 +15,6 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from .bus_projection import AppendCheckpoint
 from .bus_source_page import CandidateQuery
 from .checkpoint_seals import PrefixSource
 from .delivery_policy import KeyedResponseAcknowledgement
@@ -510,8 +509,10 @@ class WakeCandidateIndex(TypedStore):
                      limit=limit)
         try:
             self._verified_checkpoint(root_id).require_fresh(request)
-            with self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source, self.snapshot() as db:
-                checkpoint = CandidateCheckpoint.current(db).require_source(source, request.root_id).require_fresh(request)
+            with (self.log.opened_wire_snapshot(opening=SavedPrefixOpening()) as source,
+                  self.snapshot() as db):
+                checkpoint = (CandidateCheckpoint.current(db)
+                              .require_source(source, request.root_id).require_fresh(request))
                 data = Candidate.read(
                     db.execute(
                         f'SELECT * FROM "{Candidate.declared_name}" '
