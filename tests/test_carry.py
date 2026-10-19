@@ -517,23 +517,44 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
     assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
 
 
-@pytest.mark.parametrize("registered", [True, False])
-def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp_path, monkeypatch, registered):
-    """The upgrade's last step sends through the connector Core declares and reads the message
-    back; a connector that cannot fails the upgrade through its restore."""
+@pytest.mark.parametrize("served_by,registered", [
+    ("installed", True), ("other", True), ("installed", False),
+])
+def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(
+    comms, tmp_path, monkeypatch, served_by, registered,
+):
+    """The upgrade's last step reads the bus through the running connector service over its
+    loopback endpoint. A service on another runtime than the installed one fails the upgrade
+    through its restore, and the read leaves no message behind."""
+    import site
+    import socket
     import tools.upgrade_bus as upgrade_bus
+    from agent_comms.channel_targets import CommandTarget
+    from agent_comms.channels import ANY_CHANNEL
     from agent_comms.maintenance_barrier import MaintenanceBarrier, ReadyPhase
 
     comms.registry.declare(comms.registry.new_thread("user", frozenset(), str(comms.root)))
+    comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
     if registered:
-        comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(comms.root)))
         reviews = RuleReviews(comms.root)
         reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 1))
         reviews.write("claude-ai", AnsweredRuleReviewEntry(
             1, "This check exercises upgrade_bus.py:158 through the connector's declared caller with its required rule review."))
+    runtimes = {name: tmp_path / name / "bin/python" for name in ("installed", "other")}
+    for runtime in runtimes.values():
+        runtime.parent.mkdir(parents=True)
+        runtime.symlink_to(sys.executable)
+    with socket.socket() as probe:
+        probe.bind(("127.0.0.1", 0))
+        port = probe.getsockname()[1]
 
     class Owners(Stack):
-        python = Path(sys.executable)
+        python = runtimes["installed"]
+
+        def environment(self, *paths):
+            environment = super().environment(*paths)
+            return {**environment, "PYTHONPATH": os.pathsep.join(
+                (environment["PYTHONPATH"], *site.getsitepackages()))}
 
         def cli(self, root, *arguments):
             return {"threads": []}
@@ -555,21 +576,46 @@ def test_upgrade_round_trip_through_the_connector_ends_it_or_restores(comms, tmp
         "" if command[0] == "git" else ran(*command, **options)))
     monkeypatch.setattr(upgrade_bus, "route_readers", lambda: None)
     monkeypatch.setattr(upgrade_bus, "ROUTE", tmp_path / "route.json")
-    stack = Owners(REPO, tmp_path / "home")
+    stack = Owners(REPO, tmp_path / "home", port)
     checkout = tmp_path / "checkout"
     checkout.mkdir()
-
-    def upgrading():
-        return upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
-
-    failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
-    if registered:
-        assert "Upgrade round trip" in upgrading()["round_trip"]
-        assert not list(failed)
-    else:
-        with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
-            upgrading()
-        assert len(list(failed)) == 1
+    service = subprocess.Popen(
+        [runtimes[served_by], "-c", upgrade_bus.CONNECTOR, "serve", "--root", comms.root, "--port", str(port)],
+        env={**stack.environment(), "PYTHONUNBUFFERED": "1"}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        text=True)
+    try:
+        started = ""
+        while "Running on" not in started:
+            line = service.stdout.readline()
+            assert line, started
+            started += line
+        if not registered:
+            # The service had its required caller at startup. The upgrade must
+            # still refuse if that caller is no longer registered at call time.
+            comms.registry.unregister("claude-ai")
+            comms.registry.archive("claude-ai")
+            comms.registry.begin_delete("claude-ai")
+            comms.registry.remove("claude-ai")
+        failed = comms.root.parent.glob(f".{comms.root.name}.failed-*")
+        if not registered:
+            with pytest.raises(UpgradeRefused, match="connector round trip was refused"):
+                upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
+            assert len(list(failed)) == 1
+        elif served_by == "installed":
+            report = upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
+            assert json.loads(report["round_trip"]) == {
+                "round_trip": f"comms_channels read alike through {runtimes['installed']}"}
+            assert not list(failed)
+        else:
+            with pytest.raises(UpgradeRefused, match=f"runs {runtimes['other']}, not the installed"):
+                upgrade_bus.live(checkout, comms.root, "", "", (), stack, stack, None, "worker")
+            assert len(list(failed)) == 1
+    finally:
+        service.terminate()
+        service.wait(timeout=30)
+    reader = Comms(comms.root)
+    assert [name for name in reader.registry.snapshot().threads
+            if list(reader.bus.inbox(name, CommandTarget.named(ANY_CHANNEL.name)))] == []
     assert MaintenanceBarrier(comms.root / "registry.json").read().phase is ReadyPhase
 
 
