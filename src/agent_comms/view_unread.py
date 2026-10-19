@@ -529,10 +529,10 @@ class TranscriptReadState(ThreadOwnedState):
         # cancellation, never this connection, the observer pipe or the owner's locks.
         self._preparation = self._preparation.started(self, needed)
 
-    def _refresh_keys(self, visibility: RosterVisibility) -> Collection[str]:
+    def _refresh_keys(self, visibility: RosterVisibility) -> None:
         changed = self._source_watch.changed_paths()
         invalid = self._source_watch.invalid
-        # P661 gives every RegistryRevision one stable detached snapshot.
+        # Each RegistryRevision owns one stable detached snapshot.
         snapshot = self.registry.snapshot()
         rebuild = invalid
         if snapshot is not self._key_snapshot or visibility != self._key_visibility:
@@ -572,7 +572,6 @@ class TranscriptReadState(ThreadOwnedState):
                 observed = {key: FileRevision.capture(Path(key)) for key in keys.revisions}
                 if observed != keys.revisions:
                     self._thread_keys[name] = keys.refresh(observed)
-        return self._thread_keys.keys()
 
     def counts(self, viewer: str, *, document: ReadDocument,
                visibility: RosterVisibility) -> TranscriptUnread:
@@ -582,25 +581,19 @@ class TranscriptReadState(ThreadOwnedState):
         try:
             if not self._cleanup.alive:
                 raise RuntimeError("Transcript reader is closed")
-            visible = self._refresh_keys(visibility)
+            self._refresh_keys(visibility)
             try:
-                result = self._counts_locked(viewer, document, visible)
+                return self._counts_locked(viewer, document)
             except sqlite3.DatabaseError as error:
                 if error.sqlite_errorcode not in (sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB):
                     CoordinationReadUnavailable.raise_from(error)
                 self._discard_database()
-                result = self._counts_locked(viewer, document, visible)
-            return TranscriptUnread(
-                {name: count for name, count in result.counts.items() if name in visible}
-            )
+                return self._counts_locked(viewer, document)
         finally:
             self._lock.release()
 
-    def _counts_locked(
-        self, viewer: str, document: ReadDocument, visible: Collection[str]
-    ) -> TranscriptUnread:
-        ordered = sorted(self._thread_keys.items(), key=lambda item: item[0] not in visible)
-        revisions = {source: revision for _, keys in ordered
+    def _counts_locked(self, viewer: str, document: ReadDocument) -> TranscriptUnread:
+        revisions = {source: revision for keys in self._thread_keys.values()
                      for source, revision in keys.revisions.items()}
         if not revisions:
             return TranscriptUnread({name: ReplyUnread(0) for name in self._thread_keys})
