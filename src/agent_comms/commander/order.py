@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse, asyncio, os, re, subprocess, sys, time
 from abc import abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
@@ -160,10 +160,6 @@ class Commander(CommanderConfig):
     @property
     def comms(self) -> Comms:
         return self._comms
-
-    @classmethod
-    def of(cls, config: CommanderConfig) -> Commander:
-        return cls.model_construct(**config.model_dump())
 
     def post(self, audience: VerdictAudience, body: str) -> str:
         """Send one message its caller refused with OUTGOING; judge reads it from bus history.
@@ -690,6 +686,7 @@ class Commander(CommanderConfig):
 
         The reason goes on the public record and to the unit that held it."""
         todo = self.comms.goals.todos.get(pid)
+        todo.order.require_withdrawal()
         refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
         self.call(CommsTodoTool(id=pid, operation=WithdrawTodo(
             todo.revision, self.comms.registry.require(self.commander).incarnation, todo.assignment, why,
@@ -714,25 +711,22 @@ class Commander(CommanderConfig):
 @dataclass(frozen=True, kw_only=True)
 class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"):
     """One commander verb: its options are its fields, its parser comes from them, and run() does the work."""
-    context: Commander = field(init=False, repr=False)
     fork: str | None = option("--fork", default=None, help="a forked commander's name; keeps its beat fresh")
 
-    @property
-    def who(self) -> str:
-        return self.fork or self.context.commander
+    def who(self, ctx: Commander) -> str:
+        return self.fork or ctx.commander
 
     def apply(self, ctx: Commander) -> None:
-        object.__setattr__(self, 'context', ctx)
-        self.gate()
-        self.run()
+        self.gate(ctx)
+        self.run(ctx)
 
-    def gate(self) -> None:
-        self.require_commander(self.context.comms.registry.require(self.who))
+    def gate(self, ctx: Commander) -> None:
+        self.require_commander(ctx.comms.registry.require(self.who(ctx)))
         if self.fork:
-            capacity.beat(self.context.state / 'forks', self.fork)
+            capacity.beat(ctx.state / 'forks', self.fork)
 
     @abstractmethod
-    def run(self) -> None: ...
+    def run(self, ctx: Commander) -> None: ...
 
     @classmethod
     def tool(cls) -> str:
@@ -760,10 +754,10 @@ class CommanderVerb(CommanderRole, DeclaredFamily, DeclaredOptions, affix="Verb"
 class RuledVerb(CommanderVerb):
     """HARD RULE: no commander action, mine or a fork's, on rules not re-read in 20 min."""
 
-    def gate(self) -> None:
-        super().gate()
-        for due in RulesDue.violations(self.context.comms, self.who):
-            flag = '' if self.who == self.context.commander else f' --fork {self.who}'
+    def gate(self, ctx: Commander) -> None:
+        super().gate(ctx)
+        for due in RulesDue.violations(ctx.comms, self.who(ctx)):
+            flag = '' if self.who(ctx) == ctx.commander else f' --fork {self.who(ctx)}'
             sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
                      f' rules review{flag}, then answer each drawn rule{flag}.')
 
@@ -771,10 +765,10 @@ class RuledVerb(CommanderVerb):
 class LoadedVerb(RuledVerb):
     """HARD RULE: overloaded means fork, not more orders from me; a fork is never blocked."""
 
-    def gate(self) -> None:
-        super().gate()
+    def gate(self, ctx: Commander) -> None:
+        super().gate(ctx)
         if not self.fork:
-            capacity.Load.of(self.context.comms, self.context.commander, self.context.state / 'forks').require()
+            capacity.Load.of(ctx.comms, ctx.commander, ctx.state / 'forks').require()
 
 
 class OrderVerb(CommanderVerb):
@@ -795,8 +789,8 @@ class SendVerb(OrderVerb, LoadedVerb):
     traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
                                 help="the first failing source line, required after two owners")
 
-    def run(self) -> None:
-        self.context.send(self.unit, self.due, Path(self.body_file).read_text(), clean=self.clean,
+    def run(self, ctx: Commander) -> None:
+        ctx.send(self.unit, self.due, Path(self.body_file).read_text(), clean=self.clean,
              mechanical=self.mechanical, reassign=self.reassign, traced=self.traced,
              replaces=self.replaces, disk=self.disk)
 
@@ -808,11 +802,11 @@ class StrikeVerb(OrderVerb, RuledVerb):
     why: str = option("--why")
     caught: str = option("--caught", default='review', help='"WHO at STAGE"; stage is review/install/live/user')
 
-    def run(self) -> None:
+    def run(self, ctx: Commander) -> None:
         references = set(re.findall(r'\bP\d+\b', self.why))
         if len(references) != 1:
             sys.exit('Refused: name exactly one problem in --why; strikes count per problem.')
-        self.context.strike(self.unit, references.pop(), self.why, self.caught)
+        ctx.strike(self.unit, references.pop(), self.why, self.caught)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -821,8 +815,8 @@ class FireVerb(OrderVerb, RuledVerb):
     unit: str = option("unit")
     why: str = option("--why")
 
-    def run(self) -> None:
-        self.context.fire(self.unit, self.why)
+    def run(self, ctx: Commander) -> None:
+        ctx.fire(self.unit, self.why)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -833,8 +827,8 @@ class UnstrikeVerb(OrderVerb, RuledVerb):
     at: str | None = option("--at", default=None,
                             help="HH:MM the strike was recorded; default the newest")
 
-    def run(self) -> None:
-        self.context.unstrike(self.pid, self.why, self.at)
+    def run(self, ctx: Commander) -> None:
+        ctx.unstrike(self.pid, self.why, self.at)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -844,8 +838,8 @@ class DueVerb(OrderVerb, RuledVerb):
     at: str = option("at", help="HH:MM the order is now due")
     why: str = option("--why")
 
-    def run(self) -> None:
-        self.context.due(self.pid, self.at, self.why)
+    def run(self, ctx: Commander) -> None:
+        ctx.due(self.pid, self.at, self.why)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -854,8 +848,8 @@ class InstallVerb(RuledVerb):
     at: str = option("at", help="HH:MM the install is due")
     installer: str = option("installer", help="the unit that runs the install")
 
-    def run(self) -> None:
-        PlannedInstallDeadline(deadline(self.at), self.installer).plan(self.context.comms.root)
+    def run(self, ctx: Commander) -> None:
+        PlannedInstallDeadline(deadline(self.at), self.installer).plan(ctx.comms.root)
         print(f'install due {self.at}, run by {self.installer}')
 
 
@@ -867,8 +861,8 @@ class WithdrawVerb(OrderVerb, RuledVerb):
     superseded_by: str | None = option("--superseded-by", default=None, metavar="PID",
                                        help="the problem that already owns this fix")
 
-    def run(self) -> None:
-        self.context.withdraw(self.pid, self.why, self.superseded_by)
+    def run(self, ctx: Commander) -> None:
+        ctx.withdraw(self.pid, self.why, self.superseded_by)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -883,9 +877,9 @@ class DoneVerb(OrderVerb, RuledVerb):
     seen: str = option("--seen", default="")
     repo: str = option("--repo", default="", help="the recorded order check directory")
 
-    def run(self) -> None:
-        todo = self.context.comms.goals.todos.resolve_order(self.context.comms.registry.require(self.context.commander).incarnation, self.unit, self.message)
-        self.context.done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
+    def run(self, ctx: Commander) -> None:
+        todo = ctx.comms.goals.todos.resolve_order(ctx.comms.registry.require(ctx.commander).incarnation, self.unit, self.message)
+        ctx.done(todo.id, self.sha, self.screenshot, self.seen, self.repo)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -895,9 +889,9 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
     title: str = option("--title")
     body_file: str = option("--body-file")
 
-    def run(self) -> None:
-        todo = self.context.comms.goals.todos.get(self.pid)
-        checkout = self.context.comms.registry.storage_rule.order_checkout(todo.holder, todo.id)
+    def run(self, ctx: Commander) -> None:
+        todo = ctx.comms.goals.todos.get(self.pid)
+        checkout = ctx.comms.registry.storage_rule.order_checkout(todo.holder, todo.id)
         print(todo.order.open_pull_request(
             todo, checkout, self.title, Path(self.body_file).read_text()))
 
@@ -909,8 +903,8 @@ class CheckVerb(OrderVerb, RuledVerb):
     check: str = option("--check", help='"<repo> :: <shell command> -> <integer>"')
     why: str = option("--why", help="what was wrong with the recorded check")
 
-    def run(self) -> None:
-        self.context.correct_check(self.pid, self.check, self.why)
+    def run(self, ctx: Commander) -> None:
+        ctx.correct_check(self.pid, self.check, self.why)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -919,8 +913,8 @@ class ServeVerb(OrderVerb, RuledVerb):
     pid: str = option("pid")
     phase: str = option("phase", help="one of " + ", ".join(OrderPhase.names()))
 
-    def run(self) -> None:
-        self.context.call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
+    def run(self, ctx: Commander) -> None:
+        ctx.call(CommsOrderServeTool(problem=self.pid, serves=OrderPhase.member_named(self.phase)))
         print(f'{self.pid} serves {self.phase}')
 
 
@@ -930,8 +924,8 @@ class SayVerb(OrderVerb, LoadedVerb):
     units: str = option("units", metavar="UNIT[,UNIT]")
     body_file: str = option("body_file", metavar="BODYFILE")
 
-    def run(self) -> None:
-        self.context.say(self.units, self.body_file)
+    def run(self, ctx: Commander) -> None:
+        ctx.say(self.units, self.body_file)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -944,8 +938,8 @@ class ProblemVerb(OrderVerb, LoadedVerb):
     where: str = option("--where", help="the actual file:line where this problem occurs")
     disk: bool = option("--disk", default=False)
 
-    def run(self) -> None:
-        self.context.problem(self.text, self.to, self.due, self.order, self.where, self.disk)
+    def run(self, ctx: Commander) -> None:
+        ctx.problem(self.text, self.to, self.due, self.order, self.where, self.disk)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -955,8 +949,8 @@ class DropVerb(OrderVerb, RuledVerb):
     message: str = option("message")
     by: str = option("--by")
 
-    def run(self) -> None:
-        self.context.comms.goals.todos.drop(self.context.comms.registry.require(self.context.commander).incarnation, self.unit, self.message, self.by)
+    def run(self, ctx: Commander) -> None:
+        ctx.comms.goals.todos.drop(ctx.comms.registry.require(ctx.commander).incarnation, self.unit, self.message, self.by)
         print(f'{self.unit}: {self.message} replaced by {self.by}')
 
 
@@ -967,8 +961,8 @@ class FoldVerb(OrderVerb, RuledVerb):
     into: str = option("--into")
     why: str = option("--why")
 
-    def run(self) -> None:
-        self.context.comms.goals.todos.fold(self.context.comms.registry.require(self.context.commander).incarnation, self.pid, self.into, self.why)
+    def run(self, ctx: Commander) -> None:
+        ctx.comms.goals.todos.fold(ctx.comms.registry.require(ctx.commander).incarnation, self.pid, self.into, self.why)
         print(f'{self.pid} folded into {self.into}')
 
 
@@ -979,8 +973,8 @@ class LinkVerb(OrderVerb, RuledVerb):
     unit: str = option("unit")
     message: str = option("message")
 
-    def run(self) -> None:
-        self.context.comms.goals.todos.link(self.context.comms.registry.require(self.context.commander).incarnation, self.pid, self.unit, self.message)
+    def run(self, ctx: Commander) -> None:
+        ctx.comms.goals.todos.link(ctx.comms.registry.require(ctx.commander).incarnation, self.pid, self.unit, self.message)
         print(f'{self.pid} held by {self.unit} through {self.message}')
 
 
@@ -991,8 +985,8 @@ class CloseVerb(OrderVerb, RuledVerb):
     works: str = option("--works")
     artifact: str = option("--artifact", default="", help="defaults to the file recorded by done --seen")
 
-    def run(self) -> None:
-        self.context.close(self.pid, self.works, self.artifact)
+    def run(self, ctx: Commander) -> None:
+        ctx.close(self.pid, self.works, self.artifact)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1008,30 +1002,30 @@ class HuntVerb(OrderVerb, LoadedVerb):
         return (f'HUNT DUE (none in 15 min): read {where} for per-event or per-history work '
                 f'or slop, then {cls.usage()}')
 
-    def run(self) -> None:
-        self.context.hunt(self.where, self.why, self.sent)
+    def run(self, ctx: Commander) -> None:
+        ctx.hunt(self.where, self.why, self.sent)
 
 
 class NextHuntVerb(OrderVerb, declared_name="next-hunt"):
     help = "print the next place to hunt"
 
-    def run(self) -> None:
-        print(self.context.next_hunt())
+    def run(self, ctx: Commander) -> None:
+        print(ctx.next_hunt())
 
 
 class BoardVerb(OrderVerb):
     help = "show the fleet board generated from Core's Todo store"
 
-    def run(self) -> None:
-        self.context.write_board()
-        print(self.context.board.read_text(), end='')
+    def run(self, ctx: Commander) -> None:
+        ctx.write_board()
+        print(ctx.board.read_text(), end='')
 
 
 class OverdueVerb(OrderVerb):
     help = "loop: every minute, name units past their deadline"
 
-    def run(self) -> None:
-        self.context.overdue()
+    def run(self, ctx: Commander) -> None:
+        ctx.overdue()
 
 
 def main(a, commander: Commander):

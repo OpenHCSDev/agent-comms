@@ -36,7 +36,8 @@ def test_two_commands_in_one_process_keep_their_explicit_roots(commander_script,
     other.goals.update_goal('other-lead', SetGoalAction(
         text='The other root has its own owner request', goal_id='other-request', order=RequestGoalOrder()))
     config = first.model_copy(update={'root': other.root, 'commander': 'other-lead'})
-    second = Commander.of(config)
+    config.write(tmp_path / 'other-home')
+    second = Commander.read_root(other.root)
     RequestVerb.parse(['list'], '').apply(first)
     assert capsys.readouterr().out == 'request Owner request\n'
     RequestVerb.parse(['list'], '').apply(second)

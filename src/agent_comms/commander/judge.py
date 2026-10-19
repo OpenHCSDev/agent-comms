@@ -125,15 +125,15 @@ class ShowVerb(JudgeVerb):
     def selects(self, edit: Edit) -> bool:
         return not self.thread or edit.thread == self.thread
 
-    def run(self) -> None:
-        show(self.context, [edit for edit in Edit.unjudged(self.context.comms, self.context.commander) if self.selects(edit)])
+    def run(self, ctx: order.Commander) -> None:
+        show(ctx, [edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if self.selects(edit)])
 
 
 class AlarmVerb(JudgeVerb):
     help = "loop: every minute, name edits unjudged for 5 min"
 
-    def run(self) -> None:
-        alarm(self.context)
+    def run(self, ctx: order.Commander) -> None:
+        alarm(ctx)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -147,19 +147,19 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         "--line", action="append", metavar="LINE", help="an exact diff line; repeat for each")
 
     @abstractmethod
-    def operation(self, todo: Todo, edit_id: str) -> OrderVerdict: ...
+    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> OrderVerdict: ...
 
     @abstractmethod
     def check_edits(self, edits: list[Edit]) -> None: ...
 
     @abstractmethod
-    def report(self, todos: tuple[Todo, ...]) -> None: ...
+    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None: ...
 
-    def run(self) -> None:
+    def run(self, ctx: order.Commander) -> None:
         if len(self.why.split()) < 6:
             sys.exit('Refused: state which intent the edit serves or violates, and why (6+ words).')
-        orders = {todo.id: todo for todo in self.context.held_orders() if not self.msg or todo.sent_in(self.msg)}
-        edits = {edit.id: edit for edit in Edit.unjudged(self.context.comms, self.context.commander) if edit.problem in orders}
+        orders = {todo.id: todo for todo in ctx.held_orders() if not self.msg or todo.sent_in(self.msg)}
+        edits = {edit.id: edit for edit in Edit.unjudged(ctx.comms, ctx.commander) if edit.problem in orders}
         ids = [token.split(':')[0] for token in self.ids]
         if missing := [i for i in ids if i not in edits]:
             sys.exit(f'Refused: unknown edit ids {missing}')
@@ -173,14 +173,14 @@ class VerdictVerb(JudgeVerb, RuledVerb):
         self.check_edits([edits[i] for i in ids])
         # Validate the whole batch through the operation owner before its first write.
         for i, todo in selected.items():
-            self.operation(todo, i).prepare(self.context.comms.goals, todo).apply(todo)
+            self.operation(ctx, todo, i).prepare(ctx.comms.goals, todo).apply(todo)
         current = {todo.id: todo for todo in selected.values()}
         for i, todo in selected.items():
-            result = self.context.call(CommsVerdictTool(id=todo.id, operation=self.operation(current[todo.id], i)))
+            result = ctx.call(CommsVerdictTool(id=todo.id, operation=self.operation(ctx, current[todo.id], i)))
             current[todo.id] = result.todo
-        left = len(Edit.unjudged(self.context.comms, self.context.commander))
+        left = len(Edit.unjudged(ctx.comms, ctx.commander))
         print(f'{self.declared_name}: {len(ids)} edits; {left} still unjudged')
-        self.report(tuple(current.values()))
+        self.report(ctx, tuple(current.values()))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -190,8 +190,8 @@ class OkVerb(VerdictVerb):
     no_owner: str = option("--no-owner", default="", help="12+ words with because and absolute file:line")
     peer: str = option("--peer", default="", help="another sender's retained order message to the unit")
 
-    def operation(self, todo: Todo, edit_id: str) -> AcceptedVerdict:
-        actor = self.context.comms.registry.require(self.context.commander).incarnation
+    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> AcceptedVerdict:
+        actor = ctx.comms.registry.require(ctx.commander).incarnation
         if self.peer:
             return PeerAcceptedVerdict(todo.revision, actor, todo.held(), edit_id,
                                        quote=self.serves, peer=self.peer)
@@ -205,7 +205,7 @@ class OkVerb(VerdictVerb):
                 sys.exit(f'Refused: edit {edit.id} adds forwarders {added[:5]}; it goes back with judge back, never ok')
             AcceptedVerdict.require_branches(edit.branches_added(), self.no_owner)
 
-    def report(self, todos: tuple[Todo, ...]) -> None:
+    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
         pass
 
 
@@ -214,14 +214,14 @@ class SupersededVerb(VerdictVerb):
     help = "the task moved to another unit; these edits are neither ok nor sent back"
     by: str = option("--by", help="the replacing order's message")
 
-    def operation(self, todo: Todo, edit_id: str) -> SupersededVerdict:
-        return SupersededVerdict(todo.revision, self.context.comms.registry.require(self.context.commander).incarnation,
+    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SupersededVerdict:
+        return SupersededVerdict(todo.revision, ctx.comms.registry.require(ctx.commander).incarnation,
                                  todo.held(), edit_id, replacement=self.by, reason=self.why)
 
     def check_edits(self, edits: list[Edit]) -> None:
         pass
 
-    def report(self, todos: tuple[Todo, ...]) -> None:
+    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
         pass
 
 
@@ -241,8 +241,8 @@ class BackVerb(VerdictVerb):
         return FieldCodec.decode(Slop, dict(kind=self.slop_kind, fact=self.fact,
                                            at=self.at, derive=self.derive, by=self.by))
 
-    def operation(self, todo: Todo, edit_id: str) -> SendBackVerdict:
-        return SendBackVerdict(todo.revision, self.context.comms.registry.require(self.context.commander).incarnation,
+    def operation(self, ctx: order.Commander, todo: Todo, edit_id: str) -> SendBackVerdict:
+        return SendBackVerdict(todo.revision, ctx.comms.registry.require(ctx.commander).incarnation,
                                todo.held(), edit_id,
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 
@@ -255,14 +255,14 @@ class BackVerb(VerdictVerb):
         order.refuse(self.roast, BluntText)
         order.refuse(' '.join((self.why, self.roast, self.fix)), *order.OUTGOING)
 
-    def report(self, todos: tuple[Todo, ...]) -> None:
+    def report(self, ctx: order.Commander, todos: tuple[Todo, ...]) -> None:
         for todo in todos:
             audience = todo.verdicts[-1].audience.of(todo.held().owner, todo.goal)
-            roast(self.context, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
+            roast(ctx, audience, todo.holder, self.lines, self.roast, self.fix, self.slop())
             line = (f'{time.strftime("%Y-%m-%d %H:%M")} {todo.holder} '
-                    f'(strike {todo.strike_count} on {todo.id}; caught by {self.context.commander} at review): '
+                    f'(strike {todo.strike_count} on {todo.id}; caught by {ctx.commander} at review): '
                     f'{todo.strikes[-1].reason}')
-            self.context.on_record(line, 'Send-back', audience)
+            ctx.on_record(line, 'Send-back', audience)
 
 
 def main(args, commander):

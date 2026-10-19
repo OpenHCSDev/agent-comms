@@ -1329,7 +1329,7 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
                 judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
         command = judge.JudgeVerb.parse(argv, '')
         object.__setattr__(command, 'context', script)
-        operation = command.operation(comms.goals.todos.get('P1'), f'toolu_{name}')
+        operation = command.operation(script, comms.goals.todos.get('P1'), f'toolu_{name}')
         CommsVerdictTool(id='P1', operation=operation).apply(comms, caller)
         assert comms.goals.todos.get('P1').verdicts[-1] == operation
 
