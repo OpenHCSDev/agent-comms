@@ -152,7 +152,7 @@ class TextPart(TextualPart):
         return self.sessionID == session and self.text == text
 
     def prompted(self) -> tuple[TranscriptUpdate, ...]:
-        return (HiddenItem((UserTranscript(self.text),)),)
+        return (HiddenItem((UserTranscript(self.text, position=-1),)),)
 
     def summarized(self) -> tuple[TranscriptUpdate, ...]:
         return (Summarized(self.text),)
@@ -264,7 +264,7 @@ class FilePart(StructuralPart):
 
     def prompted(self) -> tuple[TranscriptUpdate, ...]:
         return (HistoryNotice('Attachment contents are not imported; source references are retained.'),
-                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]'),)))
+                HiddenItem((ContextTranscript(f'[Historical attachment: {self.filename or self.mime}]', position=-1),)))
 
 
 class AgentPart(StructuralPart):

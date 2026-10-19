@@ -81,7 +81,7 @@ class UserMessageItem(MessageItem):
     wire_tag = 'message/user'
 
     def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
-        return (FinishedItem('', self.id, (UserTranscript(self.text),)),)
+        return (FinishedItem('', self.id, (UserTranscript(self.text, position=-1),)),)
 
     def request(self) -> str:
         return self.text
@@ -91,7 +91,7 @@ class AssistantMessageItem(MessageItem):
     wire_tag = 'message/assistant'
 
     def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
-        return (FinishedItem('', self.id, (AssistantTranscript(self.text),)),)
+        return (FinishedItem('', self.id, (AssistantTranscript(self.text, position=-1),)),)
 
 
 class InstructionMessage(MessageItem, ABC):
@@ -127,7 +127,7 @@ class FunctionCallItem(RolloutItem):
     def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
         state.tools[self.call_id] = self.name
         return (FinishedItem('', self.call_id, (ToolStartTranscript(
-            tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
+            position=-1, tool_call_id=self.call_id, tool_name=self.name, raw_input=self.raw_input,
             tool=ToolDeclaration.record(self.name, self.raw_input)),)),)
 
 
@@ -145,7 +145,7 @@ class FunctionCallOutputItem(RolloutItem):
     def updates(self, state: RolloutState) -> tuple[TranscriptUpdate, ...]:
         text = self.output if isinstance(self.output, str) else json.dumps(self.output, ensure_ascii=False)
         return (FinishedItem('', self.call_id + ':result', (ToolEndTranscript(
-            tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
+            position=-1, tool_call_id=self.call_id, tool_name=state.tools.get(self.call_id, ''), text=text),)),)
 
 
 class CustomToolCallOutputItem(FunctionCallOutputItem):

@@ -71,9 +71,7 @@ class ImportedReply(ImportedMessage):
 
 @dataclass(frozen=True, kw_only=True)
 class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
-    # Import parts and the prefix precede journal rows; saved projections supply
-    # the required file position through TranscriptProjection.
-    position: int = 0
+    position: int
     routing = None
     source = None
     timestamp = None

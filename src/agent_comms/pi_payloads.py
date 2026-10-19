@@ -673,7 +673,7 @@ class AssistantMessage(PiMessage):
 
     @property
     def error_notice(self) -> str:
-        return (self.error_message or "").strip() if self.stop_reason.failed else ""
+        return self.stop_reason.error_notice(self)
 
     @property
     def unread_reply(self) -> bool:

@@ -346,7 +346,7 @@ class UserItem(Item):
     clientId: str | None = None
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (UserTranscript('\n'.join(part.display for part in self.content)),)
+        return (UserTranscript('\n'.join(part.display for part in self.content), position=-1),)
 
     def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> TranscriptUpdate:
         # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
@@ -530,7 +530,7 @@ class FunctionOutputItem(Item):
     output: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (ToolEndTranscript(tool_call_id=self.id, tool_name=self.name, text=self.output),)
+        return (ToolEndTranscript(position=-1, tool_call_id=self.id, tool_name=self.name, text=self.output),)
 
 
 class SendOutputItem(FunctionOutputItem):
@@ -546,7 +546,7 @@ class CompactionItem(Item):
     doing = 'Compacting context'
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript('Context compacted.'),)
+        return (NoticeTranscript('Context compacted.', position=-1),)
 
 
 class HookPromptItem(Item):
@@ -561,7 +561,7 @@ class ReviewBody(WireModel):
     review: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(self.review),)
+        return (NoticeTranscript(self.review, position=-1),)
 
 
 class EnteredReviewItem(ReviewBody, Item):
@@ -577,7 +577,7 @@ class SleepItem(Item):
     durationMs: int
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).'),)
+        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).', position=-1),)
 
     @property
     def activity_detail(self) -> str:
@@ -589,7 +589,7 @@ class ImageViewItem(Item):
     path: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Image: {self.path}'),)
+        return (NoticeTranscript(f'Image: {self.path}', position=-1),)
 
 
 class ImageGenerationItem(Item):
@@ -600,7 +600,7 @@ class ImageGenerationItem(Item):
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'Image generation: {self.status}' +
-                                 (f' — {self.savedPath}' if self.savedPath else '')),)
+                                 (f' — {self.savedPath}' if self.savedPath else ''), position=-1),)
 
 
 class WebSearchItem(Item):
@@ -611,7 +611,7 @@ class WebSearchItem(Item):
 
     def events(self) -> tuple[TranscriptEvent, ...]:
         # Search status carries no success flag. Do not invent a successful end.
-        return (NoticeTranscript(f'Web search: {self.query}'),)
+        return (NoticeTranscript(f'Web search: {self.query}', position=-1),)
 
     @property
     def activity_detail(self) -> str:
@@ -690,7 +690,7 @@ class AgentToolItem(Item):
     def events(self) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'{self.tool}: {self.status}\n' + '\n'.join(
             f'{name}: {state.status}' + (f' — {state.message}' if state.message else '')
-            for name, state in self.agentsStates.items())),)
+            for name, state in self.agentsStates.items()), position=-1),)
 
 
 class AgentActivityItem(Item):
@@ -700,7 +700,7 @@ class AgentActivityItem(Item):
     kind: str
 
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'{self.agentPath}: {self.kind}'),)
+        return (NoticeTranscript(f'{self.agentPath}: {self.kind}', position=-1),)
 
 
 # The existing registration owner derives this wire grammar from declarations.

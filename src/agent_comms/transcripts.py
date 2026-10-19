@@ -563,8 +563,8 @@ class Transcripts:
         if not thread.parent:
             return ()
         return (
-            NoticeTranscript(f"Forked from @{thread.parent}. This thread started with:"),
-            *((UserTranscript(thread.task),) if thread.task else ()),
+            NoticeTranscript(f"Forked from @{thread.parent}. This thread started with:", position=-2),
+            *((UserTranscript(thread.task, position=-1),) if thread.task else ()),
         )
 
     def thread_transcript_page(

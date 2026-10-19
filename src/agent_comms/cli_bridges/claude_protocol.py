@@ -296,7 +296,7 @@ class AssistantText(AssistantBlock, TextContent):
     wire_tag = 'text'
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp),))
+        return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=-1),))
 
 
 class RedactedThinking(AssistantBlock):
@@ -315,7 +315,7 @@ class ThinkingBlock(RedactedThinking):
         if not self.thinking:
             return activity
         return (*activity, *session.finished(
-            record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp),)))
+            record.uuid, (ThinkingTranscript(self.thinking, timestamp=record.timestamp, position=-1),)))
 
 
 class ToolUse(AssistantBlock):
@@ -413,7 +413,7 @@ class AgentPrompt(Prompting):
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp),)),)
+        return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=-1),)),)
 
 
 class HumanPrompt(Prompting):
@@ -422,7 +422,7 @@ class HumanPrompt(Prompting):
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
         return (TurnStarted(), *session.finished(
-            record.uuid, (UserTranscript(text, timestamp=record.timestamp),)))
+            record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=-1),)))
 
 
 class TaskNotification(PromptOrigin):
@@ -450,7 +450,7 @@ class ToolSupplied(Prompting):
 
     def prompt(self, record: TimedRecord, text: str,
                session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp),)))
+        return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=-1),)))
 
 
 class UserBlock(TaggedWire, ABC):
@@ -626,7 +626,7 @@ class CompactBoundary(SystemEvent, TimedRecord):
     wire_tag = 'compact_boundary'
 
     def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
-        return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp),))
+        return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp, position=-1),))
 
     def begins_history(self) -> bool:
         return True

@@ -177,9 +177,9 @@ class ToolCall:
         return ToolDeclaration.caption(self.name, self.tool)
 
     def finished(self, text: str, ok: bool) -> tuple[TranscriptEvent, ...]:
-        return (ToolStartTranscript(tool_call_id=self.id, tool_name=self.name,
+        return (ToolStartTranscript(position=-2, tool_call_id=self.id, tool_name=self.name,
                                     raw_input=self.arguments, tool=self.tool),
-                ToolEndTranscript(tool_call_id=self.id, tool_name=self.name,
+                ToolEndTranscript(position=-1, tool_call_id=self.id, tool_name=self.name,
                                   text=text, ok=ok, diff=self.diff))
 
 
