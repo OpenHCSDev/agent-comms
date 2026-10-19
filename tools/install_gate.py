@@ -15,6 +15,7 @@ import ast
 import json
 import os
 import shlex
+import shutil
 import signal
 import subprocess
 import sys
@@ -28,6 +29,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 CONTEXT = "install-rehearsal"
 SNAPSHOT = Path(__file__).with_name("install_snapshot.py")
+SNAPSHOT_SOURCE = SNAPSHOT.read_bytes()
 INSTALLER = Path("tools/upgrade_bus.py")
 DEFAULT_SCRATCH = Path.home() / ".cache/agent-scratch/pi-install-gate"
 
@@ -44,21 +46,28 @@ class InstallSurface:
     revision: str
 
     def paths(self) -> set[str]:
-        tracked = set(run("git", "ls-tree", "-r", "--name-only", self.revision,
-                          cwd=self.repo).splitlines())
+        tracked = set(filter(None, run("git", "ls-tree", "-r", "-z", "--name-only", self.revision,
+                                       cwd=self.repo).split("\0")))
         selected: set[str] = set()
+        members: dict[str, set[str]] = {}
+        for path in tracked:
+            for prefix in (Path(path), *Path(path).parents):
+                members.setdefault(str(prefix), set()).add(path)
 
         def include(value: str) -> None:
-            if value and value not in (".", "..") and not value.startswith("/"):
-                selected.update(p for p in tracked if p == value or p.startswith(value.rstrip("/") + "/"))
+            value = value.rstrip("/")
+            if value not in (".", ".."):
+                selected.update(members.get(value, ()))
 
         def read(path: str) -> str:
             return run("git", "show", f"{self.revision}:{path}", cwd=self.repo)
 
         include("pyproject.toml")
+        include(".gitmodules")
         project = tomllib.loads(read("pyproject.toml"))
         build = project["tool"]["hatch"]["build"]
         wheel = build["targets"]["wheel"]
+        source_roots = {Path(path).parent for path in wheel["packages"]}
         for path in wheel["packages"]:
             include(path)
         for path in wheel.get("force-include", {}):
@@ -93,21 +102,24 @@ class InstallSurface:
                         candidates = [module.with_suffix(".py"), module / "__init__.py"]
                     else:
                         module = (node.module or "").replace(".", "/")
-                        candidates = [parent / (module + ".py"), Path(module + ".py"),
-                                      parent / module / "__init__.py"]
+                        candidates = [root / candidate for root in (parent, Path(), *source_roots)
+                                      for candidate in (Path(module + ".py"), Path(module) / "__init__.py")]
+                    # `from package import child` may import a module, not a symbol.
+                    stems = [candidate.parent for candidate in candidates if candidate.name == "__init__.py"]
+                    candidates.extend(stem / (alias.name + ".py") for stem in stems for alias in node.names)
                     pending.extend(str(candidate) for candidate in candidates if str(candidate) in tracked)
                 if isinstance(node, ast.Import):
                     for alias in node.names:
                         module = alias.name.replace(".", "/") + ".py"
-                        pending.extend(candidate for candidate in (module, str(Path(path).parent / module))
-                                       if candidate in tracked)
+                        pending.extend(str(root / module) for root in (Path(path).parent, Path(), *source_roots)
+                                       if str(root / module) in tracked)
         # No second list of carry modules: a declared directory admits future steps.
         return selected
 
 
 def affected(repo: Path, base: str, head: str) -> list[str]:
-    changed = set(run("git", "diff", "--name-only", "--no-renames", base, head,
-                      cwd=repo).splitlines())
+    changed = set(filter(None, run("git", "diff", "--name-only", "-z", "--no-renames", base, head,
+                                  cwd=repo).split("\0")))
     return sorted(changed & (InstallSurface(repo, base).paths() | InstallSurface(repo, head).paths()))
 
 
@@ -140,7 +152,11 @@ class Machine:
     transport: tuple[str, ...] = ()
 
     def capture(self, destination: Path, log: Path) -> dict:
+        from agent_comms.storage_rules import StorageRule
+
         destination.mkdir(mode=0o700)
+        floor = StorageRule.load(Path.home() / ".agent-comms").floor_gib * 2**30
+        captured = 0
         command = ["bwrap", "--ro-bind", "/", "/", "--unshare-all", "--die-with-parent",
                    "/usr/bin/python3", "-I", "-B", "-", self.root]
         if self.transport:
@@ -149,13 +165,18 @@ class Machine:
         # update even its SHM file; WAL mode uses SQLite's read-only reader path.
         with log.open("wb") as errors, child(command, stdin=subprocess.PIPE,
                                                stdout=subprocess.PIPE, stderr=errors) as process:
-            process.stdin.write(SNAPSHOT.read_bytes())
+            process.stdin.write(SNAPSHOT_SOURCE)
             process.stdin.close()
             with tarfile.open(fileobj=process.stdout, mode="r|*") as archive:
                 for entry in archive:
                     if not (entry.isfile() or entry.isdir()):
                         raise ValueError("Snapshot contains a link or special file")
+                    # Reserve the second copy the installer itself will make,
+                    # using the storage owner's configured free-space floor.
+                    if shutil.disk_usage(destination).free < captured + 2 * entry.size + floor:
+                        raise RuntimeError(f"Insufficient room for snapshot and rehearsal at {destination}")
                     archive.extract(entry, destination, filter="data")
+                    captured += entry.size
             if process.wait() != 0:
                 raise RuntimeError(f"{self.name} snapshot failed; see private log {log}")
         context = json.loads((destination / "context.json").read_text())
@@ -165,25 +186,33 @@ class Machine:
 
 
 def prepare_home(home: Path, bus: Path, context: dict) -> None:
-    home.mkdir(mode=0o700)
+    home.mkdir(mode=0o700, exist_ok=True)
     # Preserve each machine's route selection, rebinding only its bus path.
+    path = home / ".local/state/agent-comms/active-route.json"
+    path.unlink(missing_ok=True)
     route = context["route"]
     if route is not None:
         if Path(route["root"]) != Path(context["root"]):
             raise ValueError("Machine's selected route does not select its specified bus")
-        path = home / ".local/state/agent-comms/active-route.json"
-        path.parent.mkdir(mode=0o700, parents=True)
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
         path.write_text(json.dumps({**route, "root": str(bus)}))
         path.chmod(0o600)
     pointer = home / ".local/share/agent-comms/current"
-    pointer.parent.mkdir(mode=0o700, parents=True)
+    pointer.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    pointer.unlink(missing_ok=True)
     # The candidate is built and rehearsed locally. The previous executable is
     # this machine's installed runtime; foreign executable paths are not portable.
     installed = Path.home() / ".local/share/agent-comms/current"
     pointer.symlink_to(installed.resolve(strict=True))
     uv = home / ".local/state/agent-comms/upgrade-bus/uv"
     uv.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    uv.unlink(missing_ok=True)
     uv.symlink_to(Path.home() / ".local/state/agent-comms/upgrade-bus/uv")
+    # Native preparation deliberately installs its pinned MCP dependencies
+    # offline. A synthetic HOME must retain the existing package-manager cache.
+    cache = Path(run("npm", "config", "get", "cache"))
+    if not (home / ".npm").exists() and cache.is_dir():
+        shutil.copytree(cache, home / ".npm", symlinks=True)
 
 
 @contextmanager
@@ -197,13 +226,28 @@ def checkout(repo: Path, revision: str, directory: Path):
 
 def rehearse(target: Path, previous: Path, head: str, bus: Path, home: Path,
              python: Path, log: Path, work: Path) -> dict:
-    environment = {**os.environ, "HOME": str(home), "TMPDIR": str(work),
-                   "PYTHONDONTWRITEBYTECODE": "1"}
-    # The target owns its CLI. Discover the repository option from that CLI,
-    # rather than importing/reimplementing its rehearsal or carry behavior.
-    help_text = run(python, target / INSTALLER, "--help", cwd=target, env=environment)
+    from agent_comms.launch_runtime import RestartEnvironment, ThreadLaunch
+
+    environment = ThreadLaunch.strip(dict(os.environ))
+    RestartEnvironment.strip(environment, "root", "virtual_env", "pythonpath")
+    # A rehearsal is not a child of the gate agent's active turn or tool server.
+    for name in ("AGENT_COMMS_PROJECT_SOCKET", "AGENT_COMMS_PROJECT_REQUEST",
+                 "PI_SESSION_ID", "PI_SESSION_FILE"):
+        environment.pop(name, None)
+    environment.update(HOME=str(home), TMPDIR=str(work), PYTHONDONTWRITEBYTECODE="1",
+                       XDG_CACHE_HOME=str(home / ".cache"), XDG_CONFIG_HOME=str(home / ".config"),
+                       XDG_STATE_HOME=str(home / ".local/state"), UV_CACHE_DIR=str(home / ".cache/uv"),
+                       npm_config_cache=str(home / ".npm"))
+    common = Path(run("git", "rev-parse", "--path-format=absolute", "--git-common-dir", cwd=target))
+    sandbox = ["bwrap", "--ro-bind", "/", "/", "--dev", "/dev", "--die-with-parent"]
+    for directory in dict.fromkeys((work, home, bus.parent, common)):
+        sandbox.extend(("--bind", str(directory), str(directory)))
+    # The installer may write only its private build/copies and Git metadata.
+    # Absolute paths retained inside sessions cannot mutate the original bus.
+    # The target owns its CLI; never import/reimplement its rehearsal behavior.
+    help_text = run(*sandbox, python, target / INSTALLER, "--help", cwd=target, env=environment)
     repo_option = "--repo" if "--repo " in help_text else "--checkout"
-    command = [python, "-X", "faulthandler", target / INSTALLER, repo_option, previous,
+    command = [*sandbox, python, "-X", "faulthandler", target / INSTALLER, repo_option, previous,
                "--root", bus, "--to", head, "--installer", "pi-install-gate", "--rehearse"]
     with log.open("w") as output, child(command, cwd=target, env=environment,
                                          stdout=output, stderr=subprocess.STDOUT) as process:
@@ -236,6 +280,14 @@ def status(repository: str, head: str, state: str, description: str) -> None:
         "-f", f"state={state}", "-f", f"context={CONTEXT}", "-f", f"description={description}")
 
 
+def api_payload(method: str, endpoint: str, payload: dict) -> None:
+    # Give gh a bounded, explicit JSON request file.
+    with tempfile.NamedTemporaryFile(mode="w", dir=REPO, prefix=".install-gate-api-") as request:
+        json.dump(payload, request)
+        request.flush()
+        run("gh", "api", "--method", method, endpoint, "--input", request.name)
+
+
 def require_status(repository: str) -> None:
     # Preserve existing protection. Never replace review/admin/restriction policy.
     response = subprocess.run(["gh", "api", f"repos/{repository}/branches/main/protection"],
@@ -247,16 +299,15 @@ def require_status(repository: str) -> None:
         payload = {"required_status_checks": {"strict": True, "contexts": [CONTEXT]},
                    "enforce_admins": True, "required_pull_request_reviews": None,
                    "restrictions": None}
-        run("gh", "api", "--method", "PUT", f"repos/{repository}/branches/main/protection",
-            "--input", "-", input=json.dumps(payload))
+        api_payload("PUT", f"repos/{repository}/branches/main/protection", payload)
     else:
         checks = json.loads(response.stdout).get("required_status_checks") or {}
         required = checks.get("checks", [{"context": name} for name in checks.get("contexts", [])])
-        if not any(check["context"] == CONTEXT for check in required):
-            required.append({"context": CONTEXT})
-        run("gh", "api", "--method", "PATCH",
-            f"repos/{repository}/branches/main/protection/required_status_checks", "--input", "-",
-            input=json.dumps({"strict": checks.get("strict", False), "checks": required}))
+        if any(check["context"] == CONTEXT for check in required):
+            return
+        required.append({"context": CONTEXT})
+        api_payload("PATCH", f"repos/{repository}/branches/main/protection/required_status_checks",
+                    {"strict": checks.get("strict", False), "checks": required})
 
 
 def main() -> int:
@@ -270,7 +321,7 @@ def main() -> int:
     parser.add_argument("--scratch", type=Path, default=DEFAULT_SCRATCH)
     parser.add_argument("--python", type=Path, default=Path(sys.executable))
     args = parser.parse_args()
-    repository = run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner")
+    repository = run("gh", "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner", cwd=args.repo)
     if args.require_status:
         require_status(repository)
         return 0
@@ -289,6 +340,8 @@ def main() -> int:
     os.umask(0o077)
     receipt = args.scratch / f"receipt-{head[:12]}-{os.getpid()}.json"
     try:
+        if args.pr:
+            run("git", "fetch", "-q", "origin", base, head, cwd=args.repo)
         report["affected"] = affected(args.repo, base, head)
         if args.pr and not report["affected"]:
             report["result"] = "outside install/runtime distribution"
@@ -299,6 +352,8 @@ def main() -> int:
                                  "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "ts@192.168.2.11")))
             # Repository worktrees must remain on persistent /home/ts/wt, not TMPDIR.
             work_root = Path.home() / "wt"
+            report["machines"] = {machine.name: {"passed": False, "error": "Not completed"}
+                                  for machine in machines}
             with tempfile.TemporaryDirectory(dir=work_root, prefix="install-gate-") as source_work:
                 work = Path(source_work)
                 with checkout(args.repo, base, work / "base") as previous, \
@@ -311,7 +366,7 @@ def main() -> int:
                                 directory = Path(directory)
                                 context = machine.capture(directory / "snapshot", log)
                                 bus = directory / "snapshot/bus"
-                                home = directory / "home"
+                                home = work / "home"
                                 prepare_home(home, bus, context)
                                 report["machines"][machine.name] = rehearse(
                                     target, previous, head, bus, home, args.python, log, work)
@@ -321,7 +376,7 @@ def main() -> int:
                 raise RuntimeError("At least one machine failed; see private receipt")
             report["result"] = "both rehearsals passed"
         report["passed"] = True
-    except Exception as error:
+    except (Exception, KeyboardInterrupt) as error:
         report.update(passed=False, error=str(error))
     finally:
         receipt.write_text(json.dumps(report, indent=2) + "\n")

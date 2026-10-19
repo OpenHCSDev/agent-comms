@@ -29,7 +29,8 @@ class InstallGateTests(unittest.TestCase):
         paths = InstallSurface(REPO, "HEAD").paths()
         for path in ("src/agent_comms/active_route.py", "src/agent_comms/owner_cutover.py",
                      "tools/cutover/carry.py", "tools/upgrade_bus.py",
-                     "stack/bin/prepare-pi-native", "hatch_build.py", "pyproject.toml"):
+                     "stack/bin/prepare-pi-native", "hatch_build.py", "pyproject.toml",
+                     "experiments/pi-context-proof/prepare-copied-pi.sh"):
             self.assertIn(path, paths)
         self.assertNotIn("docs/DECISIONS.md", paths)
         self.assertIn("src/agent_comms/active_route.py", affected(REPO, "b5b8de987^", "b5b8de987"))
@@ -91,17 +92,22 @@ class InstallGateTests(unittest.TestCase):
     def test_rehearsal_requires_actual_receipt_not_just_exit_zero(self):
         target = self.root / "target"
         (target / "tools").mkdir(parents=True)
+        subprocess.run(["git", "init", "-q", str(target)], check=True)
+        home = self.root / "home"
+        home.mkdir()
+        bus = self.root / "bus"
+        bus.mkdir()
         installer = target / "tools/upgrade_bus.py"
         installer.write_text("print('{}')\n")
         with self.assertRaisesRegex(RuntimeError, "did not return a rehearsal receipt"):
-            rehearse(target, target, "unused", self.root, self.root, Path(sys.executable),
+            rehearse(target, target, "unused", bus, home, Path(sys.executable),
                       self.root / "rehearse.log", self.root)
         installer.write_text("print('{\"rehearsal\":{\"unchanged\":\"unused\"}}')\n")
         with self.assertRaisesRegex(RuntimeError, "skipped the actual rehearsal"):
-            rehearse(target, target, "unused", self.root, self.root, Path(sys.executable),
+            rehearse(target, target, "unused", bus, home, Path(sys.executable),
                       self.root / "rehearse.log", self.root)
         installer.write_text("print('{\"rehearsal\":{\"steps\":[],\"read\":{},\"files\":{}}}')\n")
-        self.assertTrue(rehearse(target, target, "unused", self.root, self.root,
+        self.assertTrue(rehearse(target, target, "unused", bus, home,
                                  Path(sys.executable), self.root / "rehearse.log", self.root)["passed"])
 
     def test_private_home_rebinds_route_and_preserves_live_pointer(self):
