@@ -1,15 +1,21 @@
-"""Failures use the original turn record; fresh work does not need a restart."""
+"""Escaping faults are settled by the real turn runner, not by the test."""
+import json
 import os
 import shutil
 import time
+from contextlib import AsyncExitStack
+from functools import partial
 
+import pytest
+
+from agent_comms.acp import CommsAgent
 from agent_comms.channels import AllChannel
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.comms import Comms
+from agent_comms.coordinator import Coordination
 from agent_comms.thread_status import RunningThreadStatus
-from agent_comms.turn_lease import FailedTurn, TurnEnding
+from agent_comms.turn_lease import FailedTurn
 from agent_comms.wire_record import WireRecord
-import json
 
 
 def copied_owner(tmp_path, *, parent='commander'):
@@ -27,21 +33,26 @@ def messages(comms):
             for message in WireRecord.public_from_wire(json.loads(line)).messages()]
 
 
-def test_registry_read_failure_ends_loudly_and_new_input_is_independent(tmp_path, monkeypatch):
-    comms = copied_owner(tmp_path)
-    owner = comms.agents.begin_turn('unit', 'failed-one', 'first task')
-    lease = owner.turn_lease
-    before = lease.record.read()
+@pytest.mark.asyncio
+@pytest.mark.parametrize('parent', ['commander', None])
+async def test_registry_read_failure_escapes_real_runner_then_accepts_fresh_dm(tmp_path, monkeypatch, parent):
+    comms = copied_owner(tmp_path, parent=parent)
+    agent = CommsAgent(comms, auto_wake=False, runtime_enabled=False, agent_bin='pi')
+    agent.sessions.bindings['unit'] = 'unit'
     read = comms.registry.require
     def fail_once(name):
         monkeypatch.setattr(comms.registry, 'require', read)
         raise ValueError('P689 injected registry read failure')
-    monkeypatch.setattr(comms.registry, 'require', fail_once)
     started = time.monotonic()
-    try:
-        comms.registry.require('unit')
-    except ValueError as error:
-        comms.agents.finish_turn(lease, TurnEnding.from_exception(error))
+    with pytest.raises(ValueError, match='P689 injected registry read failure'):
+        async with AsyncExitStack() as resources:
+            owner = await Coordination.run_worker(partial(
+                agent.turns.acquire_turn, resources, 'unit', 'unit', 'failed-one', 'first task',
+            ))
+            lease = owner.turn_lease
+            before = lease.record.read()
+            monkeypatch.setattr(comms.registry, 'require', fail_once)
+            await Coordination.run_worker(partial(comms.registry.require, 'unit'))
     assert time.monotonic() - started < 1
     ended = lease.record.read()
     assert isinstance(ended, FailedTurn)
@@ -49,24 +60,15 @@ def test_registry_read_failure_ends_loudly_and_new_input_is_independent(tmp_path
     assert 'P689 injected registry read failure' in ended.error
     assert not comms.registry.require('unit').executing
     notices = messages(comms)
-    assert len(notices) == 1 and notices[0].target == 'commander'
+    assert len(notices) == 1 and notices[0].target == (parent or AllChannel.declared_name)
     assert ended.error in notices[0].body
-    # Closing the same exact original record cannot send the failure twice.
-    comms.agents.finish_turn(lease)
-    assert messages(comms) == notices
     fresh = comms.messaging.send('commander', 'unit', 'Fresh independent DM').message
-    next_owner = comms.agents.begin_turn('unit', 'fresh-two', fresh.body)
-    assert next_owner.turn_lease.identity.generation > lease.identity.generation
-    comms.agents.finish_turn(next_owner.turn_lease)
+    async with AsyncExitStack() as resources:
+        next_owner = await Coordination.run_worker(partial(
+            agent.turns.acquire_turn, resources, 'unit', 'unit', 'fresh-two', fresh.body,
+        ))
+        assert next_owner.turn_lease.identity.generation > lease.identity.generation
     assert lease.record.read() == ended
-    print('P689: registry read failed; failed record and commander alert; fresh DM accepted without stop')
-
-
-def test_parentless_failure_is_posted_to_channel(tmp_path):
-    comms = copied_owner(tmp_path, parent=None)
-    owner = comms.agents.begin_turn('unit', 'parentless-one', 'first task')
-    lease = owner.turn_lease
-    comms.agents.finish_turn(lease, TurnEnding.from_exception(RuntimeError('parentless fault')))
-    notice, = messages(comms)
-    assert notice.target == AllChannel.declared_name and 'parentless fault' in notice.body
+    assert len([m for m in messages(comms) if ended.error in m.body]) == 1
     assert not comms.registry.require('unit').executing
+    print('P689: real runner failed and posted error; fresh DM accepted without stop')
