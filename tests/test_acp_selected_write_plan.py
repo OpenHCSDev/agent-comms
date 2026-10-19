@@ -116,16 +116,16 @@ async def test_public_acp_preplan_one_selected_write_after_verified_fake_native(
         prior_seq = 0
         if scenario == "older_claims":
             for index in range(100):
-                prior_seq = comms.messaging.send_message(
+                prior_seq = comms.messaging.send(
                     "sender", "#team", f"@beta earlier {index}"
-                ).seq
+                ).message.seq
         bus = responder(root, comms.registry)
         if prior_seq:
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 await _accept_visible_deliveries(
                     bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 51003.0).lookup, 0, owner_name="beta"
                 )
-        message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
+        message = comms.messaging.send("sender", "#team", "@beta inspect module.py").message
         with Coordination(str(root / "coordination.sqlite3")) as store:
             await _accept_visible_deliveries(
                 bus, root_id, store.session.path, RecordedThreadIncarnation("fixture", 51003.0).lookup, prior_seq, owner_name="beta"
@@ -331,7 +331,7 @@ async def test_second_pid_public_acp_owner_ipc_preplan(monkeypatch):
                 comms,
             )
             await attached.load_session(str(work), "beta")
-            message = comms.messaging.send_message("sender", "#team", "@beta inspect module.py")
+            message = comms.messaging.send("sender", "#team", "@beta inspect module.py").message
             bus = responder(root, comms.registry)
             with Coordination(str(root / "coordination.sqlite3")) as store:
                 await _accept_visible_deliveries(

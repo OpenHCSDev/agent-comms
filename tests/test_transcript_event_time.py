@@ -22,7 +22,7 @@ def test_original_record_clock_survives_split_and_routed_projection(tmp_path, st
     for name in ("peer", "owner"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     requests = tuple(
-        comms.messaging.send_message("peer", "owner", text) for text in ("first", "second")
+        comms.messaging.send("peer", "owner", text).message for text in ("first", "second")
     )
     entry = NativeEntry.from_wire(
         {

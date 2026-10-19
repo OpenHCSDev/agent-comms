@@ -130,7 +130,7 @@ def test_routed_dependency_source_uses_existing_goal_and_wait_authorities(tmp_pa
     comms.registry.declare(peer)
     peer = comms.registry.require("peer")
     goal = Goal("Wait for peer", "goal", published_seq=0)
-    message = comms.messaging.send_message("peer", "owner", "Result")
+    message = comms.messaging.send("peer", "owner", "Result").message
     wait = RecordedGoalWait(
         goal_id=goal.id,
         wait_id="wait",

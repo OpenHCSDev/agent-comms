@@ -32,16 +32,16 @@ def test_create_claim_competes_before_file_exists_and_releases_without_creation(
             c.registry.declare(c.registry.new_thread(name, frozenset({'team'}), str(work), created_at=created))
         c.messaging.initialize_private_initial_protocol()
         resource = WritableFileClaim(Path("new/nested/file.py"))
-        committed = c.messaging.send_message("a", "#team", "Claim before create", claims=[resource])
+        committed = c.messaging.send("a", "#team", "Claim before create", claims=[resource]).message
         assert not (work / "new").exists()
         projection = Comms(root).bus.log.claim_projection()
         assert projection[str(work / "new/nested/file.py")].seq == committed.seq
         with pytest.raises(ClaimConflict):
-            c.messaging.send_message("b", "#team", "Competing create", claims=[resource])
-        c.messaging.send_message(
+            c.messaging.send("b", "#team", "Competing create", claims=[resource]).message
+        c.messaging.send(
             "a", "#team", "Release unused creation", releases=["new/nested/file.py"]
-        )
-        c.messaging.send_message("b", "#team", "New owner", claims=[resource])
+        ).message
+        c.messaging.send("b", "#team", "New owner", claims=[resource]).message
         assert c.bus.log.claim_projection()[str(work / "new/nested/file.py")].owner == "b"
 
 

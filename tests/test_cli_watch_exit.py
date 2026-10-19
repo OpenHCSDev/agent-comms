@@ -21,7 +21,7 @@ class ReportingBridge(CliBridge):
     async def deliver(self, message):
         raise AssertionError('No message may be delivered in an exit check')
 
-    async def show_sent(self, result, target, body):
+    async def show_sent(self, result):
         raise AssertionError('No send in an exit check')
 
     async def report_failure(self, text):
@@ -72,8 +72,8 @@ async def test_route_writer_delays_delivery_without_starting_a_second_child(tmp_
     from test_bus_route_counts_locking import _case
 
     comms = _case(tmp_path / 'wire', monkeypatch)
-    comms.messaging.send_message('sender', 'recipient', 'second')
-    comms.messaging.send_message('sender', 'recipient', 'third')
+    comms.messaging.send('sender', 'recipient', 'second').message
+    comms.messaging.send('sender', 'recipient', 'third').message
     ready_r, ready_w = os.pipe()
     blocked = asyncio.Event()
     delivered = asyncio.Event()
@@ -207,7 +207,7 @@ async def test_a_watch_pauses_for_an_upgrade_and_resumes_after_its_carry(tmp_pat
             assert CarryLedger(comms.root).applied() == ('carry_probe',)
             assert len(children) == 1 and not task.done()
             maintenance.clear(held)
-            comms.messaging.send_message('sender', 'recipient', 'after')
+            comms.messaging.send('sender', 'recipient', 'after').message
             assert await asyncio.wait_for(arrived.get(), 20) == 'after'
             assert len(children) == 2 and bridge.failures == []
         finally:

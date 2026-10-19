@@ -14,6 +14,7 @@ import aiohttp
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.child_process import ProcessIdentity
 from agent_comms.messages import Message
+from agent_comms.send_result import SendResult
 from agent_comms.cli_protocol import Outcome, DeliveredOutcome
 
 from .history import OnlineHistory, OpenCodeHistory
@@ -223,9 +224,9 @@ class OpenCodeBridge(OpenCodeServer, TranscriptBridge[OpenCodeOptions], declared
             await connection.deliver(IncomingFrame(message).text)
         return DeliveredOutcome
 
-    async def show_sent(self, result: str, target: str, body: str) -> None:
+    async def show_sent(self, result: SendResult) -> None:
         async with self.connection() as connection:
-            await connection.toast(Toast(message=self.sent_text(result, target, body), variant='success'))
+            await connection.toast(Toast(message=self.sent_text(result), variant='success'))
 
     async def report_failure(self, text: str) -> None:
         async with self.connection() as connection:
