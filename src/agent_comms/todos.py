@@ -619,10 +619,9 @@ class DefectText(BluntText):
 
 
 class DirectiveText:
-    """What the commander and claude-ai send units: order send, order say and the connector's
-    send refuse a text failing any of these, and a connector send needs a fresh rules review."""
+    """What the commander and the owner's voice send units: order send, order say and the
+    connector's send refuse a text failing any of these."""
 
-    senders: ClassVar[frozenset[str]] = frozenset({"claude-code", "claude-ai"})
     OUTGOING: ClassVar[tuple[type[OrderWords], ...]] = (
         FairText, HierarchyText, PlainText, OrderText, DefectText)
 

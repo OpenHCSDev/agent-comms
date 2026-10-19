@@ -20,7 +20,7 @@ from agent_comms.storage_rules import UnitStorage
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_status import StoppedThreadStatus
 from agent_comms.todos import CleanHunt, RecordHuntTodo, Todo
-from agent_comms.tool_caller import ThreadCaller
+from agent_comms.connector import CALLER
 from agent_comms.tools import CommsOrderServeTool, CommsRuleReviewTool, CommsSendTool, CommsStandingRulesTool, CommsTodoTool
 
 from test_commander_problem_orders import create, native_judge_edits
@@ -149,7 +149,7 @@ def test_a_claude_ai_directive_passes_the_commanders_directive_wording_and_revie
     """claude-ai's sends through the connector pass the same word checks as order send, and a fresh review."""
     comms, _ = commander
     comms.registry.declare(comms.registry.new_thread("claude-ai", frozenset(), str(tmp_path), created_at=3.0))
-    ai = ThreadCaller("claude-ai")
+    ai = CALLER
 
     def send(body):
         return CommsSendTool(sender="claude-ai", target="worker", body=body).apply(comms, ai)

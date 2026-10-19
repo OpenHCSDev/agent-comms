@@ -44,6 +44,9 @@ class ToolCaller(ABC):
     @abstractmethod
     def may_reconfigure(self, comms: Comms, name: str) -> bool: ...
 
+    def require_directive(self, comms: Comms, body: str) -> None:
+        """A caller whose sends direct units refuses a body its directive checks refuse."""
+
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):

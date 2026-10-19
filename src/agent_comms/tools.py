@@ -1042,6 +1042,17 @@ class CommsRenameSelfTool(ThreadToolRequest):
         return comms.threads.rename_self(self.new_name, caller=caller)
 
 
+@dataclass(frozen=True)
+class DirectiveCaller(ThreadCaller):
+    """The owner's voice: each send directs a unit, so it passes DirectiveText and needs this
+    caller's rules review, drawn, answered and under 20 minutes old."""
+
+    def require_directive(self, comms: Comms, body: str) -> None:
+        due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
+        if refused := (*DirectiveText.refused(body), *due):
+            raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
+
+
 @dataclass(frozen=True, kw_only=True)
 class CommsSendTool(ToolRequest):
     label = "Comms Send"
@@ -1061,10 +1072,7 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        if self.sender in DirectiveText.senders:
-            due = tuple(rule.line() for rule in RulesDue.violations(comms, self.sender))
-            if refused := (*DirectiveText.refused(self.body), *due):
-                raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
+        caller.require_directive(comms, self.body)
         result = comms.messaging.send(
             self.sender, self.target, self.body, self.type, report=self.report
         )

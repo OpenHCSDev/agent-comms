@@ -41,12 +41,11 @@ from .declared_family import DeclaredFamily
 from .errors import UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .locked_store import LockedStore, RootFile
-from .tool_caller import ThreadCaller
-from .tools import ReadTool, ToolRequest
+from .tools import DirectiveCaller, ReadTool, ToolRequest
 
 LOOPBACK = "127.0.0.1"
 PORT = 18766
-CALLER = ThreadCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
+CALLER = DirectiveCaller("claude-ai")  # The owner's voice: calls act as this bus thread.
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"
