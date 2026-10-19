@@ -369,10 +369,10 @@ class NativeContextProof(NativeContextRecord):
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
             with NativeContextJournal.open_evidence(session_file) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
-                if row is None:
-                    evidence.observe()
-                    evidence.tracked(input_id)
-                    raise NativePiUnavailable("The input has no assembled-context proof")
+            if row is None:
+                evidence.observe()
+                evidence.tracked(input_id)
+                raise NativePiUnavailable("The input has no assembled-context proof")
             header, _entries = evidence.observe_input(input_id, row.session_entry_id)
             entry = evidence.tracked(input_id)
             return row.corroborate(session_file, header, entry)

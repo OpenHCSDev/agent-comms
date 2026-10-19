@@ -87,6 +87,9 @@ def test_next_decode_cannot_reuse_prefetched_bytes(tmp_path):
             hashlib.sha256(first),
             FileRevision.from_stat(os.fstat(source.stream.fileno())),
         )
+        # This fixture consumed record one; verification and decode positions
+        # are separate now that an identity read can verify without decoding.
+        source.decoded_through = len(first)
         assert tuple(source._decode_captured(len(first + new)))[0]["id"] == "new"
 
 
