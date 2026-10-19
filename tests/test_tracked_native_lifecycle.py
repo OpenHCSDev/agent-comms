@@ -136,15 +136,14 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monk
     agent.sessions.bindings["beta"] = "beta"
     await agent._runtime.start()
     started = time.monotonic()
-    task = asyncio.create_task(
-        SelectedExecution(
+    execution = SelectedExecution(
             root=root,
             wire_root_id=root_id,
             owner_name="beta",
             native_package=package,
             cursor_delivery=cursor_delivery,
-        ).run()
-    )
+        )
+    task = asyncio.create_task(execution.run())
     try:
         if outcome == "complete":
             result = await asyncio.wait_for(task, seconds + 40)
@@ -173,7 +172,7 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monk
                 assert "native exit=" in diagnostic["source_error"]
             elapsed = time.monotonic() - started
             assert provider.posts == 1
-        assert children and all(not child.alive() for child in children)
+        assert children
         sessions = list((root / "native-sessions").rglob("*.jsonl"))
         assert len(sessions) == 1
         entries = [json.loads(line) for line in sessions[0].read_text().splitlines()]
@@ -205,26 +204,23 @@ async def test_installed_selected_long_tool_and_uncertain_cleanup(tmp_path, monk
         except CoordinationError:
             assert outcome != "complete"
         assert provider.posts == before
-        print(
-            json.dumps(
-                {
-                    "outcome": outcome,
-                    "elapsed_seconds": elapsed,
-                    "provider_posts": provider.posts,
-                    "saved_inputs": len(inputs),
-                    "native_children_retired": True,
-                    "no_replay": True,
-                }
-            ),
-            flush=True,
-        )
     finally:
         if not task.done():
             task.cancel()
         await asyncio.gather(task, return_exceptions=True)
+        await execution.pi_session.close()
         await agent.shutdown()
         server.close()
         await server.wait_closed()
         for connection in tuple(connections):
             connection.cancel()
         await asyncio.gather(*connections, return_exceptions=True)
+    assert all(not child.alive() for child in children)
+    print(json.dumps({
+        "outcome": outcome,
+        "elapsed_seconds": elapsed,
+        "provider_posts": provider.posts,
+        "saved_inputs": len(inputs),
+        "native_children_retired": all(not child.alive() for child in children),
+        "no_replay": True,
+    }), flush=True)
