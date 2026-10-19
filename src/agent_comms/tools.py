@@ -226,7 +226,7 @@ class TaskPublished(ToolResult):
 
 
 @dataclass(frozen=True)
-class InboxPageRead(ToolResult):
+class InboxResult(ToolResult):
     """One unread page; only its returned references can be acknowledged."""
     messages: tuple[Message, ...]
     acknowledged: int
@@ -1161,7 +1161,7 @@ class CommsInboxTool(ToolRequest):
     limit: int = tool_field("Maximum messages in this page; must be positive", default=100)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
+    def apply(self, comms: Comms, caller: ToolCaller) -> InboxResult:
         thread = self.thread
         if not (target := self.target.strip()):
             raise ValueError("An inbox target cannot be empty.")
@@ -1179,7 +1179,7 @@ class CommsInboxTool(ToolRequest):
         unresolved = tuple(comms.goals.unresolved_inputs(thread))
         references = tuple(message.reference for message in messages)
         acknowledged = comms.messaging.acknowledge(thread, references) if self.ack else 0
-        return InboxPageRead(
+        return InboxResult(
             messages, acknowledged, page.remaining + len(messages) - acknowledged,
             unresolved, standby_review=review,
         )
