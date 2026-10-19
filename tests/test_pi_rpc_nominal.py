@@ -273,9 +273,11 @@ def test_queued_input_start_budget_waits_while_the_native_run_works():
     """A message queued mid-turn is not killed by the time the turn keeps working."""
     from types import SimpleNamespace
 
+    from agent_comms.native_startup import NATIVE_STARTUP_POLICY
     from agent_comms.turn_watchdog import InputStartWait, ModelWait, ProgressWatchdog
 
-    watchdog = ProgressWatchdog(model_wait=ModelWait(60.0), input_timeout=180.0, preflight_timeout=5.0)
+    watchdog = ProgressWatchdog(model_wait=ModelWait(60.0), input_timeout=180.0, preflight_timeout=5.0,
+                                startup=NATIVE_STARTUP_POLICY)
     session = SimpleNamespace(
         awaiting_native_attestation=False,
         stats=SimpleNamespace(requested=False),
