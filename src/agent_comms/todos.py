@@ -45,9 +45,9 @@ from .storage_rules import StorageRule
 from .plan_phases import OrderPhase, UnplannedPhase
 
 if TYPE_CHECKING:
+    from .commander.config import Repo
     from .comms import Comms
     from .goal_management import Goals
-    from .commander.config import Repo
 
 
 @dataclass(frozen=True)
@@ -2330,12 +2330,13 @@ class TodoStore(TypedStore):
 
     def reconcile_merges(self, commander: ThreadIncarnation, repos: Sequence[Repo],
                          storage: StorageRule) -> None:
-        """Observe outside the write lock; commit only orders whose observed revision still holds."""
+        """Read before locking; close only orders whose observed revision still holds."""
         todos = self.held_for_commander(commander)
         pulls = PullRequests(todos)
         completed = tuple(merged.close(todo) for todo in todos
                           for repo in repos if repo.github.lower() == todo.repo
-                          for merged in MergedProgress.found(ProgressSource.of(todo, storage, pulls))
+                          for merged in MergedProgress.found(
+                              ProgressSource.of(todo, storage, pulls))
                           if repo.contains(merged.sha))
         if not completed:
             return
