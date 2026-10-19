@@ -14,7 +14,7 @@ uv lock --project stack --upgrade --python 3.14
 uv sync --project stack --locked --python 3.14
 uv run --project stack --locked agent-comms --help
 uv run --project stack --locked toad
-stack/bin/prepare-pi-native
+PYTHONPATH=src stack/.venv/bin/python -m agent_comms.cli_native_package prepare "$PWD"
 ```
 
 `stack/bin/toad-comms [THREAD]` opens the Toad workspace, where you can create
@@ -47,14 +47,14 @@ checkpoint and enables it for fresh managed roots. The current live bus has
 completed this migration; see checkpoint-live acceptance
 and the [installation procedure](private-checkpoint-install.md).
 
-`prepare-pi-native` installs the Pi release named in `pi-native.sha256` from
+The typed `NativeBuild` step installs the Pi release named in `pi-native.sha256` from
 its published package and its own `npm-shrinkwrap.json`, then builds a pinned
 local copy with native input IDs and writer-fenced session storage. Preparation and launch verify a complete-package content commitment,
 including dependencies and resolution metadata (see
 [`native-package-provenance.md`](native-package-provenance.md)). Each
 manifest gets its own copy, so preparing an update leaves running workers on
 their previous package until they restart. The copy
-retains the stock Bedrock transport; the script does not change the installed
+retains the stock Bedrock transport; the step does not change the installed
 Pi or make a provider call. An installed Pi is neither read nor needed.
 Ambient `NODE_OPTIONS`/`NODE_PATH` are removed; the managed-project bootstrap is
 copied into and loaded from the verified package. Native v3 files with complete,

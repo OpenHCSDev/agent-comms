@@ -167,7 +167,7 @@ def main(package: Path, dependency_package: Path | None = None) -> None:
         # directory. The existing owner checks its current native tree pin.
         dependency_package = dependency_package.resolve(strict=True)
         subprocess.run(
-            [str(stack / "bin/native-source"), sys.executable, "verify", str(dependency_package)],
+            [sys.executable, "-m", "agent_comms.cli_native_package", "verify", str(dependency_package)],
             env=environment,
             check=True,
         )

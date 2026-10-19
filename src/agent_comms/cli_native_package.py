@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from abc import abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 from .cli_commands import DeclaredOptions, option
 from .declared_family import DeclaredFamily
+from .native_build import NativeBuild
 from .native_package import (
+    MANIFEST,
     install_declared_sources,
     native_environment,
     package_tree_digest,
@@ -40,6 +44,23 @@ class NativePackageVerb(DeclaredFamily, DeclaredOptions, affix="Verb"):
 
 
 @dataclass(frozen=True, kw_only=True)
+class PrepareVerb(NativePackageVerb):
+    help = "Build the checkout's pinned native package using explicit stack configuration"
+    checkout: StoragePath = option("checkout", help="the source checkout")
+    directory: StoragePath = option("--directory", default=MANIFEST.parent, help="the package destination root")
+    python: StoragePath = option("--python", default=Path(sys.executable), help="the shared stack interpreter")
+    dependencies: StoragePath | None = option("--dependencies", default=None, help="a verified MCP dependency package")
+    publish: StoragePath | None = option("--publish", default=None, help="a deployment root")
+    update_pins: bool = option("--update-pins", default=False, action="store_true", help="regenerate the source pin")
+
+    def apply(self, ctx: None = None) -> None:
+        environment = {"HOME": str(Path.home()), "PATH": os.defpath,
+                       "PYTHONPATH": str(self.checkout / "src")}
+        step = NativeBuild(self.checkout, self.python, self.directory, environment, self.dependencies)
+        print(step.prepare(update_pins=self.update_pins, publish=self.publish))
+
+
+@dataclass(frozen=True, kw_only=True)
 class VerifyVerb(NativePackageVerb):
     help = "Verify a copied package against the source pin"
     package: StoragePath = option("package", help="the pi-coding-agent package directory")
@@ -63,7 +84,7 @@ class WriteManifestVerb(NativePackageVerb):
     package: StoragePath = option("package", help="the pi-coding-agent package directory")
 
     def apply(self, ctx: None = None) -> None:
-        write_native_manifest(self.package)
+        write_native_manifest(self.package, MANIFEST)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -106,7 +127,7 @@ class PackageVerb(NativePackageVerb):
     root: StoragePath = option("root", help="a stack directory or test environment")
 
     def apply(self, ctx: None = None) -> None:
-        print(pinned_package_in(self.root))
+        print(pinned_package_in(self.root, MANIFEST))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -115,7 +136,7 @@ class BuildVerb(NativePackageVerb):
     root: StoragePath = option("root", help="a stack directory or test environment")
 
     def apply(self, ctx: None = None) -> None:
-        print(pinned_package_in(self.root).parents[2])
+        print(pinned_package_in(self.root, MANIFEST).parents[2])
 
 
 if __name__ == "__main__":

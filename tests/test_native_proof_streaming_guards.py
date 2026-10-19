@@ -17,7 +17,7 @@ def test_retired_native_proof_mechanisms_stay_deleted():
         assert retired not in startup
     for retired in ("patch-native-proof-headroom.py", "patch-native-input-recovery.py"):
         assert not (root / "stack" / retired).exists()
-        assert retired not in (root / "stack/bin/prepare-pi-native").read_text()
+        assert retired not in (root / "src/agent_comms/native_build.py").read_text()
     assert not (root / "stack/test-native-proof-streaming.mjs").exists()
     assert not (root / "tools/cutover/native_proof_journal.py").exists()
 

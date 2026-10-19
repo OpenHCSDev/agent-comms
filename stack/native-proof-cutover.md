@@ -17,7 +17,7 @@ The procedure below is retained as the history of that cutover.
 ## Boundary
 
 The new package and core are a matched pair. Prepare a NEW immutable package
-using `stack/bin/prepare-pi-native`; never modify global d396 or an existing build.
+using `PYTHONPATH=src stack/.venv/bin/python -m agent_comms.cli_native_package prepare "$PWD"`; never modify global d396 or an existing build.
 The `.input-proof` pathname remains the sole proof authority. Native session
 JSONL is never rewritten by this migration. Runtime has only the current SQLite
 format; conversion is a temporary operator tool outside `src/`.

@@ -5,7 +5,7 @@ set -euo pipefail
 umask 077
 usage='Usage: pi-native-test-env [--python PATH] [--cache DIR] [--from BUILT_STACK_DIR]'
 source "${BASH_SOURCE[0]%/*}/native-source"
-# The stack environment `uv sync --project stack` installs, as prepare-pi-native uses.
+# The shared stack interpreter runs the typed native build step.
 cache=()
 built=$stack_root
 while [[ $# -gt 0 ]]; do
@@ -33,7 +33,7 @@ verify() (
 
 if [[ ! -e "$environment" ]]; then
     if [[ ! -e "$(native package "$built")" ]]; then
-        "$stack_root/bin/prepare-pi-native" --python "$python" >&2
+        native prepare "$repo_root" --python "$python" >&2
         built=$stack_root
     fi
     build=$(native build "$built")

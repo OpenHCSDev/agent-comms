@@ -40,7 +40,7 @@ jobs:
         with:
           node-version: "22.19.0"
 
-      # prepare-pi-native installs the MCP client's locked dependencies with
+      # The typed native step installs the MCP client's locked dependencies with
       # `npm ci --offline` so preparation never fetches. Fill the npm cache from
       # the same lockfile first; the prepared copy is still built offline.
       - name: Cache locked MCP client dependencies
@@ -49,10 +49,9 @@ jobs:
 
       - name: Build and check native compaction without a provider
         run: |
-          stack/bin/prepare-pi-native
-          package=$(ls -d stack/.pi-native-*/node_modules/@earendil-works/pi-coding-agent)
+          package=$(PYTHONPATH=src stack/.venv/bin/python -m agent_comms.cli_native_package prepare "$PWD")
           for mode in threshold overflow manual; do
-            node stack/test-native-pi-compaction.mjs "$PWD/$package" "$mode"
+            node stack/test-native-pi-compaction.mjs "$package" "$mode"
           done
 
       - name: Check native RPC compaction against localhost provider
@@ -119,7 +118,7 @@ jobs:
           python -m pip install uv==0.12.0
           uv lock --project stack --upgrade --python "$(command -v python)"
           uv sync --project stack --locked --python "$(command -v python)"
-          stack/bin/prepare-pi-native
+          PYTHONPATH=src stack/.venv/bin/python -m agent_comms.cli_native_package prepare "$PWD"
 
       - name: Run tests with coverage (85% enforced on Linux)
         if: matrix.os == 'ubuntu-latest'

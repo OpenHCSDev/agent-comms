@@ -6,14 +6,16 @@
 ``--checkout`` is the installation to upgrade (by default, the one holding
 this file); run the command from the target revision so its steps are known.
 
-The target revision's stack is built in a temporary worktree, relocked to the
-latest OpenHCSDev mains, and must import Toad and the ACP client. The bus
+A live upgrade builds the target stack in a temporary worktree, relocked to the
+latest OpenHCSDev mains, and must import Toad and the ACP client. A rehearsal-only
+run borrows its invoking Python environment, without creating or syncing a venv;
+when the target is already checked out it reuses that checkout. The bus
 ledger (``carries.json``) names the carry steps still pending; each runs from
 the revision that declares it (``tools/cutover/carry.py``). Every run first
 rehearses on a copy of the bus: the steps, then ``who``, ``threads`` and
 ``history`` reads, and every file no step names as rewritten must be
-byte-identical. The rehearsal prepares native Pi in the staged stack exactly as
-the live phase does. ``--rehearse`` stops there.
+byte-identical. Both phases use the typed native build step; rehearsal-only artifacts
+stay in the installer's registered scratch. ``--rehearse`` stops there.
 
 A live run then stops the running agent owners with the installed CLI, backs
 the bus up (tar plus a hash of every file), moves the checkout,
@@ -54,6 +56,8 @@ from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.host_services import HostService
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.native_build import NativeBuild
+from agent_comms.native_package import NativePackageError, native_environment
 from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
@@ -88,10 +92,12 @@ class Stack:
 
     checkout: Path
     home: Path = Path.home()
+    interpreter: Path | None = None
+    native_root: Path | None = None
 
     @property
     def python(self) -> Path:
-        return self.checkout / "stack/.venv/bin/python"
+        return self.interpreter if self.interpreter is not None else self.checkout / "stack/.venv/bin/python"
 
     @property
     def lock(self) -> Path:
@@ -120,8 +126,9 @@ class Stack:
     def imports(self) -> None:
         run(self.python, "-c", CLIENT_IMPORTS, cwd=self.checkout, env=self.environment())
 
-    def prepare_native(self) -> None:
-        run(self.checkout / "stack/bin/prepare-pi-native", cwd=self.checkout)
+    def prepare_native(self) -> Path:
+        directory = self.checkout / "stack" if self.native_root is None else self.native_root
+        return NativeBuild(self.checkout, self.python, directory, self.environment()).prepare()
 
     def environment(self, *paths: Path) -> dict:
         """``paths`` first; then this checkout's ``src``. ``home`` holds the route its clients read."""
@@ -172,6 +179,8 @@ class Revisions:
         self.trees: dict[str, Path] = {}
 
     def tree(self, revision: str) -> Path:
+        if revision == run("git", "-C", self.repo, "rev-parse", "HEAD").strip():
+            return self.repo
         if revision not in self.trees:
             path = self.scratch / f"tree-{revision[:12]}"
             run("git", "-C", self.repo, "worktree", "add", "--detach", "-q", path, revision)
@@ -253,17 +262,18 @@ def rehearsal_home(scratch: Path, root: Path, copy: Path) -> Path:
 
 
 def rehearse(root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions) -> dict:
-    with tempfile.TemporaryDirectory(dir=root.parent, prefix=f".{root.name}.rehearsal.") as scratch:
+    with tempfile.TemporaryDirectory(dir=revisions.scratch, prefix="bus-rehearsal.") as scratch:
         copy = Path(scratch) / root.name
         copy_bus(root, copy)
+        package = stack.prepare_native()
         stack = replace(stack, home=rehearsal_home(Path(scratch), root, copy))
-        stack.prepare_native()
         with transcripts_held(copy):
             before = bus_files(copy)
         stopping = before_stop(copy, pending, stack, revisions)
         # Optional connector qualification belongs to its own round_trip command;
         # a native-only bus must not acquire a fabricated director to update.
-        return carry_and_read(copy, before, pending, stack, stack, revisions, stopping)
+        return {"native": str(package),
+                **carry_and_read(copy, before, pending, stack, stack, revisions, stopping)}
 
 
 def carry_and_read(root: Path, before: dict[str, str], pending: tuple[Step, ...], staged: Stack,
@@ -315,20 +325,29 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
     except ValueError as error:
         raise UpgradeRefused(str(error)) from None
     installed = Stack(checkout)
-    installed.require_uv()
+    if not rehearse_only:
+        installed.require_uv()
     if not rehearse_only and not installed.python.exists():
         raise UpgradeRefused(f"No installed stack at {installed.python}")
-    with tempfile.TemporaryDirectory(prefix="upgrade-bus.") as scratch:
+    workspace = RegistryStore.at(root).snapshot().require(installer).storage_roots.scratch
+    workspace.mkdir(mode=0o700, parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="upgrade-bus.", dir=workspace) as scratch:
         revisions = Revisions(checkout, Path(scratch))
         try:
             staged = Stack(revisions.tree(target))
+            if rehearse_only:
+                # Read/carry the target source with shared dependencies; rehearsal neither
+                # installs Python packages nor needs a second copy of the current checkout.
+                staged = replace(staged, interpreter=Path(sys.executable),
+                                 native_root=native_environment(workspace / "native"))
+                staged.imports()
+                return {"from": current, "to": target, "pending": [step.name for step in pending],
+                        "rehearsal": rehearse(root, pending, staged, revisions)}
             staged.relock()
             install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
                                  installer)
             report = {"from": current, "to": target, "pending": [step.name for step in pending],
                       "rehearsal": install.rehearsal()}
-            if rehearse_only:
-                return report
             report["live"] = install.live()
             return report
         finally:
@@ -459,7 +478,7 @@ def main() -> None:
         signal.signal(signum, stopped)
     try:
         print(json.dumps(upgrade(args.checkout, args.root, args.to, args.installer, args.rehearse), indent=2))
-    except UpgradeRefused as error:
+    except (UpgradeRefused, NativePackageError) as error:
         raise SystemExit(f"upgrade-bus: {error}")
 
 

@@ -17,7 +17,7 @@ The manifest also pins the source inventory as `agent-comms-native-inputs-v1`.
 `NativeBuildInputs` owns that inventory and hashes source paths, executable modes,
 contents and the stock release. Test environments require this commitment before
 using a cache key derived from both those inputs and the complete manifest.
-Changing a patch without rebuilding with `prepare-pi-native --update-pins` refuses
+Changing a patch without rebuilding with `python -m agent_comms.cli_native_package prepare "$PWD" --update-pins` refuses
 the environment, even when an older cached artifact is available.
 The update-check/all-package-spawn correction supersedes NON-CLEAN `8c6ce7`'s
 `b6d13d86…` tree; see `native-package-subprocess-correction.md` for current review
@@ -58,7 +58,7 @@ fallback. The external commit bridge still separately requires Linux pidfds.
 
 ## Every supported entrypoint checks
 
-- Canonical `prepare-pi-native`: selected-file checks **and** complete tree check,
+- Canonical `NativeBuild`: selected-file checks **and** complete tree check,
   both for new staging and an already-existing target.
 - Canonical `pi-native`: complete tree verification before Node executes the CLI.
 - `OwnerCompactionCommit`: complete verification before journal initialization

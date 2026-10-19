@@ -17,7 +17,7 @@ fi
 build_id=$(sha256sum "$manifest" | cut -c1-16)
 cli="$stack_root/.pi-native-$build_id/node_modules/@earendil-works/pi-coding-agent/dist/cli.js"
 if [[ ! -f "$cli" ]]; then
-    printf 'Native Pi is unavailable; run %s/bin/prepare-pi-native first.\n' "$stack_root" >&2
+    printf 'Native Pi is unavailable; run PYTHONPATH=src %s -m agent_comms.cli_native_package prepare %s first.\n' "$python" "$repo_root" >&2
     exit 1
 fi
 # Drop inherited preloads (including the old external project bootstrap). The

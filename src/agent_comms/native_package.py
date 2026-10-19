@@ -16,7 +16,7 @@ import json
 import os
 import stat
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
@@ -51,17 +51,17 @@ OWNER_INSTRUCTIONS = _resource_root() / "APPEND_SYSTEM.md"
 PACKAGE_LAYOUT = "node_modules/@earendil-works/pi-coding-agent"
 
 
-def pin_id() -> str:
-    return hashlib.sha256(MANIFEST.read_bytes()).hexdigest()[:16]
+def pin_id(manifest: Path) -> str:
+    return hashlib.sha256(manifest.read_bytes()).hexdigest()[:16]
 
 
-def pinned_package_in(root: Path) -> Path:
-    """Where this pin's built package sits under a root laid out as stack/ is."""
-    return root / f".pi-native-{pin_id()}" / PACKAGE_LAYOUT
+def pinned_package_in(root: Path, manifest: Path) -> Path:
+    """Where the configured pin's package sits under a root laid out as stack/ is."""
+    return root / f".pi-native-{pin_id(manifest)}" / PACKAGE_LAYOUT
 
 
 def pinned_location() -> Path:
-    return pinned_package_in(MANIFEST.parent)
+    return pinned_package_in(MANIFEST.parent, MANIFEST)
 
 
 def native_environment(cache: Path) -> Path:
@@ -212,7 +212,7 @@ def share_native_resources(root: Path, deployments: Path) -> dict[str, int]:
     return {"shared_files": shared_files, "shared_content_bytes": shared_bytes}
 
 
-def write_native_manifest(root: Path) -> None:
+def write_native_manifest(root: Path, manifest: Path) -> None:
     """Commit an assembled package through the existing diagnostic/tree format.
 
     Preparation owns this new, sealed package. This does not update an existing
@@ -220,7 +220,7 @@ def write_native_manifest(root: Path) -> None:
     """
     tree = package_tree_digest(root)
     lines = []
-    for line in MANIFEST.read_text().splitlines():
+    for line in manifest.read_text().splitlines():
         if line.startswith(INPUTS_PREFIX):
             continue
         if line.startswith(TREE_PREFIX):
@@ -230,16 +230,16 @@ def write_native_manifest(root: Path) -> None:
             lines.append(hashlib.sha256((root / path).read_bytes()).hexdigest() + "  " + path)
         else:
             lines.append(line)
-    lines.append(INPUTS_PREFIX + NativeBuildInputs(_resource_root().parent).digest(MANIFEST))
-    with tempfile.NamedTemporaryFile(dir=MANIFEST.parent, prefix=".pi-native-pin-",
+    lines.append(INPUTS_PREFIX + NativeBuildInputs(manifest.parent.parent).digest(manifest))
+    with tempfile.NamedTemporaryFile(dir=manifest.parent, prefix=".pi-native-pin-",
                                      delete=False) as stream:
         replacement = Path(stream.name)
         try:
             stream.write(("\n".join(lines) + "\n").encode())
             stream.flush()
             os.fsync(stream.fileno())
-            os.chmod(replacement, stat.S_IMODE(MANIFEST.stat().st_mode))
-            os.replace(replacement, MANIFEST)
+            os.chmod(replacement, stat.S_IMODE(manifest.stat().st_mode))
+            os.replace(replacement, manifest)
         finally:
             replacement.unlink(missing_ok=True)
 
@@ -393,11 +393,12 @@ class VerifiedNativePackage:
     """The immutable artifact acquired for one process; never a readiness proof."""
 
     path: Path
+    manifest: Path = field(default_factory=lambda: MANIFEST)
 
     def __post_init__(self):
         pins = [
             line[len(TREE_PREFIX) :]
-            for line in MANIFEST.read_text().splitlines()
+            for line in self.manifest.read_text().splitlines()
             if line.startswith(TREE_PREFIX)
         ]
         if len(pins) != 1 or not _sha256_hex(pins[0]):
@@ -428,7 +429,7 @@ class VerifiedNativePackage:
         manifest = environment / MANIFEST.name
         if manifest.read_bytes() != MANIFEST.read_bytes():
             raise NativePackageError("Native environment and source pins disagree")
-        return cls.acquire(pinned_package_in(environment))
+        return cls.acquire(pinned_package_in(environment, MANIFEST))
 
     @classmethod
     def acquire(cls, root: Path) -> VerifiedNativePackage:

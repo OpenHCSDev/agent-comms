@@ -259,6 +259,16 @@ def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp
     assert namespace["OWNER_INSTRUCTIONS"] == tmp_path / "stack/APPEND_SYSTEM.md"
 
 
+def pin_build_inputs(stack, manifest):
+    from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
+
+    path = stack / "pi-native.sha256"
+    path.write_text(manifest)
+    manifest += INPUTS_PREFIX + NativeBuildInputs(stack.parent).digest(path) + "\n"
+    path.write_text(manifest)
+    return manifest
+
+
 @pytest.fixture
 def launcher(tmp_path):
     repo = Path(__file__).resolve().parents[1]
@@ -275,7 +285,7 @@ def launcher(tmp_path):
     interpreter.parent.mkdir(parents=True)
     interpreter.write_text(f'#!/bin/sh\nexec {sys.executable} "$@"\n')
     interpreter.chmod(0o755)
-    for name in ("pi-native", "prepare-pi-native", "native-source"):
+    for name in ("pi-native", "native-source"):
         shutil.copy2(repo / "stack/bin" / name, stack / "bin" / name)
     staged = tmp_path / "staged"
     (staged / "dist").mkdir(parents=True)
@@ -300,7 +310,7 @@ def launcher(tmp_path):
         + package_tree_digest(staged)
         + "\n"
     )
-    (stack / "pi-native.sha256").write_text(manifest)
+    manifest = pin_build_inputs(stack, manifest)
     build = hashlib.sha256(manifest.encode()).hexdigest()[:16]
     package = stack / f".pi-native-{build}/node_modules/@earendil-works/pi-coding-agent"
     package.parent.mkdir(parents=True)
@@ -326,8 +336,8 @@ def test_launcher_uses_only_verified_copied_bootstrap(launcher, tmp_path):
     assert not marker.exists()
 
 
-@pytest.mark.parametrize("command", [["pi-native"], ["prepare-pi-native", "--publish"]])
-def test_launch_and_publication_install_declared_source_with_one_link(launcher, tmp_path, command):
+@pytest.mark.parametrize("publication", [False, True])
+def test_launch_and_publication_install_declared_source_with_one_link(launcher, tmp_path, publication):
     stack, package = launcher
     snapshot = tmp_path / "extensions/global/index.ts"
     snapshot.parent.mkdir(parents=True)
@@ -360,13 +370,14 @@ def test_launch_and_publication_install_declared_source_with_one_link(launcher, 
         + package_tree_digest(package)
         + "\n"
     )
-    (stack / "pi-native.sha256").write_text(pin)
+    pin = pin_build_inputs(stack, pin)
     build = hashlib.sha256(pin.encode()).hexdigest()[:16]
     prepared = stack / f".pi-native-{build}"
     package.parents[2].rename(prepared)
     deployments = tmp_path / "deployments"
-    script, *flags = command
-    launch = [str(stack / "bin" / script), *flags, *([str(deployments)] if flags else [])]
+    launch = ([str(stack / "bin/native-source"), sys.executable, "prepare", str(tmp_path),
+               "--directory", str(stack), "--publish", str(deployments)] if publication
+              else [str(stack / "bin/pi-native")])
 
     # The launch ends by exec'ing node; the sources are installed before that.
     interpreter = tmp_path / "interpreter"
@@ -380,7 +391,7 @@ def test_launch_and_publication_install_declared_source_with_one_link(launcher, 
         assert result.returncode == 0, result.stderr
 
     run()
-    assert (deployments / f"native-current-{build}").is_dir() == bool(flags)
+    assert (deployments / f"native-current-{build}").is_dir() == publication
     assert destination.read_bytes() == content
     assert destination.stat().st_nlink == 1
     assert stale_link.read_bytes() == b"stale\n"
@@ -399,17 +410,20 @@ def test_prepare_imports_agent_comms_with_the_stack_interpreter_not_path_python3
     env = dict(os.environ, PATH=f"{bare}:{os.environ['PATH']}")
     assert subprocess.run(["python3", "-c", "import metaclass_registry"], env=env,
                           capture_output=True).returncode
-    result = subprocess.run([str(stack / "bin/prepare-pi-native")], env=env,
+    result = subprocess.run([str(stack / "bin/native-source"), str(stack / ".venv/bin/python"),
+                             "prepare", str(tmp_path), "--directory", str(stack)], env=env,
                             capture_output=True, text=True, timeout=15)
     assert result.returncode == 0, result.stderr
-    assert result.stdout == f"PI_NATIVE_BIN={stack}/bin/pi-native\n"
+    assert result.stdout.strip() == str(launcher[1])
 
 
-@pytest.mark.parametrize("script", ["pi-native", "prepare-pi-native"])
-def test_launch_and_existing_prepare_refuse_unlisted_dependency_drift(launcher, script):
+@pytest.mark.parametrize("preparation", [False, True])
+def test_launch_and_existing_prepare_refuse_unlisted_dependency_drift(launcher, preparation):
     stack, package = launcher
     (package / "dependency.js").write_text("// unpinned dependency change\n")
-    result = subprocess.run([str(stack / "bin" / script)], capture_output=True, timeout=10)
+    command = ([str(stack / "bin/native-source"), sys.executable, "prepare", str(stack.parent),
+                "--directory", str(stack)] if preparation else [str(stack / "bin/pi-native")])
+    result = subprocess.run(command, capture_output=True, timeout=10)
     assert result.returncode != 0
     assert not result.stdout
     assert b"differs from pinned artifact" in result.stderr
