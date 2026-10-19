@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field, replace
 
-from .channel_targets import BuiltinChannel, ChannelTarget, Tag
+from .channel_targets import ChannelTarget, Tag
 from .channels import (
     BuiltinChannelView,
     Channel,
@@ -73,8 +73,7 @@ class CatalogDocument:
                 parent = self.preferences.get(parent, ChannelPreferences()).parent
 
     def views(self) -> Channels:
-        names = (kind.value for kind in BuiltinChannel)
-        result = Channels((name, self.require_channel(name)) for name in names)
+        result = Channels((name, self.require_channel(name)) for name in BuiltinChannelView.names())
         result.update((f"#{tag}", self.require_channel(f"#{tag}")) for tag in sorted(self.tags))
         result.update((f"#{name}", self.require_channel(f"#{name}")) for name in self.saved_views)
         return result
@@ -82,9 +81,9 @@ class CatalogDocument:
     def require_channel(self, target: str) -> Channel:
         target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
-        if builtin := BuiltinChannel.lookup(target):
+        if target in BuiltinChannelView.names():
             preference = self.preferences.get(target, ChannelPreferences())
-            return preference.channel(BuiltinChannelView, target, frozenset(), builtin=builtin)
+            return preference.channel(BuiltinChannelView.member_named(target), target, frozenset())
         if (view := self.saved_views.get(tag)) is not None:
             preference = self.preferences.get(target, ChannelPreferences(created_at=view.created_at))
             return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
@@ -93,9 +92,10 @@ class CatalogDocument:
         return self.preferences[target].channel(TagChannel, target, frozenset({tag}))
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
-        return frozenset(kind.value for kind in BuiltinChannel if kind.matches(tags)) | frozenset(
-            f"#{tag}" for tag in tags
-        )
+        return frozenset(
+            kind.declared_name for kind in BuiltinChannelView.members_with(BuiltinChannelView)
+            if kind.matches(tags)
+        ) | frozenset(f"#{tag}" for tag in tags)
 
     def pinned_threads(self, channel: str) -> frozenset[str]:
         return self.preferences.get(channel, ChannelPreferences()).pinned_threads

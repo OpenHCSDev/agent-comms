@@ -3,15 +3,18 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from enum import StrEnum
 from typing import TYPE_CHECKING, ClassVar, overload
 
 from .errors import RelationViolationError, UnregisteredThreadError
+from .history_result import DmHistoryPageResult, HistoryPageResult
 from .response_policy import DirectPolicy, MentionedOnlyPolicy
 from .wake_policy import BoundedTriageWake, FullWake, MessageAudience, UnmentionedWake
 
 if TYPE_CHECKING:
+    from .catalog_document import CatalogDocument
     from .channels import Channel
+    from .historical_views import ChannelHistory, DMHistory, HistoryView
+    from .messages import Message
     from .read_basis import ChannelConversation, Conversation, DMConversation
     from .registry_provenance import RegistryProvenance
     from .thread_status import ThreadStatus
@@ -30,28 +33,11 @@ class ResolvedChannel:
     members: tuple[ResolvedThread, ...]
 
 
-class BuiltinChannel(StrEnum):
-    ANY = "#any"
-    NONE = "#none"
-    ALL = "#all"
+def exact_stored_target(name: str) -> bool:
+    from .channels import BuiltinChannelView
 
-    @classmethod
-    def lookup(cls, name: str) -> BuiltinChannel | None:
-        channel = cls._value2member_map_.get(name)
-        # Value aliases are not declared channel targets.
-        return channel if channel is not None and name == channel.value else None
-
-    @classmethod
-    def exact_stored_target(cls, name: str) -> bool:
-        channel = cls.lookup(name)
-        return channel is None or not channel.aggregate
-
-    @property
-    def aggregate(self) -> bool:
-        return self is self.ANY
-
-    def matches(self, tags: frozenset[str]) -> bool:
-        return self is not self.NONE or not tags
+    return (BuiltinChannelView.member_named(name).exact_stored_target()
+            if name in BuiltinChannelView.names() else True)
 
 
 class CommandTarget(ABC):
@@ -72,6 +58,9 @@ class CommandTarget(ABC):
             return name
         if not isinstance(name, str) or not name:
             raise ValueError("Select a named target")
+        name = name.removeprefix("@")
+        if not name:
+            raise ValueError("Select a named target")
         return ChannelTarget(name) if name.startswith("#") else ThreadTarget(name)
 
     @staticmethod
@@ -91,6 +80,14 @@ class CommandTarget(ABC):
 
     @abstractmethod
     def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog): ...
+
+    def history_view(self, viewer: str | None, catalog: CatalogDocument,
+                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
+        raise ValueError("History requires a #channel or DM peer.")
+
+    def history_result(self, catalog: CatalogDocument, messages: tuple[Message, ...],
+                       has_older: bool) -> HistoryPageResult:
+        raise ValueError("History requires a #channel or DM peer.")
 
     def contexts(self, declaration, channel):
         return (None,)
@@ -148,6 +145,7 @@ class NamedTarget(CommandTarget):
 
 
 class ThreadTarget(NamedTarget):
+    history_result_type = DmHistoryPageResult
     kind = "thread"
     incoming_scope = "direct message"
 
@@ -163,6 +161,16 @@ class ThreadTarget(NamedTarget):
 
     def require_dm_peer(self):
         return self.name
+
+    def history_view(self, viewer: str | None, catalog: CatalogDocument,
+                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
+        if viewer is None:
+            raise ValueError("DM history requires --as <participant>.")
+        return direct(viewer, self.name)
+
+    def history_result(self, catalog: CatalogDocument, messages: tuple[Message, ...],
+                       has_older: bool) -> HistoryPageResult:
+        return self.history_result_type.for_target(self.name, messages, has_older)
 
     def contexts(self, declaration, channel):
         return declaration.selection_channels(channel, self.name)
@@ -244,6 +252,17 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
+    def history_view(self, viewer: str | None, catalog: CatalogDocument,
+                     channel: type[ChannelHistory], direct: type[DMHistory]) -> HistoryView:
+        if viewer is not None:
+            raise ValueError("--as is only valid for DM history.")
+        return channel(catalog.require_channel(self.name).history_scope())
+
+    def history_result(self, catalog: CatalogDocument, messages: tuple[Message, ...],
+                       has_older: bool) -> HistoryPageResult:
+        result_type = catalog.require_channel(self.name).history_result_type
+        return result_type.for_target(self.name, messages, has_older)
+
     def pending_count(self, counts, snapshot, catalog):
         return catalog.require_channel(self.name).pending_count(counts)
 
@@ -258,7 +277,9 @@ class ChannelTarget(NamedTarget):
         return declaration.channel_bindings(comms, resolved, snapshot=snapshot, catalog=catalog)
 
     def validate(self, sender=None):
-        if BuiltinChannel.lookup(self.name) is None:
+        from .channels import BuiltinChannelView
+
+        if self.name not in BuiltinChannelView.names():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
     def response_policy(self, message):
@@ -301,10 +322,6 @@ class ChannelTarget(NamedTarget):
         views.mark_channel_view_read(self.name, worktree=worktree)
 
 
-ANY_CHANNEL = ChannelTarget(BuiltinChannel.ANY.value)
-"""Every channel a reader receives: the target of an unscoped inbox or count."""
-
-
 @dataclass(frozen=True)
 class ProjectTarget(CommandTarget):
     project: str
@@ -336,5 +353,7 @@ class Tag:
 
     @staticmethod
     def validate(name: str, *, label: str = "Tags") -> None:
-        if not name or not set(name) <= _TAG_CHARS or BuiltinChannel.lookup(f"#{name}"):
+        from .channels import BuiltinChannelView
+
+        if not name or not set(name) <= _TAG_CHARS or f"#{name}" in BuiltinChannelView.names():
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")

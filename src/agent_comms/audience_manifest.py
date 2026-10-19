@@ -18,7 +18,7 @@ from typing import Final
 
 from agent_comms.coordination_contracts import MAX_IDENTIFIER_CHARS
 
-from .channel_targets import BuiltinChannel
+from .channel_targets import exact_stored_target
 from .field_codec import MalformedRecord, Sha256Text
 from .messages import Message
 
@@ -96,7 +96,7 @@ class FrozenAudience:
         for name in ("message_id", "exact_target", "sender_lookup", "source_revision"):
             _bounded_text(getattr(self, name), name)
         _bounded_text(self.sender_name, "sender_name", thread_name=True)
-        if not BuiltinChannel.exact_stored_target(self.exact_target):
+        if not exact_stored_target(self.exact_target):
             raise MalformedRecord("aggregate views are not exact stored targets")
         if type(self.recipients) is not tuple or len(self.recipients) > MAX_RECIPIENTS:
             raise MalformedRecord("recipients must be a bounded immutable tuple")
@@ -177,7 +177,7 @@ def freeze_audience(
             "sender_name must be the externally captured canonical message sender"
         )
     _bounded_text(source_revision, "source_revision")
-    if not BuiltinChannel.exact_stored_target(prepared_message.target):
+    if not exact_stored_target(prepared_message.target):
         raise MalformedRecord("only exact stored routable targets may be frozen")
     if type(prepared_message.seq) is not int or not 0 < prepared_message.seq <= MAX_WIRE_SEQ:
         raise MalformedRecord("the prepared message must have an assigned wire sequence")

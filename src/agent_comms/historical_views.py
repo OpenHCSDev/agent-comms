@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .locked_store import RootFile
-from .channel_targets import ChannelTarget
 from .coordination_errors import HistoricalSourceChanged
 from .channels import Channel
 from .errors import UnregisteredThreadError
@@ -53,9 +52,11 @@ class HistoryView(ABC):
 
     viewer: DisplayViewer = AnonymousViewer()
 
-    @abstractmethod
     def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
-        """Each view owns its current-source interpretation as well as retained capture."""
+        """Bind the query to the bus owner's snapshot and read that exact source."""
+        with presentation.bus.snapshot() as (basis, source):
+            request = self.page_request(self.capture(basis.registry), bounds)
+            return request.read_opened(source)
 
     def page(self, presentation: BusPresentation, bounds: PageBounds = NEWEST_PAGE) -> MessagePage:
         return presentation.bus.history.integrated_page(self, presentation, bounds)
@@ -114,9 +115,6 @@ class ConversationHistoryView:
 class ChannelHistory(HistoryView):
     scope: ChannelDisplayScope
 
-    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
-        return presentation.bus.channel_history_page(ChannelTarget(self.scope.channel), bounds)
-
     def capture(self, snapshot: RegistryProvenance) -> ChannelDisplayScope:
         return self.scope
 
@@ -148,9 +146,6 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
 class DMHistory(HistoryView):
     first: str
     second: str
-
-    def live_page(self, presentation: BusPresentation, bounds: PageBounds) -> MessagePage:
-        return presentation.bus.dm_history_page(self.first, self.second, bounds)
 
     def capture(self, snapshot: RegistryProvenance) -> DMDisplayScope:
         return DMDisplayScope.capture(self.first, self.second, snapshot)
