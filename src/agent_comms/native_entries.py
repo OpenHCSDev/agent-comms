@@ -185,38 +185,56 @@ class ImportedSessionWriter:
             self.append(message, entry.timestamp.at)
 
 
-class NativeHeaderState(ABC):
-    """Acquired header lifetime, not a guess from the number of indexed inputs."""
+class NativeEvidenceState(ABC):
+    """An acquired header and the earliest admitted committed input cut."""
 
     @abstractmethod
     def read(self, reader): ...
 
-    def decode_inputs(self, rows):
-        for row in rows:
-            entry = NativeEntry.wire_member(row).input_evidence(row)
-            if entry is not None:
-                yield entry
+    def observe_inputs(self, reader, inputs):
+        from .native_pi import NativePiUnavailable
+
+        if not inputs:
+            raise NativePiUnavailable('Native input evidence requires a committed byte offset')
+        minimum = min(item.session_entry_start for item in inputs)
+        reader.header()
+        reader.source.start_at(minimum)
+        reader.state = InputNativeEvidence(minimum)
+        return reader._observe(reverified=False)
+
+    def reobserve(self, reader):
+        return reader._observe(reverified=True)
 
 
-class UnreadNativeHeader(NativeHeaderState):
-    def decode_inputs(self, rows):
-        rows = iter(rows)
-        for first in rows:
-            yield NativeEntry.from_evidence(first)
-            break
-        yield from super().decode_inputs(rows)
-
+class UnreadNativeEvidence(NativeEvidenceState):
     def read(self, reader):
         header = reader._accept_header((NativeEntry.from_evidence(reader.source.consume_header()),))
         reader.entries = (header,)
-        reader.header_state = AcceptedNativeHeader()
+        reader.state = HeaderNativeEvidence()
         return header
 
 
-class AcceptedNativeHeader(NativeHeaderState):
+class HeaderNativeEvidence(NativeEvidenceState):
     def read(self, reader):
         reader.source.verify()
         return reader.entries[0]
+
+
+@dataclass(frozen=True)
+class InputNativeEvidence(HeaderNativeEvidence):
+    minimum: int
+
+    def observe_inputs(self, reader, inputs):
+        if any(item.session_entry_start < self.minimum for item in inputs):
+            reader._forget()
+            return super().observe_inputs(reader, inputs)
+        return reader._observe(reverified=False)
+
+    def reobserve(self, reader):
+        reader.header()
+        reader.source.start_at(self.minimum)
+        reader.state = self
+        return reader._observe(reverified=True)
 
 
 class NativeEvidenceRead:
@@ -274,7 +292,7 @@ class NativeEvidenceRead:
     def _forget(self) -> None:
         self.entries: tuple[NativeEntry, ...] = ()
         self.inputs: dict[str, int] = {}
-        self.header_state: NativeHeaderState = UnreadNativeHeader()
+        self.state: NativeEvidenceState = UnreadNativeEvidence()
 
     def close(self):
         self.source.close()
@@ -314,13 +332,13 @@ class NativeEvidenceRead:
         from .native_pi import NativePiUnavailable
 
         try:
-            return self.header_state.read(self)
+            return self.state.read(self)
         except MalformedRecord as error:
             self.close()
             raise NativePiUnavailable(f'Native Pi session evidence is invalid: {error}') from error
 
-    def observe(self):
-        """Decode the captured cut."""
+    def observe(self, *inputs):
+        """A full-history acquisition already includes every admitted input."""
         return self._observe(reverified=False)
 
     def stopped_input(self, input_id: str):
@@ -348,9 +366,10 @@ class NativeEvidenceRead:
         return PendingStopReason
 
     def _reverify(self):
+        acquired = self.state
         self._forget()
-        self.source.reverify_from_start()
-        return self._observe(reverified=True)
+        self.source.reverify()
+        return acquired.reobserve(self)
 
     def _observe(self, *, reverified: bool):
         from .native_pi import (
@@ -359,6 +378,7 @@ class NativeEvidenceRead:
         )
 
         try:
+            self.header()
             appended = tuple(self.decode_rows(self.source.rows()))
             self.index(appended)
             entries = self.entries + appended
@@ -379,7 +399,6 @@ class NativeEvidenceRead:
             self.close()
             raise
         self.entries = entries
-        self.header_state = AcceptedNativeHeader()
         return entries[0], entries
 
     def decode_rows(self, rows):
@@ -394,8 +413,14 @@ class NativeInputEvidenceRead(NativeEvidenceRead):
     Read input evidence from that file without adding a history index or store.
     """
 
+    def observe(self, *inputs):
+        return self.state.observe_inputs(self, inputs)
+
     def decode_rows(self, rows):
-        yield from self.header_state.decode_inputs(rows)
+        for row in rows:
+            entry = NativeEntry.wire_member(row).input_evidence(row)
+            if entry is not None:
+                yield entry
 
 
 class NativeEvidenceScope(ExitStack):
@@ -418,6 +443,11 @@ class NativeEvidenceScope(ExitStack):
         except BaseException:
             self.close()
             raise
+
+    def observe_inputs(self, contexts):
+        """Admit each source's complete required cut before the first corroboration."""
+        for path in {context.session_file for context in contexts}:
+            self.for_source(path).observe(*(context for context in contexts if context.session_file == path))
 
     def for_source(self, path: Path) -> NativeInputEvidenceRead:
         path = Path(path).absolute()

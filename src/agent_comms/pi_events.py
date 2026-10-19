@@ -425,6 +425,7 @@ class ContextCommitted(NativePiEvent):
     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
+    session_entry_start: int | None = field(default=None, metadata={"wire_name": "sessionEntryStart"})
     request_generation: int | None = field(
         default=None, metadata={"wire_name": "requestGeneration"}
     )
@@ -649,6 +650,7 @@ class InputCommitted(NativePiEvent):
     input_id: str | None = field(default=None, metadata={"wire_name": "inputId"})
     session_id: str | None = field(default=None, metadata={"wire_name": "sessionId"})
     session_entry_id: str | None = field(default=None, metadata={"wire_name": "sessionEntryId"})
+    session_entry_start: int | None = field(default=None, metadata={"wire_name": "sessionEntryStart"})
 
 
 @dataclass(frozen=True, kw_only=True)

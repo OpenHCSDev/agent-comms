@@ -149,6 +149,7 @@ def read_historical_native_inputs(
                 raise IdentityConflict("historical native input disappeared inside its snapshot")
         if len(rows) > 2 or len({type(row.execution) for _source, row in rows}) != len(rows):
             raise IdentityConflict("historical source has ambiguous native input evidence")
+        source_reads.observe_inputs(tuple(row.require_context_proof() for _source, row in rows))
         with expected_prompt_bindings(store, (row.input_id for _source, row in rows)) as bindings:
             rows.sort(key=lambda item: item[1].execution.proof_order)
         evidence: list[HistoricalNativeInput] = []

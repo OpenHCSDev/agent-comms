@@ -13,6 +13,14 @@ def replace_once(path, before, after):
 
 
 def extend_input_claim(session, rpc, core):
+    # The persisted entry store already owns byte placement after flushInputDurably.
+    replace_once(session, 'tracked.push({ inputId, sessionEntryId: entry.id });',
+        'tracked.push({ inputId, sessionEntryId: entry.id, sessionEntryStart: this.sessionManager.entryStore.metadata(entry.id).offset });')
+    replace_once(session, 'inputId: event.message.inputId, sessionEntryId: entryId });',
+        'inputId: event.message.inputId, sessionEntryId: entryId, sessionEntryStart: this.sessionManager.entryStore.metadata(entryId).offset });')
+    for kind in ('input_committed', 'context_committed'):
+        before = f'    type: "{kind}";\\n    sessionId: string;\\n    inputId: string;\\n    sessionEntryId: string;'
+        replace_once(core/'agent-session.d.ts', before, before+'\\n    sessionEntryStart: number;')
     # Change the original claim value in place. Every digest consumer keeps the
     # original proof; descriptors never enter provider input or saved messages.
     source=session.read_text()

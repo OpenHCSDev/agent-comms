@@ -40,7 +40,7 @@ class NativeRuntimeSchemaMeta(NativeRuntimeTable, TypedTable, PrivateRuntimeSche
         install_native_runtime_schema(store)
 
     singleton: Literal[1] = field(metadata={"sql": Column(primary_key=True, check="singleton=1")})
-    version: Literal[6] = field(default=6, kw_only=True)
+    version: Literal[7] = field(default=7, kw_only=True)
     ddl_digest: str = field(metadata={"sql": Column(check="length(ddl_digest)=64")})
 
     @classmethod
@@ -120,6 +120,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             reference.input_id, reference.session_id, self.session_entry_id,
             reference.request_generation, self.llm_context_digest, self.committed_at_ms,
             self.require_session_identity().path,
+            session_entry_start=self.session_entry_start,
         )
 
     @property
@@ -229,6 +230,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
     session_id: str | None = None
     session_file: str | None = None
     session_entry_id: str | None = field(default=None, metadata={"native_context": str})
+    session_entry_start: int | None = field(default=None, metadata={"native_context": int})
     request_generation: int | None = field(default=None, metadata={"native_context": int})
     llm_context_digest: str | None = field(default=None, metadata={"native_context": str})
     committed_at_ms: int | None = field(default=None, metadata={"native_context": int})
@@ -244,9 +246,10 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
         "(session_id IS NULL AND session_file IS NULL) OR "
         "(session_id IS NOT NULL AND length(session_id)>0 AND session_file IS NOT NULL "
         "AND length(session_file)>0 AND {sent_owner_claimed_generation} IS NOT NULL)",
-        "(session_entry_id IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
+        "(session_entry_id IS NULL AND session_entry_start IS NULL AND request_generation IS NULL AND llm_context_digest IS NULL "
         "AND committed_at_ms IS NULL) OR "
-        "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 AND request_generation>0 "
+        "(session_entry_id IS NOT NULL AND length(session_entry_id)>0 "
+        "AND session_entry_start IS NOT NULL AND session_entry_start>0 AND request_generation>0 "
         "AND length(llm_context_digest)=64 AND committed_at_ms>0 AND session_id IS NOT NULL)",
         "stage='triage' OR verdict IS NULL",
     )
@@ -272,6 +275,7 @@ class NativeRuntimeInput(NativeInputRecord, NativeInputContext, NativeRuntimeTab
             where="input_id=? AND session_entry_id IS NULL",
             parameters=(self.input_id,),
             session_entry_id=context.session_entry_id,
+            session_entry_start=context.session_entry_start,
             request_generation=context.request_generation,
             llm_context_digest=context.llm_context_digest,
             committed_at_ms=context.committed_at_ms,

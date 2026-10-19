@@ -104,9 +104,9 @@ export class NativeProofJournal {
             const committedAtMs = Date.now();
             const insert = db.prepare(nativeProofSchema.insert);
             // Each journal row is also the live context_committed event, unchanged.
-            const records = tracked.map(({inputId, sessionEntryId}) => ({
-                schema:2, type:'context_committed', sessionId:this.sessionId, inputId,
-                sessionEntryId, requestGeneration:generation, llmContextDigest:digest, committedAtMs}));
+            const records = tracked.map(({inputId, sessionEntryId, sessionEntryStart}) => ({
+                schema:3, type:'context_committed', sessionId:this.sessionId, inputId,
+                sessionEntryId, sessionEntryStart, requestGeneration:generation, llmContextDigest:digest, committedAtMs}));
             for (const record of records)
                 insert.run(...nativeProofSchema.columns.map(column => record[column.wire]));
             db.exec('COMMIT');
