@@ -9,11 +9,12 @@ from dataclasses import replace
 import pytest
 
 from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.child_process import CountPrinted
 from agent_comms.goals import CountCheckResult, GitCommandFailed, OrderCheck
 from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, DistanceReadings, MergedProgress, NoCommitProgress,
     InstallDeadline, InstallDue, OpenPrProgress, OperationDelivery, OrderProgress, PlannedInstallDeadline,
-    LocalProgressSource, MergedPullRequest, ProgressPoint, ProgressSource, PullRequest, PullRequests,
+    MergedPullRequest, PresentCheckout, ProgressPoint, ProgressSource, PullRequest, PullRequests,
     PushedProgress, UnmergedPullRequest, UnreadProgress)
 
 from agent_comms.messages import InfoKind
@@ -71,7 +72,7 @@ def test_no_commit_since_the_order_is_explicit(checkout):
 
 
 def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander_script, checkout, monkeypatch):
-    from agent_comms.child_process import CountPrinted, NoIntegerPrinted
+    from agent_comms.child_process import NoIntegerPrinted
     from agent_comms.todos import DistanceReading, UncountedTrend
 
     script, _ = commander_script
@@ -84,6 +85,7 @@ def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander
         replace(todo, order=broken).upsert(db)
     create(commander, 'P2', deadline=1)
     commit(unit)
+    broken.check.at(git(unit, 'rev-parse', 'HEAD'), str(unit))
 
     progress = read((comms.goals.todos.get('P1'), unit))
     assert progress.line.endswith("; check prints no integer: printf 'no count here'")
@@ -123,7 +125,7 @@ def test_an_open_pr_naming_the_order_shows_its_number_and_head(checkout):
 def test_removed_checkout_uses_only_retained_pr_and_present_git_errors_propagate(checkout):
     _, unit = checkout
     shutil.rmtree(unit)
-    pulls = Listed(open=(PullRequest(7, 'fix/p1', 'a' * 40,
+    pulls = Listed(open=(UnmergedPullRequest(7, 'fix/p1', 'a' * 40,
                                     updated_at=400.0, orders=('order-P1',)),))
     progress = read(checkout, pulls)
     assert progress == OpenPrProgress(7, 'a' * 9, at=400.0)
@@ -178,21 +180,21 @@ def test_progress_reads_only_explicit_check_receipts(checkout, tmp_path):
     check = OrderCheck(str(unit), f'printf x >> {shlex.quote(str(marker))}; printf 0',
                        CountCheckResult(0))
     todo = replace(todo, order=replace(todo.order, check=check))
-    source = ProgressSource.at(todo, unit, Listed())
-    assert source.readings() == DistanceReadings()
+    source = ProgressSource.of(todo, StorageRule(checkout_base=unit.parent), Listed())
+    assert not source.readings().readings
     assert not marker.exists()
     check.at(git(unit, 'rev-parse', 'HEAD').strip(), str(unit))
     assert marker.read_text() == 'x'
     assert len(source.readings().readings) == 1
-    assert source.readings().readings[0].distance == todo.order.untouched(())
+    assert source.readings().readings[0].distance == CountPrinted(todo.order.checked().untouched(()))
     assert marker.read_text() == 'x'
 
 
 def test_an_existing_broken_checkout_is_not_silently_treated_as_missing(checkout, tmp_path):
-    bad = tmp_path / 'not-a-repository'
-    bad.mkdir()
-    source = ProgressSource.at(checkout[0], bad, Listed())
-    assert isinstance(source, LocalProgressSource)
+    bad = tmp_path / 'not-a-repository' / 'worker--P1'
+    bad.mkdir(parents=True)
+    source = ProgressSource.of(checkout[0], StorageRule(checkout_base=bad.parent), Listed())
+    assert isinstance(source.checkout, PresentCheckout)
     with pytest.raises(GitCommandFailed):
         source.readings()
 
