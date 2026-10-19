@@ -438,10 +438,23 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
     numbered = body.read_text().replace('Problem: NEW', f'Problem: {created.id}')
+    # The refusal itself supplies the exact replacement argument; no DM lookup.
+    with pytest.raises(ValueError) as refusal:
+        script.send('worker', due, numbered)
+    expected = f"worker already holds P1; pass --replaces {created.messages[-1].message_id}"
+    assert str(refusal.value) == expected
+    replaces = str(refusal.value).split('--replaces ', 1)[1]
+    print(f'Refused order: {refusal.value}')
     # Without --clean this replaces the prior order and counts a send-back.
-    script.send('worker', due, numbered, replaces=created.messages[-1].message_id)
+    script.send('worker', due, numbered, replaces=replaces)
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
+    print(f'Accepted replacement: {sent_back.order.id}')
+    # A historical send cannot replace the latest order.
+    with pytest.raises(ValueError, match=sent_back.messages[-1].message_id):
+        script.send('worker', due, numbered, replaces=replaces)
+    with pytest.raises(ValueError, match='no order message was recorded'):
+        replace(sent_back, messages=()).require_replacement(replaces)
     (link,) = sent_back.messages[-1:]
     sent = next(m.body for m in comms.views.history_page(CommandTarget.named('worker'), viewer='lead').messages if m.message_id == link.message_id)
     assert 'Set count.txt to 1.' in sent and 'Start now and push as you go.' in sent
@@ -477,6 +490,40 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
 
 def problem(script, body):
     script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, f'{__file__}:1')
+
+
+def test_installed_order_entrypoint_refuses_then_accepts_printed_replacement(
+        commander, commander_script):
+    from agent_comms.rule_reviews import (
+        AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews,
+    )
+
+    comms, _ = commander
+    script, repo = commander_script
+    (repo / 'count.txt').write_text('0\n')
+    body = Path(order_body(repo))
+    problem(script, str(body))
+    body.write_text(body.read_text().replace('Problem: NEW', 'Problem: P1'))
+    reviews = RuleReviews(comms.root)
+    reviews.write('lead', DrawnRuleReviewEntry(('Keep the current order message with its Todo.',), 0))
+    reviews.write('lead', AnsweredRuleReviewEntry(
+        1, 'P1 keeps the current message in its Todo and prints it when refusing replacement.'))
+    command = [str(Path(sys.executable).with_name('agent-comms-commander')),
+               'order', 'send', 'worker', '23:59', str(body)]
+    env = {**os.environ, 'PYTHONPATH': str(Path(__file__).parents[1] / 'src'),
+           'AGENT_COMMS_ROOT': str(comms.root)}
+    refused = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+    assert refused.returncode != 0
+    current = comms.goals.todos.get('P1')
+    expected = f'worker already holds P1; pass --replaces {current.messages[-1].message_id}'
+    assert expected in refused.stderr
+    replacement = re.search(r'pass --replaces (\w+)', refused.stderr).group(1)
+    print(expected)
+    accepted = subprocess.run([*command, '--replaces', replacement], env=env,
+                              capture_output=True, text=True, timeout=30)
+    assert accepted.returncode == 0, accepted.stderr
+    assert comms.goals.todos.get('P1').order.id != current.order.id
+    print(f'Accepted --replaces {replacement}: {accepted.stdout.strip()}')
 
 
 def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
