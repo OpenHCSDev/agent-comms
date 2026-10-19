@@ -3,15 +3,11 @@
 from __future__ import annotations
 
 import sqlite3
-from collections.abc import Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from .active_route import guard_original_root_write
 from .registration import Registration
 
-if TYPE_CHECKING:
-    pass
 from .bus_publication import AgentOrigin, HumanOrigin
 from .change_report import ChangeReport
 from .errors import RelationViolationError, UnregisteredThreadError

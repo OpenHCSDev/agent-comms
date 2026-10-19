@@ -618,7 +618,9 @@ class ClaimCommits(CheckpointTable, TypedTable):
         "sql": Column(unique=True, generated="json_extract(transition,'$.seq')"),
     })
     operation_id: str | None = field(default=None, init=False, compare=False, metadata={
-        "sql": Column(unique=True, generated=f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}.operation_id')"),
+        "sql": Column(unique=True, generated=(
+            f"json_extract(transition,'$.{FieldCodec.record_key(ClaimOwner, 'claim_scope')}"
+            ".operation_id')")),
     })
 
     @classmethod
@@ -666,8 +668,8 @@ class ResourceClaims(CheckpointTable, TypedTable):
 
     @classmethod
     def owner_for(cls, db: sqlite3.Connection, resource: str) -> ResourceClaim:
-        originals = ClaimCommits.select(
-            db, where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
+        originals = ClaimCommits.select(db,
+            where=f'"seq"=(SELECT "claim_seq" FROM "{cls.declared_name}" WHERE "resource"=?)',
             parameters=(resource,))
         return next((row.transition.claimed(resource) for row in originals), UnclaimedResource())
 
