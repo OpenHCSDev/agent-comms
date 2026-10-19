@@ -39,6 +39,7 @@ from .native_arguments import NativeArguments
 from .runtime import RuntimeProxy, RuntimeServer
 from .session_effects import SessionEffects
 from .threads import Thread
+from .thread_identity import AcpThreadRole
 from .registry_document import RegistryEntry
 from .transcript_updates import TranscriptReplay
 from .owner_protocol import IncompatibleOwner, IncompatibleOwnerError
@@ -153,6 +154,7 @@ class SessionLifecycle:
             model=self.agent_args.model,
             thinking_level=self.agent_args.thinking,
             auto_title_pending=True,
+            role=AcpThreadRole,
         )
         self.comms.threads.restore_stopped(self.comms.registry.snapshot(), (thread.name,))
         return self.acquire_declared_thread(thread)

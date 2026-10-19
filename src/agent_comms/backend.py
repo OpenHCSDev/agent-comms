@@ -234,10 +234,6 @@ class NativeSession(MroDispatch, ABC):
         self.output = TurnOutput()
         self.rejected_signal = asyncio.Event()
 
-    @property
-    def active_tools(self):
-        return self.tool_socket.active_tools
-
     def accept_tool_round(self, message):
         self.tool_socket.announce(message.content)
         return True
@@ -270,7 +266,7 @@ class NativeSession(MroDispatch, ABC):
             yield update
         for update in await self.apply_native_event(event):
             yield update
-        self.watchdog.transition(event, self.active_tools)
+        self.watchdog.transition(event, self.tool_socket.active_tools)
         for update in self.native_phase_changes(previous):
             yield update
 
