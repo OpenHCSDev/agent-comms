@@ -36,7 +36,7 @@ def beat(name: str):
 
 @dataclass(frozen=True)
 class Load:
-    """The commander load on one Comms: its open and overdue orders and the edits it has not judged."""
+    """The commander load on one Comms: its open and overdue orders and its unjudged edits."""
     owed: int
     overdue: int
     unjudged: int
@@ -59,8 +59,8 @@ class Load:
         forks = live_forks()
         if len(forks) < needed:
             return (f'load {self.total:.0f} ({self.owed} open orders, {self.overdue} overdue, '
-                    f'{self.unjudged} unjudged edits) needs {needed} live fork(s), {len(forks)} live {forks}; '
-                    f'fork a slice now (each fork passes --fork NAME to order)')
+                    f'{self.unjudged} unjudged edits) needs {needed} live fork(s), '
+                    f'{len(forks)} live {forks}; fork a slice now (each fork passes --fork NAME to order)')
         return None
 
     def require(self) -> None:
