@@ -99,10 +99,9 @@ class Publisher:
         sender: str,
         target: NamedTarget,
         sequence: int,
-        snapshot: RegistrySnapshot | None = None,
+        snapshot: RegistrySnapshot,
         original_source: CertifiedSourceRead | None = None,
     ) -> Message:
-        snapshot = snapshot or self._registry.snapshot()
         if original_source is not None:
             original_source.require_marker(self.log.private_marker_unlocked())
         message.require_task_publication(sender, snapshot, original_source)

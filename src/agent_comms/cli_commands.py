@@ -2091,7 +2091,7 @@ class PinThreadCliCommand(CliCommand, declared_name='pin-thread'):
         return channel.get(target, (None,)) if isinstance(channel, dict) else (channel,)
 
     @classmethod
-    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog=None):
+    def thread_bindings(cls, comms, thread, status, channel=None, *, catalog: CatalogDocument):
         if channel is None:
             return ()
         with comms.bus.opened_activity() as activity:

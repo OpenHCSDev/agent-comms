@@ -11,6 +11,7 @@ from agent_comms.tool_caller import ThreadCaller, NoThreadCaller
 from agent_comms.activity import ActivityState
 from agent_comms.channels import BuiltinChannelView
 from agent_comms.channels import AllOfMatch, AnyOfMatch, ChannelMemberIndex, RetiredTagChannel, TagChannel, SavedView, ViewKind, ViewPredicate
+from agent_comms.channel_targets import CommandTarget
 from agent_comms.child_process import NoProcess, ProcessIdentity
 from agent_comms.channel_management import (
     ArchiveThreadsTagDisposition, DeleteThreadsTagDisposition,
@@ -284,8 +285,8 @@ def test_tag_lifecycle_is_transactional_for_metadata_views_and_history(tmp_path)
     with pytest.raises(ValueError, match="not a routable target"):
         restarted.messaging.send("other", "#api", "must not route")
     with pytest.raises(ValueError, match="Unknown channel"):
-        restarted.views.channel_history_page("#tpyo")
-    assert [message.body for message in list(restarted.views.channel_history_page("#api").messages)] == [
+        restarted.views.history_page(CommandTarget.named("#tpyo"))
+    assert [message.body for message in list(restarted.views.history_page(CommandTarget.named("#api")).messages)] == [
         "target-owned historical row"
     ]
     assert restarted.channels.catalog.read().saved_views["cross-team"].predicate.tags == {"docs"}
@@ -538,16 +539,16 @@ def test_membership_notices_follow_exact_membership_and_do_not_wake(tmp_path):
         comms.registry.new_thread('peer', frozenset({'api'}), str(tmp_path), process_identity=ProcessIdentity.capture(os.getpid()))
     )
     comms.channels.update_tags("moving", add=frozenset({"api"}))
-    joined = list(comms.views.channel_history_page("#api").messages)
+    joined = list(comms.views.history_page(CommandTarget.named("#api")).messages)
     assert len(joined) == 1 and joined[0].role.change.value == "joined"
     assert joined[0].body == "moving joined #api" and not joined[0].role.response_policy(joined[0]).starts_turn
     with comms.bus.opened_activity() as clocks:
         assert "moving" not in comms.views.last_sent_timestamps(clocks.sent.items(), registry=comms.registry.snapshot())
     comms.channels.update_tags("moving", add=frozenset({"ui"}))
     comms.channels.update_tags("moving", remove=frozenset({"api"}))
-    assert len(list(comms.views.channel_history_page("#api").messages)) == 2
+    assert len(list(comms.views.history_page(CommandTarget.named("#api")).messages)) == 2
     comms.channels.update_tags("moving", remove=frozenset({"ui"}))
-    history = list(wire(tmp_path).views.channel_history_page("#api").messages)
+    history = list(wire(tmp_path).views.history_page(CommandTarget.named("#api")).messages)
     assert [message.role.change.value for message in history] == ["joined", "left"]
     assert all(not message.role.response_policy(message).starts_turn for message in history)
     assert not comms.views.viewer_snapshot(str(tmp_path)).participants("#api")
