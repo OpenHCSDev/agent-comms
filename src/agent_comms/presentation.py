@@ -368,7 +368,7 @@ class ReadAll(ChannelReadMark):
         with presentation.bus.log.opened_wire_snapshot() as source:
             with CapturedSelection.reading(
                 presentation.registry, presentation.catalog, presentation.bus.reads,
-                NamedViewer(viewer),
+                NamedViewer(viewer), presentation.bus.activity_index.snapshot(source),
             ) as basis:
                 scope = basis.scope(target)
             yield source.query_page_index(lambda index: scope.capture_all(
@@ -384,9 +384,9 @@ class ReadThrough(ChannelReadMark):
 
     @contextmanager
     def reading(self, presentation, target, viewer):
-        with CapturedSelection.reading(
+        with presentation.bus.opened_activity() as activity, CapturedSelection.reading(
             presentation.registry, presentation.catalog, presentation.bus.reads,
-            NamedViewer(viewer),
+            NamedViewer(viewer), activity,
         ) as basis:
             displayed = self.expected_scope.require_displayed()
             if basis.scope(target) != self.expected_scope:
@@ -428,8 +428,8 @@ class BusPresentation:
         self, viewer: str, visibility: RosterVisibility = DEFAULT_ROSTER,
     ) -> CoordinationSnapshot:
         """Current sidebar rows without advancing whole-bus derived indexes."""
-        with CapturedSelection.reading(
-            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer)
+        with self.bus.opened_activity() as activity, CapturedSelection.reading(
+            self.registry, self.catalog, self.bus.reads, NamedViewer(viewer), activity,
         ) as basis:
             snapshot = CoordinationSnapshot.capture(
                 self._path.parent, basis.registry, basis.catalog, self.agents, basis.channels,
@@ -454,7 +454,8 @@ class BusPresentation:
             with _store_lock(self._wire_lock_path, mode=SharedLock()):
                 source = resources.enter_context(self.bus.log.opened_wire_snapshot())
                 with CapturedSelection.reading(
-                    self.registry, self.catalog, self.bus.reads, viewer
+                    self.registry, self.catalog, self.bus.reads, viewer,
+                    self.bus.activity_index.snapshot(source),
                 ) as basis:
                     scope = basis.scope(target.name)
             # Reading identity is separate from preparing pages. Both
@@ -830,7 +831,7 @@ class WireRevision(ReadState):
                           for actor in (message.sender, message.target)}
             catalog = comms.channels.catalog.read()
             for actor in actors:
-                changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, catalog))
+                changed.update(CommandTarget.named(actor).changed_threads(names, snapshot, comms.bus.require_channel))
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != previous.activity.get(name)}

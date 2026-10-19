@@ -56,7 +56,7 @@ class BuiltinChannel(StrEnum):
 
 class CommandTarget(ABC):
     """A command destination owns its binding and catalog participation."""
-    needs_catalog: ClassVar[bool] = False
+    needs_channel_state: ClassVar[bool] = False
 
     @staticmethod
     @overload
@@ -87,7 +87,7 @@ class CommandTarget(ABC):
         return True
 
     @abstractmethod
-    def resolve(self, snapshot, catalog): ...
+    def resolve(self, snapshot, require_channel): ...
 
     @abstractmethod
     def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog): ...
@@ -170,10 +170,10 @@ class ThreadTarget(NamedTarget):
     def available(self, snapshot) -> bool:
         return self.canonical_name(snapshot.canonical_name) in snapshot.threads
 
-    def pending_count(self, counts, snapshot, catalog):
+    def pending_count(self, counts, snapshot, require_channel):
         return counts.get(snapshot.require(self.name).name, 0)
 
-    def resolve(self, snapshot, catalog) -> ResolvedThread:
+    def resolve(self, snapshot, require_channel) -> ResolvedThread:
         thread = snapshot.require(self.name)
         return ResolvedThread(thread, snapshot.status(thread.name))
 
@@ -193,14 +193,14 @@ class ThreadTarget(NamedTarget):
     def wake_policy(self, recipient, mentions):
         return FullWake()
 
-    def require_publication(self, message, snapshot, catalog):
+    def require_publication(self, message, snapshot, require_channel):
         target = self.canonical_name(snapshot.canonical_name)
         if target not in snapshot.threads:
             raise UnregisteredThreadError(f"Target {self.name!r} is not a registered thread.")
         if target == snapshot.canonical_name(message.sender) and message.type.conversation_message:
             raise RelationViolationError(f"Thread {target!r} cannot message itself.")
 
-    def initial_delivery(self, sender, message, snapshot, catalog):
+    def initial_delivery(self, sender, message, snapshot, require_channel):
         target = self.canonical_name(snapshot.canonical_name)
         recipient = snapshot.require(target)
         snapshot.status(target).require_visible()
@@ -209,14 +209,14 @@ class ThreadTarget(NamedTarget):
         message, names = recipient.role.initial_delivery(message, target)
         return ThreadTarget(target), message, names
 
-    def display_scope(self, viewer, snapshot, catalog, direct_scope):
+    def display_scope(self, viewer, snapshot, require_channel, direct_scope):
         return direct_scope.capture(viewer, snapshot.require(self.name).name, snapshot)
 
     def conversation_key(self, sender, snapshot, channel, direct):
         names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
         return direct(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
-    def changed_threads(self, names, snapshot, catalog):
+    def changed_threads(self, names, snapshot, require_channel):
         return (self.canonical_name(snapshot.canonical_name),)
 
     def mark_view_read(self, views, worktree):
@@ -224,7 +224,7 @@ class ThreadTarget(NamedTarget):
 
 
 class ChannelTarget(NamedTarget):
-    needs_catalog = True
+    needs_channel_state = True
     batchable = True
     kind = "channel"
     default_audience = MessageAudience.COLLECTIVE
@@ -244,11 +244,11 @@ class ChannelTarget(NamedTarget):
     def require_channel(self):
         return self
 
-    def pending_count(self, counts, snapshot, catalog):
-        return catalog.require_channel(self.name).pending_count(counts)
+    def pending_count(self, counts, snapshot, require_channel):
+        return require_channel(self.name).pending_count(counts)
 
-    def resolve(self, snapshot, catalog) -> ResolvedChannel:
-        channel = catalog.require_channel(self.name)
+    def resolve(self, snapshot, require_channel) -> ResolvedChannel:
+        channel = require_channel(self.name)
         members = tuple(ResolvedThread(thread, snapshot.status(thread.name))
                         for thread in snapshot.channel_audience()
                         if channel.matches(thread.tags))
@@ -277,23 +277,23 @@ class ChannelTarget(NamedTarget):
             return FullWake() if recipient.canonical_thread in mentions else UnmentionedWake()
         return BoundedTriageWake()
 
-    def require_publication(self, message, snapshot, catalog):
-        catalog().require_channel(self.name).require_routable()
+    def require_publication(self, message, snapshot, require_channel):
+        require_channel(self.name).require_routable()
 
-    def initial_delivery(self, sender, message, snapshot, catalog):
-        channel = catalog.require_channel(self.name)
+    def initial_delivery(self, sender, message, snapshot, require_channel):
+        channel = require_channel(self.name)
         names = [thread.name for thread in snapshot.channel_audience()
                  if thread.name != sender and channel.matches(thread.tags)]
         return self, message, names
 
-    def display_scope(self, viewer, snapshot, catalog, direct_scope):
-        return catalog.require_channel(self.name).history_scope()
+    def display_scope(self, viewer, snapshot, require_channel, direct_scope):
+        return require_channel(self.name).history_scope()
 
     def conversation_key(self, sender, snapshot, channel, direct):
         return channel(target=self.name)
 
-    def changed_threads(self, names, snapshot, catalog):
-        channel = catalog.require_channel(self.name)
+    def changed_threads(self, names, snapshot, require_channel):
+        channel = require_channel(self.name)
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
@@ -317,7 +317,7 @@ class ProjectTarget(CommandTarget):
     def names(self) -> tuple[str, ...]:
         return ()
 
-    def resolve(self, snapshot, catalog):
+    def resolve(self, snapshot, require_channel):
         return self.project
 
     def bindings(self, declaration, comms, channel, resolved, *, snapshot, catalog):

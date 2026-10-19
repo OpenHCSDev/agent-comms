@@ -130,7 +130,8 @@ class ChannelDisplayHistory(ConversationHistoryView, HistoryView):
     def _selection(cls, views: HistoryViews, snapshot: RegistrySnapshot, catalog: CatalogDocument,
                    viewer: str, target: str, worktree: str,
                    history_revision: FileRevision | None) -> ChannelSelection:
-        channel = catalog.require_channel(target)
+        with views.bus.opened_activity() as activity:
+            channel = catalog.require_channel(target, activity)
         return ChannelSelection(
             viewer=snapshot.require(viewer).incarnation,
             bus_identity=RecordedBusIdentity.capture(views.bus.log.path),

@@ -7,6 +7,8 @@ uses ThreadIncarnation; process and turn generations do not alter provenance.
 
 from __future__ import annotations
 
+from .bus_activity_index import ActivityClocks
+
 import asyncio
 import json
 from abc import ABC, abstractmethod
@@ -925,6 +927,7 @@ class CapturedSelection:
 
     registry: RegistrySnapshot
     catalog: CatalogDocument
+    activity: ActivityClocks
     viewer: DisplayViewer
     reads: ReadLedger
     document: ReadDocument
@@ -936,15 +939,16 @@ class CapturedSelection:
     def capture(
         cls, snapshot: RegistrySnapshot, catalog: CatalogDocument,
         reads: ReadLedger, document: ReadDocument, viewer: DisplayViewer,
+        activity: ActivityClocks,
     ) -> CapturedSelection:
         viewer = viewer.resolve(snapshot)
-        return cls(snapshot, catalog, viewer, reads, document)
+        return cls(snapshot, catalog, activity, viewer, reads, document)
 
     @classmethod
     @contextmanager
     def reading(
         cls, registry: Registration, catalog: ChannelCatalog,
-        reads: ReadLedger, viewer: DisplayViewer,
+        reads: ReadLedger, viewer: DisplayViewer, activity: ActivityClocks,
     ) -> Iterator[CapturedSelection]:
         """Borrow the original identity resources and read the ledger once.
 
@@ -954,13 +958,13 @@ class CapturedSelection:
         with registry.store.reading() as document, catalog.reading() as channels:
             with reads.reading() as read_document:
                 selected = cls.capture(
-                    document.snapshot(), channels, reads, read_document, viewer
+                    document.snapshot(), channels, reads, read_document, viewer, activity
                 )
             yield selected
 
     @property
     def channels(self) -> Channels:
-        return self.catalog.views()
+        return self.catalog.views(self.activity)
 
     @property
     def scopes(self) -> tuple[ChannelDisplayScope, ...]:
@@ -977,5 +981,5 @@ class CapturedSelection:
         return self.viewer.require_name(self.registry)
 
     def scope(self, target: str) -> ChannelDisplayScope:
-        channel = self.catalog.require_channel(target)
+        channel = self.catalog.require_channel(target, self.activity)
         return channel.display_scope(self.registry)

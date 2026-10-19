@@ -16,7 +16,6 @@ from .channels import Channel, SavedView
 from .cli_result import CliResult
 from .display_order import ChannelSort, ThreadSort
 from .message_bus import MessageBus
-from .message_page import PageBounds
 from .messages import InfoKind, Message, MembershipConversationRole
 from .registration import Registration
 from .store_files import _store_lock
@@ -137,7 +136,7 @@ class ChannelManagement:
         self.catalog = threads.catalog
 
     def channels(self) -> Sequence[str]:
-        return list(self.catalog.read().views())
+        return list(self.bus.channel_declarations())
 
     def _require_available_new_tags(self, proposed: frozenset[str]) -> None:
         document = self.catalog.read()
@@ -169,7 +168,7 @@ class ChannelManagement:
     def _update_tags_locked(self, name, *, add, remove) -> Thread:
         self._require_available_new_tags(add)
         thread = self.registry.require(name)
-        previous_channels = self.catalog.read().views()
+        previous_channels = self.bus.channel_declarations()
         updated = replace(thread, tags=(thread.tags | add) - remove)
         self.registry.register(updated, self.registry.status(thread.name))
         updated = self.registry.require(thread.name)
@@ -179,7 +178,7 @@ class ChannelManagement:
         for announcer in announcers:
             channels = {
                 **previous_channels,
-                **self.catalog.read().views(),
+                **self.bus.channel_declarations(),
             }
             for channel in channels.values():
                 for change in channel.membership_changes(thread.tags, updated.tags):
@@ -196,8 +195,8 @@ class ChannelManagement:
         return updated
 
     def set_saved_view(self, view: SavedView) -> SavedView:
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
-            document.set_view(view)
+        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            document.set_view(view, activity)
             result = document.saved_views[view.name]
         return result
 
@@ -206,21 +205,21 @@ class ChannelManagement:
             document.delete_view(name)
 
     def set_channel_metadata(self, name: str, *, parent: str | None, archived: bool) -> Channel:
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
-            return document.set_metadata(name, parent=parent, archived=archived)
+        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_metadata(name, activity, parent=parent, archived=archived)
 
     def set_channel_archived(self, name: str, archived: bool) -> Channel:
-        with guard_original_root_write(self.root), _store_lock(self._wire_lock_path), self.catalog.editing() as document:
-            channel = document.require_channel(name)
-            return document.set_metadata(channel.name, parent=channel.parent, archived=archived)
+        with self.bus.opened_activity() as activity, guard_original_root_write(self.root), _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            channel = document.require_channel(name, activity)
+            return document.set_metadata(channel.name, activity, parent=channel.parent, archived=archived)
 
     def set_channel_any_mode(self, name: str, enabled: bool) -> Channel:
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
-            return document.set_any_mode(name, enabled)
+        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_any_mode(name, enabled, activity)
 
     def set_channel_sort(self, name: str, order: type[ThreadSort]) -> Channel:
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
-            return document.set_preferences(name, order=order)
+        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_preferences(name, activity, order=order)
 
     def set_channel_order(self, order: type[ChannelSort]) -> type[ChannelSort]:
         with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
@@ -228,15 +227,15 @@ class ChannelManagement:
         return order
 
     def set_channel_pinned(self, name: str, pinned: bool) -> Channel:
-        with _store_lock(self._wire_lock_path), self.catalog.editing() as document:
-            return document.set_preferences(name, pinned=pinned)
+        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path), self.catalog.editing() as document:
+            return document.set_preferences(name, activity, pinned=pinned)
 
     def set_thread_pinned(self, channel: str, name: str, pinned: bool) -> None:
-        with _store_lock(self._wire_lock_path):
+        with self.bus.opened_activity() as activity, _store_lock(self._wire_lock_path):
             thread = self.registry.require(name)
             snapshot = self.registry.snapshot()
             with self.catalog.editing() as document:
-                view = document.require_channel(channel)
+                view = document.require_channel(channel, activity)
                 if pinned:
                     thread.role.require_executable(ValueError(
                         f"Thread {thread.name!r} is not a member of {view.name}."
@@ -284,8 +283,6 @@ class ChannelManagement:
 
     def _change_tag_unlocked(self, name: str, replacement: str | None,
                              cohort: tuple[Thread, ...]) -> None:
-        self.catalog.read().require_channel(name).require_routable()
-        history = self.bus.channel_history_page(ChannelTarget(f"#{name}"), PageBounds(limit=1))
-        self.registry.change_tag(cohort, name, replacement)
         with self.catalog.editing() as document:
-            document.change_tag(name, replacement, has_history=bool(history.messages))
+            document.change_tag(name, replacement)
+            self.registry.change_tag(cohort, name, replacement)

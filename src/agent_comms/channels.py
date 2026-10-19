@@ -121,8 +121,8 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
     @abstractmethod
     def sort_key(self, ordering, view) -> tuple: ...
 
-    @abstractmethod
-    def delete_view_bindings(self, command) -> tuple: ...
+    def delete_view_bindings(self, command) -> tuple:
+        return ()
 
     @abstractmethod
     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]: ...
@@ -190,9 +190,6 @@ class MembershipChannel:
     @property
     def read_only(self) -> bool:
         return False
-
-    def delete_view_bindings(self, command) -> tuple:
-        return ()
 
     def membership_changes(self, before: frozenset[str], after: frozenset[str]) -> tuple[MembershipChange, ...]:
         previous, current = self.matches(before), self.matches(after)
@@ -323,6 +320,11 @@ class TagChannel(MembershipChannel, TagChannelIdentity):
 
 @dataclass(frozen=True, slots=True)
 class RetiredTagChannel(ReadOnlyChannel, TagChannelIdentity):
+    def validate_declaration(self) -> None:
+        super(RetiredTagChannel, self).validate_declaration()
+        if self.any_mode:
+            raise ValueError("Retired channels cannot include member activity.")
+
     def members(self, index: ChannelMemberIndex) -> tuple[Thread, ...]:
         return ()
 

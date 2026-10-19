@@ -93,26 +93,26 @@ def test_catalog_restore_preserves_current_preferences_and_historical_channels(t
     old.channels.set_channel_pinned("#nra", True)
     old.channels.set_channel_pinned("#all", True)
     new.channels.set_channel_sort("#comms", LastActivityThreadSort)
-    before = new.channels.catalog.read().require_channel("#comms")
+    before = new.bus.require_channel("#comms")
     old_files = {p: p.read_bytes() for p in old.root.glob("*.json")}
 
-    with new.channels.catalog.editing() as document:
+    with new.bus.opened_activity() as activity, new.channels.catalog.editing() as document:
         document.restore_missing(
-            old.channels.catalog.read(), existing=True
+            old.channels.catalog.read(), activity, existing=True
         )
-    assert new.channels.catalog.read().require_channel("#comms") == before
-    assert not new.channels.catalog.read().require_channel("#all").pinned
+    assert new.bus.require_channel("#comms") == before
+    assert not new.bus.require_channel("#all").pinned
     for name in ("#nra", "#openhcs"):
-        assert new.channels.catalog.read().require_channel(name) == old.channels.catalog.read().require_channel(
+        assert new.bus.require_channel(name) == old.bus.require_channel(
             name
         )
     assert old_files == {p: p.read_bytes() for p in old.root.glob("*.json")}
-    with new.channels.catalog.editing() as document:
+    with new.bus.opened_activity() as activity, new.channels.catalog.editing() as document:
         document.restore_missing(
-            old.channels.catalog.read(), existing=True
+            old.channels.catalog.read(), activity, existing=True
         )
-    assert new.channels.catalog.read().require_channel("#comms") == before
-    assert new.channels.catalog.read().require_channel("#nra").any_mode
+    assert new.bus.require_channel("#comms") == before
+    assert new.bus.require_channel("#nra").any_mode
 
 
 @pytest.mark.parametrize("repair_existing", [False, True])

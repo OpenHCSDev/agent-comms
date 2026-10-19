@@ -298,6 +298,7 @@ def test_comms_export_uses_target_owned_channel_and_alias_aware_dm_scopes(tmp_pa
     for name in ("alice", "bob"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset({'team'}), str(tmp_path)))
     comms.messaging.send("alice", "#team", "team row").message.message_id
+    comms.channels.create_tag("other")
     comms.messaging.send("alice", "#other", "other row").message.message_id
     comms.messaging.send("alice", "bob", "private row").message.message_id
     comms.registry.rename("alice", "renamed")

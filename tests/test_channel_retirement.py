@@ -74,11 +74,13 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     catalog = comms.channels.catalog
     imported = catalog.read()
     assert json.loads(catalog.path.read_text()) == original  # read is not activation
-    projection = imported.require_channel("#engineering")
+    with comms.bus.opened_activity() as activity:
+        pass
+    projection = imported.require_channel("#engineering", activity)
     assert projection.view.original_targets == {"#engineering"}
     assert projection.pinned and projection.parent == "#ui"
     assert projection.created_at == 17 and imported.pinned_threads("#engineering") == {"a"}
-    assert imported.require_channel("#api").exact and imported.require_channel("#api").any_mode
+    assert imported.require_channel("#api", activity).exact and imported.require_channel("#api", activity).any_mode
     assert "#engineering" not in imported.targets_for(frozenset({"api"}))
     assert set(
         next(v.members for v in comms.views.channel_views() if v.channel.name == "#engineering")
@@ -107,7 +109,7 @@ def test_saved_projection_preserves_preferences_history_and_has_no_writable_alia
     with pytest.raises(ValueError, match="reserved"):
         comms.channels.create_tag("engineering")
     comms.channels.set_channel_metadata("engineering", parent="#ui", archived=True)
-    assert catalog.read().require_channel("#engineering").archived
+    assert comms.bus.require_channel("#engineering").archived
     comms.channels.set_saved_view(
         replace(imported.saved_views["engineering"], original_targets=frozenset())
     )
@@ -146,8 +148,8 @@ def test_restoring_same_named_view_keeps_current_predicate_and_original_target_h
         created_at=19,
     )
     comms.channels.set_saved_view(current)
-    with comms.channels.catalog.editing() as document:
-        document.restore_missing(source, existing=True)
+    with comms.bus.opened_activity() as activity, comms.channels.catalog.editing() as document:
+        document.restore_missing(source, activity, existing=True)
     restored = comms.channels.catalog.read().saved_views["engineering"]
     assert restored.predicate == current.predicate
     assert restored.created_at == 19

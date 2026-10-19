@@ -5,6 +5,8 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field, replace
 
+from .bus_activity_index import ActivityClocks
+from . import channels
 from .channel_targets import BuiltinChannel, ChannelTarget, Tag
 from .channels import (
     BuiltinChannelView,
@@ -12,7 +14,6 @@ from .channels import (
     Channels,
     SavedView,
     SavedViewChannel,
-    RetiredTagChannel,
     TagChannel,
     ViewPredicate,
 )
@@ -47,7 +48,6 @@ class ChannelPreferences:
 @dataclass(slots=True)
 class CatalogDocument:
     tags: frozenset[str] = frozenset()
-    retired_tags: frozenset[str] = frozenset()
     preferences: dict[str, ChannelPreferences] = field(default_factory=dict)
     saved_views: dict[str, SavedView] = field(default_factory=dict)
     list_order: type[ChannelSort] = NameChannelSort
@@ -56,9 +56,7 @@ class CatalogDocument:
         self.validate()
 
     def validate(self) -> None:
-        if self.tags & self.retired_tags:
-            raise ValueError("A tag cannot be current and retired at the same time.")
-        for tag in self.tags | self.retired_tags:
+        for tag in self.tags:
             Tag.validate(tag)
             if f"#{tag}" not in self.preferences or self.preferences[f"#{tag}"].created_at <= 0:
                 raise ValueError(f"Channel #{tag} has no recorded creation time; carry its catalog first.")
@@ -76,14 +74,14 @@ class CatalogDocument:
                 visited.add(parent)
                 parent = self.preferences.get(parent, ChannelPreferences()).parent
 
-    def views(self) -> Channels:
+    def views(self, activity: ActivityClocks) -> Channels:
         names = (kind.value for kind in BuiltinChannel)
-        result = Channels((name, self.require_channel(name)) for name in names)
-        result.update((f"#{tag}", self.require_channel(f"#{tag}")) for tag in sorted(self.tags))
-        result.update((f"#{name}", self.require_channel(f"#{name}")) for name in self.saved_views)
+        result = Channels((name, self.require_channel(name, activity)) for name in names)
+        result.update((f"#{tag}", self.require_channel(f"#{tag}", activity)) for tag in sorted(self.tags))
+        result.update((f"#{name}", self.require_channel(f"#{name}", activity)) for name in self.saved_views)
         return result
 
-    def require_channel(self, target: str) -> Channel:
+    def require_channel(self, target: str, activity: ActivityClocks) -> Channel:
         target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
         if builtin := BuiltinChannel.lookup(target):
@@ -94,8 +92,9 @@ class CatalogDocument:
             return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
         if tag in self.tags:
             return self.preferences[target].channel(TagChannel, target, frozenset({tag}))
-        if tag in self.retired_tags:
-            return self.preferences[target].channel(RetiredTagChannel, target, frozenset({tag}))
+        if target in activity.channels:
+            preference = self.preferences.get(target, ChannelPreferences())
+            return preference.channel(channels.RetiredTagChannel, target, frozenset({tag}))
         raise UnknownChannelError(f"Unknown channel: {target!r}")
 
     def targets_for(self, tags: frozenset[str]) -> frozenset[str]:
@@ -130,17 +129,18 @@ class CatalogDocument:
             Tag.validate(tag)
             self.preferences[f"#{tag}"] = ChannelPreferences(created_at=created_at)
         self.tags |= tags
-        self.retired_tags -= tags
 
     def create_tag(self, tag: str) -> None:
         self.require_available_name(tag)
         self.remember_tags(frozenset({tag}))
 
-    def set_view(self, view: SavedView) -> None:
+    def set_view(self, view: SavedView, activity: ActivityClocks) -> None:
         unknown = view.predicate.tags - self.tags
         if unknown:
             raise ValueError(f"Unknown view tags: {', '.join(sorted(unknown))}")
-        if view.name in self.tags:
+        if view.name in self.tags or (
+            view.name not in self.saved_views and f"#{view.name}" in activity.channels
+        ):
             raise ValueError(f"View name conflicts with channel: #{view.name}")
         previous = self.saved_views.get(view.name)
         if previous is not None:
@@ -164,39 +164,39 @@ class CatalogDocument:
         del self.saved_views[name]
         self.remove_channel(f"#{name}")
 
-    def set_preferences(self, name: str, **changes) -> Channel:
-        channel = self.require_channel(name)
+    def set_preferences(self, name: str, activity: ActivityClocks, **changes) -> Channel:
+        channel = self.require_channel(name, activity)
         preference = self.preferences.get(channel.name, ChannelPreferences(created_at=channel.created_at))
         self.preferences[channel.name] = replace(preference, **changes)
-        return self.require_channel(channel.name)
+        return self.require_channel(channel.name, activity)
 
-    def set_metadata(self, name: str, *, parent: str | None, archived: bool) -> Channel:
-        current = self.require_channel(name)
+    def set_metadata(self, name: str, activity: ActivityClocks, *, parent: str | None, archived: bool) -> Channel:
+        current = self.require_channel(name, activity)
         current.require_metadata()
         if type(archived) is not bool:
             raise ValueError("Channel archived state must be boolean.")
         if parent is not None:
             parent = ChannelTarget.normalize_name(parent)
             try:
-                parent_channel = self.require_channel(parent)
+                parent_channel = self.require_channel(parent, activity)
             except UnknownChannelError as error:
                 raise ValueError(f"Unknown parent channel: {parent!r}") from error
             parent_channel.require_parent()
-        result = self.set_preferences(name, parent=parent, archived=archived)
+        result = self.set_preferences(name, activity, parent=parent, archived=archived)
         self.validate_parents()
         return result
 
-    def set_any_mode(self, name: str, enabled: bool) -> Channel:
+    def set_any_mode(self, name: str, enabled: bool, activity: ActivityClocks) -> Channel:
         if type(enabled) is not bool:
             raise ValueError("Channel any_mode must be boolean.")
         unsupported = ValueError("Only existing exact tag channels support any_mode.")
         try:
-            channel = self.require_channel(name)
+            channel = self.require_channel(name, activity)
         except UnknownChannelError as error:
             raise unsupported from error
         if not channel.exact:
             raise unsupported
-        return self.set_preferences(name, any_mode=enabled)
+        return self.set_preferences(name, activity, any_mode=enabled)
 
     def set_thread_pinned(self, channel: str, thread: str, pinned: bool) -> None:
         preference = self.preferences.get(channel, ChannelPreferences())
@@ -222,12 +222,14 @@ class CatalogDocument:
             for child, p in self.preferences.items()
         }
 
-    def change_tag(self, previous: str, current: str | None, *, has_history: bool) -> None:
+    def change_tag(self, previous: str, current: str | None) -> None:
+        if previous not in self.tags:
+            raise UnknownChannelError(f"Unknown channel: #{previous}")
+
         def changed(tags):
             return (tags - {previous}) | ({current} if previous in tags and current else set())
 
         old_target, new_target = f"#{previous}", f"#{current}" if current else None
-        original = self.preferences[old_target]
         if new_target:
             preference = self.preferences.pop(old_target, None)
             if preference is not None:
@@ -246,18 +248,9 @@ class CatalogDocument:
         else:
             self.remove_channel(old_target)
         self.tags = changed(self.tags)
-        if has_history:
-            self.retired_tags |= {previous}
-            self.preferences[old_target] = replace(
-                original, pinned=False, parent=None, archived=True, any_mode=False,
-                pinned_threads=frozenset(),
-            )
-        if current:
-            self.retired_tags -= {current}
 
-    def restore_missing(self, source: CatalogDocument, *, existing: bool) -> tuple[str, ...]:
-        declarations = source.views()
-        declarations.update((f"#{tag}", source.require_channel(f"#{tag}")) for tag in source.retired_tags)
+    def restore_missing(self, source: CatalogDocument, activity: ActivityClocks, *, existing: bool) -> tuple[str, ...]:
+        declarations = source.views(activity)
         missing = {
             name: channel
             for name, channel in declarations.items()
@@ -268,7 +261,6 @@ class CatalogDocument:
                 name, ChannelPreferences(order=channel.order, created_at=channel.created_at)
             )
         self.tags |= source.tags
-        self.retired_tags = (self.retired_tags | source.retired_tags) - self.tags
         self.saved_views = source.saved_views | {
             name: replace(
                 view,
