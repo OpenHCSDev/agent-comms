@@ -19,9 +19,10 @@ from .bus_display_index import DisplaySnapshot
 from .coordination_database import CoordinationStore
 from .errors import RelationViolationError
 from .field_codec import MalformedRecord
-from .private_path import FileRevision
+from .private_path import FileRevision, ObservedPath
+from .recorded_bus import RecordedBus
 from .read_basis import ChannelDisplayScope, ConversationCursor, DMDisplayScope, ReadCursor
-from .typed_table import Column, Index, TypedRow, TypedStore, TypedTable
+from .typed_table import Column, Index, SQLiteSchemaObject, TypedRow, TypedStore, TypedTable
 
 if TYPE_CHECKING:
     from .registry_provenance import RegistryProvenance
@@ -111,8 +112,6 @@ class BusPageIndex(TypedStore):
         with ExitStack() as resources:
             db = resources.enter_context(self._attached(
                 lambda: closing(CoordinationStore.read_snapshot(self.path))))
-            if actual := self._schema(db):
-                self.require_schema(actual)
             db.execute("ROLLBACK")
             self._resources.enter_context(resources.pop_all())
             return db
@@ -146,6 +145,8 @@ class BusPageIndex(TypedStore):
             return
         with self.snapshot():
             actual = self._schema(self.connection)
+            if actual:
+                self.require_schema(actual)
             saved = BusPageSource.one(self.connection, singleton=1) if actual else None
             yield saved is not None and saved.covers(opened)
 
@@ -173,23 +174,25 @@ class BusPageIndex(TypedStore):
             if not borrowed and self.connection.in_transaction:
                 self.connection.execute("ROLLBACK")
 
-    def sync(self) -> bool:
-        """Prepare a freshly opened source; incomplete source is an error."""
-        from .wire_log import CurrentSnapshotOpening, WireLog
+    def replaced_by(self, source: ObservedPath) -> bool:
+        """Only a different file retires the saved offsets; stale rows do not."""
+        if source.shows_no_bus() or not self.path.exists():
+            return False
+        with self.snapshot():
+            if SQLiteSchemaObject.differences(self._schema(self.connection), self.declared_schema()):
+                return False  # A writer handles old schemas; this check only recognizes replacement.
+            saved = BusPageSource.one(self.connection, singleton=1)
+            return saved is not None and not RecordedBus(saved.revision.identity).matches(source)
 
-        with WireLog(self.bus_path).opened_wire_snapshot(opening=CurrentSnapshotOpening()) as source:
-            self.prepare(source)
-        return True
-
-    def prepare(self, opened: WireSnapshot) -> None:
-        """Advance bounded batches from the coverage held by SQLite's writer lock."""
+    def sync(self, opened: WireSnapshot) -> bool:
+        """Advance the source supplied by its writer; never acquire another bus lock."""
         revision = opened.revision
         size = opened.complete_prefix.boundary
         while size:
             with self.writing() as db:
                 saved = BusPageSource.one(db, singleton=1)
                 if saved is not None and saved.covers(opened):
-                    return
+                    return True
                 offset = saved.revision.size if saved is not None else 0
                 valid = (
                     saved is not None
@@ -211,6 +214,7 @@ class BusPageIndex(TypedStore):
                         last_sequence = message.seq
                 through = opened.position
                 BusPageSource(replace(revision, size=through), opened.fingerprint(through)).upsert(db)
+        return True
 
     def invalidate(self) -> None:
         """Discard damaged derived coverage under the index's writer exclusion."""

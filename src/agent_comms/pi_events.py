@@ -716,7 +716,7 @@ class MessageUpdate(NativePiEvent, DurablePiEvent):
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
         if self.message.update_context and not session.native.attestation.uncertain:
-            tokens = self.message.measured_tokens.otherwise(self.usage.token_total)
+            tokens = self.message.measured_tokens.otherwise(self.usage.total_tokens)
             for event in tokens.provisional(session):
                 yield event
 

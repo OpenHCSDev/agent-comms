@@ -60,7 +60,7 @@ from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
-                    TodoOperation)
+                    TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
 from .native_tools import NativeExecutableTool, NativeRequestTools
@@ -1052,6 +1052,9 @@ class CommsSendTool(ToolRequest):
     sender: str = tool_field("Sender thread name", wire_name="from")
     target: str = tool_field("Target thread name or channel", wire_name="to")
     body: str = tool_field("Message text")
+    audience: tuple[str, ...] = tool_field(
+        "Threads a channel message is for; no other member is woken", default=()
+    )
     type: Type[MessageKind] = tool_field(
         "Message kind", default=InfoKind, choices=MessageKind.sendable_names
     )
@@ -1060,9 +1063,8 @@ class CommsSendTool(ToolRequest):
     )
 
     def apply(self, comms: Comms, caller: ToolCaller) -> MessagePublished:
-        result = comms.messaging.send(
-            self.sender, self.target, self.body, self.type, report=self.report
-        )
+        body = VerdictAudience(self.audience).addressed(self.target, self.body)
+        result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         return MessagePublished.from_send(result)
 
 
