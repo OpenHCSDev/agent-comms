@@ -170,10 +170,12 @@ class TurnDeclaration(SubclassUnion, affix=""):
     def selection_matches(self, actual: object, expected: object) -> bool:
         return actual == expected
 
-    def answered_by(self, messaging: Messaging, owner: Thread, target: str) -> tuple[MessageReference, ...]:
+    def answered_by(self, messaging: Messaging, owner: Thread,
+                    target: str) -> tuple[MessageReference, ...]:
         return ()
 
-    async def observe_compaction(self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent) -> None:
+    async def observe_compaction(self, runner: TurnRunner, session_id: str, owner: Thread,
+                                 event: events.CompactionEvent) -> None:
         pass
 
     async def cancel_turn(self, runner: TurnRunner, session_id: str, owner: Thread) -> None:
@@ -252,13 +254,15 @@ class ActiveTurn(RecordMember, TurnDeclaration):
     def selection_matches(self, actual: object, expected: object) -> bool:
         return True
 
-    def answered_by(self, messaging: Messaging, owner: Thread, target: str) -> tuple[MessageReference, ...]:
+    def answered_by(self, messaging: Messaging, owner: Thread,
+                    target: str) -> tuple[MessageReference, ...]:
         lease = owner.require_turn_lease()
         inputs = InputDispositions(messaging.root).in_turn(self.id)
         with messaging.bus.log.checked_read() as source:
             return inputs.answered_by(lease, source, messaging.registry.snapshot(), target)
 
-    async def observe_compaction(self, runner: TurnRunner, session_id: str, owner: Thread, event: events.CompactionEvent) -> None:
+    async def observe_compaction(self, runner: TurnRunner, session_id: str, owner: Thread,
+                                 event: events.CompactionEvent) -> None:
         await CompactionObservation(
             runner, session_id, owner.require_turn_lease(), self.phase
         ).dispatch(event)
