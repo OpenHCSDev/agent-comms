@@ -182,6 +182,12 @@ class ProblemClosed(ToolResult):
 
 
 @dataclass(frozen=True)
+class PullRequestMerged(ToolResult):
+    number: int
+    head: str
+
+
+@dataclass(frozen=True)
 class WorkBranchList(ToolResult):
     branches: tuple[WorkBranch, ...]
 
@@ -903,6 +909,24 @@ class CommsOrderDoneTool(ThreadToolRequest):
             expect=GoalPrecondition(goal_id=assignment.generation), problem=self.problem,
             operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery)))
         return GoalRead(goal)
+
+
+@dataclass(frozen=True, kw_only=True)
+class CommsOrderMergeTool(ThreadToolRequest):
+    label = "Merge reviewed PR"
+    description = ("Merge the holder's open PR for its order; refused unless claude-ai or the "
+                   "commander recorded an accepted verdict on the PR's head commit.")
+    problem: str = tool_field("Problem ID")
+    number: int = tool_field("The open PR that names the order")
+
+    def apply(self, comms: Comms, caller: ThreadCaller) -> PullRequestMerged:
+        todo = comms.goals.todos.get(self.problem)
+        todo.require_assignee(comms.registry.require(caller.name).incarnation, todo.held().generation)
+        pulls = {pull.number: pull for pull in PullRequests().listed(todo.repo, "open", todo.order)}
+        if self.number not in pulls:
+            raise ValueError(f"PR #{self.number} is no open PR naming {self.problem}.")
+        pulls[self.number].merge(todo)
+        return PullRequestMerged(self.number, pulls[self.number].head)
 
 
 @dataclass(frozen=True, kw_only=True)

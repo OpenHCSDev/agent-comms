@@ -44,7 +44,7 @@ from .goal_actions import DirectiveGoalAction
 from .locked_store import LockedStore, RootFile
 from .messages import Message
 from .standing_rules import RulesDue
-from .todos import DirectiveText
+from .todos import AcceptedVerdict, DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import ReadTool, ToolRequest
 
@@ -72,7 +72,7 @@ class DirectorCaller(ThreadCaller):
             )
 
 
-CALLER = DirectorCaller("claude-ai")  # Owner-typed calls act as this registered bus thread.
+CALLER = DirectorCaller(AcceptedVerdict.reviewer)  # Owner-typed calls act as this registered bus thread.
 ClaudeCallback = Literal["https://claude.ai/api/mcp/auth_callback"]
 CALLBACK: str = get_args(ClaudeCallback)[0]
 PROTOCOL_VERSION = "2025-06-18"

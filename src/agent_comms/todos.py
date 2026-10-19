@@ -161,6 +161,15 @@ class PullRequest:
                    _github_time(merged) if merged else None, _github_time(updated),
                    ProblemOrder.pull_request_ids(body))
 
+    def merge(self, todo: Todo) -> None:
+        """Merge this open PR for ``todo`` at the head commit an accepted verdict names."""
+        todo.require_reviewed(self.head)
+        merged = subprocess.run(
+            ("gh", "pr", "merge", str(self.number), "--repo", todo.repo, "--merge", "--admin",
+             "--match-head-commit", self.head), capture_output=True, text=True, timeout=120)
+        if merged.returncode:
+            raise ValueError(merged.stderr.strip() or f"Merging PR #{self.number} failed.")
+
 
 def _github_time(text: str) -> float:
     return calendar.timegm(time.strptime(text, "%Y-%m-%dT%H:%M:%SZ"))
@@ -1281,6 +1290,9 @@ class TodoOperation(Command, DeclaredFamily, affix="TodoOperation"):
         if FieldCodec.decode(int, self.expected_revision) <= 0:
             raise TodoError("Todo operation requires a positive exact revision")
 
+    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
+        current.require_commander(actor)
+
     def prepare(self, goals, current):
         return self
 
@@ -1374,9 +1386,13 @@ class OrderVerdict(TodoOperation, declared_name=None):
     @abstractmethod
     def line(self) -> str: ...
 
+    def accepts(self, head: str) -> bool:
+        """Whether this verdict lets the order's PR merge at ``head``."""
+        return False
+
     def apply(self, current: Todo) -> Todo:
         current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
+        self.require_caller(current, self.actor)
         current.require_assignment(self.previous)
         _text(self.tool_call_id, "Judged tool call ID", 200)
         judged = self.judged(current)
@@ -1385,9 +1401,18 @@ class OrderVerdict(TodoOperation, declared_name=None):
 
 @dataclass(frozen=True)
 class AcceptedVerdict(OrderVerdict):
-    """The tool call carries out the order clause it quotes."""
+    """The tool call carries out the order clause it quotes; the owner's reviewer accepts
+    beside the commander, and a PR head commit as the judged call lets that PR merge."""
+    reviewer: ClassVar[str] = "claude-ai"
     quote: str
     line = "Accepted"
+
+    def require_caller(self, current: Todo, actor: ThreadIncarnation) -> None:
+        if actor.name != self.reviewer:
+            current.require_commander(actor)
+
+    def accepts(self, head: str) -> bool:
+        return self.tool_call_id == head
 
     def judged(self, current: Todo) -> Todo:
         quoted = " ".join(self.quote.split())
@@ -1538,6 +1563,8 @@ class DeliverTodo(TodoOperation):
     def prepare(self, goals, current):
         current.require_revision(self.expected_revision)
         current.require_commander(self.actor)
+        for pull in PullRequests().listed(current.repo, "merged", current.order):
+            current.require_reviewed(pull.head)
         verified = self.delivery.verified(current.order.check, current.order.deletes)
         return replace(self, delivery=asyncio.run(verified))
 
@@ -1711,6 +1738,11 @@ class Todo(TypedTable):
     def require_commander(self, actor: ThreadIncarnation) -> None:
         if self.creator_identity != actor:
             raise TodoConflict(self)
+
+    def require_reviewed(self, head: str) -> None:
+        if not any(verdict.accepts(head) for verdict in self.verdicts):
+            raise TodoError(f"PR head {head} has no accepted verdict from "
+                            f"{AcceptedVerdict.reviewer} or the commander; send it for review.")
 
     def require_actor(self, actor: ThreadIncarnation, generation: str | None) -> None:
         if self.creator_identity != actor:

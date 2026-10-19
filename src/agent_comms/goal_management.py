@@ -57,7 +57,7 @@ class Goals:
     def change_problem(self, problem, operation, commander):
         actor = self.registry.require(commander).incarnation
         current = self.todos.get(problem)
-        current.require_commander(actor)
+        operation.require_caller(current, actor)
         return operation.prepare(self, current).record(self, problem)
 
     def apply_problem(self, problem: str, operation: TodoOperation) -> Todo:
