@@ -39,6 +39,7 @@ from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
 from tools.upgrade_bus import (
+    Backup,
     Revisions,
     Stack,
     UpgradeRefused,
@@ -543,6 +544,38 @@ def test_upgrade_killed_while_waiting_clears_maintenance(tmp_path):
     assert "stopped by SIGTERM" in err and "aborted before the backup" in err
     assert out.splitlines() == ["threads", "stop --name worker", "start --name worker"]
     assert MaintenanceBarrier(root / "registry.json").read().phase is ReadyPhase
+
+
+def test_upgrade_transcript_hold_outlasts_the_backup_and_an_aborted_carry(comms):
+    """A bridge publishes from its own process, and the upgrade reads the store's files raw
+    for the backup and its digests. Neither may let the bridge write before the carry is
+    judged, nor into the failed bus an abort keeps as evidence."""
+    unit = comms.registry.declare(comms.registry.new_thread(
+        "hold-unit", frozenset({"hold"}), str(comms.root), execution=ExternalThreadExecution))
+    transcript = ExternalTranscript(comms.root, unit.incarnation)
+    with transcript.writing():
+        pass
+
+    def bridge_publishes(bus: Path) -> str:
+        writer = ("import sqlite3, sys\n"
+                  "db = sqlite3.connect(sys.argv[1], timeout=0.2, isolation_level=None)\n"
+                  "db.execute('BEGIN IMMEDIATE'); db.execute('COMMIT'); print('wrote')")
+        result = subprocess.run([sys.executable, "-c", writer, ExternalTranscript.path_in(bus)],
+                                capture_output=True, text=True, timeout=60)
+        return result.stdout.strip() or result.stderr.strip().splitlines()[-1]
+
+    with transcripts_held(comms.root):
+        before = bus_files(comms.root)
+        backup = Backup.take(comms.root, comms.root.parent / "no-route.json")
+        assert bridge_publishes(comms.root).endswith("database is locked")
+        assert carried(comms.root, before, []) == {"identical": len(before), "rewritten": 0}
+        backup.restore()  # the carry aborted
+        failed, = comms.root.parent.glob(f".{comms.root.name}.failed-*")
+        assert bridge_publishes(failed).endswith("database is locked")
+    assert bridge_publishes(comms.root) == "wrote"
+    name = str(ExternalTranscript.path_in(comms.root).relative_to(comms.root))
+    assert backup.files() == before
+    assert CoordinationStore.digest(ExternalTranscript.path_in(failed)) == before[name]
 
 
 def test_a_writer_during_the_drain_is_refused_or_its_file_is_declared(comms, monkeypatch):
