@@ -8,6 +8,7 @@ from agent_comms.bus_page_index import BusPageIndex, BusPageSource
 from agent_comms.comms import wire
 from agent_comms.threads import Thread
 from agent_comms.wire_record import WireRecord
+from agent_comms.wire_log import CurrentSnapshotOpening
 
 
 def test_opened_readers_overlap_and_delivery_waits_only_for_their_source_capture(
@@ -69,8 +70,9 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
     for name in ("sender", "recipient"):
         comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(tmp_path)))
     first = comms.messaging.send("sender", "recipient", "first").message
-    with BusPageIndex(comms.bus.log.path) as prepared:
-        assert prepared.sync()
+    with comms.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with BusPageIndex(comms.bus.log.path) as prepared:
+            assert prepared.sync(opened)
 
     update_started = threading.Event()
     executor = ThreadPoolExecutor(max_workers=1)
@@ -82,16 +84,17 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
 
             def sync():
                 update_started.set()
-                with BusPageIndex(comms.bus.log.path) as writer:
-                    return writer.sync()
+                with comms.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+                    with BusPageIndex(comms.bus.log.path) as writer:
+                        return writer.sync(opened)
 
             update = executor.submit(sync)
             assert update_started.wait(timeout=5)
-            assert not update.done(), "page-index writer committed through a pinned reader"
+            assert update.result(timeout=5), "WAL publication must not wait for a pinned reader"
             rows = tuple(
                 reader.offsets(
                     lower=None, upper=None, descending=False,
-                    targets=None, before_offset=saved.revision.size,
+                    predicate=("1", ()), before_offset=saved.revision.size,
                 )
             )
         assert update.result(timeout=5)
@@ -100,7 +103,7 @@ def test_page_index_snapshot_keeps_coverage_and_offsets_on_one_revision(tmp_path
     assert [row.seq for row in rows] == [first.seq]
     with BusPageIndex(comms.bus.log.path) as current:
         assert [row.seq for row in current.offsets(
-            lower=None, upper=None, descending=False, targets=None
+            lower=None, upper=None, descending=False, predicate=("1", ())
         )] == [first.seq, second.seq]
 
 

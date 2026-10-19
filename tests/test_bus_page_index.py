@@ -40,8 +40,9 @@ def retained_source(root, count, *, access=ArchivedAccess()):
         comms.bus.log.write_metadata_unlocked(marker)
         (root / "private_bus_checkpoint.sqlite3").unlink()
         install_private_bus_checkpoint(comms.bus.log, _bus_locked=True)
-    with BusPageIndex(comms.bus.log.path) as index:
-        assert index.sync()
+    with comms.bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with BusPageIndex(comms.bus.log.path) as index:
+            assert index.sync(opened)
     marker = comms.bus.log.read_metadata_unlocked(required=True)
     marker.access = access
     comms.bus.log.write_metadata_unlocked(marker)
@@ -61,7 +62,8 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
         bus.incoming_page('b', after=6)
     with BusPageIndex(bus.log.path) as index:
         index.invalidate()
-        index.sync()  # explicit administrative rebuild, never a reader repair
+        with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+            index.sync(opened)  # explicit administrative rebuild, never a reader repair
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
     for member in CoordinationStore.files(path):
         member.unlink(missing_ok=True)
@@ -73,8 +75,9 @@ def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_pat
                    '"offset" INTEGER NOT NULL, PRIMARY KEY ("seq")) STRICT')
     with pytest.raises(StaleBusPageIndexError):
         bus.incoming_page('b', after=6)
-    with BusPageIndex(bus.log.path) as index:
-        index.sync()
+    with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
+        with BusPageIndex(bus.log.path) as index:
+            index.sync(opened)
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
 
     archive = retained_source(tmp_path / 'archive', 9)
