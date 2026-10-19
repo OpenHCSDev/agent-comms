@@ -92,6 +92,12 @@ def held_by(unit: str) -> tuple[Todo, ...]:
     return COMMS.goals.todos.held_by(COMMS.registry.require(ME).incarnation, unit)
 
 
+def units() -> frozenset[str]:
+    """The threads this commander gives orders to; the owner, claude-ai and peer commanders
+    are not among them."""
+    return COMMS.goals.todos.units(COMMS.registry.require(ME).incarnation)
+
+
 def progress() -> dict[str, OrderProgress]:
     """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
     listed: TodoList = call(CommsTodoListTool())
