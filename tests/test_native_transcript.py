@@ -160,11 +160,12 @@ def test_corrupt_complete_entries_raise_in_every_read_direction(tmp_path, raw, e
 @pytest.mark.parametrize(
     "event",
     [
-        AssistantTranscript("answer"),
-        ThinkingTranscript("reason"),
-        NoticeTranscript("compacted"),
-        ToolStartTranscript(tool_call_id="a", tool_name="read", raw_input={"path": "x"}),
-        ToolEndTranscript(tool_call_id="a", tool_name="read", text="contents", ok=False),
+        # Codec data: a byte offset and a provider item ID are both recorded positions.
+        AssistantTranscript("answer", position=0),
+        ThinkingTranscript("reason", position=512),
+        NoticeTranscript("compacted", position="item-1"),
+        ToolStartTranscript(position=1024, tool_call_id="a", tool_name="read", raw_input={"path": "x"}),
+        ToolEndTranscript(position=1024, tool_call_id="a", tool_name="read", text="contents", ok=False),
     ],
 )
 def test_snapshot_family_roundtrip_has_only_owned_fields(event):
