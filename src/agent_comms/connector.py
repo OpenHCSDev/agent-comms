@@ -570,6 +570,14 @@ class ServiceProcess:
         raise ValueError(f"No process listens on {LOOPBACK}:{port}")
 
     @property
+    def unit(self) -> str:
+        """The systemd user unit that runs the service, named by the last part of its cgroup."""
+        unit = Path(Path(f"/proc/{self.pid}/cgroup").read_text().split("::", 1)[1].strip()).name
+        if not unit.endswith(".service"):
+            raise ValueError(f"The connector service (pid {self.pid}) runs in {unit}, not a unit")
+        return unit
+
+    @property
     def executable(self) -> Path:
         """The interpreter the service was started as; its venv link is not resolved."""
         return Path(os.fsdecode(Path(f"/proc/{self.pid}/cmdline").read_bytes().split(b"\0")[0]))
