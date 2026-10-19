@@ -135,7 +135,9 @@ class FieldPlan:
     def decoded(self, data: object) -> dict[str, object]:
         return self.decoded_using(data, self.value.decode)
 
-    def decoded_bound(self, data, context):
+    def decoded_bound(
+        self, data: dict[str, object], context: Mapping[str, object]
+    ) -> dict[str, object]:
         return self.decoded(data)
 
     def decoded_selected(self, data, keys, selections):
@@ -165,17 +167,22 @@ class FieldPlan:
 class ContextFieldPlan(FieldPlan):
     """A constructor value supplied by the caller, never by wire data."""
 
-    def contribute(self, fields):
+    def contribute(self, fields: list[FieldPlan]) -> tuple[str, ...]:
         return ()
 
     @property
-    def wire_keys(self):
+    def wire_keys(self) -> tuple[str, ...]:
         return ()
 
-    def encoded(self, value, *, key=None):
+    def encoded(self, value: object, *, key: str | None = None) -> dict[str, object]:
         return {}
 
-    def decoded_bound(self, data, context):
+    def decoded(self, data: object) -> dict[str, object]:
+        raise MalformedRecord(f"Missing decode context: {self.name}")
+
+    def decoded_bound(
+        self, data: dict[str, object], context: Mapping[str, object]
+    ) -> dict[str, object]:
         if self.name not in context:
             raise MalformedRecord(f"Missing decode context: {self.name}")
         return {self.name: self.value.decode(context[self.name])}
@@ -184,7 +191,9 @@ class ContextFieldPlan(FieldPlan):
 class BoundFieldPlan(FieldPlan):
     """A nested record receives its context from declared sibling fields."""
 
-    def decoded_bound(self, data, context):
+    def decoded_bound(
+        self, data: dict[str, object], context: Mapping[str, object]
+    ) -> dict[str, object]:
         bound = {name: data[source] for name, source in self.declared.metadata["wire_bind"].items()}
         return self.decoded_using(data, lambda raw: self.value.decode_bound(raw, bound))
 
@@ -1082,7 +1091,7 @@ class ValueDecoder[T](ABC):
     @abstractmethod
     def decode(self, data: object) -> T: ...
 
-    def decode_bound(self, data, context):
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         return self.decode(data)
 
     field_names: ClassVar[tuple[str, ...]] = ()
@@ -1293,7 +1302,7 @@ class UnionDecoder[T](ValueDecoder[T]):
     def decode(self, data: object) -> T:
         return self.decode_bound(data, {})
 
-    def decode_bound(self, data, context) -> T:
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> T:
         first_error = None
         try:
             for alternative in self.alternatives:
@@ -1448,7 +1457,7 @@ class _FamilyRecordDecoder[Member: DeclaredFamily](ValueDecoder[Any]):
     def decode(self, data):
         return self.decode_bound(data, {})
 
-    def decode_bound(self, data, context):
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         member, payload = self.member(data)
         return _member_decoder(member).decode_bound(payload, context)
 
@@ -1483,7 +1492,7 @@ class _RecordDecoder(ValueDecoder[Any]):
     def decode(self, data):
         return self.decode_bound(data, {})
 
-    def decode_bound(self, data, context):
+    def decode_bound(self, data: object, context: Mapping[str, object]) -> Any:
         return self.decode_selected(data, {}, fields=self.field_names, context=context)
 
     def decode_selected(self, data, selections, *, fields: tuple[str, ...], context={}):
