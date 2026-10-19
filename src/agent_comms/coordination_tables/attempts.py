@@ -16,7 +16,7 @@ from agent_comms.coordination_contracts import (
     require_optional_nonempty,
     validate_execution_id,
 )
-from agent_comms.coordination_errors import IntegrityViolationError, IdentityConflict
+from agent_comms.coordination_errors import IdentityConflict, IntegrityViolationError
 from agent_comms.coordination_schema import CoordinatorTable
 from agent_comms.coordination_tables.participants import OwnerGenerations
 from agent_comms.field_codec import projected
@@ -359,21 +359,32 @@ class ReplayAssessments(CoordinatorTable, TypedTable):
         assessment may retain that fact, and every incoming observation can
         revoke it. Output facts remain monotonic across all attempts.
         """
-        before = cls.one(db, execution_id=execution_id)
-        if before is None:
-            if not observed:
-                return
-            after = cls(execution_id, observed, False, True, 1)
-        else:
-            facts = before.facts | observed
-            after = replace(
-                before,
-                facts=facts,
-                replay_safe=before.replay_safe and not facts,
-                side_effects_possible=before.side_effects_possible or bool(observed),
-                revision=before.revision + 1,
-            )
-        after.record(db, before)
+        if not observed or cls.exists(
+            db,
+            where=(
+                "execution_id=? AND (facts & ?) = ? "
+                "AND replay_safe=0 AND side_effects_possible=1"
+            ),
+            parameters=(execution_id, int(observed), int(observed)),
+        ):
+            return
+        # Most streamed deltas repeat a fact already durably joined. Read only
+        # that answer, not a decoded row or another write-lock acquisition.
+        # A new fact joins atomically: another connection may have accumulated
+        # different evidence since the existence check, even in autocommit use.
+        statement, values = cls(execution_id, observed, False, True, 1)._insertion()
+        db.execute(
+            statement + """
+            ON CONFLICT (execution_id) DO UPDATE SET
+                facts = facts | excluded.facts,
+                replay_safe = 0,
+                side_effects_possible = 1,
+                revision = revision + 1
+            WHERE (facts | excluded.facts) != facts
+               OR replay_safe != 0 OR side_effects_possible != 1
+            """,
+            values,
+        )
 
     @classmethod
     def authorize_if_unobserved(cls, db, execution_id: str) -> None:
