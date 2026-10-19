@@ -643,7 +643,7 @@ def deadline_lines(pending: list[Todo], read: dict[str, OrderProgress], since: f
         ordered, work = t.order.at.recorded_at('An order'), read[t.id]
         if work.stalled_between(ordered, since, now):
             stalled.append(f'STALL {t.id} {t.holder}: {work.line} -> push it now or reassign')
-        if t.late_since(now) is None:
+        if not t.overdue(now):
             continue
         answer = reply(t.holder, ordered)
         due = f'due {hhmm(t.deadline)}, order {t.order.id}'
@@ -660,7 +660,7 @@ def install_lines(held: tuple[Todo, ...], read: dict[str, OrderProgress], now: f
 
 
 def overdue():
-    since = 0.0  # the previous poll: a line prints once, when its state is entered after it
+    since = 0.0  # previous poll bounds stall crossings; deadline alarms repeat
     installs: list[str] = []
     while True:
         now = time.time()
@@ -683,7 +683,7 @@ def overdue():
         # Units leave finished PRs open and wander off. An order's open PR that nobody has touched for
         # 5 minutes is a stall, whatever the unit says it is doing; until its deadline, OVERDUE owns the alarm.
         idle_prs = [f'{t.holder} {t.repo.split("/")[1]} {read[t.id].line} ({t.id})'
-                    for t in pending if now > t.deadline.at and read[t.id].untouched(now)]
+                    for t in pending if t.overdue(now) and read[t.id].untouched(now)]
         if idle_prs:
             print('STALL PR open and untouched 5+ min: ' + ', '.join(idle_prs) + ' -> order the merge or the fix now', flush=True)
         for _ in HuntDue.broken(COMMS, ME, since):
@@ -926,7 +926,8 @@ class PullRequestVerb(OrderVerb, declared_name="pr"):
     def run(self) -> None:
         todo = COMMS.goals.todos.get(self.pid)
         checkout = COMMS.registry.storage_rule.order_checkout(todo.holder, todo.id)
-        print(todo.order.open_pull_request(todo, checkout, self.title, Path(self.body_file).read_text()))
+        print(todo.order.open_pull_request(
+            todo, checkout, self.title, Path(self.body_file).read_text()))
 
 
 @dataclass(frozen=True, kw_only=True)
