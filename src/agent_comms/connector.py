@@ -63,6 +63,9 @@ class DirectorCaller(ThreadCaller):
     """claude-ai speaks for the owner: each message it sends a thread is a directive, recorded as a
     request when that thread holds owner requests."""
 
+    def judged(self, comms, problem, verdict):
+        return verdict.reviewed(comms.goals, problem, comms.registry.require(self.name).incarnation)
+
     def require_directive(self, comms: Comms, body: str) -> None:
         """A directive passes DirectiveText and needs this caller's rules review, drawn,
         answered and under 20 minutes old."""
