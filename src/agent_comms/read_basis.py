@@ -406,7 +406,7 @@ class DMConversation(Conversation):
         )))
 
     def scope(self, snapshot: RegistryProvenance) -> DMDisplayScope:
-        first, second = self.participants
+        first, second = self.participants[0], self.participants[-1]
         return DMDisplayScope.capture(first.name, second.name, snapshot)
 
     def recorded_keys(self, snapshot: RegistryProvenance) -> Iterable[Conversation]:
@@ -417,7 +417,7 @@ class DMConversation(Conversation):
         return any(snapshot.names_for(p.name).intersection(targets) for p in self.participants)
 
     def sql_keys(self, snapshot: RegistryProvenance) -> Iterable[tuple[str, str]]:
-        first, second = self.participants
+        first, second = self.participants[0], self.participants[-1]
         a, b = snapshot.names_for(first.name), snapshot.names_for(second.name)
         return tuple((target, sender) for senders, targets in ((a, b), (b, a))
                      for sender in senders for target in targets)
