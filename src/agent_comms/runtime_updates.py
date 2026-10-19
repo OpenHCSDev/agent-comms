@@ -17,7 +17,12 @@ from .agent_activity import AgentActivity
 from .cli_protocol import EarlierItems
 from .external_transcript import ExternalPage, ExternalTranscript
 from .recorded_time import EventTime, UnrecordedEventTime
-from .transcript_events import LiveTextTranscript, NoticeTranscript, ToolStartTranscript, TranscriptEvent
+from .transcript_events import (
+    LiveTextTranscript,
+    NoticeTranscript,
+    ToolStartTranscript,
+    TranscriptEvent,
+)
 
 if TYPE_CHECKING:
     from .cli_bridges.shared import TranscriptBridge
@@ -45,7 +50,11 @@ class DraftAccumulator:
 
     @property
     def events(self) -> tuple[TranscriptEvent, ...]:
-        return (self.started_at.stamp(NoticeTranscript(self._start.detail, position=self._start.item_id)),)
+        return (
+            self.started_at.stamp(
+                NoticeTranscript(self._start.detail, position=self._start.item_id)
+            ),
+        )
 
     def snapshot(self, turn_id: str, item_id: str) -> tuple[DraftItem, ...]:
         return (DraftItem(turn_id, item_id, self),)
@@ -113,6 +122,7 @@ class TextDraft(DraftAccumulator):
         return (
             (self.started_at.stamp(self.event_type(text, position=self.position)),) if text else ()
         )
+
 
 class ParagraphDraft(TextDraft):
     separator = "\n\n"
