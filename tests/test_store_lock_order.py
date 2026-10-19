@@ -9,7 +9,7 @@ from agent_comms.catalog_store import ChannelCatalog
 from agent_comms.coordination_session import NativeBoundary
 from agent_comms.historical_views import DMDisplayHistory
 from agent_comms.message_bus import MessageBus
-from agent_comms.store_files import SharedLock, StoreLock, StoreLockOwner
+from agent_comms.store_files import SharedLock, StoreLock, StoreLockOwner, StoreOwner
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
 
@@ -21,7 +21,8 @@ def test_undeclared_store_rank_is_rejected_before_acquisition():
 
 
 @pytest.mark.parametrize("owner_type", [MessageBus, WireLog, ChannelCatalog])
-def test_concrete_store_must_be_declared_at_startup(owner_type):
+def test_concrete_store_must_be_declared_at_startup(owner_type, monkeypatch):
+    monkeypatch.setattr(StoreOwner, "__registry__", dict(StoreOwner.__registry__))
     class UnrankedOwner(owner_type):
         pass
 
