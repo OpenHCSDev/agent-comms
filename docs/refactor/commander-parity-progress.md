@@ -79,8 +79,10 @@ board record was created. Consumer staging depends on pi-cn-phase7 #1932; its
 native dispatch proof is not whole-phase acceptance.
 
 Scratch owner: pi-plan-claims. Only scratch root:
-/home/ts/.cache/agent-scratch/pi-plan-claims (13 MiB at checkpoint); source checkout
+/home/ts/.cache/agent-scratch/pi-plan-claims (8 KiB after cleanup); source checkout
 27 MiB; free filesystem 25 GiB. Test subdirectories parity-worker-check,
-parity-final-check and parity-confirm are disposable after active borrower
-checks. Real-copy directories were already retired by CheckRoot. Patch handoffs
-stay in /home/ts/wt/pi-plan-claims--P1. B shared GitHub claims remains unstarted.
+parity-final-check and parity-confirm were removed after lsof found no active
+borrowers. Real-copy directories were already retired by CheckRoot. Patch
+handoffs stay in /home/ts/wt/pi-plan-claims--P1. B shared GitHub claims remains
+unstarted. The user's concurrent remote main merge was integrated normally;
+all 13 focused checks passed again afterward. No PR/main merge was performed.
