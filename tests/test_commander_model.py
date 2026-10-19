@@ -3,6 +3,9 @@ from dataclasses import replace
 
 import pytest
 
+from agent_comms.audience_manifest import FrozenRecipient
+from agent_comms.notification_progress import FailedProgress, SentProgress
+from agent_comms.presentation import MessageNotification
 from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import CommitMomentum, ForecastCommitMomentum, UnknownCommitMomentum, ProgressPoint, ProgressSource, PullRequests, StatusProgressSource
 from agent_comms.ui_model.commander import (
@@ -81,6 +84,15 @@ def test_unknown_commit_cadence_does_not_invent_forecast(commander, points):
     assert isinstance(momentum, UnknownCommitMomentum)
     assert 'cadence unknown' in momentum.line
     assert 'next commit ~' not in momentum.line
+
+
+def test_delivery_progress_selects_its_original_failed_notification():
+    sent = MessageNotification(FrozenRecipient('worker', 'worker'), 'lead', SentProgress(1))
+    assert sent.state.failed_notifications(sent) == ()
+    failed = replace(sent, state=FailedProgress(sent.state))
+    selected, = failed.state.failed_notifications(failed)
+    assert selected is failed
+    assert selected.label == 'Failed'
 
 
 def test_commander_identity_is_resolved_or_refused_in_the_read_process(commander):

@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING
 
 from agent_comms.coordination_tables.refusals import SendRefusal
 from agent_comms.declared_family import DeclaredFamily
-from agent_comms.notification_progress import FailedProgress
 from agent_comms.presentation import NoRevision, ReadState, WireRevision
 from agent_comms.revision_views import CommanderView
 from agent_comms.thread_identity import ThreadIncarnation
@@ -171,9 +170,9 @@ class FailedDeliveryAlarmSource(CommanderAlarmSource):
     ) -> tuple[CommanderAlarm, ...]:
         presentation = comms.views.thread_presentations((commander.name,)).require(commander.name)
         return tuple(
-            CommanderAlarm(f"RECORDED FAILED DELIVERY to {notice.recipient}: {notice.label}")
+            CommanderAlarm(f"RECORDED FAILED DELIVERY to {failed.recipient}: {failed.label}")
             for notice in presentation.sent_notifications
-            if isinstance(notice.state, FailedProgress)
+            for failed in notice.state.failed_notifications(notice)
         )
 
 
