@@ -5,7 +5,6 @@ import collections
 import importlib
 import json
 
-from agent_comms.channel_coding_tools import RefusedCodingCall
 from agent_comms.native_tool_call import SelectedToolDenied
 from agent_comms.todos import StorageStrikeTodo
 from test_commander_problem_orders import create
@@ -27,7 +26,7 @@ def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
 
 def test_coordination_call_uses_its_presentation_record(tool_watch):
     call = tool_watch.decoded('comms_threads', {}, 'coordination-1')
-    assert tool_watch.digest_line('comms_threads', {}, call).strip() == 'comms_threads'
+    assert tool_watch.digest_line(call) == 'comms_threads {}'
 
 
 def test_a_line_core_refuses_is_reported_with_its_file_and_offset(tool_watch, commander, capsys):
@@ -59,11 +58,33 @@ def test_storage_watch_reports_refused_call_without_judging(tool_watch, commande
     monkeypatch.setattr(comms.registry.__class__, 'decide_storage',
                         lambda self, thread, effects: judged.append(thread))
     call = tool_watch.decoded('write', {'path': 'a.py'}, 'refused-1')
-    assert isinstance(call, RefusedCodingCall)
     tool_watch.enforce_storage(comms.registry, 'worker', call)
     assert judged == []
-    assert 'REFUSED tool write [refused-1]' in capsys.readouterr().out
-    assert tool_watch.digest_line('write', {'path': 'a.py'}, call).startswith('REFUSED write:')
+    assert capsys.readouterr().out == ''
+    assert tool_watch.digest_line(call) == 'REFUSED write: Missing required fields for WriteTool: content'
+
+
+def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, commander, monkeypatch):
+    from agent_comms.tool_declaration import ToolDeclaration
+
+    comms, _ = commander
+    seen = []
+    parse = ToolDeclaration.parse_arguments.__func__
+
+    def counted(cls, arguments):
+        seen.append(cls.declared_name)
+        return parse(cls, arguments)
+
+    monkeypatch.setattr(ToolDeclaration, 'parse_arguments', classmethod(counted))
+    calls = [('bad', {'path': 'a.py'}), ('good', {'path': 'b.py', 'content': 'body'})]
+    line = json.dumps({'type': 'message', 'id': 'digest-once', 'timestamp': '2026-10-19T07:50:00.000Z',
+                       'message': {'role': 'assistant', 'stopReason': 'toolUse', 'content': [
+                           {'type': 'toolCall', 'id': id, 'name': 'write', 'arguments': args}
+                           for id, args in calls]}})
+    turns = collections.defaultdict(list)
+    tool_watch.follow(comms.registry, turns, 'worker', 'session.jsonl', 0, (line + '\n').encode())
+    assert seen == ['write', 'write']
+    assert turns['worker'] == ['REFUSED write: Missing required fields for WriteTool: content', 'write b.py: body']
 
 
 def test_storage_violation_is_struck_once_across_watch_restart(tool_watch, commander, monkeypatch):

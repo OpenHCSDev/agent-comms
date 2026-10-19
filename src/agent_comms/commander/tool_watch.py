@@ -11,9 +11,8 @@ from .config import CommanderConfig
 from ..channel_coding_tools import CodingCall
 from ..field_codec import MalformedRecord
 from ..native_entries import NativeEntry
-from ..native_tool_call import SelectedToolDenied
 from ..pi_payloads import PiMessage, TextContent
-from ..tool_declaration import ToolDeclaration, one_line
+from ..tool_declaration import one_line
 from ..registration import Registration
 from ..todos import StorageStrikeTodo
 
@@ -30,37 +29,21 @@ def thread_names(registry: Registration) -> dict[str, str]:
 
 def decoded(name: str, args: object, call_id: str) -> CodingCall:
     """The recorded call owns either its decoded tool or its argument refusal."""
-    call = CodingCall.decode(call_id, name, args)
-    try:
-        call.require_tool()
-    except SelectedToolDenied as refused:
-        print(f'REFUSED tool {name} [{call_id}]: {one_line(str(refused), 200)}', flush=True)
-    return call
+    return CodingCall.decode(call_id, name, args)
 
 
-def digest_line(name: str, args: object, call: CodingCall) -> str:
-    """What the call does, in enough detail to judge it."""
-    try:
-        call.require_tool()
-    except SelectedToolDenied:
-        return f'REFUSED {name}: {one_line(str(args), 200)}'
-    return ToolDeclaration.call_digest(name, ToolDeclaration.record(name, args), args)
+def digest_line(call: CodingCall) -> str:
+    """The call owns its digest, including an argument refusal."""
+    return call.digest()
 
 
 def enforce_storage(registry: Registration, thread: str, call: CodingCall) -> None:
     """Core judges its units and records each storage violation once."""
     if thread not in order.units() or thread not in registry:
         return
-    try:
-        tool = call.require_tool()
-    except SelectedToolDenied:
+    violation = call.storage_violation(registry, thread)
+    if violation is None:
         return
-    try:
-        worktree = Path(registry.require(thread).worktree)
-        registry.decide_storage(thread, tool.storage_effects(worktree))
-        return
-    except SelectedToolDenied as denied:
-        violation = str(denied)
     print(f'VIOLATION storage {thread}: {violation}', flush=True)
     for todo in order.held_by(thread)[:1]:
         order.strike(thread, todo.id,
@@ -103,7 +86,7 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
     for call in message.tool_calls:
         name, args = call.name, call.arguments
         tool = decoded(name, args, call.id)
-        digest = digest_line(name, args, tool)
+        digest = digest_line(tool)
         with open(LOG, 'a') as log:
             log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
         turns[thread].append(digest)
