@@ -19,7 +19,8 @@ and refuses to let a deadline lapse silently.
 """
 import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
+from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
@@ -180,7 +181,7 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, where=None):
+def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, order_type=PendingProblemOrder):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -290,7 +291,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     struck_already = replacing and listed[group[0]].struck_on_order(unit)
     at = time.time()
     try:
-        order = PendingProblemOrder(
+        order = order_type(
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
             report=report[1], run=run, serves=phase,
@@ -299,9 +300,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
             at=RecordedEventTime(at), first_call_deadline=RecordedEventTime(at + 120))
     except ValueError as refused:  # Core owns what an order may say
         sys.exit(f'Refused order: {refused}')
-    if where is not None:
-        order = FoundPendingProblemOrder(**{item.name: getattr(order, item.name) for item in fields(order)}, finding=where)
-    common = dict(order=order, request=order.request(ME, tuple(group)), deadline=deadline(due), commander=ME)
+    common = dict(order=order, request=order.request(COMMS.registry.require(ME), tuple(group)), deadline=deadline(due), commander=ME)
     if new:
         call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
             problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
@@ -391,7 +390,8 @@ def problem(text, unit, due, order_file, where, disk=False):
     pid = f'P{max([int(t.id[1:]) for t in history if t.id[1:].isdigit()] + [0]) + 1}'
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
-        send(unit, due, order_file, new=(pid, text), where=location, disk=disk)
+        send(unit, due, order_file, new=(pid, text), disk=disk,
+             order_type=partial(FoundPendingProblemOrder, finding=location))
     except SystemExit:
         open(order_file, 'w').write(body)
         raise
@@ -967,6 +967,7 @@ class ProblemVerb(OrderVerb, LoadedVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class DropVerb(OrderVerb, RuledVerb):
+    help = "drop an old order for a live newer one without a strike"
     unit: str = option("unit")
     message: str = option("message")
     by: str = option("--by")
@@ -978,6 +979,7 @@ class DropVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class FoldVerb(OrderVerb, RuledVerb):
+    help = "join duplicate open problems without losing their text"
     pid: str = option("pid")
     into: str = option("--into")
     why: str = option("--why")
@@ -989,6 +991,7 @@ class FoldVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class LinkVerb(OrderVerb, RuledVerb):
+    help = "attach an unassigned problem to an existing order"
     pid: str = option("pid")
     unit: str = option("unit")
     message: str = option("message")

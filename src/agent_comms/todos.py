@@ -1020,8 +1020,12 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return FoldedProblemOrder(original=self, into=into, why=why)
 
     @staticmethod
-    def request(sender: str, problems: tuple[str, ...]) -> str:
-        return f"{sender}: Problems: {', '.join(problems)}"
+    def request(sender: Thread, problems: tuple[str, ...]) -> str:
+        if not problems:
+            raise ValueError('An order needs its Problems line.')
+        request = sender.goal.require().require_active()
+        request.order.require_request()
+        return request.id
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1050,6 +1054,7 @@ class FoldedProblemOrder(ProblemOrder):
         return (f"{todo.id} folded into {self.into}: {self.why}",)
 
 
+@dataclass(frozen=True, kw_only=True)
 class CheckedProblemOrder(ProblemOrder, declared_name=None):
     """A checked order keeps its actual body, check and source location."""
 
@@ -1202,6 +1207,7 @@ class PendingProblemOrder(CheckedProblemOrder):
                             superseded_by=superseded_by)
 
 
+@dataclass(frozen=True, kw_only=True)
 class FoundProblemOrder(CheckedProblemOrder, declared_name=None):
     finding: FileLine
 

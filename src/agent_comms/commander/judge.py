@@ -228,6 +228,7 @@ class SupersededVerb(VerdictVerb):
 @dataclass(frozen=True, kw_only=True)
 class BackVerb(VerdictVerb):
     help = "send the edit back; the roast is posted to the verdict's audience"
+    msg: str = option(help="the required order message")
     roast: str = option(help="blunt, why it is stupid, with because")
     fix: str = option(help="owner and replacing shape")
     slop_kind: str = option("--slop", help="|".join(SlopKind.names()))
@@ -246,8 +247,6 @@ class BackVerb(VerdictVerb):
                                reason=StrikeReason(f'{todo.id} edit sent back: {self.why}'))
 
     def check_edits(self, edits: list[Edit]) -> None:
-        if self.msg is None:
-            raise ValueError('A send-back requires --msg naming the recorded order.')
         if len(self.roast.split()) < 12 or not re.search(r'\bbecause\b', self.roast):
             sys.exit('Refused: --roast needs 12+ words with because, naming the duplicated fact and its owner')
         if len(self.fix.split()) < 8:
