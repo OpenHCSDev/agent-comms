@@ -35,6 +35,7 @@ from .selected_session import SelectedSession
 from .selected_tool_broker import SelectedToolIntent
 from .selected_turn import SelectedAttempt, SelectedConsideration
 from .selected_write_authority import NoSelectedWritePlans, SelectedWriteAuthority
+from .turn_failure import RetryableProviderFailure
 
 
 class SessionSetupFailed(ValueError):
@@ -57,7 +58,7 @@ class IndependentExecution(NativeExecution):
 
 @dataclass(kw_only=True)
 class SelectedExecution(NativeExecution):
-    max_attempts: ClassVar[int] = 3
+    max_attempts: ClassVar[int] = RetryableProviderFailure.max_retries + 1
 
     root: Path
     wire_root_id: str
@@ -97,7 +98,7 @@ class SelectedExecution(NativeExecution):
             owner = Comms(self.root).registry.require(self.owner_name)
             if not Path(owner.worktree).is_dir():
                 raise ValueError("registered participant worktree is unavailable")
-            directory = self.root / "native-sessions" / owner.incarnation.lookup
+            directory = owner.native_session_directory(self.root)
             directory.mkdir(parents=True, mode=0o700, exist_ok=True)
             _private_session_dir(directory)
             paths = ((self.session_file,) if self.session_file is not None

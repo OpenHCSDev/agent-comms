@@ -1462,8 +1462,6 @@ class InstallCliCommand(CliCommand):
     commander: str = option("--commander", default="claude-code")
 
     def apply(self, ctx: Comms) -> CliResult:
-        from importlib.resources import files
-
         from .commander.config import CommanderConfig, Repo
 
         home = Path.home()
@@ -1472,7 +1470,6 @@ class InstallCliCommand(CliCommand):
             commander=self.commander, root=ctx.root, cli=Harness.bin("agent-comms"),
             state=home / ".local/state/agent-comms/commander",
             board=project / "docs/agents/fleet-board.md", narrative=project / "docs/agents/fleet-narrative.md",
-            skill=Path(str(files("agent_comms") / "skills/comms-commander/SKILL.md")), rules=(CommanderConfig.packaged_rules(),),
             repos=tuple(Repo.of(repo) for repo in self.repos or (project,)),
             worktrees=home / "wt", scratch=home / ".cache/agent-scratch", disk=home,
         )

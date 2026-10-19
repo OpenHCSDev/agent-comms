@@ -41,7 +41,7 @@ from .cli_commands import DeclaredOptions, option
 from .cli_protocol import CoreError
 from .comms import Comms, client_wire
 from .declared_family import DeclaredFamily
-from .errors import UnregisteredThreadError
+from .errors import ToolRefusedError, UnregisteredThreadError
 from .field_codec import FieldCodec, MalformedRecord, PathText
 from .goal_actions import DirectiveGoalAction
 from .connector_store import (
@@ -49,7 +49,6 @@ from .connector_store import (
     RegisteredClient, digest,
 )
 from .messages import Message
-from .standing_rules import RulesDue
 from .todos import DirectiveText
 from .tool_caller import ThreadCaller
 from .tools import CommsChannelsTool, ReadTool, ToolRequest
@@ -64,11 +63,9 @@ class DirectorCaller(ThreadCaller):
     request when that thread holds owner requests."""
 
     def require_directive(self, comms: Comms, body: str) -> None:
-        """A directive passes DirectiveText and needs this caller's rules review, drawn,
-        answered and under 20 minutes old."""
-        due = tuple(rule.line() for rule in RulesDue.violations(comms, self.name))
-        if refused := (*DirectiveText.refused(body), *due):
-            raise ValueError("Directive refused, nothing sent: " + " ".join(refused))
+        """A directive passes DirectiveText. claude-ai directs the commanders, so the
+        commander rules review does not gate it."""
+        DirectiveText.require(body)
 
     def sent(self, comms: Comms, message: Message) -> None:
         if message.target in comms.registry:  # a channel holds no requests
@@ -290,11 +287,11 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
         tool = Connector.exposed().get(self.params.name)
         if tool is None:
             return ToolsCallResult.refused(
-                ValueError(f"The connector exposes no tool {self.params.name!r}.")
+                ToolRefusedError(f"The connector exposes no tool {self.params.name!r}.")
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except UnregisteredThreadError as error:
+        except ToolRefusedError as error:
             return ToolsCallResult.refused(error)
         return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
 
@@ -317,7 +314,7 @@ class ToolsCallResult:
     )
 
     @classmethod
-    def refused(cls, error: BaseException) -> ToolsCallResult:
+    def refused(cls, error: ToolRefusedError) -> ToolsCallResult:
         return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
 
 

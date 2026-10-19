@@ -93,10 +93,6 @@ class QueuedInput:
     def key(self) -> str:
         return f"acp:{self.input_id}"
 
-    @property
-    def accepted_id(self) -> str | None:
-        return self.input_id
-
     def queue_items(self, scope: QueueScope) -> tuple[QueueItem, ...]:
         """Show the item only when its recorded input generation matches the queue."""
         from .acp_extension import QueueItem
@@ -235,11 +231,14 @@ class QueuedInput:
             initial_display_text=self.text if self.echo else None,
             original_owner_input=True,
             original_goal_id=self.context.active_goal_id,
-            accepted_input_id=self.accepted_id,
+            accepted_input_id=self.input_id,
         )
 
+    def is_live(self, inputs: InputDrain, session_id: str) -> bool:
+        return inputs.state(session_id).following.get(self.input_id) == self.source()
+
     def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
-        if inputs.state(session_id).following.get(self.input_id) != self.source():
+        if not self.is_live(inputs, session_id):
             raise RelationViolationError("Accepted input source changed")
 
     def current(self, owner: Thread, claim_scope: int) -> bool:
@@ -479,8 +478,10 @@ class DeliveredInput(QueuedInput):
 
         def read(store: Coordination):
             with store.session.read():
-                assignments = pending_sealed_assignments(
-                    store, lookup, owner.name, after_seq=after_seq
+                assignments = tuple(
+                    assignment for assignment in pending_sealed_assignments(
+                        store, lookup, owner.name, after_seq=after_seq
+                    ) if assignment.audience.joins_active_turn()
                 )
             with bus.log.checked_read() as source:
                 if source.marker.root_id != root_id:
@@ -583,16 +584,11 @@ class InitialInput(QueuedInput):
                 queued.pop(self.input_id)
             await inputs.emit_queue_state(session_id)
 
-    def require_live_source(self, inputs: InputDrain, session_id: str) -> None:
-        if inputs.state(session_id).queued.get(self.input_id) is not self:
-            raise RelationViolationError("Original input acceptance changed")
+    def is_live(self, inputs: InputDrain, session_id: str) -> bool:
+        return inputs.state(session_id).queued.get(self.input_id) is self
 
     def after_clear(self) -> InitialInput:
         return self  # Clearing follow-ups cannot withdraw the original dispatch.
 
     def restore_after_turn(self) -> None:
         return None  # Its original terminal disposition owns cancellation/UNKNOWN.
-
-    @property
-    def accepted_id(self) -> None:
-        return None

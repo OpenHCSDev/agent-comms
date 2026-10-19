@@ -1,7 +1,7 @@
 """Forced rule review for the commander (HARD RULE: the commander cannot trust itself to remember the rules alone).
 
-The rules have one source each: the commander skill's bold-lead lines, every feedback rule in the configured rule
-directories (the packaged rules first, then the project's own memory), and paper 1's correct-maintenance results
+The rules have one source each: the commander skill's bold-lead lines, every packaged feedback rule,
+and paper 1's correct-maintenance results
 (the packaged correct-maintenance rule). `review` prints all of them and draws three, two always from the paper, that must each be answered with how the current tick obeys or breaks it. Core records each
 review and answer (CommsRuleReviewTool); its RulesDue member refuses every commander action in order and prints
 RULES DUE in rotate until the last review is answered and fresh.
@@ -37,8 +37,8 @@ def principles() -> list[str]:
 
 
 def rules(commander) -> list[str]:
-    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(str(commander.skill)).read(), re.M)]
-    for path in [path for directory in commander.rules for path in sorted(glob.glob(f'{directory}/*.md'))]:
+    found = [m.group(1).strip() for m in re.finditer(r'^\s*- \*\*(.+?)\*\*', open(CommanderConfig.packaged_skill()).read(), re.M)]
+    for path in sorted(glob.glob(f'{CommanderConfig.packaged_rules()}/*.md')):
         text = open(path).read()
         if re.search(r'^\s*type: feedback', text, re.M):
             desc = re.search(r'^description: (.+)$', text, re.M)

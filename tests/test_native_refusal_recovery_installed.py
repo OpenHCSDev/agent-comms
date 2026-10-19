@@ -81,7 +81,7 @@ async def test_actual_native_refusal_after_tool_preserves_saved_history(tmp_path
         return [event async for event in backend.stream_agent_events(
             launcher, arguments, text, str(tmp_path), root=Path(str(tmp_path)), session_file=saved,
             persistent_session=session, model_wait=ModelWait(240),
-        )]
+         session_directory=Path(str(tmp_path)))]
 
     try:
         async with asyncio.timeout(240):
