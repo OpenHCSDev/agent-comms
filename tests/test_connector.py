@@ -165,6 +165,30 @@ async def test_connector_lists_every_tool(client, store, comms):
     assert all("claude-ai to call this without asking" in description for description in writes)
 
 
+async def test_connector_reads_two_newest_first_conversation_pages(client, store, comms):
+    comms.registry.declare(comms.registry.new_thread("commander", frozenset(), str(comms.root)))
+    originals = [comms.messaging.send("worker", "claude-ai", f"history {number}").message
+                 for number in range(5)]
+    comms.messaging.send("commander", "claude-ai", "not this conversation")
+    headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
+
+    async def page(arguments):
+        response = await client.post("/mcp", headers=headers, json={
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "comms_history", "arguments": arguments},
+        })
+        assert response.status == 200
+        result = (await response.json())["result"]
+        assert result["isError"] is False
+        return result["structuredContent"]
+
+    first = await page({"peer": "worker", "limit": 2})
+    second = await page({"peer": "worker", "limit": 2, "before": first["before"]})
+    assert [row["id"] for row in first["dm"]] == [row.message_id for row in originals[4:2:-1]]
+    assert [row["id"] for row in second["dm"]] == [row.message_id for row in originals[2:0:-1]]
+    assert first["has_older"] and second["has_older"]
+
+
 async def test_connector_thread_tools_act_as_claude_ai(client, store, comms):
     headers = {"Authorization": f"Bearer {await approved_token(client, store)}"}
     reviews = RuleReviews(comms.root)
