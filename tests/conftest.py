@@ -80,6 +80,21 @@ def _native_runtime_resources_are_explicit(monkeypatch, native_runtime_package):
 
 
 @pytest.fixture(autouse=True)
+def _live_processes_are_not_test_work(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A test reads only the processes it started: a developer's live work is never named or ended."""
+    from agent_comms.running_processes import ProcessTable
+
+    every = ProcessTable.read.__func__
+
+    def started_here(cls):
+        table = every(cls)
+        return cls({pid: process for pid, process in table.running.items()
+                    if any(identity.pid == os.getpid() for identity in table.lineage(pid)[1:])})
+
+    monkeypatch.setattr(ProcessTable, "read", classmethod(started_here))
+
+
+@pytest.fixture(autouse=True)
 def _managed_runtime_environment_is_explicit(monkeypatch: pytest.MonkeyPatch) -> None:
     """A developer's live managed process is not a test wire or native child."""
     for name in _MANAGED_RUNTIME_ENVIRONMENT:
