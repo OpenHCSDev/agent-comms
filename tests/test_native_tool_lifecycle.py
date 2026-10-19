@@ -342,19 +342,19 @@ async def test_socket_close_cancels_pending_claim_and_closes_client(policy):
 
 async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
     p = policy
-    closed = []
+    closed, observed = [], []
     reply = p.socket._reply
+    close = asyncio.StreamWriter.close
+
+    def close_once(writer):
+        closed.append(writer)
+        close(writer)
 
     async def observe_reply(reader, writer):
-        close = writer.close
-
-        def close_once():
-            closed.append(writer)
-            close()
-
-        monkeypatch.setattr(writer, "close", close_once)
+        observed.append(writer)
         return await reply(reader, writer)
 
+    monkeypatch.setattr(asyncio.StreamWriter, "close", close_once)
     monkeypatch.setattr(p.socket, "_reply", observe_reply)
     p.announce()
     p.start()
@@ -373,12 +373,13 @@ async def test_sent_answer_closes_its_connection_once(policy, monkeypatch):
         async with asyncio.timeout(2):
             while p.socket._handlers:
                 await asyncio.sleep(0)
-        assert len(closed) == 1 and p.effects == ["one"]
+        assert len(observed) == 1 and closed.count(observed[0]) == 1
+        assert p.effects == ["one"]
         p.end()
         p.socket.assert_complete()
     finally:
         await p.socket.close()
-    assert len(closed) == 1
+    assert closed.count(observed[0]) == 1
 
 
 async def test_interleaved_calls_wait_on_their_own_native_start(tmp_path):
