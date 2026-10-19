@@ -38,7 +38,7 @@ def test_field_plan_refuses_an_unclaimed_representation():
     from agent_comms.field_codec import FieldPlan
 
     class UnclaimedPath(PathText):
-        field_plan = FieldPlan  # The abstract base is not a registered concrete plan.
+        field_plan = FieldPlan  # The base has no registered field claim.
 
     @dataclass
     class Record:
