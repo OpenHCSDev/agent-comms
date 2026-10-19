@@ -118,8 +118,13 @@ def event():
 
 
 def test_abstract_parent_and_real_adopter(tmp_path):
-    with pytest.raises(TypeError, match="abstract"):
-        LockedStore(tmp_path / "document")
+    @dataclass(frozen=True, slots=True)
+    class AbstractDocument(LockedStore[dict[str, RecordedGoalWait]]):
+        pass
+
+    for owner in (LockedStore, AbstractDocument):
+        with pytest.raises(TypeError, match="abstract"):
+            owner(tmp_path / "document")
     assert WaitDocument.read is LockedStore.read
     assert WaitDocument.update is LockedStore.update
 
