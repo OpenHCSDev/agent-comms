@@ -20,13 +20,9 @@ from .owner_lifecycle import OwnerLifecycle
 from .publisher import OwnerPublisher, Publisher
 from .registration import Registration
 from .relationships import ThreadRelationships
-from .store_files import StoreLockOwner
 from .thread_management import ThreadManagement
 from .thread_configuration import ThreadConfiguration
 from .transcripts import Transcripts
-
-
-StoreLockOwner.lock_order()
 
 
 class Comms:

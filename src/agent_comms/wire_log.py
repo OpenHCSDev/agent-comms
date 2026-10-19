@@ -556,7 +556,7 @@ class CheckedWireStoreLock(WireStoreLock):
             yield source
 
 
-class WireLog(StoreLockOwner):
+class WireLog(StoreLockOwner, lock_rank=1):
     lock_type = WireStoreLock
     page_index_type = BusPageIndex
 

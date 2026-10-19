@@ -21,7 +21,7 @@ from agent_comms.thread_identity import RecordedThreadIncarnation
 
 
 @dataclass(frozen=True, slots=True)
-class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
+class WaitDocument(LockedStore[dict[str, RecordedGoalWait]], lock_rank=10):
     """A JSON transaction exemplar, independent of the indexed wait store."""
     @property
     def record_type(self):
@@ -49,7 +49,6 @@ class WaitDocument(LockedStore[dict[str, RecordedGoalWait]]):
 
 
 
-StoreLockOwner.declare_lock_order(*StoreLockOwner.lock_order(), WaitDocument)
 
 
 def wait(goal_id="goal"):

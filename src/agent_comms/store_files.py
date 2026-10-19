@@ -233,54 +233,33 @@ class StoreOwner(DeclaredFamily):
 
 
 class StoreLockOwner(StoreOwner, declared_name=None):
-    """The composition root orders owners; each rank derives from that order."""
+    """Each store declares its acquisition rank alongside its behavior."""
 
     __slots__ = ()
     path: Path
-    _lock_order: ClassVar[tuple[type[StoreLockOwner], ...]] = ()
+    _declared_lock_rank: ClassVar[int]
     lock_type: ClassVar[type[StoreLock]] = StoreLock
 
-    def __init_subclass__(cls, **kwargs):
+    def __init_subclass__(cls, *, lock_rank: int | None = None, **kwargs):
         super().__init_subclass__(**kwargs)
         if "lock_rank" in vars(cls):
-            raise TypeError("Store lock ranks derive from the composition root")
-
-    @classmethod
-    def declare_lock_order(cls, *owners: type[StoreLockOwner]) -> None:
-        if len(set(owners)) != len(owners):
-            raise TypeError("A store owner occurs twice in the lock order")
-        missing = set(cls.members_with(cls)) - set(owners)
-        if missing:
-            names = ", ".join(sorted(owner.__name__ for owner in missing))
-            raise TypeError(f"Store owners missing from the lock order: {names}")
-        StoreLockOwner._lock_order = owners
-
-    @classmethod
-    def lock_order(cls) -> tuple[type[StoreLockOwner], ...]:
-        """Load the acquisition relation before any independently opened store."""
-        if not StoreLockOwner._lock_order:
-            from .message_bus import MessageBus
-            from .wire_log import WireLog
-            from .registry_store import RegistryStore
-            from .catalog_store import ChannelCatalog
-            from .read_ledger import ReadLedger
-            from .relationships import RelationshipStore
-            from .runtime_info import RuntimeInfoStore
-            from .shared_ledger import SharedLedger
-            from .collaboration_ledger import CollaborationLedger
-            from .connector_store import ConnectorStore
-
-            cls.declare_lock_order(
-                MessageBus, WireLog, RegistryStore, ChannelCatalog, ReadLedger,
-                RelationshipStore, RuntimeInfoStore, SharedLedger, CollaborationLedger, ConnectorStore,
-            )
-        return StoreLockOwner._lock_order
+            raise TypeError("Store lock ranks must be class keywords")
+        # slots dataclasses rebuild their declaration with its namespace intact.
+        rank = vars(cls).get("_declared_lock_rank", lock_rank)
+        if rank is not None:
+            if type(rank) is not int or rank < 0:
+                raise TypeError("Store lock ranks must be nonnegative integers")
+            for owner in StoreLockOwner.members_with(StoreLockOwner):
+                if (vars(owner).get("_declared_lock_rank") == rank
+                        and owner.declared_name != cls.declared_name):
+                    raise TypeError(f"Duplicate store lock rank {rank}: {owner.__name__}, {cls.__name__}")
+            cls._declared_lock_rank = rank
 
     @property
     def lock_rank(self) -> int:
         try:
-            return self.lock_order().index(type(self))
-        except ValueError:
+            return vars(type(self))["_declared_lock_rank"]
+        except KeyError:
             raise TypeError(f"{type(self).__name__} is absent from the declared lock order") from None
 
     def locked(self, *, blocking: bool = True, max_bus_bytes: int | None = None,

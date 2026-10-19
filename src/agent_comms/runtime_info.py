@@ -69,7 +69,7 @@ class AgentRuntimeInfo(RuntimeInfo):
 
 
 @dataclass(frozen=True, slots=True)
-class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]]):
+class RuntimeInfoStore(RootFile, ThreadOwnedState, LockedStore[dict[str, AgentRuntimeInfo]], lock_rank=6):
     """Latest observations, independently committed from the registry/log."""
 
     filename: ClassVar[str] = "runtime_info.json"
