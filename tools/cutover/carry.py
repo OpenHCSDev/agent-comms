@@ -38,6 +38,7 @@ from typing import ClassVar
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec
 from agent_comms.todos import Todo, TodoStore
+from agent_comms.store_files import _atomic_write_text
 
 STEPS = Path("tools/cutover")
 
@@ -125,7 +126,8 @@ class RetainedBus:
                         if Path(bus.root).expanduser().resolve() == root.resolve() else bus
                         for bus in buses)
         if updated != buses:
-            path.write_text(json.dumps(FieldCodec.encode(updated), indent=2) + "\n")
+            _atomic_write_text(path, json.dumps(FieldCodec.encode(updated), indent=2) + "\n",
+                               fsync_parent=True)
 
 
 class Carry(ABC):
@@ -225,6 +227,7 @@ class Step:
     after: str | None
     revision: str
     columns: tuple[str, ...] = ()
+    after_line: int = 0
     """The todo column this step adds, as its ``column`` declares it."""
 
     @staticmethod
@@ -256,7 +259,7 @@ class Step:
                             and [target.id for target in statement.targets
                                  if isinstance(target, ast.Name)] == ["after"]):
                         return cls(name, ast.literal_eval(statement.value), revision,
-                                   cls.declared_columns(source))
+                                   cls.declared_columns(source), statement.lineno)
                 raise ValueError(f"{name} declares no step it runs after")
         raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
 
@@ -303,11 +306,13 @@ class CarryChain:
                     name, git(repo, "show", f"{revision}:{STEPS}/{path}"), revision)
         # Only a declared predecessor can keep a historical step reachable.
         # Deleting a finished step and reconnecting its successor retires it.
+        restored_by: dict[str, Step] = {}
         waiting = list(known.values())
         while waiting:
             step = waiting.pop()
             if step.after is not None and step.after not in known:
                 predecessor = cls.deleted(repo, revision, step.after)
+                restored_by[predecessor.name] = restored_by.get(step.name, step)
                 known[predecessor.name] = predecessor
                 waiting.append(predecessor)
         retired = cls.retired_at(repo, revision, known)
@@ -319,7 +324,16 @@ class CarryChain:
             for column in Step.declared_columns(cls.source(repo, revision, name)[1]))
         if not known:
             return cls((), retired, retired_columns)
-        added = cls.added_at(repo, revision)
+        positions = {commit: index for index, commit in enumerate(
+            git(repo, "rev-list", "--first-parent", "--reverse", revision).decode().split())}
+        added = cls.added_at(repo, revision, positions)
+        for name, anchor in restored_by.items():
+            # A recovered predecessor enters the chain through this kept reference.
+            # Its old source date does not make it an obligation of an older ledger.
+            reference = git(repo, "blame", "--first-parent", "--porcelain",
+                            "-L", f"{anchor.after_line},{anchor.after_line}", revision,
+                            "--", f"{STEPS}/{anchor.name}.py").decode().split()[0]
+            added[name] = max(added[name], positions[reference])
         followed = {step.after for step in known.values()}
         heads = [step for step in known.values() if step.name not in followed]
         if len(heads) != 1:
@@ -340,14 +354,16 @@ class CarryChain:
         return cls(tuple(reversed(steps)), retired, retired_columns, added)
 
     @staticmethod
-    def added_at(repo: Path, revision: str) -> dict[str, int]:
+    def added_at(repo: Path, revision: str, positions: Mapping[str, int]) -> dict[str, int]:
         """Number each step file's first main-line addition, oldest first."""
         log = git(repo, "log", "-m", "--first-parent", "--no-renames", "--diff-filter=A",
-                  "--reverse", "--name-only", "--format=%x00", revision, "--", str(STEPS))
+                  "--reverse", "--name-only", "--format=%x00%H", revision, "--", str(STEPS))
         added: dict[str, int] = {}
-        for index, commit in enumerate(log.decode().split("\0")):
-            for path in commit.split():
-                added.setdefault(Path(path).stem, index)
+        for commit in log.decode().split("\0"):
+            fields = commit.split()
+            if fields:
+                for path in fields[1:]:
+                    added.setdefault(Path(path).stem, positions[fields[0]])
         return added
 
     @staticmethod

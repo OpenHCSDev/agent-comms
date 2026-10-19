@@ -383,6 +383,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     except BaseException as error:
         transcripts.close()
         backup.restore()
+        RetainedBus.record(checkout, root)
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
