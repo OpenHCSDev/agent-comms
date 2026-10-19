@@ -1380,8 +1380,8 @@ def test_a_commit_done_takes_no_claim_and_every_close_carries_its_verified_worki
     script, _ = commander_script
 
     def git(*args):
-        return subprocess.check_output(('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t',
-                                        *args), stderr=subprocess.DEVNULL).decode().strip()
+        command = ('git', '-C', str(comms.root), '-c', 'user.name=t', '-c', 'user.email=t@t', *args)
+        return subprocess.check_output(command, stderr=subprocess.DEVNULL).decode().strip()
     git('init', '-q', '-b', 'main')
     git('commit', '-q', '--allow-empty', '-m', 'the unit answers the order')
     git('update-ref', 'refs/remotes/origin/main', 'HEAD')
@@ -1393,10 +1393,12 @@ def test_a_commit_done_takes_no_claim_and_every_close_carries_its_verified_worki
                           working=WorkingClaim(artifact)).apply(comms, caller)
     assert comms.goals.todos.get('P1').state.declared_name == 'done'
 
-    run = ApplicationOrderRun('The board shows the problem closed after the commander reopens the session')
+    run = ApplicationOrderRun(
+        'The board shows the problem closed after the commander reopens the session')
     CommsTodoCreateTool(owner='worker', order=CreateProblemGoalAction(
         problem='P2', order=replace(order(comms.root, 'order-P2'), run=run), request='request',
-        deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms', text='Fix P2',
+        deadline=RecordedEventTime(1000), commander='lead', repo='OpenHCSDev/agent-comms',
+        text='Fix P2',
     )).apply(comms, caller)
     CommsOrderDoneTool(problem='P2', delivery=OperationDelivery()).apply(comms, caller)
     works = 'In the installed app the board shows the problem closed, read after a restart.'
