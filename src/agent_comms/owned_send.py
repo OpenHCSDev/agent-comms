@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from .channel_coding_tools import CodingToolOwner
-from .messages import ClaimNoticeKind, Message
+from .messages import ClaimNoticeKind
 
 from .ordinary_turn_rules import (
     AcceptedInputCheck,
@@ -198,7 +198,7 @@ class OwnedSend(CodingToolOwner):
                 if prior is not None and source.claim(canonical) == prior:
                     return prior
             committed = self.comms.bus.publisher.publish_claim_envelope(
-                Message(owner.name, owner.name, "Claimed", ClaimNoticeKind),
+                ClaimNoticeKind.claimed(owner),
                 worktree=Path(self.thread.worktree),
                 incarnation=str(owner.created_at),
                 claims=(resource,),

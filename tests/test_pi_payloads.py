@@ -396,5 +396,5 @@ def test_raw_tool_arguments_reach_the_declared_call_refusal():
     assert raw.arguments == []
     call = CodingCall.decode(raw.id, raw.name, raw.arguments)
     assert isinstance(call, RefusedCodingCall)
-    with pytest.raises(SelectedToolDenied, match="cannot execute"):
-        call.require_tool()
+    with pytest.raises(SelectedToolDenied, match="Expected a JSON object"):
+        call.allowed_claim()

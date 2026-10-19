@@ -42,7 +42,7 @@ from .goal_actions import (
     SetGoalAction, TransitionGoalAction,
 )
 from .goal_history import RecordedGoalRevision
-from .goal_waits import StandbyReview, StandbyReviewSummary
+from .goal_waits import StandbyReview
 from .input_attempt import UnresolvedInput
 from .goal_presentation import GoalSnapshot, ThreadGoalExecution
 from .goals import Goal, GoalDeclaration, OrderCheck
@@ -50,6 +50,7 @@ from .rule_reviews import RuleReviewEntry, RuleReviews
 from .standing_rules import RulesDue, StandingRule
 from .plan_phases import OrderPhase
 from .message_reference import MessageReference
+from .message_page import PageBounds
 from .messages import Message
 from .owner_lifecycle import OwnerStartResult
 from .presentation import ChannelView
@@ -76,11 +77,7 @@ from .order_work import OrderWork
 from .turn_digests import LastTurns, OrderEditCountRead, OrderEditsRead, ThreadTurns, TurnsSince, TurnDigestRead, UnjudgedEdits
 from .relationships import RelationshipEdit
 from .work_branches import WorkBranch, WorkBranches
-from .tool_output import (
-    MAX_INLINE_OUTPUT_BYTES,
-    materialize_oversized_output,
-    serialize_tool_output,
-)
+from .tool_output import MAX_INLINE_OUTPUT_BYTES
 
 if TYPE_CHECKING:
     from .comms import Comms
@@ -229,17 +226,13 @@ class TaskPublished(ToolResult):
 
 
 @dataclass(frozen=True)
-class InboxRead(ToolResult):
-    """An oversized read names its snapshot file and counts in place of the arrays."""
+class InboxPageRead(ToolResult):
+    """One unread page; only its returned references can be acknowledged."""
     messages: tuple[Message, ...]
     acknowledged: int
+    remaining: int
     unresolved_inputs: tuple[UnresolvedInput, ...]
-    complete: bool | None = _omitted_when_absent()
-    ack_deferred: bool | None = _omitted_when_absent(wire_name="ackDeferred")
-    counts: dict[str, int] | None = _omitted_when_absent()
-    result_file: str | None = _omitted_when_absent()
-    instruction: str | None = _omitted_when_absent()
-    standby_review: StandbyReview | StandbyReviewSummary | None = _omitted_when_absent()
+    standby_review: StandbyReview | None = _omitted_when_absent()
 
 
 @dataclass(frozen=True)
@@ -376,38 +369,6 @@ class ThreadToolRequest(ToolRequest[ThreadCaller]):
 
 def _tag_set(value: str) -> frozenset[str]:
     return frozenset(tag.strip() for tag in value.split(",") if tag.strip())
-
-
-def _bounded_inbox_response(
-    messages: tuple[Message, ...],
-    unresolved: tuple[UnresolvedInput, ...],
-    review: StandbyReview | None,
-    result_file: str,
-    *,
-    ack: bool,
-) -> InboxRead:
-    """Project a saved inbox snapshot without changing any delivery or goal authority."""
-    bounded = InboxRead(
-        (), 0, (), complete=False, ack_deferred=ack,
-        counts={"messages": len(messages), "unresolved_inputs": len(unresolved)},
-        result_file=result_file,
-        instruction=(
-            "The messages and unresolved_inputs arrays are omitted, not empty. The file is "
-            "a complete public result snapshot, not current authority. Read it selectively "
-            "with read offset/limit or a JSON query; do not dump the whole file into "
-            "context. No messages were acknowledged. UNKNOWN inputs are unchanged. When "
-            "standby_review.messages is present, its complete eligible messages and exact "
-            "reviewed_inputs are inline; other review arrays are omitted with counts. "
-            "Otherwise read the review from the file. Inspect the full relevant messages "
-            "before passing their reviewed_inputs to comms_goal."
-        ),
-    )
-    if review is not None:
-        bounded = replace(bounded, standby_review=review.summary())
-        candidate = replace(bounded, standby_review=review.eligible_summary())
-        if len(serialize_tool_output(candidate).encode("utf-8")) <= MAX_INLINE_OUTPUT_BYTES:
-            return candidate
-    return bounded
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1185,20 +1146,22 @@ class StandbyRequest:
 class CommsInboxTool(ToolRequest):
     label = "Comms Inbox"
     description = (
-        "Fetch undelivered messages and unresolved native input attempts for a thread. "
-        "Optional target limits the conversation. ACK marks exactly the returned "
-        "message references; unresolved_inputs remain UNKNOWN. Oversized results return "
-        "complete=false, counts, and a complete result_file; ACK is deferred. Read that "
-        "file selectively, never dump it into context. For standby, supply standby "
+        "Fetch one oldest-first page of undelivered messages and unresolved native input "
+        "attempts for a thread. Optional target limits the conversation. ACK marks exactly "
+        "the returned message references; remaining counts unread messages in that snapshot "
+        "after this page's acknowledgment. "
+        "Call again to drain the next page. One oversized message is returned alone for "
+        "progress. Unresolved inputs remain UNKNOWN and are not paged. For standby, supply standby "
         "(goal_id and wait_for) to get standby_review: exact eligible keys and messages, "
         "already reviewed entries, and excluded owner/other-dependency inputs."
     )
     thread: str = tool_field("Thread name")
     target: str = tool_field("Channel or peer conversation", default=ANY_CHANNEL.name)
     ack: bool = tool_field("Mark exactly the returned messages delivered", default=True)
+    limit: int = tool_field("Maximum messages in this page; must be positive", default=100)
     standby: StandbyRequest | None = tool_field("Goal and dependencies to review", default=None)
 
-    def apply(self, comms: Comms, caller: ToolCaller) -> InboxRead:
+    def apply(self, comms: Comms, caller: ToolCaller) -> InboxPageRead:
         thread = self.thread
         if not (target := self.target.strip()):
             raise ValueError("An inbox target cannot be empty.")
@@ -1208,19 +1171,18 @@ class CommsInboxTool(ToolRequest):
             if standby is not None
             else None
         )
-        messages = tuple(comms.bus.inbox(thread, CommandTarget.named(target)))
-        unresolved = tuple(comms.goals.unresolved_inputs(thread))
-        response = InboxRead(messages, 0, unresolved, standby_review=review)
-        result_file = materialize_oversized_output(
-            comms.root, response, inline_limit=MAX_INLINE_OUTPUT_BYTES - 64
+        page = comms.bus.inbox_at(
+            thread, comms.registry.snapshot(), CommandTarget.named(target),
+            bounds=PageBounds(limit=self.limit, max_bytes=MAX_INLINE_OUTPUT_BYTES // 2),
         )
-        if result_file is not None:
-            return _bounded_inbox_response(
-                messages, unresolved, review, str(result_file), ack=self.ack
-            )
+        messages = page.page.messages
+        unresolved = tuple(comms.goals.unresolved_inputs(thread))
         references = tuple(message.reference for message in messages)
-        return replace(response, acknowledged=(
-            comms.messaging.acknowledge(thread, references) if self.ack else 0))
+        acknowledged = comms.messaging.acknowledge(thread, references) if self.ack else 0
+        return InboxPageRead(
+            messages, acknowledged, page.remaining + len(messages) - acknowledged,
+            unresolved, standby_review=review,
+        )
 
 
 @dataclass(frozen=True, kw_only=True)
