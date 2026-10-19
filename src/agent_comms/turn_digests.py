@@ -96,7 +96,7 @@ class TranscriptRead[Result](ConversationPreparation):
         return self.from_turns(turns)
 
     def external(self) -> Result:
-        with ExternalTranscript(self.root, self.thread.incarnation.lookup).reading() as source:
+        with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
             return self.from_external(source)
 
     @abstractmethod

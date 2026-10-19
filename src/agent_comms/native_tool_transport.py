@@ -7,7 +7,7 @@ import logging
 import os
 import socket
 import struct
-from collections.abc import Callable, ValuesView
+from collections.abc import Callable
 from contextlib import ExitStack, suppress
 from dataclasses import dataclass
 from pathlib import Path
@@ -64,18 +64,15 @@ class NativeToolRound(Generic[Call]):
         return cls(number, tuple(declared))
 
 
-class NativeToolCallTable(Generic[Call]):
+class NativeToolCallTable(dict[ToolCallIdentity | str, Call]):
     """Broker-owned identities and lifecycle objects for every native tool round."""
 
     def __init__(self) -> None:
         # A request has only a call id until the native message declares its
         # round. Keep that unresolved identity in this same table; socket
         # arrival must never assign the next observed round number.
-        self._calls: dict[ToolCallIdentity | str, Call] = {}
+        super().__init__()
         self.rounds: list[NativeToolRound[Call]] = []
-
-    def __bool__(self) -> bool:
-        return bool(self._calls)
 
     def decode_round(
         self,
@@ -95,7 +92,7 @@ class NativeToolCallTable(Generic[Call]):
         identities = tuple(ToolCallIdentity(round.number, call.call_id) for call in round.declared)
         resolved: list[Call] = []
         for identity, candidate in zip(identities, round.declared, strict=True):
-            existing = self._calls.get(identity.call_id)
+            existing = self.get(identity.call_id)
             if existing is not None:
                 existing.correlate(candidate)
                 resolved.append(existing)
@@ -105,21 +102,21 @@ class NativeToolCallTable(Generic[Call]):
         for call in announced.declared:
             call.announce()
         for identity, call in zip(identities, resolved, strict=True):
-            self._calls.pop(identity.call_id, None)
-            self._calls[identity] = call
+            self.pop(identity.call_id, None)
+            self[identity] = call
         self.rounds.append(announced)
 
     def call_for(self, candidate: Call) -> Call:
         if self.rounds:
             current_identity = ToolCallIdentity(self.rounds[-1].number, candidate.call_id)
-            current = self._calls.get(current_identity)
+            current = self.get(current_identity)
             if current is not None and current.accepts_current_request(candidate):
                 return current
-        existing = self._calls.get(candidate.call_id)
+        existing = self.get(candidate.call_id)
         if existing is not None:
             existing.correlate(candidate)
             return existing
-        self._calls[candidate.call_id] = candidate
+        self[candidate.call_id] = candidate
         return candidate
 
     def identity_for(self, call: Call) -> ToolCallIdentity:
@@ -136,16 +133,13 @@ class NativeToolCallTable(Generic[Call]):
     ) -> tuple[ToolCallIdentity, Call]:
         if self.rounds:
             identity = ToolCallIdentity(self.rounds[-1].number, call_id)
-            call = self._calls.get(identity)
+            call = self.get(identity)
             if call is not None:
                 return identity, call
         raise SelectedToolDenied(missing_message)
 
     def require(self, round_number: int, call_id: str) -> Call:
-        return self._calls[ToolCallIdentity(round_number, call_id)]
-
-    def values(self) -> ValuesView[Call]:
-        return self._calls.values()
+        return self[ToolCallIdentity(round_number, call_id)]
 
 
 

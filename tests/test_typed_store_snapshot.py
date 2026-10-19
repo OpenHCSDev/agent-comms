@@ -17,7 +17,7 @@ from agent_comms.wire_log import WireLog
 @pytest.mark.parametrize("make_store", (
     InputDispositions,
     OwnerReleaseStore,
-    lambda root: ExternalTranscript(root, RecordedThreadIncarnation("cli", 1.0).lookup),
+    lambda root: ExternalTranscript(root, RecordedThreadIncarnation("cli", 1.0)),
     lambda root: WakeCandidateIndex(WireLog(root / "bus.jsonl")),
 ), ids=("inputs", "releases", "transcript", "wake"))
 def test_missing_snapshot_has_declared_read_only_schema_without_creating_root(tmp_path, make_store):
