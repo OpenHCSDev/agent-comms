@@ -76,6 +76,7 @@ class PublishRoot(PublishTarget):
         else:
             with tempfile.TemporaryDirectory(prefix=".native-current-", dir=self.path) as scratch:
                 stage = Path(scratch) / "deployment"
+                stage.mkdir(mode=0o700)
                 target = stage / PACKAGE_LAYOUT
                 target.parent.mkdir(mode=0o700, parents=True)
                 build.run("cp", "-a", "--reflink=auto", package, target)
@@ -136,7 +137,9 @@ class NativeBuild(NativeBuildInputs):
         with tempfile.TemporaryDirectory(prefix=".native-build-", dir=self.directory) as scratch:
             work = Path(scratch)
             stock = self.stock(work)
-            package = work / "stage" / PACKAGE_LAYOUT
+            stage = work / "stage"
+            stage.mkdir(mode=0o700)
+            package = stage / PACKAGE_LAYOUT
             package.parent.mkdir(mode=0o700, parents=True)
             self.copy_stock(stock, package)
             self.patch(
@@ -164,7 +167,7 @@ class NativeBuild(NativeBuildInputs):
             if destination.exists():
                 VerifiedNativePackage(destination, self.manifest)
             else:
-                (work / "stage").rename(destination.parents[2])
+                stage.rename(destination.parents[2])
             return self.publish(destination, publish)
 
     def stock(self, work: Path) -> Path:
