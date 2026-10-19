@@ -817,6 +817,10 @@ class FieldCodec(Sealed):
 
     @overload
     @classmethod
+    def encode(cls, value: type[DeclaredFamily]) -> str: ...
+
+    @overload
+    @classmethod
     def encode(cls, value: DeclaredFamily) -> dict[str, Any]: ...
 
     @overload

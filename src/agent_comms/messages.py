@@ -185,7 +185,7 @@ class MessageRoleName(FieldRepresentation[MessageRole]):
 
     @classmethod
     def encode(cls, value: MessageRole) -> str:
-        return value.declared_name
+        return FieldCodec.encode(type(value))
 
     @classmethod
     def decode(cls, value: object) -> MessageRole:
