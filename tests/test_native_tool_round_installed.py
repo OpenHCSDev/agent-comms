@@ -49,10 +49,11 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         if isinstance(event, MessageEnd) and any(
                 isinstance(item, ToolCallContent) and item.id == "fresh-round-1"
                 for item in event.message.content):
-            # The actual first socket request reaches its original ten-second
-            # start deadline. The second request must exist before this native
-            # declaration is consumed, reproducing the retained ordering.
+            # The real socket request arrives while stdout is still applying
+            # the previous declaration. Withhold that declaration past the
+            # deleted ten-second timer; only its actual start may authorize it.
             await asyncio.wait_for(release.wait(), 20)
+            await asyncio.sleep(11)
         return await apply_native_event(turn, event)
 
     handle_request = CodingToolSocket.handle_request
@@ -62,8 +63,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         requests.append(call_id)
         if socket not in sockets:
             sockets.append(socket)
-        if call_id == "fresh-round-2":
-            # handle_request registers its unresolved call before yielding.
+        if call_id == "fresh-round-1":
             asyncio.get_running_loop().call_soon(release.set)
         return await handle_request(socket, raw)
 
@@ -95,12 +95,16 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
             "verifier", session, f"Distinct isolated delayed-round verification {native.session.stem}."
         ).message
         await owner.inputs.drain_inbox(session)
-        await asyncio.wait_for(reply_turn_finished(owner, session), 45)
+        await asyncio.wait_for(reply_turn_finished(owner, session), 120)
 
+        rows = [json.loads(line) for line in native.session.read_text().splitlines()]
+        tools = [row["message"] for row in rows if row.get("type") == "message"
+                 and row["message"].get("role") == "toolResult"]
+        print("delayed_native_start=" + json.dumps({"claims":claims, "tools":tools}))
         assert release.is_set()
         assert provider.posts == 3
         assert requests == ["fresh-round-1", "fresh-round-2"]
-        assert claims == [(1, "fresh-round-2")]
+        assert claims == [(0, "fresh-round-1"), (1, "fresh-round-2")]
         assert effect.read_text() == "fresh-effect\n"
         assert len(sockets) == 1
         sockets[0].assert_complete()
@@ -111,8 +115,7 @@ async def test_actual_native_delayed_round_then_tool_effect_and_error(native_bac
         assert len([message for message in messages if message.get("role") == "user"]) == 2
         tools = [message for message in messages if message.get("role") == "toolResult"]
         assert [message["toolCallId"] for message in tools] == requests
-        assert tools[0]["isError"] is True and not tools[1].get("isError")
-        assert "within 10 s" in tools[0]["content"][0]["text"]
+        assert not tools[0].get("isError") and not tools[1].get("isError")
         errors = [message for message in messages if message.get("stopReason") == "error"]
         assert len(errors) == 1
         assert provider.error_message in errors[0]["errorMessage"]
