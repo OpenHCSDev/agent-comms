@@ -32,10 +32,9 @@ class ResolvedChannel:
 def exact_stored_target(name: str) -> bool:
     from .channels import BuiltinChannelView
 
-    channel = BuiltinChannelView.lookup(name)
-    if channel is not None:
+    if name in BuiltinChannelView.names():
         try:
-            channel.require_routable()
+            BuiltinChannelView.decode(name).require_routable()
         except RelationViolationError:
             return False
     return True
@@ -247,7 +246,7 @@ class ChannelTarget(NamedTarget):
     def validate(self, sender=None):
         from .channels import BuiltinChannelView
 
-        if BuiltinChannelView.lookup(self.name) is None:
+        if self.name not in BuiltinChannelView.names():
             Tag.validate(self.name[1:], label=f"Channel {self.name!r}")
 
     def response_policy(self, message):
@@ -323,5 +322,5 @@ class Tag:
     def validate(name: str, *, label: str = "Tags") -> None:
         from .channels import BuiltinChannelView
 
-        if not name or not set(name) <= _TAG_CHARS or BuiltinChannelView.lookup(f"#{name}"):
+        if not name or not set(name) <= _TAG_CHARS or f"#{name}" in BuiltinChannelView.names():
             raise ValueError(f"{label} must be lowercase alphanumeric with hyphens/underscores; built-in channel names are reserved.")

@@ -21,9 +21,9 @@ from .read_basis import AllChannelDisplayScope, ChannelDisplayScope, MemberActiv
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
-    from .threads import Thread
     from .registry_document import RosterVisibility
     from .registry_provenance import RegistryProvenance
+    from .threads import Thread
 
 
 class ChannelMemberIndex(dict[str, tuple["Thread", ...]]):
@@ -69,7 +69,6 @@ class Channel(DeclaredFamily, CliResult, ToolResult, affix="Channel"):
             raise ValueError("Channel presentation flags must be boolean.")
         if self.any_mode and not self.exact:
             raise ValueError("Only exact tag channels can include member activity.")
-        ChannelTarget(name).validate()
         if self.parent is not None:
             ChannelTarget(self.parent).validate()
         if self.parent == name:
@@ -194,10 +193,6 @@ class MembershipChannel:
 
 
 class BuiltinChannelView(PredicateChannel, MembershipChannel, Channel, declared_name=None):
-    @classmethod
-    def lookup(cls, name: str) -> type[BuiltinChannelView] | None:
-        return next((kind for kind in cls.members_with(cls) if kind.declared_name == name), None)
-
     def validate_declaration(self) -> None:
         if self.name != self.declared_name:
             raise ValueError("Built-in channel must retain its declaration identity.")

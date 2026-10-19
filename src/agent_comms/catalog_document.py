@@ -81,9 +81,9 @@ class CatalogDocument:
     def require_channel(self, target: str) -> Channel:
         target = ChannelTarget.normalize_name(target)
         tag = target.removeprefix("#")
-        if builtin := BuiltinChannelView.lookup(target):
+        if target in BuiltinChannelView.names():
             preference = self.preferences.get(target, ChannelPreferences())
-            return preference.channel(builtin, target, frozenset())
+            return preference.channel(BuiltinChannelView.decode(target), target, frozenset())
         if (view := self.saved_views.get(tag)) is not None:
             preference = self.preferences.get(target, ChannelPreferences(created_at=view.created_at))
             return preference.channel(SavedViewChannel, target, view.predicate.tags, view=view)
