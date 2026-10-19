@@ -54,6 +54,7 @@ from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.store_files import _store_lock
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -193,15 +194,27 @@ def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: st
     ``stack``'s Python: the target's staged stack, never the installed one."""
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
-    output = run(stack.python, "-m", f"cutover.{step.name}", root, *flags, cwd=tree, env=environment)
-    return json.loads(output.strip().splitlines()[-1])
+    # Historical conversions use their own source, but their old CLI cannot decide
+    # the target chain's order or recognize steps added after that source revision.
+    worker = (
+        "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
+        "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
+        "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
+    )
+    operation = "before_stop" if "--before-stop" in flags else "carry"
+    output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
+                 operation, root, cwd=tree, env=environment)
+    result = json.loads(output.strip().splitlines()[-1])
+    return {"carry": step.name, "changed": result["changed"], "applied": True,
+            "rewritten": result["rewritten"], **result["detail"]}
 
 
 def before_stop(
     root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
 ) -> list[dict]:
     """What the running installation needs before its own stop command reads the bus."""
-    return [carry(step, root, stack, revisions, "--before-stop", "--apply") for step in pending]
+    with _store_lock(root / "wire"):
+        return [carry(step, root, stack, revisions, "--before-stop", "--apply") for step in pending]
 
 
 def carry_all(
@@ -209,7 +222,13 @@ def carry_all(
 ) -> list[dict]:
     results = []
     for step in pending:
-        results.append(carry(step, root, stack, revisions, "--apply"))
+        with _store_lock(root / "wire"):
+            CarryChain.at(revisions.repo, step.chain_revision).require_next(
+                step.name, CarryLedger(root).applied())
+            result = carry(step, root, stack, revisions, "--apply")
+            CarryLedger(root).record(step.name)
+            result["rewritten"] = [*result["rewritten"], CarryLedger.name]
+        results.append(result)
         RetainedBus.record(revisions.repo, root)
     return results
 

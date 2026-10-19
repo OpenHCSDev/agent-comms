@@ -227,6 +227,8 @@ class Step:
     name: str
     after: str | None
     revision: str
+    declaration: str
+    chain_revision: str
     columns: tuple[str, ...] = ()
     """The todo column this step adds, as its ``column`` declares it."""
     after_line: int = 0
@@ -259,7 +261,7 @@ class Step:
                     if (isinstance(statement, ast.Assign)
                             and [target.id for target in statement.targets
                                  if isinstance(target, ast.Name)] == ["after"]):
-                        return cls(name, ast.literal_eval(statement.value), revision,
+                        return cls(name, ast.literal_eval(statement.value), revision, node.name, revision,
                                    cls.declared_columns(source), statement.lineno)
                 raise ValueError(f"{name} declares no step it runs after")
         raise ValueError(f"{name} holds no Carry step; every carry_* module is a step of the chain")
@@ -356,7 +358,8 @@ class CarryChain:
                 raise ValueError(f"Carry chain loops at {step.name}")
         if len(set(known) - {step.name for step in steps}):
             raise ValueError("Carry steps must form one chain")
-        return cls(tuple(reversed(steps)), retired, retired_columns, added, restored)
+        return cls(tuple(replace(step, chain_revision=revision) for step in reversed(steps)),
+                   retired, retired_columns, added, restored)
 
     @staticmethod
     def added_at(repo: Path, revision: str, positions: Mapping[str, int]) -> dict[str, int]:
