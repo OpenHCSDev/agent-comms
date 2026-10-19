@@ -17,6 +17,7 @@ from ..comms import Comms
 from ..errors import RelationViolationError
 from ..native_arguments import NativeArguments
 from ..threads import Thread
+from ..todos import Todo
 
 
 class CommanderRole:
@@ -39,6 +40,15 @@ class Repo(BaseModel):
     checkout: Path
     github: str
     source: str = 'src'
+
+    def contains(self, sha: str) -> bool:
+        """Only a successful ancestry proof in this installed checkout permits closure."""
+        result = subprocess.run(
+            ('git', '-C', str(self.checkout), 'merge-base', '--is-ancestor', sha, 'HEAD'),
+            capture_output=True, timeout=60)
+        if result.returncode not in (0, 1):
+            result.check_returncode()
+        return result.returncode == 0
 
     @classmethod
     def of(cls, checkout: Path) -> Repo:
@@ -108,6 +118,12 @@ class Commander:
     @classmethod
     def of(cls, config: CommanderConfig) -> Commander:
         return cls(config.commander, Comms(config.root))
+
+    def orders(self, repos: tuple[Repo, ...]) -> tuple[Todo, ...]:
+        actor = self.comms.registry.require(self.name).incarnation
+        store = self.comms.goals.todos
+        store.reconcile_merges(actor, repos, self.comms.registry.storage_rule)
+        return store.for_commander(actor)
 
     def units(self) -> frozenset[str]:
         """The threads this commander gives orders to; the owner, claude-ai and peer commanders
