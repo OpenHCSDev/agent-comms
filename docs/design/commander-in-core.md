@@ -62,7 +62,6 @@ Every tool below is a `ToolRequest` in `src/agent_comms/tools.py`; `agent-comms 
 | `comms_fire` | `CommsFireTool`, tools.py | Release every open problem the unit holds in one operation, recording one plain reason on each |
 | `comms_correct_wording` | `CommsCorrectWordingTool`, tools.py | Answer a unit's jargon with a correction naming its open orders; its strikes stay as they are |
 | `comms_order_check` | `CommsOrderCheckTool`, tools.py:782 | Replace the check of an open order, recording the old check, the new one and why |
-| `comms_problem_close` | `CommsProblemCloseTool`, tools.py:800 | Record installed application evidence and close only a problem with no open order |
 | `comms_turns` | `CommsTurnsTool`, tools.py:817 | Read a unit's recent turns with ordered original transcript facts |
 | `comms_work_branches` | `CommsWorkBranchesTool`, tools.py:842 | Branches with commits not on main, newest first, with their open PR or linked issue and the threads that have them checked out |
 
@@ -82,8 +81,8 @@ Every tool below is a `ToolRequest` in `src/agent_comms/tools.py`; `agent-comms 
   family (todos.py:549), each member revision-checked:
   `AssignTodo` (todos.py:564), `StrikeTodo` (todos.py:586), `VoidStrikeTodo` (todos.py:602,
   the strike stays on the record), `CorrectCheckTodo` (todos.py:620), `RecordFirstCallTodo`
-  (todos.py:638), `RecordHuntTodo` (todos.py:650), `DeliverTodo` (todos.py:663), `InstallTodo`
-  (todos.py:679, refuses without a retained installed artifact) and `ChangeTodoState` (todos.py:695).
+  (todos.py:638), `RecordHuntTodo` (todos.py:650), `DeliverTodo` (todos.py:663, closes the problem once the delivery is verified)
+  and `ChangeTodoState` (todos.py:695).
 - **Delivery = the `OrderDelivery` family** (todos.py:34): `RecordedCommitDelivery` (todos.py:57),
   `CommitDelivery` (todos.py:81) and `OperationDelivery` (todos.py:107). The order's check runs
   on the delivered commit or operation, not on a checkout's HEAD.

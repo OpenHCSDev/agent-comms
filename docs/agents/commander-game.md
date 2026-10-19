@@ -239,8 +239,9 @@ Core already has the commander: `src/agent_comms/commander/` (order, judge,
 rotate, rules, capacity, cli, rules/*.md), installed in the
 current runtime. Design: `docs/design/commander-in-core.md`. Problems are Core
 Todos and orders are Goals (#934/P51, merged 2026-10-17); a wrong strike is
-voided, never deleted (P47, #1498); closing a problem goes through
-`CommsProblemCloseTool` with works evidence.
+voided, never deleted (P47, #1498); a problem closes when `order done` records
+its order merged and checked. Installing main is the install schedule's work
+(`InstallDeadline`, checked by the `InstallDue` standing rule), not an order's.
 
 The live loop still runs the scratch copies in
 `/home/ts/.cache/agent-scratch/rts/` with their own JSON stores

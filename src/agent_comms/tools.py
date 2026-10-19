@@ -59,7 +59,7 @@ from .restart_queue import QueuedRestart, cancel as cancel_restart, enqueue as e
 from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
-from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
+from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, OrderDelivery,
                     OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
                     TodoOperation)
 from .change_report import ChangeReport
@@ -173,11 +173,6 @@ class StandingRulesRead(ToolResult):
 @dataclass(frozen=True)
 class ProblemOrdered(ToolResult):
     goal: Goal
-    todo: Todo
-
-
-@dataclass(frozen=True)
-class ProblemClosed(ToolResult):
     todo: Todo
 
 
@@ -922,23 +917,6 @@ class CommsOrderServeTool(ThreadToolRequest):
         changed = comms.goals.change_problem(
             self.problem, ServeTodo(todo.revision, actor, self.serves), caller.name)
         return TodoChanged(changed, changed.strike_count)
-
-
-@dataclass(frozen=True, kw_only=True)
-class CommsProblemCloseTool(ThreadToolRequest):
-    label = "Close installed problem"
-    description = "Record installed application evidence and close only a problem with no open order."
-    problem: str = tool_field("Problem ID")
-    works: str = tool_field("What worked in the app, quoting the order's Works when run")
-    artifact: str = tool_field("Existing verification artifact file")
-
-    def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemClosed:
-        todo = comms.goals.todos.get(self.problem)
-        actor = comms.registry.require(caller.name).incarnation
-        todo.require_commander(actor)
-        closed = comms.goals.change_problem(self.problem, InstallTodo(
-            todo.revision, actor, self.works, self.artifact), caller.name)
-        return ProblemClosed(closed)
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -271,10 +271,6 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         """An open pull request nobody has touched for five minutes."""
         return False
 
-    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
-        """The held order this progress leaves waiting on the fleet's install."""
-        return ()
-
 
 @dataclass(frozen=True)
 class FoundProgress(OrderProgress):
@@ -389,9 +385,6 @@ class MergedProgress(FoundProgress):
     @property
     def line(self) -> str:
         return f"merged as {self.sha}, awaiting record"
-
-    def waiting_on_install(self, todo: Todo) -> tuple[Todo, ...]:
-        return (todo,)
 
 
 class InstallDeadline(DeclaredFamily, affix="InstallDeadline"):
@@ -640,25 +633,17 @@ class OrderRun(DeclaredFamily, affix="OrderRun"):
     @abstractmethod
     def instructions(self) -> tuple[str, ...]: ...
 
-    @abstractmethod
-    def require_closing(self, works: str) -> None:
-        """Refuse closing evidence that does not show this run happened."""
-
 
 @dataclass(frozen=True)
 class MechanicalOrderRun(OrderRun):
     def instructions(self) -> tuple[str, ...]:
         return ()
 
-    def require_closing(self, works: str) -> None:
-        """The order's check alone closes it."""
-
 
 @dataclass(frozen=True)
 class ApplicationOrderRun(OrderRun):
     text: str
-    least_words: ClassVar[int] = 8  # the run, and the evidence that it happened
-    quoted_words: ClassVar[int] = 4
+    least_words: ClassVar[int] = 8
 
     def __post_init__(self) -> None:
         if len(self.text.split()) < self.least_words:
@@ -667,18 +652,6 @@ class ApplicationOrderRun(OrderRun):
 
     def instructions(self) -> tuple[str, ...]:
         return (f"{self.label} {self.text}",)
-
-    def require_closing(self, works: str) -> None:
-        quoted = self.phrases(self.text) & self.phrases(works)
-        if len(works.split()) < self.least_words or not quoted:
-            raise ValueError(f"Describe what worked in {self.least_words}+ words, quoting "
-                             f"{self.quoted_words}+ consecutive words of: {self.label} {self.text}")
-
-    @classmethod
-    def phrases(cls, text: str) -> set[tuple[str, ...]]:
-        words = [word.strip(".,;:!?\"'`()").lower() for word in text.split()]
-        return {tuple(words[at:at + cls.quoted_words])
-                for at in range(len(words) - cls.quoted_words + 1)}
 
 
 class OrderDeletion(DeclaredFamily, affix="Deletion"):
@@ -817,21 +790,14 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
         return replace(self, check=correction.check,
                        check_corrections=(*self.check_corrections, correction))
 
-    def installed(self, works: str, artifact: str) -> ProblemOrder:
-        raise ValueError("Check the delivered order before recording installation.")
-
     def require_close(self):
-        raise ValueError("Closing requires recorded installed application evidence.")
+        raise ValueError("An order closes at its delivery, merged and checked, or its withdrawal.")
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         raise ValueError("Only an undelivered order can be withdrawn.")
 
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         """How this order retired its problem without delivery, as the record and board say."""
-        return ()
-
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
-        """The order waiting on the fleet's install to record it working."""
         return ()
 
 
@@ -841,10 +807,6 @@ class PendingProblemOrder(ProblemOrder):
 
     def require_transfer(self, todo: Todo) -> None:
         pass
-
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
-        """An undelivered order waits on install once its PR merged."""
-        return read[todo.id].waiting_on_install(todo)
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
@@ -868,34 +830,6 @@ class DeliveredProblemOrder(ProblemOrder):
     def corrected(self, correction: CorrectCheckTodo) -> ProblemOrder:
         raise ValueError("A delivered order keeps the check its delivery passed.")
 
-    def installed(self, works, artifact):
-        self.run.require_closing(works)
-        return self.copy_as(InstalledProblemOrder, works=works, artifact=artifact)
-
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
-        return (todo,)
-
-
-@dataclass(frozen=True, kw_only=True)
-class InstalledProblemOrder(DeliveredProblemOrder):
-    works: str
-    artifact: str
-
-    def __post_init__(self):
-        super().__post_init__()
-        if not self.works.strip() or not self.artifact.strip():
-            raise ValueError("Describe what worked and name its artifact file.")
-
-    def installed(self, works, artifact):
-        if (works, artifact) != (self.works, self.artifact):
-            raise ValueError("The order already records different installed evidence.")
-        return self
-
-    def require_close(self):
-        pass
-
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
-        return ()
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1046,7 +980,7 @@ class Assignment:
 
 
 class TodoState(DeclaredFamily, affix="TodoState"):
-    open: ClassVar[bool] = True  # on the board until closed with installed evidence
+    open: ClassVar[bool] = True  # on the board until its order is delivered or withdrawn
 
     @classmethod
     def open_names(cls) -> tuple[str, ...]:
@@ -1338,23 +1272,6 @@ class RecordHuntTodo(TodoOperation):
 
 
 @dataclass(frozen=True)
-class DeliverTodo(TodoOperation):
-    actor: ThreadIncarnation
-    delivery: OrderDelivery
-
-    def prepare(self, goals, current):
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
-        verified = self.delivery.verified(current.order.check, current.order.deletes)
-        return replace(self, delivery=asyncio.run(verified))
-
-    def apply(self, current):
-        current.require_revision(self.expected_revision)
-        current.require_commander(self.actor)
-        return replace(current, order=current.order.delivered(self.delivery), revision=current.revision + 1)
-
-
-@dataclass(frozen=True)
 class CloseOrderTodo(TodoOperation, declared_name=None):
     """The commander records the order's terminal state and closes its problem in one revision."""
     actor: ThreadIncarnation
@@ -1371,14 +1288,19 @@ class CloseOrderTodo(TodoOperation, declared_name=None):
 
 
 @dataclass(frozen=True)
-class InstallTodo(CloseOrderTodo):
-    works: str
-    artifact: str
+class DeliverTodo(CloseOrderTodo):
+    """An order is done when its pull request merged and its check passes on that commit;
+    installing main on the bus is the install schedule's work, not the order's."""
+    delivery: OrderDelivery
+
+    def prepare(self, goals, current):
+        current.require_revision(self.expected_revision)
+        current.require_commander(self.actor)
+        verified = self.delivery.verified(current.order.check, current.order.deletes)
+        return replace(self, delivery=asyncio.run(verified))
 
     def closed(self, current: Todo) -> ProblemOrder:
-        if not Path(self.artifact).is_file():
-            raise ValueError("Retain the installed application artifact before closing.")
-        return current.order.installed(self.works, self.artifact)
+        return current.order.delivered(self.delivery)
 
 
 @dataclass(frozen=True)
