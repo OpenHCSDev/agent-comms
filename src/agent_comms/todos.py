@@ -25,7 +25,7 @@ from uuid import uuid4
 
 from . import skills
 from .change_report import FileLine
-from .child_process import BoundedRun, ChildResult, ExitedOutcome
+from .child_process import BoundedRun, CheckPrinted, ChildResult, ExitedOutcome
 from .command import Command
 from .declared_family import DeclaredFamily
 from .errors import ToolRefusedError
@@ -261,7 +261,8 @@ def _clock(at: float) -> str:
 @dataclass(frozen=True)
 class DistanceReading:
     at: float
-    distance: int
+    distance: CheckPrinted
+    command: str = ""
 
 
 @dataclass(frozen=True)
@@ -272,15 +273,25 @@ class DistanceReadings:
 
     @property
     def trend(self) -> DistanceTrend:
-        """Velocity across the two readings: falling projects the finish, else it is flat."""
-        last = self.readings[-2:]
-        if len(last) < 2 or not last[1].distance:
+        """A missing count diagnoses the check; only measured counts project a finish."""
+        if not self.readings:
             return UnreadTrend()
-        first, final = last
-        if final.distance >= first.distance:
-            return FlatTrend(final.distance, final.at)
-        rate = (first.distance - final.distance) / max(final.at - first.at, 1.0)
-        return MovingTrend(final.distance, final.at + final.distance / rate)
+        return self.readings[-1].distance.project(
+            self.counted_trend, lambda: UncountedTrend(self.readings[-1].command))
+
+    def counted_trend(self, final: int) -> DistanceTrend:
+        last = self.readings[-2:]
+        if len(last) < 2 or not final:
+            return UnreadTrend()
+        first, latest = last
+
+        def compared(previous: int) -> DistanceTrend:
+            if final >= previous:
+                return FlatTrend(final, latest.at)
+            rate = (previous - final) / max(latest.at - first.at, 1.0)
+            return MovingTrend(final, latest.at + final / rate)
+
+        return first.distance.project(compared, UnreadTrend)
 
 
 class DistanceTrend(DeclaredFamily, affix="Trend"):
@@ -311,6 +322,15 @@ class FlatTrend(DistanceTrend):
     @property
     def projection(self) -> str:
         return f"; distance {self.distance}, not falling"
+
+
+@dataclass(frozen=True)
+class UncountedTrend(DistanceTrend):
+    command: str
+
+    @property
+    def projection(self) -> str:
+        return f"; check prints no integer: {self.command}"
 
 
 @dataclass(frozen=True)
@@ -375,7 +395,7 @@ class PresentCheckout(ProgressCheckout):
             "--not", base).splitlines()))]
         points = [(base, source.since), *commits][-2:]
         return DistanceReadings(
-            tuple(DistanceReading(at, source.distance(self, base, sha)) for sha, at in points))
+            tuple(source.reading(self, base, sha, at) for sha, at in points))
 
     def pushes(self, since: float) -> Iterator[tuple[str, float]]:
         """A push-ref update has its own time, not the commit's author time."""
@@ -427,12 +447,13 @@ class ProgressSource:
         """Progress observation does not run the order's Check."""
         return DistanceReadings()
 
-    def distance(self, checkout: PresentCheckout, base: str, sha: str) -> int:
-        """Run the order's check and count its untouched edits at a present revision."""
+    def reading(self, checkout: PresentCheckout, base: str, sha: str, at: float) -> DistanceReading:
+        """Keep the check command with its measured or missing distance."""
         check = self.todo.order.check
         touched = checkout.git("diff", "--name-only", base, sha).split()
         run = check.at(sha, str(checkout.path))
-        return check.result.distance(run) + self.todo.order.untouched(touched)
+        return DistanceReading(at, check.result.distance(run).plus(
+            self.todo.order.untouched(touched)), check.command)
 
 
 class MeasuredProgressSource(ProgressSource):
@@ -2208,8 +2229,13 @@ class Todo(TypedTable):
         return bool(self.messages) and self.messages[-1].message_id == message_id
 
     def require_replacement(self, message_id: str) -> None:
+        if not self.messages:
+            raise ValueError(f"{self.holder} holds {self.id}, but no order message was recorded.")
         if not self.sent_in(message_id):
-            raise ValueError(f"{self.holder} already holds {self.id}; pass --replaces with its current message.")
+            raise ValueError(
+                f"{self.holder} already holds {self.id}; "
+                f"pass --replaces {self.messages[-1].message_id}"
+            )
 
     @classmethod
     def require_order_body(cls, body: str) -> None:
