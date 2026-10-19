@@ -34,7 +34,7 @@ from agent_comms.registry_store import RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
-from cutover.carry import STEPS, Carry, CarryChain, CarryLedger
+from cutover.carry import STEPS, Carry, CarryChain, CarryLedger, RetainedBus
 from tools.debt_ratchet import EditedCarry, UncarriedRecordFormat, git
 from agent_comms.recorded_time import RecordedEventTime
 from test_todos import order, thread
@@ -112,6 +112,45 @@ def test_a_deleted_step_runs_from_the_last_revision_that_held_it(tmp_path):
     repo.commit({"carry_c": None})
     assert [(step.name, step.revision) for step in CarryChain.at(tmp_path, "HEAD").steps] == [
         ("carry_a", held), ("carry_b", "HEAD")]
+
+
+
+def test_retirement_requires_every_retained_bus_to_have_applied_the_step(tmp_path):
+    repo = Repository(tmp_path)
+    bus_root = tmp_path / "laptop-bus"
+    bus_root.mkdir()
+    declarations = repo.path / STEPS / RetainedBus.filename
+    repo.commit({"carry_a": step_source(None), "carry_b": step_source("carry_a")})
+    buses = [
+        {"name": "laptop", "root": str(bus_root), "applied": ["carry_a"]},
+        {"name": "desktop", "root": "/desktop/bus", "applied": []},
+    ]
+    declarations.write_text(json.dumps(buses))
+    repo.commit({"carry_a": None, "carry_b": step_source(None)})
+    with pytest.raises(ValueError, match="desktop.*carry_a"):
+        CarryChain.at(tmp_path, "HEAD")
+    repo.commit({"carry_b": step_source("carry_a")})
+    restored = CarryChain.at(tmp_path, "HEAD")
+    assert [step.name for step in restored.pending(("carry_b",))] == ["carry_a"]
+    repo.commit({"carry_b": step_source(None)})
+    buses[1]["applied"] = ["carry_a"]
+    buses[0]["applied"] = []
+    declarations.write_text(json.dumps(buses))
+    repo.commit({"carry_b": step_source(None)})
+    with pytest.raises(ValueError, match="laptop.*carry_a"):
+        CarryChain.at(tmp_path, "HEAD")
+    buses[0]["applied"] = ["carry_a"]
+    declarations.write_text(json.dumps(buses))
+    repo.commit({"carry_b": step_source(None)})
+    assert CarryChain.at(tmp_path, "HEAD").retired == {"carry_a"}
+    for name in ("carry_a", "carry_b"):
+        CarryLedger(bus_root).record(name)
+    RetainedBus.record(repo.path, bus_root)
+    saved = json.loads(declarations.read_text())
+    assert saved[0]["applied"] == ["carry_a", "carry_b"]
+    assert saved[1] == buses[1]
+    RetainedBus.restore(repo.path, "HEAD")
+    assert declarations.read_text() == repo.git("show", f"HEAD:{STEPS}/{RetainedBus.filename}")
 
 
 def test_reconnected_successor_retires_deleted_steps_without_replaying_them(tmp_path):

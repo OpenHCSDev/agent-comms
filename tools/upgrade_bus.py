@@ -46,14 +46,16 @@ from pathlib import Path
 # tree's src, never the src the checkout being upgraded has installed.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from cutover.carry import CarryChain, CarryLedger, Step
+from cutover.carry import Carried, CarryChain, CarryLedger, RetainedBus, Step, TodoColumnCarry
 
 import agent_comms.activity_checkpoint  # noqa: F401  (declares the activity runtime files)
 from agent_comms.active_route import acquire_exclusive_route_lock, route_lock_holders
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.external_transcript import ExternalTranscript
+from agent_comms.field_codec import FieldCodec
 from agent_comms.locked_store import RuntimeFile
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.store_files import _store_lock
 
 REPO = Path(__file__).resolve().parents[1]
 CLIENT_IMPORTS = "import toad.app, agent_comms.acp"
@@ -188,26 +190,52 @@ class Revisions:
             subprocess.run(["git", "-C", str(self.repo), "worktree", "remove", "--force", str(path)])
 
 
-def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> dict:
+def carry(step: Step, root: Path, stack: Stack, revisions: Revisions, *flags: str) -> Carried:
     """Run one step from the revision that declares it, with that revision's src and
     ``stack``'s Python: the target's staged stack, never the installed one."""
+    if step.columns:
+        if "--before-stop" in flags:
+            return TodoColumnCarry.before_stop(root, apply=True)
+        return TodoColumnCarry.carry_step(
+            root, step, CarryChain.at(revisions.repo, step.chain_revision), apply=True)
     tree = revisions.tree(step.revision)
     environment = stack.environment(tree / "src", tree / "tools")
-    output = run(stack.python, "-m", f"cutover.{step.name}", root, *flags, cwd=tree, env=environment)
-    return json.loads(output.strip().splitlines()[-1])
+    # Historical conversions use their own source, but their old CLI cannot decide
+    # the target chain's order or recognize steps added after that source revision.
+    worker = (
+        "import importlib,json,sys; from dataclasses import asdict; from pathlib import Path; "
+        "step=getattr(importlib.import_module(sys.argv[1]),sys.argv[2]); "
+        "print(json.dumps(asdict(getattr(step,sys.argv[3])(Path(sys.argv[4]),apply=True))))"
+    )
+    operation = "before_stop" if "--before-stop" in flags else "carry"
+    output = run(stack.python, "-c", worker, f"cutover.{step.name}", step.declaration,
+                 operation, root, cwd=tree, env=environment)
+    return FieldCodec.decode(Carried, FieldCodec.parse(output.strip().splitlines()[-1]))
 
 
 def before_stop(
     root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
 ) -> list[dict]:
     """What the running installation needs before its own stop command reads the bus."""
-    return [carry(step, root, stack, revisions, "--before-stop", "--apply") for step in pending]
+    with _store_lock(root / "wire"):
+        return [carry(step, root, stack, revisions, "--before-stop", "--apply").report(
+            step.name, True) for step in pending]
 
 
 def carry_all(
     root: Path, pending: tuple[Step, ...], stack: Stack, revisions: Revisions
 ) -> list[dict]:
-    return [carry(step, root, stack, revisions, "--apply") for step in pending]
+    results = []
+    for step in pending:
+        with _store_lock(root / "wire"):
+            CarryChain.at(revisions.repo, step.chain_revision).require_next(
+                step.name, CarryLedger(root).applied())
+            result = carry(step, root, stack, revisions, "--apply")
+            CarryLedger(root).record(step.name)
+            result = replace(result, rewritten=(*result.rewritten, CarryLedger.name))
+        results.append(result.report(step.name, True))
+        RetainedBus.record(revisions.repo, root)
+    return results
 
 
 def copy_bus(root: Path, copy: Path) -> None:
@@ -379,6 +407,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     except BaseException as error:
         transcripts.close()
         backup.restore()
+        RetainedBus.restore(checkout, target)
         run("git", "-C", checkout, "reset", "--keep", "-q", current)
         if (backup.path / "uv.lock").exists():
             shutil.copy2(backup.path / "uv.lock", lock)
