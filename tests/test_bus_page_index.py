@@ -5,12 +5,14 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
+from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 import pytest
 
 from agent_comms.bus_page_index import BusPageIndex, BusPageRow
 from agent_comms.comms import Comms
+from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
 from agent_comms.messages import InfoKind, Message
 from agent_comms.private_bus_checkpoint import install_private_bus_checkpoint
@@ -97,7 +99,8 @@ def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, openin
     assert decoded == [7, 150]
 
 
-def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
+@pytest.mark.parametrize('direct', (False, True))
+def test_two_stale_readers_share_sqlite_writer_exclusion(tmp_path, direct):
     bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
     with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         message, _ = next(opened.public_records())
@@ -110,22 +113,28 @@ def test_two_stale_reference_readers_wait_for_one_bus_locked_preparer(tmp_path):
         with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             with BusPageIndex(bus.log.path) as index:
                 assert not index.covers(opened)
-            captured.release()
-            readers_ready.wait(timeout=5)
-            return opened.messages_for_references((message.reference,))
+                captured.release()
+                readers_ready.wait(timeout=5)
+                if direct:
+                    index.prepare(opened)
+                    assert index.covers(opened)
+                    return tuple(row.seq for row in BusPageRow.select(index.connection, order_by=('seq',)))
+                return opened.messages_for_references((message.reference,))
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         readers = (executor.submit(read_reference), executor.submit(read_reference))
-        # Both readers must capture their stale source before the bus owner
-        # blocks preparation; neither may become an independent SQLite writer.
+        # Both readers see stale coverage. Only SQLite's writer transaction
+        # blocks preparation; the bus is not locked while they rebuild.
         for _ in readers:
             assert captured.acquire(timeout=5)
-        with bus.log.locked():
+        with closing(CoordinationStore.writer(bus.log.path.with_name('bus_page_index.sqlite3'))) as db, db:
+            db.execute('BEGIN IMMEDIATE')
             readers_ready.wait(timeout=5)
             for reader in readers:
                 with pytest.raises(TimeoutError):
                     reader.result(timeout=0.05)
-        assert [reader.result(timeout=5) for reader in readers] == [(message,), (message,)]
+        expected = tuple(range(1, 10)) if direct else (message,)
+        assert [reader.result(timeout=5) for reader in readers] == [expected, expected]
     with BusPageIndex(bus.log.path) as index:
         with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             assert index.covers(opened)

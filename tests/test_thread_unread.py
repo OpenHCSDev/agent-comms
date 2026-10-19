@@ -100,7 +100,7 @@ def test_reply_counts_are_persistent_human_read_positions(tmp_path):
     comms.views.mark_thread_view_read("worker", worktree=str(tmp_path), through=shown)
     assert completed_snapshot(wire(comms.root), str(tmp_path)).thread_unread["worker"] == 1
     assert completed_snapshot(comms, str(tmp_path / "other-project")).thread_unread["worker"] == 1
-    comms.messaging.send("worker", "#ci", "Channel reply")
+    comms.messaging.send("worker", "#ci", "Channel reply").message.message_id
     comms.views.mark_channel_view_read("#ci", worktree=str(tmp_path))
     messages = comms.bus.inbox("worker")
     comms.messaging.acknowledge("worker", tuple(message.reference for message in messages))

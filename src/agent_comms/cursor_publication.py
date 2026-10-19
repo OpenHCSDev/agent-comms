@@ -78,19 +78,18 @@ class CursorPublication:
         self.comms, self.runtime = comms, runtime
         self.deliveries: dict[str, CursorDelivery] = {}
 
-    @property
-    def root_id(self) -> str | None:
-        """The root ID this root's owner lifecycle pinned, if the root is private."""
-        launch = self.comms.owners.launch_authority
-        return None if launch is None else launch.wire_root_id
-
     def delivery(self, session_id: str) -> CursorDelivery:
         return self.deliveries.setdefault(session_id, CursorDelivery())
 
     def scope(self, thread_name: str, session_id: str) -> CursorScope:
-        root_id = self.root_id
-        if root_id is None:
-            return NoCursorScope()
+        return self.comms.owners.launch_authority.cursor_scope(self, thread_name, session_id)
+
+    def shared_scope(self) -> CursorScope:
+        """A shared root's scope: it launches no owner whose cursor this process publishes."""
+        return NoCursorScope()
+
+    def live_scope(self, root_id: str, thread_name: str, session_id: str) -> CursorScope:
+        """A private root's scope: this process's live owner of ``thread_name``."""
         try:
             owner, generation = self.comms.registry.live_owner_with_claim(thread_name)
         except RelationViolationError:
@@ -118,8 +117,7 @@ class CursorPublication:
         self, delivery: CursorDelivery, thread_name: str, session_id: str, *,
         defer_busy: bool, advance: bool,
     ) -> CursorEnvelope:
-        if self.root_id is None:
-            raise ValueError("Native cursor requires the configured root")
+        root_id = self.comms.owners.require_private_launch().wire_root_id
         revision = delivery.next_revision()
         scope = await Coordination.run_worker(partial(self.scope, thread_name, session_id))
         unavailable = CursorEnvelope(scope, revision, UnavailableCursorObservation())
@@ -131,7 +129,7 @@ class CursorPublication:
                 NativeSourceCursor.refresh_async if advance else NativeSourceCursor.read_async
             )
             cursor = await read_cursor(
-                bus, wire_root_id=self.root_id, owner_name=thread_name,
+                bus, wire_root_id=root_id, owner_name=thread_name,
                 source_reads=delivery.source_reads,
             )
         except BlockingIOError:
@@ -152,8 +150,11 @@ class CursorPublication:
         )
 
     async def trusted_metadata(self, thread_name: str, session_id: str) -> tuple:
-        if self.root_id is None:
-            return ()
+        launch = self.comms.owners.launch_authority
+        return await launch.cursor_metadata(self, thread_name, session_id)
+
+    async def observed_metadata(self, thread_name: str, session_id: str) -> tuple:
+        """A private root's trusted cursor read, published as session metadata."""
         observed = await self.observe(thread_name, session_id)
         self.delivery(session_id).trusted_read(observed)
         return (CursorAdvancedUpdate(observed),)

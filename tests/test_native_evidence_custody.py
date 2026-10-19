@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from agent_comms.native_entries import NativeEntry, NativeEvidenceScope
-from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead
+from agent_comms.native_entries import MessageEntry, NativeEntry, NativeEvidenceRead, NativeEvidenceScope
+from agent_comms.native_pi import NativeContextProof, NativePiUnavailable, PrivateEvidenceRead, read_tracked_input_digest
 from native_proof_cases import write_proof_rows
 from test_native_pi import INPUT_ID, _evidence
 
@@ -59,7 +59,7 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
     ))
     with NativeEntry.open_input_evidence(session) as evidence:
         header, entries = evidence.observe()
-        assert header.id == "sid" and tuple(NativeEntry.tracked_users(entries)) == (INPUT_ID,)
+        assert header.id == "sid" and tuple(evidence.inputs) == (INPUT_ID,)
         if rewrite == "in_place":
             assert len(restored) == session.stat().st_size
             session.write_bytes(restored)
@@ -70,7 +70,7 @@ def test_acquired_input_source_reverifies_rewritten_file_from_start(tmp_path, re
             replacement.replace(session)
         header, entries = evidence.observe()
         assert header.id == "restored"
-        assert tuple(NativeEntry.tracked_users(entries)) == (restored_input,)
+        assert tuple(evidence.inputs) == (restored_input,)
         assert evidence.source.size == len(restored)
 
 
@@ -319,3 +319,41 @@ async def test_joined_worker_retains_original_evidence_and_owns_sqlite_until_can
                 await asyncio.gather(pending, return_exceptions=True)
     assert evidence.source.stream.closed
     assert (session.read_bytes(), Path(str(session) + '.input-proof').read_bytes()) == before
+
+
+def test_an_input_check_costs_the_same_on_a_long_session_as_on_a_short_one(tmp_path, monkeypatch):
+    """After the first read, a check decodes only the appended entry and visits only its input."""
+    decoded, visited = [], []
+    decode, tracked = NativeEvidenceRead.decode_rows, MessageEntry.tracked_user
+
+    def counted(self, rows):
+        for entry in decode(self, rows):
+            decoded.append(entry)
+            yield entry
+
+    monkeypatch.setattr(NativeEvidenceRead, "decode_rows", counted)
+    monkeypatch.setattr(MessageEntry, "tracked_user", property(lambda self: visited.append(self) or tracked.fget(self)))
+
+    def user(number):
+        return json.dumps({"type": "message", "id": f"e{number}", "message": {
+            "role": "user", "inputId": f"{number:032x}", "inputDigest": "b" * 64,
+            "content": [{"type": "text", "text": "one input"}]}}).encode() + b"\n"
+
+    def check_counts(history):
+        sessions = tmp_path / f"history-{history}"
+        sessions.mkdir(mode=0o700)
+        session = sessions / "s.jsonl"
+        session.write_bytes(json.dumps({"type": "session", "id": "sid", "version": 3}).encode() + b"\n"
+                            + b"".join(user(number) for number in range(1, history + 1)))
+        session.chmod(0o600)
+        with NativeEntry.open_evidence(session) as evidence:
+            evidence.observe()
+            with session.open("ab") as output:
+                output.write(user(history + 1))
+            decoded.clear()
+            visited.clear()
+            assert read_tracked_input_digest(session, f"{history + 1:032x}", evidence=evidence) == "b" * 64
+            evidence.stopped_input(f"{history + 1:032x}")
+            return len(decoded), len(visited)
+
+    assert check_counts(10_000) == check_counts(10) == (1, 2)

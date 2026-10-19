@@ -27,6 +27,7 @@ from .pi_vocabulary import (
 )
 from .tool_declaration import ToolDeclaration
 from .transcript_events import SentTranscript
+from .send_result import CorrectionResult, CorrectionUnreported
 
 if TYPE_CHECKING:
     from .agent_events import ProviderUsage
@@ -1207,6 +1208,7 @@ class PublishedMessageToolDetails(NativeToolDetails):
     strict_fields = True
     id: str
     message: SentTranscript
+    correction: CorrectionResult = field(default_factory=CorrectionUnreported)
 
     def __post_init__(self):
         if self.id != self.message.source.message_id:

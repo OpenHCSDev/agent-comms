@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, Literal, Protocol
 from .coordination_database import CoordinationStore
 from .native_arguments import NativeArguments, SelectedModel
 from .native_session_files import NativeSessionFiles
-from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage, pinned_native_package
+from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
@@ -29,7 +29,7 @@ from .native_input_record import NativeInputCommit
 from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode, NoNativeTools
-from .pi_vocabulary import NoThinkingOverride, ThinkingChoice
+from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
 
 if TYPE_CHECKING:
     from . import pi_events as pi
@@ -73,6 +73,14 @@ class NativeEmptyAnswer(NativeRequestFailure):  # noqa: N818 - nominal model out
         super().__init__("The model finished with no text")
 
 
+class NativeInputUncommitted(NativePiUnavailable):
+    """The observed session holds no durable commit of the asked input; its turn is pending."""
+
+    @property
+    def stop_reason(self) -> type[PendingStopReason]:
+        return PendingStopReason
+
+
 class NativePiInputNotSent(NativePiUnavailable):
     """The input never entered its prompt writer; this does not permit replay."""
 
@@ -107,12 +115,9 @@ class NativePiPromptRejected(NativePiUnavailable):
 
 def main() -> int:
     """Run the active route's pinned Pi for ordinary ACP owner sessions."""
-    from .private_nk_entrypoint import PrivateNkLaunch
+    from .active_route import resolve_comms_route
 
-    launch = PrivateNkLaunch.derive()
-    if launch is None:
-        raise NativePiUnavailable("Native owner backend requires a configured private route")
-    package = launch.validate()
+    package = resolve_comms_route().launch().require_private().validate()
     environment = dict(os.environ)
     argv, environment = NativePiRpcLaunch.bootstrap(
         package, tuple(sys.argv[1:]), Path.cwd(), environment,
@@ -308,10 +313,9 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return next(iter(rows), None)
 
     def corroborate(
-        self, session_file: Path, header: SessionEntry, tracked: dict[str, NativeEntry]
+        self, session_file: Path, header: SessionEntry, entry: NativeEntry
     ) -> NativeContextProof:
-        entry = tracked.get(self.input_id)
-        if self.session_id != header.id or entry is None or self.session_entry_id != entry.id:
+        if self.session_id != header.id or self.session_entry_id != entry.id:
             raise NativePiUnavailable("Native Pi proof journal source lineage differs")
         return self.at(session_file)
 
@@ -343,18 +347,16 @@ class NativeContextProof(NativeContextRecord):
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         Id128Text.decode(input_id)
         session_file = Path(session_file).absolute()
-        from .native_entries import NativeEntry, NativeInputEvidenceRead
+        from .native_entries import NativeInputEvidenceRead
 
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            header, entries = evidence.observe()
-            tracked = NativeEntry.tracked_users(entries)
-            if input_id not in tracked:
-                raise NativePiUnavailable("The specified input was never durably committed")
+            header, _entries = evidence.observe()
+            entry = evidence.tracked(input_id)
             with NativeContextJournal.open_evidence(session_file) as db:
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
                 if row is None:
                     raise NativePiUnavailable("The input has no assembled-context proof")
-                return row.corroborate(session_file, header, tracked)
+                return row.corroborate(session_file, header, entry)
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -469,15 +471,9 @@ class NativePiRpcLaunch:
 
         The launch is the caller's root's; without one, this process's selection.
         """
-        from .private_nk_entrypoint import PrivateNkLaunch
+        from .active_route import resolve_comms_route
 
-        route = PrivateNkLaunch.derive(root)
-        if route is not None:
-            package = route.validate()
-        elif Path(shutil.which(command) or command).resolve() == (MANIFEST.parent / "bin/pi-native").resolve():
-            package = VerifiedNativePackage.acquire(pinned_native_package())
-        else:
-            raise NativePiUnavailable("Native owner requires a configured pinned package")
+        package = resolve_comms_route(root).launch().package_for(command)
         cls._command_selection(command, runtime, package)
         return package
 
@@ -1003,14 +999,14 @@ def read_tracked_input_digest(
     """
     Id128Text.decode(input_id)
     session_file = Path(session_file).absolute()
-    from .native_entries import NativeEntry, NativeInputEvidenceRead
+    from .native_entries import NativeInputEvidenceRead
 
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-        _header, entries = evidence.observe()
-        users = NativeEntry.tracked_users(entries)
-        if input_id not in users:
+        evidence.observe()
+        try:
+            return evidence.tracked(input_id).message.input_digest
+        except NativeInputUncommitted:
             return None
-        return users[input_id].message.input_digest
 
 
 def _verify_context(

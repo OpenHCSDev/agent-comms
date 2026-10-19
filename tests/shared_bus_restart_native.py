@@ -250,8 +250,8 @@ async def configured_pure_channel(arguments):
                             expected = tuple(row.assignment_id for row in claims if row.recipient == native.owner_thread)
                             assert membership[native.input_id] == expected, "Native input did not capture the complete ordered wave"
                             with NativeEntry.open_evidence(Path(native.session_file)) as evidence:
-                                _, entries = evidence.observe()
-                            tracked = NativeEntry.tracked_users(entries)[native.input_id]
+                                evidence.observe()
+                                tracked = evidence.tracked(native.input_id)
                             assert all(assignment_id in tracked.message.text for assignment_id in expected)
                             assert all(json.dumps(original.body,ensure_ascii=True) in tracked.message.text
                                        for original in originals)
@@ -583,7 +583,8 @@ async def configured_mixed_routes(arguments):
 async def retained_owner():
     """Original installed ACP owner with an explicit saved SelectedExecution."""
     from agent_comms.coordinated_runtime import SelectedExecution
-    from agent_comms.private_nk_entrypoint import PrivateNkLaunch
+    from agent_comms.active_route import resolve_comms_route
+    from agent_comms.private_nk_entrypoint import RootLaunch
     from agent_comms.native_source_cursor import NativeSourceCursor
     import traceback
     original_advance = NativeSourceCursor._advance_proven
@@ -599,7 +600,7 @@ async def retained_owner():
                          'result':'original_completed'}), flush=True)
         return value
     NativeSourceCursor._advance_proven = observe_advance
-    launch = PrivateNkLaunch.derive(Path(os.environ['AGENT_COMMS_ROOT']))
+    launch = RootLaunch.derive(resolve_comms_route(os.environ['AGENT_COMMS_ROOT'])).require_private()
     launch.validate()
     service = Comms(launch.validated_root)
     name = os.environ['AGENT_COMMS_THREAD']
