@@ -15,7 +15,7 @@ from agent_comms.envelope_claim_transitions import ClaimRelease, ClaimTransition
 from agent_comms.errors import RelationViolationError
 from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.fresh_private_session import create_fresh_private_session
-from agent_comms.transcript_events import AssistantTranscript, UserTranscript
+from agent_comms.transcript_events import AssistantTranscript, NoticeTranscript, UserTranscript
 from agent_comms.input_disposition import InputDispositions
 from agent_comms.native_entries import NativeEntry
 from agent_comms.thread_status import RunningThreadStatus, StoppedThreadStatus
@@ -58,20 +58,22 @@ def test_external_projection_preserves_event_clocks_or_refuses_unknown(source, t
         UserTranscript("source request " * 1500, position=1, timestamp=timestamp),
         AssistantTranscript("source reply", position=2,
                             timestamp=None if timestamp is None else timestamp + 1.125),
+        NoticeTranscript("not portable conversation", position=3),
+        UserTranscript("", position=4),
     )
     external.finish(turn_id="saved", item_id="item", events=events)
     root = tmp_path / "external-window"
     if timestamp is None:
-        with pytest.raises(ValueError, match="no original timestamp"):
+        with pytest.raises(ValueError, match="Copied conversation requires a recorded time"):
             with CheckRoot(source, (owner.name,), root).open():
                 pytest.fail("An unknown source clock was rewritten as known time")
     else:
         with CheckRoot(source, (owner.name,), root).open() as copied:
             session = Path(copied.registry.require(owner.name).session_file)
             rows = [NativeEntry.read(line) for line in session.read_bytes().splitlines()]
-            assert [entry.message.text for entry in rows[1:]] == [event.text for event in events]
+            assert [entry.message.text for entry in rows[1:]] == [event.text for event in events[:2]]
             assert [entry.timestamp.at.timestamp() for entry in rows[1:]] == [
-                event.timestamp for event in events
+                event.timestamp for event in events[:2]
             ]
     with external.reading() as original:
         assert tuple(original.reverse(original.cut().offset))[0].events == events

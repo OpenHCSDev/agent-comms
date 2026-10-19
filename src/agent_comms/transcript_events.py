@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, ClassVar
 from pydantic import JsonValue
@@ -35,6 +36,10 @@ class ImportedMessage(ABC):
 
     body: str
     truncated: bool = False
+
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        if self.body.strip():
+            accept(self)
 
     def bounded(self, limits: ImportLimits) -> ImportedMessage:
         cap = min(limits.per_message, limits.characters)
@@ -97,9 +102,8 @@ class TranscriptEvent(EventMerge, DeclaredFamily, affix="Transcript"):
     def routed(self) -> bool:
         return False
 
-    def imported(self) -> ImportedMessage | None:
-        """This event as portable text in an imported conversation; activity is not conversation."""
-        return None
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        """Non-conversation events produce no portable message."""
 
     def record_call(self, calls: dict[str, OrderCall], since: float) -> None:
         """Only tool events change a unit's calls."""
@@ -246,8 +250,8 @@ class UserTranscript(NativeTextTranscript):
     def routed(self) -> bool:
         return self.routing is not None and bool(self.routing.requests)
 
-    def imported(self) -> ImportedMessage:
-        return ImportedRequest(self.text)
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        ImportedRequest(self.text).import_to(accept)
 
 
 class AssistantTranscript(AgentTextTranscript):
@@ -255,8 +259,8 @@ class AssistantTranscript(AgentTextTranscript):
     def category(self) -> type[MessageCategory]:
         return OutboundCategory if self.routed else AgentCategory
 
-    def imported(self) -> ImportedMessage:
-        return ImportedReply(self.text)
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        ImportedReply(self.text).import_to(accept)
 
 
 class NoticeTranscript(AgentTextTranscript):
@@ -325,8 +329,8 @@ class ThinkingTranscript(SilentTranscript, LiveTextTranscript):
 class ContextTranscript(SilentTranscript, NativeTextTranscript):
     category = InboundCategory
 
-    def imported(self) -> ImportedMessage:
-        return ImportedInput(self.text)
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        ImportedInput(self.text).import_to(accept)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -367,9 +371,9 @@ class ToolStartTranscript(ToolTranscript):
             calls[self.tool_call_id] = OrderCall(
                 self.tool_call_id, self.tool_name, digest, RunningCallState)
 
-    def imported(self) -> ImportedMessage:
-        return ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
-                             + json.dumps(self.raw_input, ensure_ascii=False))
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
+        ImportedInput(f"[Historical tool call: {self.tool_name}]\n"
+                      + json.dumps(self.raw_input, ensure_ascii=False)).import_to(accept)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -394,9 +398,9 @@ class ToolEndTranscript(ToolTranscript):
             calls[self.tool_call_id] = replace(
                 calls[self.tool_call_id], state=SucceededCallState if self.ok else FailedCallState)
 
-    def imported(self) -> ImportedMessage:
+    def import_to(self, accept: Callable[[ImportedMessage], None]) -> None:
         outcome = "" if self.ok else ", failed"
-        return ImportedInput(f"[Historical tool result{outcome}]\n{self.text}")
+        ImportedInput(f"[Historical tool result{outcome}]\n{self.text}").import_to(accept)
 
     text: str = ""
     ok: bool = True
