@@ -28,7 +28,6 @@ from ..child_process import BoundedRun
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
 from ..external_transcript import ExternalTranscript
-from ..comms import Comms
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
 from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
@@ -47,11 +46,12 @@ from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, Plan
                      OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
-from .config import CommanderConfig, CommanderRole, Repo
+from .config import Commander, CommanderConfig, CommanderRole, Repo
 
 CONFIG = CommanderConfig.installed()
-ME = CONFIG.commander
-COMMS = Comms(CONFIG.root)  # the bus whose Todo store owns problems, orders, deadlines and strikes
+COMMANDER = Commander.of(CONFIG)
+ME = COMMANDER.name
+COMMS = COMMANDER.comms
 RTS = str(CONFIG.state)
 BOARD = str(CONFIG.board)
 NARRATIVE = str(CONFIG.narrative)  # public record of every failure, in plain words
@@ -96,9 +96,7 @@ def held_by(unit: str) -> tuple[Todo, ...]:
 
 
 def units() -> frozenset[str]:
-    """The threads this commander gives orders to; the owner, claude-ai and peer commanders
-    are not among them."""
-    return COMMS.goals.todos.units(COMMS.registry.require(ME).incarnation)
+    return COMMANDER.units()
 
 
 def progress() -> dict[str, OrderProgress]:

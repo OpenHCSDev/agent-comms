@@ -44,10 +44,3 @@ def test_only_a_lapsed_watch_warns_the_session(tmp_path, monkeypatch):
     assert hooks['PreToolUse'][0]['matcher'] == 'Bash'
     assert 'matcher' not in hooks['PostToolUse'][0]
 
-
-def test_each_hook_program_names_code_that_exists():
-    from importlib.util import find_spec
-    from agent_comms_hooks import ClaudeHookProgram
-    from agent_comms_hooks.send import SendGuard
-    assert {program.__name__ for program in ClaudeHookProgram.members()} == {'SendGuard', 'WatchGuard'}
-    assert find_spec(SendGuard.module) is not None

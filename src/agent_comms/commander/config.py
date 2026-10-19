@@ -6,6 +6,7 @@ hardcodes a home directory, a bus root or a unit name.
 from __future__ import annotations
 
 import subprocess
+from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
 from pathlib import Path
@@ -88,3 +89,20 @@ class CommanderConfig(CommanderRole, BaseModel):
                           self.scratch, self.board.parent):
             directory.mkdir(parents=True, exist_ok=True)
         return path
+
+
+@dataclass(frozen=True)
+class Commander:
+    """This machine's commander thread and the bus whose Todo store owns its problems and orders."""
+
+    name: str
+    comms: Comms
+
+    @classmethod
+    def of(cls, config: CommanderConfig) -> Commander:
+        return cls(config.commander, Comms(config.root))
+
+    def units(self) -> frozenset[str]:
+        """The threads this commander gives orders to; the owner, claude-ai and peer commanders
+        are not among them."""
+        return self.comms.goals.todos.units(self.comms.registry.require(self.name).incarnation)
