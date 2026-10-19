@@ -361,7 +361,7 @@ async def test_send_now_interrupts_native_response(surface, monkeypatch):
                     AuthorityChangedSend() if surface == "revoked" else GrantedSend()
                 ),
                 persistent_session=pi_session,
-            ):
+             session_directory=Path(str(root))):
                 events.append(event)
                 if isinstance(event, ae.Chunk) and "OLD_PARTIAL" in event.text:
                     first_chunk.set()
