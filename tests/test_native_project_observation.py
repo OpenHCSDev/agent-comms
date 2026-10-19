@@ -14,8 +14,8 @@ from native_proof_cases import read_proof_rows
 from types import SimpleNamespace
 
 
-async def test_current_project_observation_keeps_original_binding_across_rename_and_project_change(tmp_path, monkeypatch):
-    async with native_backend_fixture(tmp_path) as native:
+async def test_current_project_observation_keeps_original_binding_across_rename_and_project_change(tmp_path, monkeypatch, native_runtime_package):
+    async with native_backend_fixture(tmp_path, package=native_runtime_package) as native:
         model = json.loads((native.config / 'models.json').read_text())
         origin = model['providers']['response-local']['baseUrl'].removesuffix('/v1')
         monkeypatch.setenv('AGENT_COMMS_NATIVE_ORIGIN', origin)
