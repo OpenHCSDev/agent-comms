@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from .input_disposition import InputDocument
     from .turn_input_source import OriginalTurnInput
 
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .delivery_presentation import DeliveryPresentation
 from .input_attempt import InputAttempt
 from .field_codec import FieldCodec, JsonShapeFamily, JsonShapeMember
@@ -425,7 +425,7 @@ class TextErrorValue(ErrorValue, JsonShapeMember):
     def reason(self) -> ErrorValue:
         try:
             nested = json.loads(self.value)
-        except ValueError:
+        except json.JSONDecodeError:
             return self
         return FieldCodec.decode(ErrorValue, nested).reason().encoded_reason(self.value)
 
@@ -437,7 +437,7 @@ class TextErrorValue(ErrorValue, JsonShapeMember):
     def declared_input(self, body: ErrorValue) -> ErrorValue:
         try:
             attempt = InputAttempt.member_named(self.value)
-        except ValueError:
+        except UnknownFamilyMember:
             # An external public status may be unambiguous; redacted UNKNOWN
             # cannot distinguish reserved from bound input and grants nothing.
             matches = tuple(member for member in InputAttempt.members_with(InputAttempt)

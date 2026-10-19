@@ -372,7 +372,7 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
         try:
             return next((progress for member in members for progress in member.found(source)),
                         NoCommitProgress())
-        except (ValueError, subprocess.TimeoutExpired) as unread:
+        except subprocess.TimeoutExpired as unread:
             return UnreadProgress(str(unread))
 
     @property

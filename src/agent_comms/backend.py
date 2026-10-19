@@ -145,7 +145,7 @@ async def stream_agent_events(
                     environment=env_extra,
                     session_file=session_file,
                 ))
-            except (OSError, ValueError, NativePiUnavailable) as error:
+            except NativePiUnavailable as error:
                 yield events.Error(text=str(error), reason_code="native_launch_invalid")
                 yield events.Done(ok=False, reason_code="native_launch_invalid", text=str(error))
                 return
@@ -334,7 +334,7 @@ class NativeSession(MroDispatch, ABC):
                         and abort_payload.command is commands.Abort
                     ):
                         break
-            except (TimeoutError, OSError):
+            except TimeoutError:
                 pass
         await self.native.shutdown()
 
@@ -352,12 +352,6 @@ class NativeSession(MroDispatch, ABC):
         """The original acquisition failures preserve their source disposition."""
         try:
             yield
-        except (OSError, TimeoutError, SelectedToolDenied) as error:
-            failure = NativePiUnavailable(
-                f"Native resource acquisition failed: {type(error).__name__}: {error}"
-            )
-            failure.__cause__ = error
-            self.prompt_state.raise_native_failure(failure, self.launch.session.attestation())
         except NativePiUnavailable as error:
             self.prompt_state.raise_native_failure(error, self.launch.session.attestation())
 

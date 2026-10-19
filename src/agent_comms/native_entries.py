@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Annotated, Any, ClassVar, Literal
 
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
-from .declared_family import DeclaredFamily
+from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
 from .pi_payloads import PiMessage, PiPayload
 from .routing import TurnRouting
@@ -79,7 +79,7 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     def wire_member(cls, value):
         try:
             member = cls.member_named(value.get("type"))
-        except ValueError:
+        except UnknownFamilyMember:
             return UnknownEntry
         return member.wire_variant(value)
 

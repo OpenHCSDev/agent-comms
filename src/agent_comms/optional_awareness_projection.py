@@ -132,9 +132,7 @@ class OptionalAwarenessProjection:
             reading = self._reader.submit(self, initial, assignment, owner)
         except RuntimeError:
             self._build_slot.release()
-            return OmittedAwareness.capture(reason="builder unavailable").segments(
-                self.max_text_bytes
-            )
+            raise
         # The executor's Future owns both the value and the original defect.
         # Cancellation of the waiter cannot release a still-running read's slot.
         reading.add_done_callback(lambda _: self._build_slot.release())

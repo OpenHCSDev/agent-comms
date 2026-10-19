@@ -372,10 +372,10 @@ class OwnerRead(AwaitedRead):
         service.send(answer)
 
     async def answer(self, comms: Comms) -> ReadAnswered | ReadRefused:
+        self.require_root(comms)
         try:
-            self.require_root(comms)
             return ReadAnswered(self.request_id, await self.ask(comms))
-        except (OSError, ValueError, RuntimeError, RequestError) as error:
+        except (RequestError, CoordinationError) as error:
             return self.refused(error)
 
     def connect(self, comms: Comms) -> RuntimeConnection:
@@ -1215,8 +1215,8 @@ def serve(route: CommsRoute, connection: Connection) -> None:
     except BaseException:
         try:
             connection.send(ObservationFailed(traceback.format_exc()))
-        except OSError:
-            pass
+        except BrokenPipeError:
+            pass  # The reader has gone; preserve the original service failure.
         raise
     finally:
         connection.close()
