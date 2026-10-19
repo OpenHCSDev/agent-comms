@@ -397,7 +397,7 @@ class TestThreadOps:
         assert wired.registry.require("fixer").parent == "planner"
         assert wired.agents.activity_of("planner", snapshot=wired.registry.snapshot()).detail == "renaming"
         assert wired.agents.agent_info_of("planner").model == "test/model"
-        assert wired.ledger.read()["owner"] == "planner"
+        assert wired.ledger.read().entries["owner"] == "planner"
         assert wired.bus.pending_count("planner", CommandTarget.named("fixer")) == 0
 
         wired.messaging.send("fixer", "PR111", "old alias routes").message.message_id
@@ -566,7 +566,7 @@ class TestLedgerOps:
 
     def test_merge_records_author(self, wired):
         wired.ledger.merge({"k": "v"}, author="PR111")
-        assert wired.ledger.read()["last_updated_by"] == "PR111"
+        assert wired.ledger.read().entries["last_updated_by"] == "PR111"
 
 
 class TestPollAndWire:

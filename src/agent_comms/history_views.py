@@ -453,4 +453,4 @@ class HistoryViews:
         name = target.thread(self.registry).name
         peers = tuple(view for view in self._presence_views() if view.thread.name != name)
         return ThreadPoll(self.thread_detail(name, CountedRead()), tuple(self.bus.inbox(name)),
-                          self.ledger.document(), peers)
+                          self.ledger.read(), peers)

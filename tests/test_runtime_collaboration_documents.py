@@ -8,7 +8,7 @@ import pytest
 
 from agent_comms.locked_store import LockedStore
 from agent_comms.runtime_info import RuntimeInfoStore
-from agent_comms.shared_ledger import SharedLedger
+from agent_comms.shared_ledger import SharedLedger, LedgerDocument
 from agent_comms.store_files import _store_lock
 from agent_comms.threads import Thread
 
@@ -47,9 +47,9 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
             store = agent._comms.agents.runtime_info
             original = store.path.read_bytes()
             with patch("time.time", side_effect=AssertionError("Reading cannot capture an observation")):
-                assert RuntimeInfoStore(store.path).read()[name] == captured
+                assert RuntimeInfoStore(store.path).read().observations[name] == captured
                 store.rename_thread(name, "renamed-observation")
-                assert RuntimeInfoStore(store.path).read()["renamed-observation"].timestamp == captured.timestamp
+                assert RuntimeInfoStore(store.path).read().observations["renamed-observation"].timestamp == captured.timestamp
             assert json.loads(original)[name]["ts"] == captured.timestamp
             assert native.session.read_bytes() == history
             assert native.provider.posts == len(native.saved_inputs()) == 0
@@ -62,11 +62,11 @@ async def test_installed_native_observation_producers_preserve_dates_without_inp
 def test_document_readers_share_lock_and_exclude_updates(tmp_path, store_type):
     store = store_type(tmp_path / store_type.filename)
     with store.reading() as first:
-        assert first == store_type(store.path).read() == {}
+        assert first == store_type(store.path).read() == store.empty()
         with pytest.raises(BlockingIOError), _store_lock(store.path, blocking=False):
             pass
-    store.update(lambda rows: {**rows})
-    assert store.read() == {}
+    store.update(lambda document: document)
+    assert store.read() == store.empty()
 
 
 def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, thread_registration):
@@ -82,10 +82,10 @@ def test_saved_runtime_dates_and_fields_survive_rename_and_reopen(tmp_path, *, t
     }
     store.path.write_text(json.dumps(saved))
     original = store.path.read_bytes()
-    assert store.read()["old"].timestamp == 456.25
+    assert store.read().observations["old"].timestamp == 456.25
     assert store.path.read_bytes() == original
     store.rename_thread("old", "new")
-    assert RuntimeInfoStore(store.path).read()["new"].timestamp == 456.25
+    assert RuntimeInfoStore(store.path).read().observations["new"].timestamp == 456.25
     assert json.loads(store.path.read_text()) == {"new": {**saved["old"], "thread": "new"}}
     before = store.path.stat()
     store.remove_threads((thread_registration.new_thread('absent', frozenset(), str(tmp_path)),))
@@ -114,13 +114,13 @@ def test_free_form_ledger_has_no_retained_mutable_mirror(tmp_path, *, thread_reg
     }
     store.path.write_text(json.dumps(saved))
     snapshot = store.read()
-    snapshot["nested"].clear()
-    assert SharedLedger(store.path).read() == saved
+    snapshot.entries["nested"].clear()
+    assert SharedLedger(store.path).read().entries == saved
     SharedLedger(store.path).merge({"other": [1, 2]}, "other")
     assert store.rename_thread("old", "new") == 2
-    assert store.read()["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
+    assert store.read().entries["nested"] == {"new": ["new", None, True, 9, {"free": "old is prose"}]}
     store.remove_threads((thread_registration.new_thread('new', frozenset(), str(tmp_path)),))
-    assert store.read() == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
+    assert store.read().entries == {**saved, "nested": {}, "other": [1, 2], "last_updated_by": "other"}
 
 
 @pytest.mark.parametrize(
@@ -152,5 +152,5 @@ def test_complete_snapshot_replacement_does_not_decode_discarded_document(tmp_pa
     store = SharedLedger.at(tmp_path)
     store.path.write_text("invalid discarded snapshot")
     with patch.object(LockedStore, "_read_unlocked", side_effect=AssertionError("old read")):
-        store.replace({"captured": [1, 2]})
-    assert store.read() == {"captured": [1, 2]}
+        store.replace(LedgerDocument({"captured": [1, 2]}))
+    assert store.read().entries == {"captured": [1, 2]}

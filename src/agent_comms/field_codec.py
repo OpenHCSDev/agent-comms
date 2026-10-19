@@ -304,6 +304,30 @@ class WireValue(WireForm):
         return cls.from_wire(value)
 
 
+class SingleFieldValue(WireValue):
+    """One declared field is the whole wire value, not an object envelope."""
+
+    external_json_shape = True
+
+    @classmethod
+    def wire_field(cls):
+        entry, = FieldCodec._record_plan(cls).fields
+        return entry
+
+    @classmethod
+    def from_wire(cls, data):
+        entry = cls.wire_field()
+        return cls(**{entry.name: FieldCodec.decode(entry.annotation, data)})
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(cls.wire_field().annotation)
+
+    def to_wire(self):
+        entry = self.wire_field()
+        return FieldCodec.encode(getattr(self, entry.name), entry.annotation)
+
+
 class SubclassUnion(DeclaredFamily, WireValue):
     """An untagged wire family; each union declares its own root with affix=""."""
 
