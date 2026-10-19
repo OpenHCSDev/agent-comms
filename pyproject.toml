@@ -32,7 +32,6 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "nominal-refactor-audit @ git+https://github.com/OpenHCSDev/NominalRefactorAdvisor.git@120c04fb9a0eb4afafab6d621d1c5fd421bb7552#subdirectory=skills/refactor-audit",
     "pytest>=7.0",
     "pytest-cov>=4.0",
     "pytest-asyncio>=0.23",
