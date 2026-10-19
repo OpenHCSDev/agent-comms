@@ -45,23 +45,12 @@ class StandingRule(DeclaredFamily, affix="StandingRule", discovery_package="agen
 
 
 @dataclass(frozen=True)
-class StatedStandingRule(StandingRule, declared_name=None):
+class ReasonedStandingRule(StandingRule, declared_name=None):
     """A rule broken at most once, saying why in its declared line."""
 
     why: str
     since: float | None = None
     text: ClassVar[str]
-
-    def began(self) -> float | None:
-        return self.since
-
-    def line(self) -> str:
-        return self.text.format(why=self.why)
-
-
-@dataclass(frozen=True)
-class ReasonedStandingRule(StatedStandingRule, declared_name=None):
-    """A stated rule whose reason and start are read on their own."""
 
     @classmethod
     @abstractmethod
@@ -75,6 +64,12 @@ class ReasonedStandingRule(StatedStandingRule, declared_name=None):
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         why = cls.reason(comms, commander)
         return (cls(why, cls.broken_at(comms, commander)),) if why else ()
+
+    def began(self) -> float | None:
+        return self.since
+
+    def line(self) -> str:
+        return self.text.format(why=self.why)
 
 
 @dataclass(frozen=True)
@@ -104,19 +99,26 @@ class HuntDue(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
-class RulesDue(StatedStandingRule):
+class RulesDue(StandingRule):
     """A reviewer acts only while its last review is fresh and every drawn rule is answered."""
 
     max_age: ClassVar[int] = 20 * 60
-    text = (
-        "RULES DUE ({why}) -> agent-comms-commander rules review"
-        " and answer the drawn rules before any order"
-    )
+    why: str
+    since: float
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[Self, ...]:
         review = RuleReviews(comms.root).review(commander)
         return tuple(cls(why, since) for why, since in review.due(commander, cls.max_age))
+
+    def began(self) -> float:
+        return self.since
+
+    def line(self) -> str:
+        return (
+            f"RULES DUE ({self.why}) -> agent-comms-commander rules review"
+            " and answer the drawn rules before any order"
+        )
 
 
 @dataclass(frozen=True)
