@@ -23,7 +23,7 @@ def test_pi_calls_through_the_watcher_digest(tool_watch, commander):
                            {"type": "toolCall", "id": f"c{index}", "name": name, "arguments": arguments}
                            for index, (name, arguments) in enumerate(calls)]}})
     turns = collections.defaultdict(list)
-    tool_watch.follow(comms.registry, turns, "worker", "session.jsonl", 0, f"{line}\n".encode())
+    tool_watch.follow(comms.registry, turns, "worker", f"{line}\n".encode())
     assert turns["worker"] == ["edit a.py: -old text +new", "write b.py: body line", "bash ls -la"]
 
 
@@ -38,7 +38,7 @@ def test_a_malformed_line_raises_instead_of_skipping_history(tool_watch, command
                         "message": {"role": "user", "content": "hello"}})
     data = f'{whole}\n{{"type": "message"\n'.encode()
     with pytest.raises(json.JSONDecodeError):
-        tool_watch.follow(comms.registry, collections.defaultdict(list), "worker", "session.jsonl", 7, data)
+        tool_watch.follow(comms.registry, collections.defaultdict(list), "worker", data)
 
 
 def test_storage_watch_judges_only_core_units(tool_watch, commander, monkeypatch):
@@ -85,7 +85,7 @@ def test_watcher_decodes_each_call_once_and_logs_its_owned_digest(tool_watch, co
                            {'type': 'toolCall', 'id': id, 'name': 'write', 'arguments': args}
                            for id, args in calls]}})
     turns = collections.defaultdict(list)
-    tool_watch.follow(comms.registry, turns, 'worker', 'session.jsonl', 0, (line + '\n').encode())
+    tool_watch.follow(comms.registry, turns, 'worker', (line + '\n').encode())
     assert seen == ['write', 'write']
     assert turns['worker'] == ['REFUSED write: Missing required fields for WriteTool: content', 'write b.py: body']
 

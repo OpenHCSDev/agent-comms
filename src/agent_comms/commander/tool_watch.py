@@ -1,25 +1,13 @@
-"""Follow every live native session file and log each tool call with its thread name.
-
-Writes one line per call to activity.log. At each turn end (or every 25 calls in a
-long turn) prints one digest of what the unit did, for the commander to judge by reading it.
-"""
+"""Follow live native sessions and print turn digests for commander judgment."""
 import os, time, glob, collections
-from pathlib import Path
 
 from . import order
-from .config import CommanderConfig
 from ..native_tool_call import CodingCall, SelectedToolDenied
-from ..field_codec import MalformedRecord
 from ..native_entries import NativeEntry
 from ..pi_payloads import PiMessage, TextContent
 from ..tool_declaration import one_line
 from ..registration import Registration
 from ..todos import StorageStrikeTodo
-
-CONFIG = CommanderConfig.installed()
-B = str(CONFIG.root)
-LOG = f'{CONFIG.state}/activity.log'
-
 
 def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""
@@ -53,14 +41,9 @@ def emit(turns, thread, final=''):
     print('\n'.join(lines)[:3000], flush=True)
 
 
-def follow(registry: Registration, turns: dict[str, list[str]], thread: str, path: str,
-           start: int, data: bytes) -> None:
-    """Each complete session line from byte `start` is decoded once by Core's native entry
-    family; each assistant tool call is logged, digested and judged for storage. A line
-    Core refuses is reported."""
-    offset = start
+def follow(registry: Registration, turns: dict[str, list[str]], thread: str, data: bytes) -> None:
+    """Decode each complete native line once; digest and judge its tool calls."""
     for line in data.splitlines(keepends=True):
-        at, offset = offset, offset + len(line)
         entry = NativeEntry.read(line)
         for message in entry.messages:
             if message.assistant:
@@ -72,8 +55,6 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
     for pi_call in message.tool_calls:
         coding_call = CodingCall.decode(pi_call.id, pi_call.name, pi_call.arguments)
         digest = coding_call.digest()
-        with open(LOG, 'a') as log:
-            log.write(f"{time.strftime('%H:%M:%S')} {thread} {digest[:260]}\n")
         turns[thread].append(digest)
         enforce_storage(registry, thread, coding_call)
         if len(turns[thread]) >= 25:
@@ -84,14 +65,14 @@ def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
 
 
 def main(a):
-    registry = Registration(Path(B) / 'registry.json')
+    registry = order.COMMS.registry
     names, offsets = thread_names(registry), {}
     turns = collections.defaultdict(list)
     last_names = time.time()
     while True:
         if time.time() - last_names > 60:
             names.update(thread_names(registry)); last_names = time.time()
-        for path in set(glob.glob(f'{B}/native-sessions/*/*.jsonl')) | set(names):
+        for path in set(glob.glob(f'{order.COMMS.root}/native-sessions/*/*.jsonl')) | set(names):
             try:
                 st = os.stat(path)
             except FileNotFoundError:
@@ -109,5 +90,5 @@ def main(a):
             if path not in names and time.time() - last_names > 10:
                 names.update(thread_names(registry)); last_names = time.time()
             thread = names.get(path, path.split('/')[-2][:8])
-            follow(registry, turns, thread, path, start, data[:cut])
+            follow(registry, turns, thread, data[:cut])
         time.sleep(2)
