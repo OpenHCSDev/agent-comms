@@ -23,27 +23,14 @@ from agent_comms.transcript_events import (
 )
 
 from .shared import (
-    ActiveItem,
-    FinishedItem,
-    HiddenItem,
-    HistoryNotice,
-    SessionFacts,
-    Summarized,
-    CliToolArguments,
-    ToolCall,
-    TranscriptUpdate,
-    StatusUpdate,
-    TurnEnded,
-    TurnStarted,
-    IncomingFrame,
-    MonitorFrame,
-    MonitorPart,
-    MonitorProbe,
-    ForeignMonitorFrame,
-    MonitorObservation,
-    ObservedMonitor,
-    MONITOR_FRAME,
+    IncomingFrame, MonitorFrame, MonitorPart, MonitorProbe, ForeignMonitorFrame, MonitorObservation,
+    ObservedMonitor, MONITOR_FRAME,
 )
+from agent_comms.runtime_updates import (
+    ActiveItem, FinishedItem, HiddenItem, HistoryNotice, ReadingPhase, RuntimeUpdate, SessionFacts,
+    StatusUpdate, Summarized, TurnEnded, TurnStarted,
+)
+from .shared import CliToolArguments, ToolCall
 
 
 class ClaudeMonitorFrame(IncomingFrame):
@@ -112,52 +99,49 @@ class ClaudeMonitorFrame(IncomingFrame):
         return tuple(cls.decode_line(line) for line in event.splitlines())
 
 
-class ClaudeReaderPhase(ABC):
+class ClaudeReaderPhase(ReadingPhase):
     """The initial bounded window and live tail have different guarantees."""
 
     @abstractmethod
-    def status(self, update: StatusUpdate) -> tuple[TranscriptUpdate, ...]: ...
+    def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
 
     @abstractmethod
-    def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
+    def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]: ...
 
     @abstractmethod
-    def missing_tool(self, tool_id: str) -> tuple[TranscriptUpdate, ...]: ...
-
-    @abstractmethod
-    def unturned_finish(self) -> tuple[TranscriptUpdate, ...]: ...
+    def unturned_finish(self) -> tuple[RuntimeUpdate, ...]: ...
 
 
 @dataclass
 class CatchUp(ClaudeReaderPhase):
     pending: tuple[StatusUpdate, ...] = ()
 
-    def status(self, update: StatusUpdate) -> tuple[TranscriptUpdate, ...]:
+    def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
         self.pending = (update,)
         return ()
 
-    def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.phase = Live()
         return self.pending
 
-    def missing_tool(self, tool_id: str) -> tuple[TranscriptUpdate, ...]:
+    def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
         return ()
 
-    def unturned_finish(self) -> tuple[TranscriptUpdate, ...]:
+    def unturned_finish(self) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
 class Live(ClaudeReaderPhase):
-    def status(self, update: StatusUpdate) -> tuple[TranscriptUpdate, ...]:
+    def status(self, update: StatusUpdate) -> tuple[RuntimeUpdate, ...]:
         return (update,)
 
-    def window_ended(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def window_ended(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
-    def missing_tool(self, tool_id: str) -> tuple[TranscriptUpdate, ...]:
+    def missing_tool(self, tool_id: str) -> tuple[RuntimeUpdate, ...]:
         raise ValueError(f'Claude result has no tool start: {tool_id}')
 
-    def unturned_finish(self) -> tuple[TranscriptUpdate, ...]:
+    def unturned_finish(self) -> tuple[RuntimeUpdate, ...]:
         raise ValueError('Claude completed an item before identifying its turn')
 
 
@@ -166,20 +150,20 @@ class ClaudeTurn(ABC):
 
     @abstractmethod
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
-                 phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]: ...
+                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]: ...
 
     @abstractmethod
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[TranscriptUpdate, ...]: ...
+               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class UnknownTurn(ClaudeTurn):
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
-                 phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
+                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[TranscriptUpdate, ...]:
+               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]:
         return phase.unturned_finish()
 
 
@@ -188,11 +172,11 @@ class KnownTurn(ClaudeTurn):
     id: str
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...],
-                 phase: ClaudeReaderPhase) -> tuple[TranscriptUpdate, ...]:
+                 phase: ClaudeReaderPhase) -> tuple[RuntimeUpdate, ...]:
         return (FinishedItem(self.id, item, events),)
 
     def active(self, tool_id: str, phase: ClaudeReaderPhase,
-               state: ActivityState, detail: str) -> tuple[TranscriptUpdate, ...]:
+               state: ActivityState, detail: str) -> tuple[RuntimeUpdate, ...]:
         return (ActiveItem(self.id, tool_id, state, detail),)
 
 
@@ -203,7 +187,7 @@ class ClaudeSession:
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
 
-    def located(self, cwd: str) -> tuple[TranscriptUpdate, ...]:
+    def located(self, cwd: str) -> tuple[RuntimeUpdate, ...]:
         if not cwd or cwd == self.project:
             return ()
         self.project = cwd
@@ -212,7 +196,7 @@ class ClaudeSession:
     def started(self, call: ToolCall) -> None:
         self.tools[call.id] = call
 
-    def tool_result(self, tool_id: str, text: str, ok: bool, position: int) -> tuple[TranscriptUpdate, ...]:
+    def tool_result(self, tool_id: str, text: str, ok: bool, position: int) -> tuple[RuntimeUpdate, ...]:
         try:
             call = self.tools.pop(tool_id)
         except KeyError:
@@ -220,7 +204,7 @@ class ClaudeSession:
         return (*self.finished(tool_id, call.finished(text, ok, position)),
                 *self.turn.active(tool_id, self.phase, ActivityState.WORKING, ''))
 
-    def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[TranscriptUpdate, ...]:
+    def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
 
 
@@ -261,7 +245,7 @@ class ClaudeRecord(TaggedWire, ABC):
     header = ClaudeHeader
     cwd: str = ''
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
     def begins_history(self) -> bool:
@@ -278,7 +262,7 @@ class AssistantBlock(TaggedWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
     @abstractmethod
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]: ...
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class TextContent(WireModel):
@@ -296,14 +280,14 @@ class ImageContent(WireModel):
 class AssistantText(AssistantBlock, TextContent):
     wire_tag = 'text'
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(record.uuid, (AssistantTranscript(self.text, timestamp=record.timestamp, position=record.position),))
 
 
 class RedactedThinking(AssistantBlock):
     wire_tag = 'redacted_thinking'
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.turn.active(record.uuid, session.phase, ActivityState.THINKING, '')
 
 
@@ -311,7 +295,7 @@ class ThinkingBlock(RedactedThinking):
     wire_tag = 'thinking'
     thinking: str
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         activity = super().updates(record, session)
         if not self.thinking:
             return activity
@@ -325,7 +309,7 @@ class ToolUse(AssistantBlock):
     name: str
     input: dict[str, JsonValue]
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
         session.started(call)
         return session.turn.active(self.id, session.phase, ActivityState.WORKING, call.title)
@@ -355,7 +339,7 @@ class AssistantRecord(ClaudeRecord, TimedRecord):
     wire_tag = 'assistant'
     message: AssistantMessage
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
 
@@ -395,7 +379,7 @@ class PromptOrigin(TaggedWire, ABC):
     header = KindHeader
 
     def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
     def request(self, text: str) -> str:
@@ -413,7 +397,7 @@ class AgentPrompt(Prompting):
     """Input another agent wrote: the commanding session, or a peer session."""
 
     def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)),)
 
 
@@ -421,7 +405,7 @@ class HumanPrompt(Prompting):
     wire_tag = 'human'
 
     def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(), *session.finished(
             record.uuid, (UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
 
@@ -450,7 +434,7 @@ class ToolSupplied(Prompting):
     It starts a turn; the live view does not show it as the person's prompt."""
 
     def prompt(self, record: TimedRecord, text: str,
-               session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+               session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(), HiddenItem((UserTranscript(text, timestamp=record.timestamp, position=record.position),)))
 
 
@@ -458,7 +442,7 @@ class UserBlock(TaggedWire, ABC):
     __registry_config__: ClassVar[RegistryConfig] = RegistryConfig(
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnStarted(),)
 
     def prompt_text(self) -> str:
@@ -471,7 +455,7 @@ class UserText(UserBlock, TextContent):
     def prompt_text(self) -> str:
         return self.text
 
-    def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: UserRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         if self.text.startswith('[Request interrupted by user'):
             return (TurnEnded(),)
         return record.origin.prompt(record, self.text, session)
@@ -504,20 +488,20 @@ class TaskEnvelope(WireModel, ABC):
         return MonitorTaskNotification(frames=ClaudeMonitorFrame.decode_event(''.join(event.itertext())))
 
     @abstractmethod
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
+    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class ForeignTaskNotification(TaskEnvelope):
     text: str
 
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
 class MonitorTaskNotification(TaskEnvelope):
     frames: tuple[MonitorFrame, ...]
 
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         return tuple(MonitorObservation(frame,
                                         ObservedMonitor(record.uuid, record.timestamp))
                      for frame in self.frames)
@@ -532,7 +516,7 @@ class TaskContent(WireModel):
     def envelope(cls, value: str) -> TaskEnvelope:
         return TaskEnvelope.from_text(value)
 
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         return self.text.updates(record)
 
 
@@ -543,7 +527,7 @@ class TaskText(TaskContent):
 class TaskMessage(ContentBlocks):
     content: list[TaskText]
 
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         return tuple(update for block in self.content for update in block.updates(record))
 
 
@@ -553,7 +537,7 @@ class ToolResult(UserBlock, ContentBlocks):
     content: list[ResultPart.declared_union()]
     is_error: bool = False
 
-    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record.position)
 
 
@@ -567,7 +551,7 @@ class UserRecord(ClaudeRecord, TimedRecord):
     message: UserMessage
     origin: PromptOrigin.declared_union() = Field(default_factory=ToolSupplied)
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(self.promptId)
         return tuple(update for block in self.message.content for update in block.updates(self, session))
 
@@ -583,7 +567,7 @@ class CompactSummary(UserRecord):
     """Claude's summary of the conversation before its latest compaction."""
     wire_tag = 'compact-summary'
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         session.turn = KnownTurn(self.promptId)
         return (TurnStarted(), Summarized(self.text))
 
@@ -596,7 +580,7 @@ class TaskUserRecord(ClaudeRecord, TimedRecord):
     origin: TaskNotification
     message: TaskMessage
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.message.updates(self)
 
 
@@ -609,7 +593,7 @@ class SystemEvent(TaggedWire, ABC):
         registry_dict={}, key_attribute='wire_tag', skip_if_no_key=True)
     header = SubtypeHeader
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
     def begins_history(self) -> bool:
@@ -619,14 +603,14 @@ class SystemEvent(TaggedWire, ABC):
 class TurnDuration(SystemEvent):
     wire_tag = 'turn_duration'
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (TurnEnded(),)
 
 
 class CompactBoundary(SystemEvent, TimedRecord):
     wire_tag = 'compact_boundary'
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return session.finished(self.uuid, (NoticeTranscript('Context compacted', timestamp=self.timestamp, position=self.position),))
 
     def begins_history(self) -> bool:
@@ -672,7 +656,7 @@ class SystemRecord(ClaudeRecord):
         # once; its declared subtype owns the behavior and any retained fields.
         return {'subtype': value}
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.subtype.updates(session)
 
     def begins_history(self) -> bool:
@@ -699,7 +683,7 @@ class AttachmentPayload(TaggedWire, ABC):
     header = AttachmentHeader
 
     @abstractmethod
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]: ...
+    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]: ...
 
 
 class QueuedTaskNotification(TaskContent, AttachmentPayload):
@@ -711,7 +695,7 @@ class QueuedTaskNotification(TaskContent, AttachmentPayload):
 class ForeignAttachment(AttachmentPayload):
     wire_tag = 'foreign'
 
-    def updates(self, record: TimedRecord) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         return ()
 
 
@@ -719,7 +703,7 @@ class Attachment(ClaudeRecord, TimedRecord):
     wire_tag = 'attachment'
     attachment: AttachmentPayload.declared_union()
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return self.attachment.updates(self)
 
 
@@ -793,7 +777,7 @@ class ForkContextReference(MetadataRecord):
     wire_tag = 'fork-context-ref'
     parentSessionId: str
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice(f'Context inherited from session {self.parentSessionId} is not imported.'),)
 
 
@@ -802,7 +786,7 @@ class CustomTitle(MetadataRecord):
     wire_tag = 'custom-title'
     customTitle: str
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(title=self.customTitle),)
 
 
@@ -811,7 +795,7 @@ class AgentName(MetadataRecord):
     wire_tag = 'agent-name'
     agentName: str
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (SessionFacts(title=self.agentName),)
 
 
@@ -820,7 +804,7 @@ class ContinuedIn(MetadataRecord):
     wire_tag = 'continued-in'
     continuedInSessionId: str
 
-    def updates(self, session: ClaudeSession) -> tuple[TranscriptUpdate, ...]:
+    def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice(f'The conversation continued in session {self.continuedInSessionId}.'),)
 
 
