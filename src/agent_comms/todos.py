@@ -2605,7 +2605,8 @@ class TodoStore(TypedStore):
         traced: FileLine | None = None,
     ) -> Todo:
         identity = _thread(owner)
-        proposed = Assignment(identity.name, identity.created_at, assigner.name, assigner.wire_birth,
-                              generation)
-        return self.apply(todo_id, operation(expected_revision, proposed, deadline, order, goal, traced))
+        proposed = Assignment(
+            identity.name, identity.created_at, assigner.name, assigner.wire_birth, generation)
+        return self.apply(
+            todo_id, operation(expected_revision, proposed, deadline, order, goal, traced))
 

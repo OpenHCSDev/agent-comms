@@ -27,21 +27,28 @@ from .goal_states import (
 from .goal_waits import GoalWaits, RecordedGoalWait
 from .goals import (
     Goal,
-    ReportedTurn,
     GoalDeclaration,
     GoalOrder,
     NoGoal,
     ProblemGoalOrder,
+    ReportedTurn,
     RequestDirective,
     RequestGoalOrder,
     UnorderedGoalOrder,
 )
 from .progress_claims import ProgressClaim
 from .recorded_time import EventTime
-from .threads import Thread
 from .thread_identity import StallWatcherIncarnation, ThreadIncarnation
-from .todos import (AssignTodo, GoalRef, PendingProblemOrder, SendBackVerdict, StallAssignTodo, Todo,
-                    TodoOperation)
+from .threads import Thread
+from .todos import (
+    AssignTodo,
+    GoalRef,
+    PendingProblemOrder,
+    SendBackVerdict,
+    StallAssignTodo,
+    Todo,
+    TodoOperation,
+)
 
 if TYPE_CHECKING:
     from .goal_management import Goals

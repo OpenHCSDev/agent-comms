@@ -18,7 +18,7 @@ from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.registration import Registration
 from agent_comms.threads import Thread
 from agent_comms.todos import (
-    Assignment, ChangeTodoState, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
+    AssignTodo, Assignment, ChangeTodoState, DoneTodoState, GoalRef, MechanicalOrderRun, PendingProblemOrder,
     BlockedTodoState, OperationDelivery, Todo, TodoConflict, TodoError, TodoState, TodoStore,
 )
 
@@ -43,7 +43,7 @@ def _assign_process(root: str, name: str, created: float, gate) -> tuple[str, st
     try:
         row = store.assign(
             "todo-1", expected_revision=1,
-            owner=thread(name, Path(root), created), parent=thread("lead", Path(root), 1.0),
+            owner=thread(name, Path(root), created), assigner=thread("lead", Path(root), 1.0).incarnation, operation=AssignTodo,
             generation=f"generation-{name}", goal=GoalRef("lead", 1.0, "goal-1"),
             deadline=RecordedEventTime(1000.0), order=order(Path(root)),
         )
