@@ -33,6 +33,7 @@ from .agent_backend import (
     TurnDelivery,
 )
 from .fresh_private_session import create_fresh_private_session
+from .native_arguments import NativeArguments
 from .native_pi import NativePiRpcLaunch
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import SessionIdentityHelper
@@ -44,7 +45,6 @@ if TYPE_CHECKING:
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
     from .launch_runtime import LaunchRuntime
-    from .native_arguments import NativeArguments
     from .native_child import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity
     from .pi_payloads import StateData
@@ -229,11 +229,12 @@ class PiNativeBackend(
         environment = await Coordination.run_worker(lambda: thread.native_environment(
             self.comms.root, self.comms.registry.snapshot(), thread.worktree,
         ))
+        package = self.comms.owners.require_private_launch().native_package
         return await open_native(
             self,
             self.agent_bin,
-            thread.native_launch_arguments(self.arguments(thread)),
-            package=self.comms.owners.require_private_launch().native_package,
+            thread.native_launch_arguments(NativeArguments.parse(self.arguments(thread)), package.path),
+            package=package,
             worktree=thread.worktree,
             root=self.comms.root,
             environment=environment,
@@ -253,9 +254,10 @@ class PiNativeBackend(
         from . import backend
 
         images = {"images": content.images} if content.images else {}
+        package = self.comms.owners.require_private_launch().native_package
         async for event in backend.stream_agent_events(
             self.agent_bin,
-            thread.native_launch_arguments(self.arguments(thread)),
+            thread.native_launch_arguments(NativeArguments.parse(self.arguments(thread)), package.path),
             content.text,
             delivery.worktree,
             delivery.environment,
@@ -269,7 +271,7 @@ class PiNativeBackend(
             native_start=delivery.input_started,
             request_observer=delivery.request_progress,
             persistent_session=self,
-            package=self.comms.owners.require_private_launch().native_package,
+            package=package,
             root=self.comms.root,
             ui_request=delivery.ui_request,
         ):

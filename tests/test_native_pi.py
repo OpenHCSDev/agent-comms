@@ -1097,12 +1097,14 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     assert "NODE_OPTIONS" not in environment
 
 
-def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
+def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch, tmp_path):
     import agent_comms.native_pi as native_pi
-    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
+    from agent_comms.coordination_errors import PublicationActivationBlocked
 
-    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "derive", classmethod(lambda cls, root=None: None))
-    with pytest.raises(NativePiUnavailable, match="configured private route"):
+    # A root with no private marker resolves to a shared launch, which refuses before any exec.
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
+    monkeypatch.setattr(native_pi.os, "execvpe", lambda *call: pytest.fail(f"started a real Pi: {call}"))
+    with pytest.raises(PublicationActivationBlocked, match="requires a private bus root"):
         native_pi.main()
 
 

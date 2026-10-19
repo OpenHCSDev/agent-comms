@@ -93,6 +93,10 @@ class ModelArgument(NamedOption, ValueArgument):
     pass
 
 
+class ExtensionArgument(NamedOption, ValueArgument):
+    short = "-e"
+
+
 @dataclass(frozen=True)
 class SelectedModel:
     provider: str
@@ -209,6 +213,11 @@ class VersionArgument(NamedOption, OneShotArgument):
     short = "-v"
 
 
+class NoExtensionsArgument(NamedOption, OneShotArgument):
+    def validate_rpc(self) -> None:
+        pass
+
+
 @dataclass(frozen=True)
 class NativeArguments:
     entries: tuple[NativeArgument, ...]
@@ -271,6 +280,11 @@ class NativeArguments:
         return next(
             (entry.value for entry in reversed(self.entries) if isinstance(entry, member)), None
         )
+
+    def loads(self, extension: Path) -> bool:
+        """Pi discovers installed extensions unless told not to; ``-e`` always loads its own."""
+        return (NoExtensionsArgument() not in self.entries
+                or ExtensionArgument(str(extension)) in self.entries)
 
     @property
     def model(self) -> str | None:
