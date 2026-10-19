@@ -14,7 +14,7 @@ from agent_comms.notification_progress import (
 )
 from agent_comms.errors import RelationViolationError
 from agent_comms.message_reference import MessageReference
-from agent_comms.presentation import MessageNotification
+from agent_comms.presentation import MessageNotification, StoresView
 from agent_comms.pi_payloads import PublishedMessageToolDetails
 from agent_comms.wire_log import WireLog
 from agent_comms.threads import Thread
@@ -246,7 +246,7 @@ async def test_original_target_handling_revokes_open_sender_read_without_new_mes
     ).run()
     assert outcome is not None and outcome.disposition is IgnoredAssignment
     assert len(calls) == 1
-    assert comms.views.revision().stores_changed_since(published_revision)
+    assert comms.views.revision().changed_since(StoresView(), published_revision)
     after = comms.transcripts.capture_page_read("sender")
     assert not before.current()
     assert before.content_current()

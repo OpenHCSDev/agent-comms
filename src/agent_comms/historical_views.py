@@ -76,8 +76,9 @@ class ConversationRevision:
     selection: DisplaySelection
 
     def display_changed_since(self, earlier: ConversationRevision) -> bool:
+        from .presentation import BusSourceView
         return (self.selection != earlier.selection
-                or self.stores.bus_source_changed_since(earlier.stores))
+                or self.stores.changed_since(BusSourceView(), earlier.stores))
 
 
 class ConversationHistoryView:
