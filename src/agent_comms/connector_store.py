@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import secrets
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import ClassVar
@@ -13,6 +15,7 @@ from pydantic import JsonValue
 from .locked_store import LockedStore, RootFile
 
 ACCESS_SECONDS = 3600
+CODE_SECONDS = 300
 
 
 def digest(secret: str) -> str:
@@ -96,3 +99,19 @@ class ConnectorStore(RootFile, LockedStore[ConnectorGrants], lock_rank=9):
 
     def empty(self) -> ConnectorGrants:
         return ConnectorGrants()
+
+    @contextmanager
+    def granted(self, client_id: str) -> Iterator[str]:
+        """An access token for a caller on this machine, revoked when its call is done."""
+        token = secrets.token_urlsafe(32)
+        held = IssuedAccess(client_id, time.time() + CODE_SECONDS)
+        key = digest(token)
+        self.update(lambda grants: replace(grants, access=grants.access | {key: held}))
+        try:
+            yield token
+        finally:
+            self.update(
+                lambda grants: replace(
+                    grants, access={k: v for k, v in grants.access.items() if k != key}
+                )
+            )

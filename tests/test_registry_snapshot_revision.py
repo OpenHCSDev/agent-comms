@@ -3,6 +3,8 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 
+from agent_comms.comms import Comms
+from agent_comms.historical_views import ChannelDisplayHistory, DMDisplayHistory
 from agent_comms.registration import Registration
 from agent_comms.registry_document import RegistrySnapshot
 from agent_comms.store_files import _atomic_write_text
@@ -45,6 +47,18 @@ def test_concurrent_first_readers_share_one_snapshot(tmp_path):
             snapshots = list(readers.map(lambda _: Registration(path).snapshot(), range(20)))
         assert all(snapshot is snapshots[0] for snapshot in snapshots)
         assert capture.call_count == 1
+
+
+def test_channel_and_dm_revisions_use_the_cached_registry_snapshot(tmp_path):
+    comms = Comms(tmp_path)
+    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    comms.messaging.user_identity(str(tmp_path))
+    snapshot = comms.registry.snapshot()
+    with patch.object(RegistrySnapshot, "capture", side_effect=AssertionError("snapshot rebuilt")):
+        channel = ChannelDisplayHistory.revision(comms.views, "#any", worktree=str(tmp_path))
+        dm = DMDisplayHistory.revision(comms.views, "worker", worktree=str(tmp_path))
+        assert channel.selection.viewer == dm.selection.viewer
+        assert comms.registry.snapshot() is snapshot
 
 
 def test_absence_and_recreation_have_distinct_snapshots(tmp_path):
