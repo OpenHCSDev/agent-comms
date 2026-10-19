@@ -8,8 +8,6 @@ claim append or file mutation, and UNKNOWN is never retried automatically.
 
 from __future__ import annotations
 
-from typing import ClassVar
-
 import logging
 import os
 import re
@@ -18,10 +16,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
+from typing import ClassVar
 
 from agent_comms.coordinator import Coordination
 
-from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .comms import Comms
 from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import CoordinationReadUnavailable
@@ -36,9 +34,15 @@ from .native_tool_call import (
     NativeToolMode,
     SelectedToolDenied,
 )
+from .native_tool_transport import (
+    NativeToolRound,
+    ToolListener,
+    ToolTransport,
+    UnboundToolTransport,
+)
 from .private_path import PrivateDirectoryRole, PrivateFileRole, fsync_directory
-from .native_tool_transport import ToolTransport, NativeToolRound
 from .selected_actions import SelectedAction
+from .selected_claim import publish_selected_resource_claim, write_selected_claimed_file
 from .turn_context import InstructionFile
 
 # Stay well below the existing native RPC record cap (1 MiB, including JSON).
@@ -92,7 +96,7 @@ class SelectedToolMode(NativeToolMode):
             str(selected_extension(package)),
         )
 
-    async def open_transport(self, turn, ownership) -> ToolTransport:
+    async def open_transport(self, turn, ownership) -> UnboundToolTransport:
         return await SelectedToolSocket.open(turn, ownership, self.action)
 
 
@@ -339,9 +343,9 @@ class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
     """One selected replacement, preserving the existing one-slot authority."""
 
     def __init__(
-        self, directory: Path, token: str, action: Callable[[SelectedToolRequest], None]
+        self, listener: ToolListener, action: Callable[[SelectedToolRequest], None], *, pid: int
     ) -> None:
-        super().__init__(directory, token)
+        super().__init__(listener, pid=pid)
         self.action = action
 
     def validate_round(self, round: NativeToolRound[SelectedToolRequest]) -> None:
@@ -368,7 +372,7 @@ class SelectedToolSocket(ToolTransport[SelectedToolRequest]):
             )
         except MalformedRecord as error:
             raise SelectedToolDenied("Invalid selected tool request") from error
-        return envelope.authenticate(self.token)
+        return envelope.authenticate(self.listener.token)
 
     async def allow(self, round_number: int, call: SelectedToolRequest) -> None:
         await Coordination.run_worker(partial(self.action, call))
