@@ -870,7 +870,8 @@ class CommsOrderTool(ThreadToolRequest):
     owner: str = tool_field("Assignee thread")
 
     def apply(self, comms: Comms, caller: ThreadCaller) -> ProblemOrdered:
-        goal = comms.goals.update_goal(self.owner, replace(self.order, commander=caller.name))
+        goal = comms.goals.update_goal(self.owner, self.order.bound_to(
+            comms.registry.require(caller.name).incarnation))
         return ProblemOrdered(goal, comms.goals.todos.get(self.order.problem))
 
 
