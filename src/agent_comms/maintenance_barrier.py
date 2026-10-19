@@ -282,10 +282,10 @@ class MaintenanceBarrier(MaintenanceIngress):
         return value
 
     def current_unlocked(self) -> MaintenanceStatus:
-        """Capture admission while holding the registry lock OR the wire lock.
+        """Check the phase under the registry lock OR the wire lock.
 
-        A client may observe this without a lock only for early refusal, never
-        to grant admission. An incomplete transition fails closed in that read.
+        Clients may read it before taking locks only to refuse work, never to
+        permit a write. An incomplete phase change refuses that read.
         For a send, the wire lock stays held through stdin.write; for a claim,
         the registry lock spans the turn's durable transition. A phase change
         takes both locks in wire -> registry order.
