@@ -279,7 +279,7 @@ class ThreadTarget(NamedTarget):
         names = sorted({snapshot.canonical_name(sender), self.canonical_name(snapshot.canonical_name)})
         return direct(participants=tuple(snapshot.participant(name).incarnation for name in names))
 
-    def changed_threads(self, names, snapshot, require_channel):
+    def changed_threads(self, names, snapshot, catalog, activity):
         return (self.canonical_name(snapshot.canonical_name),)
 
     def mark_view_read(self, views, worktree):
@@ -374,8 +374,8 @@ class ChannelTarget(NamedTarget):
     def conversation_key(self, sender, snapshot, channel, direct):
         return channel(target=self.name)
 
-    def changed_threads(self, names, snapshot, require_channel):
-        channel = require_channel(self.name)
+    def changed_threads(self, names, snapshot, catalog, activity):
+        channel = catalog.require_channel(self.name, activity)
         return tuple(name for name in names if (thread := snapshot.threads.get(name)) is not None
                      and channel.matches(thread.tags))
 
