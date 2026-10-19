@@ -449,7 +449,7 @@ class JsonShapeFamily(WireValue):
     def schema(cls) -> dict[str, Any]:
         alternatives = [FieldCodec.value_schema(annotation)
                         for _, annotation in cls._json_owners.values()]
-        return {"anyOf": alternatives} if alternatives else {"not": {}}
+        return FieldCodec.alternatives_schema("anyOf", alternatives)
 
     def to_wire(self):
         return self.value
@@ -830,6 +830,13 @@ class FieldCodec(Sealed):
         with MalformedRecord.refusing(f"Invalid {target.__name__}"):
             return target(**values)
 
+    @staticmethod
+    def alternatives_schema(
+        combinator: Literal["anyOf", "oneOf"], alternatives: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """An alternative schema with no possible member rejects every value."""
+        return {combinator: alternatives} if alternatives else {"not": {}}
+
     @classmethod
     def _family_schema(cls, target: type[DeclaredFamily]) -> dict[str, Any]:
         """Instance values carry their selector inside the encoded object."""
@@ -839,7 +846,7 @@ class FieldCodec(Sealed):
             alternatives.append(cls._record_schema(
                 member, {tag: {"type": "string", "const": member.declared_name}}, [tag]
             ))
-        return {"oneOf": alternatives} if alternatives else {"not": {}}
+        return cls.alternatives_schema("oneOf", alternatives)
 
     @classmethod
     def record_schema(cls, target: type) -> dict[str, Any]:
@@ -866,14 +873,14 @@ class FieldCodec(Sealed):
         if representation is not None:
             schema = representation.schema()
             if type(None) in get_args(annotation):
-                return {"anyOf": [schema, {"type": "null"}]}
+                return cls.alternatives_schema("anyOf", [schema, {"type": "null"}])
             return schema
         origin, args = get_origin(annotation), get_args(annotation)
         if origin in (Union, types.UnionType):
             members = list(args)
             if len(members) == 1:
                 return cls.value_schema(members[0])
-            return {"anyOf": [cls.value_schema(item) for item in members]}
+            return cls.alternatives_schema("anyOf", [cls.value_schema(item) for item in members])
         if origin is Literal:
             return {**cls.value_schema(type(args[0])), "enum": [value for _, value in compile_decoder(annotation).editor_choices()]}
         if origin in (list, tuple, frozenset):
