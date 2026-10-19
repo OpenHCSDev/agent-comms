@@ -1,4 +1,4 @@
-"""One-time import of the RTS orders, findings, strikes and hunts into Core's todo store.
+"""One-time import of open RTS orders, their strikes and hunts into Core's todo store.
 
 Run once on a quiesced root during the install, then delete this file. Every write goes
 through TodoStore on a staged copy that replaces the store in one SQLite backup. Nothing
@@ -7,11 +7,9 @@ here publishes goals, sends messages or launches a provider.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import sqlite3
-import subprocess
 import tempfile
 import time
 from dataclasses import dataclass, replace
@@ -22,12 +20,11 @@ from agent_comms.commander.config import Repo
 from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec, boundary_decoder
 from agent_comms.goals import OrderCheck
-from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
+from agent_comms.recorded_time import RecordedEventTime
 from agent_comms.todos import (ApplicationOrderRun, Assignment, AwaitingFirstCall,
-    CheckedProblemOrder, Hunt, HuntRecord, LocatedProblemFinding, MechanicalOrderRun,
-    MergedProblemOrder, NoGoalReference, ObservedFirstCall, OpenTodoState, OrderMessage,
-    PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, Todo, TodoStore,
-    UnorderedProblemOrder, WithdrawTodo)
+    CheckedProblemOrder, Hunt, HuntRecord, MechanicalOrderRun,
+    MergedProblemOrder, NoGoalReference, ObservedFirstCall, OrderMessage,
+    PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, TodoStore, WithdrawTodo)
 
 SOURCES = ('deadlines.json', 'problems.json', 'strikes.jsonl', 'sent.jsonl', 'hunts.jsonl')
 TOOLS = ('order.py', 'judge.py', 'rotate.py', 'tool_watch.py', 'shift_after_window.py')
@@ -46,13 +43,13 @@ class RtsSent:
     at: float
     id: str
     text: str
-    to: str
+    to: tuple[str, ...]
 
 
 @dataclass(frozen=True)
 class RtsStrike:
     at: float
-    task: str
+    task: str | None
     unit: str
     why: str
     caught: str = ''
@@ -124,16 +121,7 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
     if missing := sorted(selected.keys() - problems.keys()):
         raise ValueError(f'Restore the missing problem rows first: {missing}')
     strikes = lines(source['strikes.jsonl'], RtsStrike)
-    repos, gone = {}, []
-    for pid in sorted(problems.keys() - selected.keys()):
-        try:
-            repos[pid] = Repo.of(Path(problems[pid].where.file).parent).github
-        except (subprocess.CalledProcessError, FileNotFoundError, NotADirectoryError):
-            gone.append(f'{pid} {problems[pid].where.file}')
-    if gone:
-        raise ValueError('Re-locate or drop the findings whose checkout is gone:\n' + '\n'.join(gone))
-    report = {'source_sha256': {name: hashlib.sha256(data).hexdigest() for name, data in source.items()},
-              'orders': len(selected), 'unordered_findings': len(repos), 'strikes': len(strikes)}
+    report = {'orders': len(selected), 'strikes': len(strikes)}
     if not apply:
         print(json.dumps(report, indent=2))
         return
@@ -179,16 +167,6 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
         if (recorded.holder, recorded.deadline, recorded.order, recorded.strikes) != (
                 owner.name, old.deadline(), old.order, history):
             raise ValueError(f'{pid}: the imported Core row differs from its RTS order')
-    for pid, repo in repos.items():
-        finding = Todo(id=pid, repo=repo, text=problems[pid].text, creator=actor.name,
-                       creator_created=actor.created_at, state=OpenTodoState, revision=1,
-                       goal=NoGoalReference(), assignment=None, deadline=UnrecordedEventTime(),
-                       order=UnorderedProblemOrder(finding=LocatedProblemFinding(problems[pid].where)))
-        if pid in existing:
-            finding = replace(finding, revision=existing[pid].revision + 1,
-                              strikes=existing[pid].strikes, released=existing[pid].released)
-        with store.writing() as db:
-            finding.upsert(db)
     with store.writing() as db:
         for index, line in enumerate(source['hunts.jsonl'].splitlines()):
             HuntRecord(id=f'rts-hunt:{index}', commander=actor.incarnation, hunt=rts_hunt(line)).upsert(db)
@@ -199,7 +177,7 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
     for path in staging.iterdir():
         path.unlink()
     staging.rmdir()
-    for name in (TOOLS + SOURCES) * retire:
+    for name in (TOOLS + tuple(name for name in SOURCES if name != 'problems.json')) * retire:
         (rts / name).rename(rts / f'{name}.retired-p707')
     print(json.dumps(report, indent=2))
 
