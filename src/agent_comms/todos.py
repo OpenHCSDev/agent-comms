@@ -741,16 +741,18 @@ class HierarchyText(OrderWords):
                                       if cls.BANS.search(item) and not cls.UNDOES.search(item)]
 
 
-class DefectText(BluntText):
+class DefectText(OrderWords):
     """A text naming a defect in a Slop: line also says, outside that line, what was wrong;
     a text naming no defect needs no label."""
 
     SLOP: ClassVar[re.Pattern] = re.compile(r'(?m)^Slop: .*$')
+    REFUSED = BluntText.REFUSED
+    refusal = BluntText.refusal
 
     @classmethod
     def found(cls, text: str) -> list[str]:
-        named = cls.SLOP.search(text)
-        return super().found(cls.SLOP.sub(' ', text)) if named else ['no defect named']
+        """The Slop: lines left unlabeled: nothing when no line names a defect or a label is given."""
+        return [] if BluntText.found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
 
 
 class DirectiveText:
