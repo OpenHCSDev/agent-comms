@@ -24,6 +24,9 @@ class WirePrefix(ABC):
 
     boundary: int
 
+    def ensure_page_index(self, opened, index, mode) -> None:
+        """An empty prefix has no offsets to prepare."""
+
     @abstractmethod
     def project(self, index, opened, semantics, checkpoint): ...
 
@@ -39,6 +42,9 @@ class EmptyWirePrefix(WirePrefix):
 @dataclass(frozen=True)
 class CompleteWirePrefix(WirePrefix):
     boundary: int
+
+    def ensure_page_index(self, opened, index, mode) -> None:
+        opened.ensure_indexed_prefix(index, mode)
 
     def project(self, index, opened, semantics, checkpoint):
         return index.record_type.from_prefix(index, opened, self.boundary, semantics, checkpoint)

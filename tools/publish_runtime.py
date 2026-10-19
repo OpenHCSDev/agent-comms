@@ -24,12 +24,15 @@ from typing import ClassVar
 
 from agent_comms.active_route import read_active_route, active_route_path, acquire_exclusive_route_lock
 from agent_comms.child_process import LinuxPlatform, ProcessIdentity, ProcessState
-from agent_comms.comms import wire
+from agent_comms.comms import Comms, wire
 from agent_comms.harness_install import Harness, replace_link
 from agent_comms.owner_restart import OwnerRestartRequest
 from agent_comms.owner_cutover import StoppedOwnerInstallation
 from agent_comms.launch_runtime import LaunchRuntime
+from agent_comms.maintenance_barrier import MaintenanceOperator, MaintenanceState
 from agent_comms.restart_queue import enqueue
+from agent_comms.store_files import _store_lock
+from cutover.carry_check_revision import CheckRevisions
 
 
 @dataclass(frozen=True)
@@ -160,11 +163,25 @@ class RuntimePublication:
             acquire_exclusive_route_lock(directory)
             if read_active_route(path) != previous_route:
                 raise ValueError('Active route changed during CLI check')
-            return self.publish_links(owners)
+            barrier = Comms(root).owners.maintenance
+            hold = barrier.begin(MaintenanceOperator('runtime publication'))
+            try:
+                with _store_lock(barrier.wire_path):
+                    return self.publish_links(owners, hold)
+            finally:
+                barrier.clear(hold)
         finally:
             os.close(directory)
 
-    def publish_links(self, owners: tuple[ProcessState, ...]) -> tuple[RunningProcess, ...]:
+    def publish_links(self, owners: tuple[ProcessState, ...],
+                      hold: MaintenanceState) -> tuple[RunningProcess, ...]:
+        """Carry checks and move the pointer with the caller's wire lock and hold held.
+
+        This re-runs the same idempotent conversion even when its format step was
+        recorded before more commander orders were imported into the bus.
+        """
+        root = Path(hold.root)
+        Comms(root).owners.maintenance.require_draining_unlocked(hold)
         current = StoppedOwnerInstallation.current_pointer()
         if not current.is_symlink():
             if current.exists():
@@ -179,6 +196,8 @@ class RuntimePublication:
         retired = RetiredRuntime(current.resolve(strict=True))
         if retired.path == self.runtime.resolve():
             raise ValueError(f'Publication would retire the runtime it publishes: {self.runtime}')
+        carried = CheckRevisions.carry(root, apply=True)
+        print(carried.report(CheckRevisions.name(), True), flush=True)
         for link, target in self.links.items():
             replace_link(link, current / target.relative_to(self.runtime))
         replace_link(current, self.runtime)

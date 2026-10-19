@@ -95,8 +95,10 @@ def scenario(comms: Comms, project, monkeypatch):
         OrderCheck(str(comms.root), "printf 1", CountCheckResult(1))),
         "why": "The recorded check counted the wrong file"}, lead
     yield CommsOrderWorkTool, {"problem": "P1"}, lead
-    yield CommsOrderDoneTool, {"problem": "P1", "delivery": FieldCodec.encode(OperationDelivery())}, lead
     (comms.root / "installed-evidence").write_text("Verified installed path")
+    yield CommsOrderDoneTool, {"problem": "P1", "order_id": comms.goals.todos.get("P1").order.id,
+        "delivery": FieldCodec.encode(OperationDelivery()),
+        "claims": [{"kind": "working", "screenshot": str(comms.root / "installed-evidence")}]}, lead
     yield CommsProblemCloseTool, {
         "problem": "P1", "works": "The installed application now keeps the order across returns.",
         "artifact": str(comms.root / "installed-evidence")}, lead
