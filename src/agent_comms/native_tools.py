@@ -32,14 +32,13 @@ class NativeExecutableTool(ToolDeclaration):
     def native_extension(cls, package: Path) -> Path: ...
 
     @classmethod
-    def launch_arguments(cls, package: Path) -> tuple[str, ...]:
-        """The executable declarations own their tool names and extension set."""
+    def extension_arguments(cls, package: Path) -> tuple[str, ...]:
+        """Load the declared extensions independently of input/tool authority."""
         declarations = cls.members_with(cls)
         extensions = tuple(dict.fromkeys(tool.native_extension(package) for tool in declarations))
         if any(not extension.is_file() for extension in extensions):
             raise SelectedToolDenied("Native tool extension is not installed")
-        return ("--tools", ",".join(tool.declared_name for tool in declarations),
-                *(argument for extension in extensions for argument in ("-e", str(extension))))
+        return tuple(argument for extension in extensions for argument in ("-e", str(extension)))
 
     @classmethod
     def from_call(cls, name: str, arguments: object, *, call_id: str):

@@ -552,8 +552,8 @@ class NativePiRpcLaunch:
         session = (SavedSelectedSession(directory,
             identity=SessionIdentityHelper.locate(package, str(saved)))
             if saved is not None else SelectedSession(directory))
-        return cls._managed(package, (*NativeExecutableTool.launch_arguments(package.path), *arguments),
-            cwd, environment, session, runtime, root)
+        arguments = (*NativeExecutableTool.extension_arguments(package.path), *arguments)
+        return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 
     @classmethod
     def _managed(cls, package, arguments, cwd, environment, session, runtime, root):
@@ -583,8 +583,9 @@ class NativePiRpcLaunch:
         saved = Path(session_file).absolute() if session_file is not None else None
         if saved != self.session.path:
             return None
-        return self._managed(self.package,
-            (*NativeExecutableTool.launch_arguments(self.package.path), *NativeArguments.parse(arguments).rpc()),
+        arguments = (*NativeExecutableTool.extension_arguments(self.package.path),
+                     *NativeArguments.parse(arguments).rpc())
+        return self._managed(self.package, arguments,
             worktree, environment, self.session, self.runtime, root)
 
     @classmethod

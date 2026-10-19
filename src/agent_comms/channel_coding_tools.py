@@ -200,7 +200,9 @@ class CodingToolMode(NativeToolMode):
     owner: CodingToolOwner
 
     def launch_arguments(self, package: Path) -> tuple[str, ...]:
-        arguments = NativeExecutableTool.launch_arguments(package)
+        declarations = NativeExecutableTool.members_with(NativeExecutableTool)
+        arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
+                     *NativeExecutableTool.extension_arguments(package))
         thread = self.owner.comms.registry.require(self.owner.owner_name)
         return thread.native_launch_arguments(arguments)
 
