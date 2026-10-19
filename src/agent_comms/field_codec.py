@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import json
+import os
 import re
 import types
 from abc import ABC, abstractmethod
@@ -456,6 +457,66 @@ class PathText(TextRepresentation[Path]):
     @classmethod
     def from_text(cls, value: str) -> Path:
         return Path(value)
+
+
+class BoundedText(TextRepresentation[str]):
+    """Nonempty identity text of bounded length: an owner, incarnation or message ID."""
+
+    max_length: ClassVar[int] = 4096
+
+    @classmethod
+    def encode(cls, value: object) -> str:
+        return cls.decode(value)
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        if not value or len(value) > cls.max_length:
+            raise MalformedRecord(f"{cls.__name__} is nonempty and at most {cls.max_length} long")
+        return value
+
+
+class ResourcePathText(BoundedText):
+    """A claimed resource, already a canonical absolute path."""
+
+    @classmethod
+    def from_text(cls, value: str) -> str:
+        path = super().from_text(value)
+        if not Path(path).is_absolute() or os.path.normpath(path) != path:
+            raise MalformedRecord("A resource is a canonical absolute path")
+        return path
+
+
+class SequenceNumber(FieldRepresentation):
+    """An exact integer bus position; its minimum is the kind's one rule."""
+
+    minimum: ClassVar[int]
+
+    @classmethod
+    def decode(cls, value: object) -> int:
+        position = FieldCodec.decode(int, value)
+        if position < cls.minimum:
+            raise MalformedRecord(f"{cls.__name__} is at least {cls.minimum}")
+        return position
+
+    @classmethod
+    def encode(cls, value: object) -> int:
+        return cls.decode(value)
+
+    @classmethod
+    def schema(cls) -> dict[str, object]:
+        return {"type": "integer", "minimum": cls.minimum}
+
+
+class EnvelopeSequence(SequenceNumber):
+    """The bus row an envelope was written at."""
+
+    minimum = 1
+
+
+class ProjectionSequence(SequenceNumber):
+    """The last envelope a projection applied; zero before the first."""
+
+    minimum = 0
 
 
 @dataclass(frozen=True)
