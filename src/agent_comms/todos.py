@@ -161,7 +161,7 @@ class PullRequest:
                    _github_time(merged) if merged else None, _github_time(updated),
                    ProblemOrder.pull_request_ids(body))
 
-    def merge(self, todo: Todo) -> None:
+    def merge_reviewed(self, todo: Todo) -> None:
         """Merge this open PR for ``todo`` at the head commit an accepted verdict names."""
         todo.require_reviewed(self.head)
         merged = subprocess.run(

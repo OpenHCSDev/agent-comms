@@ -925,7 +925,7 @@ class CommsOrderMergeTool(ThreadToolRequest):
         pulls = {pull.number: pull for pull in PullRequests().listed(todo.repo, "open", todo.order)}
         if self.number not in pulls:
             raise ValueError(f"PR #{self.number} is no open PR naming {self.problem}.")
-        pulls[self.number].merge(todo)
+        pulls[self.number].merge_reviewed(todo)
         return PullRequestMerged(self.number, pulls[self.number].head)
 
 
