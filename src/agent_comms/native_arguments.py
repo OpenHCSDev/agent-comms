@@ -103,8 +103,9 @@ class ModelProvider(DeclaredFamily, affix="Provider"):
     may_command: ClassVar[bool] = True
 
     @classmethod
-    def named(cls, name: str) -> type[ModelProvider]:
-        return cls.__registry__.get(name, cls)
+    def named(cls, name: object) -> type[ModelProvider]:
+        return next((member for member in cls.members_with(cls)
+                     if member.declared_name == name), cls)
 
 
 class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
@@ -304,6 +305,10 @@ class NativeArguments:
         """Pi discovers installed extensions unless told not to; ``-e`` always loads its own."""
         return (NoExtensionsArgument() not in self.entries
                 or ExtensionArgument(str(extension)) in self.entries)
+
+    @property
+    def provider_type(self) -> type[ModelProvider]:
+        return ModelProvider.named(self.value(ProviderArgument))
 
     @property
     def model(self) -> str | None:

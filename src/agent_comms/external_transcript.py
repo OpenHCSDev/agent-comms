@@ -413,13 +413,12 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     def last_tool_call(self) -> EventTime:
         """One indexed newest-first event read; absence remains explicitly unrecorded."""
         with self.snapshot() as connection:
-            row = connection.execute(
-                f'SELECT timestamp FROM "{ExternalEventRow.declared_name}" '
-                'WHERE thread=? AND kind=? ORDER BY seq DESC,ordinal DESC LIMIT 1',
+            timestamp = connection.execute(
+                f'SELECT (SELECT timestamp FROM "{ExternalEventRow.declared_name}" '
+                'WHERE thread=? AND kind=? ORDER BY seq DESC,ordinal DESC LIMIT 1)',
                 (self.lookup, ToolStartTranscript.declared_name),
-            ).fetchone()
-        return (UnrecordedEventTime() if row is None else
-                FieldCodec.decode(Annotated[EventTime, GeneratedTimestamp], row[0]))
+            ).fetchone()[0]
+        return GeneratedTimestamp.decode(timestamp)
 
     def finish(self, *, turn_id: str, item_id: str,
                events: tuple[TranscriptEvent, ...]) -> None:

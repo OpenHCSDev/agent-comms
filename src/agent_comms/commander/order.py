@@ -713,7 +713,7 @@ class RuledVerb(CommanderVerb):
     def gate(self) -> None:
         super().gate()
         for due in RulesDue.violations(COMMS, self.who):
-            flag = '' if self.who == ME else f' --as {self.who}'
+            flag = '' if self.who == ME else f' --fork {self.who}'
             sys.exit(f'REFUSED, nothing recorded: {due.why}. Run agent-comms-commander'
                      f' rules review{flag}, then answer each drawn rule{flag}.')
 

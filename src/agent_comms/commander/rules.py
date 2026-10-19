@@ -6,8 +6,8 @@ directories (the packaged rules first, then the project's own memory), and paper
 review and answer (CommsRuleReviewTool); its RulesDue member refuses every commander action in order and prints
 RULES DUE in rotate until the last review is answered and fresh.
 
-  agent-comms-commander rules review [--as FORK]                 print the rules, draw three
-  agent-comms-commander rules answer N "<10+ words>" [--as FORK]  answer drawn rule N with what this tick does about it
+  agent-comms-commander rules review [--fork FORK]                 print the rules, draw three
+  agent-comms-commander rules answer N "<10+ words>" [--fork FORK]  answer drawn rule N with what this tick does about it
 
 Every fork reviews for itself (forks must know correct maintenance, not carry dogma): a fork's
 actions are refused until its own review is answered, and all three of a fork's drawn rules come from paper 1.
@@ -77,9 +77,8 @@ def answer(n: int, text: str, who: str = ME):
     record(who, AnsweredRuleReviewEntry(n, text))
 
 
-@dataclass(frozen=True, kw_only=True)
 class RulesVerb(CommanderVerb):
-    fork: str | None = option("--as", default=None, help="the acting commander")
+    """Rules use the shared acting-commander declaration and gate."""
 
 
 class ReviewVerb(RulesVerb):
