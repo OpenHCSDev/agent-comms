@@ -13,11 +13,10 @@ from collections.abc import Iterable
 from typing import TYPE_CHECKING, ClassVar
 
 from .declared_family import DeclaredFamily
-from .work_dispatch import UnspecifiedPhaseTask
+from .phase_tasks import PhaseTask, UnspecifiedPhaseTask
 
 if TYPE_CHECKING:
     from .todos import Todo
-    from .work_dispatch import PhaseTask
 
 
 class OrderPhase(DeclaredFamily, affix="Phase"):

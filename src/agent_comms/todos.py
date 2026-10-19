@@ -1334,6 +1334,10 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def require_transfer(self, todo: Todo) -> None:
         raise ValueError("This problem cannot receive another order.")
 
+    def reissued(self, at: float) -> PendingProblemOrder:
+        """This order sent again at ``at`` to a new owner, its first-call window kept."""
+        raise ValueError("Only an undelivered order can change owner.")
+
     def require_close(self):
         raise ValueError("Closing requires recorded installed application evidence.")
 

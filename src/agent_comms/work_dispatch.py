@@ -9,14 +9,24 @@ from __future__ import annotations
 
 import subprocess
 import time
-from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, replace
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
+
+from .goal_actions import (
+    CreateProblemGoalAction,
+    GoalActionContext,
+    OrderGoalAction,
+    ProblemOrderGoalAction,
+)
+from .native_settings import NativeThreadDefaults
+from .phase_tasks import PhaseTask
+from .recorded_time import RecordedEventTime
+from .storage_rules import CheckoutStorageEffect
+from .thread_status import StoppedThreadStatus
 
 if TYPE_CHECKING:
     from .comms import Comms
-    from .goal_actions import ProblemOrderGoalAction
     from .plan_phases import PlanPhase
     from .threads import Thread
     from .todos import PendingProblemOrder, Todo
@@ -30,11 +40,6 @@ class WorkDispatch:
     revision: int
 
     def start(self, comms: Comms) -> Thread:
-        from .goal_actions import GoalActionContext
-        from .native_settings import NativeThreadDefaults
-        from .storage_rules import CheckoutStorageEffect
-        from .thread_status import StoppedThreadStatus
-
         defaults = NativeThreadDefaults()
         # A concurrent rotation of this same row contends on one git checkout,
         # not on two newly generated unit names. Never adopt a partial attempt.
@@ -89,8 +94,6 @@ class WorkDispatch:
     @classmethod
     def reissue(cls, comms: Comms, commander: Thread, todo: Todo) -> None:
         """Retained checked work needs no already-idle unit."""
-        from .goal_actions import OrderGoalAction
-
         current = comms.goals.todos.get(todo.id)
         current.require_revision(todo.revision)
         if current.holder or not current.pending:
@@ -104,26 +107,6 @@ class WorkDispatch:
             commander=commander.name,
         )
         cls(action, revision=current.revision).start(comms)
-
-
-class PhaseTask(ABC):
-    instruction: ClassVar[str]
-
-    @abstractmethod
-    def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase]) -> None: ...
-
-    @abstractmethod
-    def done(self, todos: Iterable[Todo]) -> bool: ...
-
-
-class UnspecifiedPhaseTask(PhaseTask):
-    instruction = "no checked task declared; supply its source, check and brief"
-
-    def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase]) -> None:
-        """Readiness alone cannot authorize a fabricated order."""
-
-    def done(self, todos: Iterable[Todo]) -> bool:
-        return False
 
 
 @dataclass(frozen=True)
@@ -142,9 +125,6 @@ class CheckedPhaseTask(PhaseTask):
             raise ValueError("A phase task needs a positive deadline of at most one day.")
 
     def start(self, comms: Comms, commander: Thread, phase: type[PlanPhase]) -> None:
-        from .goal_actions import CreateProblemGoalAction
-        from .recorded_time import RecordedEventTime
-
         history = comms.goals.todos.history_for_commander(commander.incarnation)
         if not phase.ready(history) or phase.ordered(history):
             return
