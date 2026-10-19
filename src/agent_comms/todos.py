@@ -1226,9 +1226,7 @@ class TodoState(DeclaredFamily, affix="TodoState"):
 
     @classmethod
     def require_open(cls, current: Todo) -> None:
-        if not cls.open:
-            raise TodoError(f"{current.id} is {cls.declared_name}; a strike or hunt is recorded "
-                            "on an open problem.")
+        pass
 
     @classmethod
     def prepare_change(cls, goals, current):
@@ -1264,6 +1262,10 @@ class BlockedTodoState(TodoState):
 
 class DoneTodoState(TodoState):
     open: ClassVar[bool] = False
+
+    @classmethod
+    def require_open(cls, current):
+        raise TodoError(f"{current.id} is done; a strike or hunt is recorded on an open problem.")
 
     @classmethod
     def prepare_change(cls, goals, current):
