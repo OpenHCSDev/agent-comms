@@ -52,6 +52,15 @@ def _page(comms: Comms, lookup: str, after: int = 0, limit: int = 100):
     return witness, tuple(captured), more
 
 
+def test_bus_read_authority_comes_from_its_declared_lock_type(tmp_path):
+    comms, root_id = _root(tmp_path)
+    publish_initial(comms, 'sender', '#team', 'typed bus source')
+    with _store_lock(comms.bus.log.path) as generic:
+        assert generic.source is None
+    with comms.bus.log.locked() as bus:
+        assert bus.certified_read().marker.root_id == root_id
+
+
 def test_claim_barrier_reuses_the_writer_sealed_marker(tmp_path, monkeypatch):
     from agent_comms.wire_log import WireLog
 
