@@ -16,7 +16,7 @@ from agent_comms.tools import CommsOrderServeTool
 from test_commander_problem_orders import create
 
 
-def test_cutover_waits_for_native_work_and_views_follow_cutover(commander):
+def test_views_wait_for_native_work_but_never_block_cutover(commander):
     comms, caller = commander
     required = (RecordPlanePhase, ReviewQueuePhase, ControlPlanePhase)
     phases = (*required, CutoverPhase, StoryPhase, CommanderPagePhase)
@@ -26,13 +26,20 @@ def test_cutover_waits_for_native_work_and_views_follow_cutover(commander):
         CommsOrderServeTool(problem=todo.id, serves=phase).apply(comms, caller)
         todos.append(comms.goals.todos.get(todo.id))
 
+    record_done = tuple(
+        replace(todo, state=DoneTodoState) if todo.order.serves is RecordPlanePhase else todo
+        for todo in todos
+    )
+    assert StoryPhase.ready(record_done)
+    assert not CommanderPagePhase.ready(record_done)
+
     native_done = tuple(
         replace(todo, state=DoneTodoState) if todo.order.serves in required else todo
         for todo in todos
     )
     assert CutoverPhase.ready(native_done)
-    assert not StoryPhase.ready(native_done)
-    assert not CommanderPagePhase.ready(native_done)
+    assert StoryPhase.ready(native_done)
+    assert CommanderPagePhase.ready(native_done)
     assert not SkillPhase.ready(native_done)
 
     for unfinished in required:

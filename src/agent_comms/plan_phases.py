@@ -95,13 +95,13 @@ class CutoverPhase(PlanPhase):
 class StoryPhase(PlanPhase):
     """A view of the native records, not a prerequisite for their cutover."""
 
-    after = (CutoverPhase,)
+    after = (RecordPlanePhase,)
 
 
 class CommanderPagePhase(PlanPhase):
-    """A view of the native records and control plane after their cutover."""
+    """A view of the native records and control plane, independent of cutover."""
 
-    after = (CutoverPhase,)
+    after = (RecordPlanePhase, ControlPlanePhase)
 
 
 class SkillPhase(PlanPhase):

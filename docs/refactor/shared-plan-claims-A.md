@@ -1,5 +1,9 @@
 # Shared plan claims: A dependency checkpoint
 
+The original A dependency design below is superseded by the A2 correction at
+this file's end: views wait on their source phases, not cutover. A2's completion
+rule and executable parity gate remain in progress; B has not started.
+
 Owner: pi-plan-claims. Branch: feat/shared-plan-claims. Base: 011084fc5.
 This checkpoint changes commander-native dependency declarations only. Shared
 claims are the next, separate commit. Nothing is installed or merged here.
@@ -125,3 +129,55 @@ blocks parity acceptance and script deletion, but does not prevent reviewing thi
 dependency-only checkpoint. Both machines can write the approved shared claim
 store. pi-cn-phase7 owns dispatch and will propose any checked-task capability;
 this checkpoint does not fabricate runnable task bodies from phase names.
+
+## A2: corrected view prerequisites and false story completion
+
+Owner correction 1753: story waits on record plane; commander page waits on
+record plane and control plane. Neither waits on cutover, and no phase waits
+on either view. The earlier dependency on cutover was my mistake.
+
+Actual source evaluation of the same 214 retained commander orders:
+
+```text
+Before A2 (A commit):
+Core ready: record_plane
+Core next startable (ready, no open order): (none)
+story done= True after= cutover
+commander_page done= False after= cutover
+
+After the A2 view dependency correction:
+Core ready: record_plane
+Core next startable (ready, no open order): (none)
+cutover done= False after= record_plane,review_queue,control_plane
+story done= True after= record_plane
+commander_page done= False after= record_plane,control_plane
+```
+
+Story's only serving order is P149, revision 8, installed/done, order
+`b258d208cd26`, serving `story`. Its text is:
+
+> every send-back wakes all units because verdicts declare no audience
+
+Its actual Works record is:
+
+> Merged to main as 74176e31a (#1678, delivered commit f72e47943); closed on merge evidence by owner directive 1520, run not re-observed: a send-back reaches only its unit and its order's thread, so other units take no turn for it, while a verdict every unit must act on still reaches all of them
+
+This is legitimately related to the story phase, but it is not acceptance of the
+whole phase's order/fleet story tools. The wrong rule is `PlanPhase.done`: all
+currently known serving subtasks closed does not mean the whole phase passed.
+The retained record was not edited or reopened. The completion-rule repair will
+use the phase's explicitly declared full-phase checked task, not infer completion
+from this serving set. pi-cn-phase7 owns that task type and its accepted-order
+semantics; I own its use in PlanPhase. Owner-confirmed review queue delivery is
+PR #1654, merge 41e4ec7319432755d75dcd8dbbab35839a4eb005.
+
+The expanded family test confirms story can start after record plane while
+control plane and cutover are still open; page starts after record and control
+plane without waiting for cutover. Both focused tests passed (2 passed, 16
+deselected, 1 pre-existing timeout-option warning, 5.37 seconds). The run used
+`--basetemp /home/ts/.cache/agent-scratch/pi-plan-claims/a2-view-check/pytest`;
+that owned disposable directory is retired after the run.
+
+A2's executable per-matrix-row comparison is newly authorized. It is not yet
+implemented. No failing parity rows or passing parity acceptance are asserted
+by this view-dependency checkpoint. B remains after A2.
