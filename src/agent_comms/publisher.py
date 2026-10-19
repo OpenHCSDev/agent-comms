@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from contextlib import ExitStack
 from dataclasses import replace
 from functools import partial
+from itertools import groupby
 
 from .bus_activity_index import ActivityClocks
 from pathlib import Path
@@ -29,6 +30,7 @@ from .channel_targets import CommandTarget, NamedTarget
 from .coordinator import Coordination
 from .delivery_policy import InitialDeliveryPolicy
 from .envelope_claim_transitions import (
+    ClaimOwner,
     ClaimRelease,
     ClaimTransition,
     FileClaimPath,
@@ -133,6 +135,36 @@ class PrivateWrites(Publisher):
 
 class ClaimWrites(PrivateWrites):
     """Publishes claim envelopes."""
+
+    def release_resources(self, boundary, claims: Sequence[ClaimOwner], wording: str) -> None:
+        """Release only still-current acquisitions, in bounded whole-set envelopes.
+
+        The resource lifetime supplies its original acquisition witnesses. A
+        delayed retirement cannot release a successor's generation or a manual
+        claim absent from that lifetime. The caller holds the native boundary.
+        """
+        from .messages import ClaimNoticeKind
+
+        metadata = self.log.private_marker_unlocked()
+        with boundary.bus_lock.current_source(self.log, metadata) as source:
+            owned = tuple(claim for claim in claims if source.claim(claim.resource) == claim)
+        ordered = sorted(owned, key=lambda claim: claim.incarnation)
+        for incarnation, records in groupby(ordered, key=lambda claim: claim.incarnation):
+            recorded = tuple(records)
+            owner = boundary.registry.require(recorded[0].owner)
+            worktree = Path(owner.worktree).absolute()
+            for offset in range(0, len(recorded), ClaimTransition.max_resources):
+                released = recorded[offset:offset + ClaimTransition.max_resources]
+                paths = (Path(claim.resource) for claim in released)
+                names = ", ".join(str(path.relative_to(worktree) if path.is_relative_to(worktree)
+                                      else path) for path in paths)
+                self._publish_claim_envelope_unlocked(
+                    boundary.bus_lock, boundary.registry,
+                    Message(owner.name, owner.name, f"{wording}: {names}", ClaimNoticeKind),
+                    worktree=worktree, incarnation=incarnation, activity=boundary.activity,
+                    releases=tuple(ClaimRelease(claim.resource, claim.generation)
+                                   for claim in released),
+                )
 
     def publish_claim_envelope(
         self,

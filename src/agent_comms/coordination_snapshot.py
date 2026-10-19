@@ -336,11 +336,7 @@ class RecoverySnapshot:
         belonging to a later attempt (or an unbound manual claim) is untouched.
         The caller retains wire/bus/registry exclusion through terminal commit.
         """
-        from .envelope_claim_transitions import ClaimRelease, ClaimTransition
-        from .messages import ClaimNoticeKind, Message
-        from itertools import groupby
-
-        bus, bus_lock, registry = boundary.bus, boundary.bus_lock, boundary.registry
+        bus, bus_lock = boundary.bus, boundary.bus_lock
         attempt = self.require_attempt()
         metadata = bus.log.private_marker_unlocked()
         with bus_lock.current_source(bus.log, metadata) as source:
@@ -353,31 +349,7 @@ class RecoverySnapshot:
             and claim.claim_scope.recipient_lookup == attempt.owner_lookup
             and claim.claim_scope.participant_generation == attempt.owner_generation
         )
-        if not owned:
-            return
-        owner = registry.threads[registry.canonical_name(attempt.owner_thread)]
-        from pathlib import Path
-
-        worktree = Path(owner.worktree).absolute()
-
-        def display_resource(claim) -> str:
-            resource = Path(claim.resource)
-            return str(resource.relative_to(worktree) if resource.is_relative_to(worktree) else resource)
-
-        ordered = sorted(owned, key=lambda claim: claim.incarnation)
-        for incarnation, records in groupby(ordered, key=lambda claim: claim.incarnation):
-            recorded = tuple(records)
-            for offset in range(0, len(recorded), ClaimTransition.max_resources):
-                released = recorded[offset:offset + ClaimTransition.max_resources]
-                names = ", ".join(display_resource(claim) for claim in released)
-                bus.publisher._publish_claim_envelope_unlocked(
-                    bus_lock, registry,
-                    Message(owner.name, owner.name,
-                            f"{outcome.release_wording}: {names}", ClaimNoticeKind),
-                    worktree=worktree, incarnation=incarnation, activity=boundary.activity,
-                    releases=tuple(ClaimRelease(claim.resource, claim.generation)
-                                   for claim in released),
-                )
+        bus.publisher.release_resources(boundary, owned, outcome.release_wording)
 
     def require_nonpublication_response(self) -> None:
         for obligation in self.obligations:

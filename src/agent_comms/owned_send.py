@@ -205,6 +205,18 @@ class OwnedSend(CodingToolOwner):
             )
             return committed.require_claim_transition().claimed(canonical)
 
+    async def release_resources(self) -> None:
+        """The ordinary turn owns its acquisitions through native/tool retirement."""
+        from .coordinator import Coordination
+
+        def release(store):
+            with store.session.boundary(self.comms.bus) as boundary:
+                boundary.bus.publisher.release_resources(
+                    boundary, tuple(self.claims.values()), "Released files after an ordinary turn"
+                )
+
+        await Coordination.run_async(self.comms.root / "coordination.sqlite3", release)
+
     def native_start(self, public_id: str | None, native_id: str, sent_text: str) -> bool:
         source = self.source(public_id)
         return source.valid_keys(sent_text) and all(
