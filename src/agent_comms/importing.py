@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections import deque
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
@@ -95,19 +95,11 @@ class ImportSnapshot:
         """A valid Pi v3 tree, using text-only portable historical context."""
         timestamp = datetime.now(UTC)
         iso = timestamp.isoformat()
-        milliseconds = int(timestamp.timestamp() * 1000)
         records: list[dict[str, object]] = [
             {"type": "session", "version": 3, "id": str(uuid4()), "timestamp": iso, "cwd": str(project)}
         ]
-        parent: str | None = None
-
-        def append(kind: str, payload: Mapping[str, object]) -> None:
-            nonlocal parent
-            entry_id = uuid4().hex[:16]
-            records.append({"type": kind, "id": entry_id, "parentId": parent, "timestamp": iso, **payload})
-            parent = entry_id
-
-        append("custom", {
+        parent = uuid4().hex[:16]
+        records.append({"type": "custom", "id": parent, "parentId": None, "timestamp": iso,
             "customType": "agent-comms-import",
             "data": FieldCodec.encode(ImportedSessionMetadata(
                 self.harness, self.source_id, self.messages_seen, len(self.messages),
@@ -125,9 +117,10 @@ class ImportSnapshot:
             context += "\nMost recent user request in the source session:\n" + self.latest_request
         if self.notices:
             context += "\nImport notes:\n" + "\n".join(self.notices)
-        append("message", {"message": ImportedInput(context).pi_message(milliseconds)})
-        for message in self.messages:
-            append("message", {"message": message.pi_message(milliseconds)})
+        for message in (ImportedInput(context), *self.messages):
+            entry = message.session_entry(parent, timestamp)
+            records.append(entry)
+            parent = entry["id"]
         return "".join(json.dumps(record, ensure_ascii=False) + "\n" for record in records)
 
     @property

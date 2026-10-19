@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, replace
+from datetime import datetime
+from uuid import uuid4
 from typing import TYPE_CHECKING, ClassVar
 from pydantic import JsonValue
 from urllib.parse import quote
@@ -44,6 +46,12 @@ class ImportedMessage(ABC):
 
     def remember(self, buffer: ImportBuffer) -> None:
         """Only a request is the source session's latest request."""
+
+    def session_entry(self, parent: str | None, timestamp: datetime) -> dict[str, object]:
+        """The portable message owns its saved SDK envelope as well as its role."""
+        return {"type": "message", "id": uuid4().hex[:16], "parentId": parent,
+                "timestamp": timestamp.isoformat(),
+                "message": self.pi_message(int(timestamp.timestamp() * 1000))}
 
     @abstractmethod
     def pi_message(self, timestamp: int) -> dict[str, object]: ...

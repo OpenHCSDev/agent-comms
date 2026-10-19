@@ -18,7 +18,9 @@ from .cli_result import CliResult
 from .comms import Comms
 from .fresh_private_session import create_fresh_private_session
 from .goals import NoGoal
+from .importing import ImportBuffer, ImportLimits
 from .launch_runtime import RestartEnvironment, ThreadLaunch
+from .native_entries import TranscriptProjection
 from .native_transcript import NativeTranscript
 from .read_basis import MemberActivityDisplayScope
 from .storage_rules import StorageRoots
@@ -100,7 +102,16 @@ class CheckRoot:
                 storage_roots=StorageRoots(copied.root / "scratch" / name),
                 turn_generation=0, last_finished_turn_id=None,
             )
-        copied.registry.restore_stopped(replace(snapshot, threads=declarations), names)
+        with copied.registry.store.editing() as edit:
+            edit.document.restore_stopped(snapshot, names)
+            edit.document.threads.update(declarations)
+            # Old messages can name people outside the selected workers. Keep
+            # only their deleted-name record, never their sessions or authority.
+            for name in snapshot.claimed_generations:
+                if not edit.document.taken(name):
+                    edit.document.advance_claim(name)
+                    edit.document.owners.advance(name)
+            edit.commit()
         if messages:
             for name in names:
                 copied.messaging.acknowledge_through(name, messages[-1].seq)
@@ -112,24 +123,23 @@ class CheckRoot:
             return session.session_file
         reader = NativeTranscript(Path(original))
         entries = tuple(reversed(tuple(islice(reader.tail(max_bytes=self.max_bytes), self.max_records))))
-        messages = tuple(entry for entry in entries if entry.is_message)
-        # Never copy an unfinished tool round, or start a window at its tool result.
-        last = next((i for i in range(len(messages) - 1, -1, -1) if messages[i].final_reply), None)
-        first = next((i for i, entry in enumerate(messages[:last + 1] if last is not None else ())
-                      if entry.input_boundary), None)
-        if first is None or last is None:
-            raise ValueError(f"{name}: newest session window has no complete user/reply exchange")
         routes = TranscriptRoutes(self.source.root)
         output_routes = TranscriptRoutes(copied.root)
         parent = None
+        limits = ImportLimits(messages=self.max_records, characters=self.max_bytes)
         with routes.for_session(original) as source_routes, session.path.open("a") as output:
-            for entry in messages[first:last + 1]:
-                entry = replace(entry, parent_id=parent)
-                output.write(json.dumps(entry.to_wire(), ensure_ascii=False) + "\n")
-                parent = entry.require_entry_id()
+            for entry in entries:
+                # Core's portable import owns tool/thought conversion to historical
+                # text. A newest window must never resume a partial old tool round.
+                buffer = ImportBuffer(limits)
                 routing = source_routes.get(entry.id)
-                if routing is not None:
-                    output_routes.record(session.session_file, (entry.id,), routing)
+                buffer.add(entry.events(TranscriptProjection(position=0, routing=routing)))
+                for message in buffer.messages:
+                    copied_entry = message.session_entry(parent, entry.timestamp.at)
+                    output.write(json.dumps(copied_entry, ensure_ascii=False) + "\n")
+                    parent = copied_entry["id"]
+                    if routing is not None:
+                        output_routes.record(session.session_file, (parent,), routing)
         return session.session_file
 
     def run(self, command: Sequence[str]) -> CheckRootResult:
