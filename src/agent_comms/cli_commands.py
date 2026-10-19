@@ -61,7 +61,7 @@ from .exporting import (
 )
 from .field_codec import FieldCodec, PathText, compile_decoder
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .presentation import CountedRead, InboxRead, UncountedRead
+from .presentation import CountedRead, InboxRead, ThreadRecord, UncountedRead
 from .harness_install import Harness, HarnessInstalled
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
@@ -620,7 +620,10 @@ class ChannelsResult(CliResult):
 
 @dataclass(frozen=True)
 class ThreadsResult(CliResult):
-    threads: tuple[Mapping[str, object], ...]
+    threads: tuple[ThreadRecord, ...]
+
+    def encoded(self) -> object:
+        return FieldCodec.project(self, "presence")
 
 
 @dataclass(frozen=True)
@@ -1372,7 +1375,7 @@ class ThreadsCliCommand(CliCommand):
     active_only: bool = option("--active-only", default=False)
 
     def apply(self, ctx: Comms) -> CliResult:
-        return ThreadsResult(tuple(ctx.views.list_threads(active_only=self.active_only)))
+        return ThreadsResult(ctx.views.list_threads(active_only=self.active_only))
 
 
 @dataclass(frozen=True, kw_only=True)

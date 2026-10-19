@@ -268,15 +268,15 @@ class TestThreadOps:
             wired.agents.observe_runtime_info("ghost", AgentInfo(model="model"))
 
     def test_list_threads_shape(self, wired):
-        rows = {row["name"]: row for row in wired.views.list_threads()}
+        rows = {row.thread.name: row for row in wired.views.list_threads()}
         assert set(rows) == {"PR111", "fixer"}
-        assert rows["fixer"]["status"] == "running"
-        assert rows["fixer"]["parent"] == "PR111"
-        assert rows["fixer"]["pending"] == 0
+        assert rows["fixer"].status.declared_name == "running"
+        assert rows["fixer"].thread.parent == "PR111"
+        assert rows["fixer"].pending.value == 0
 
     def test_list_active_only(self, wired):
         wired.owners.stop("fixer")
-        names = {row["name"] for row in wired.views.list_threads(active_only=True)}
+        names = {row.thread.name for row in wired.views.list_threads(active_only=True)}
         assert names == {"PR111"}
 
     @pytest.mark.parametrize("counted", [True, False])
@@ -288,7 +288,7 @@ class TestThreadOps:
                 "fixer", CountedRead() if counted else UncountedRead()).encoded(),
             "roster": next(row for row in (views.who() if counted else views.presence())
                            if row["name"] == "fixer"),
-            **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
+            **({"list": next(row.encoded() for row in views.list_threads() if row.thread.name == "fixer")}
                if counted else {}),
         }
         record = rows["detail"]
