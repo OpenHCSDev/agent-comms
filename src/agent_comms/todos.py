@@ -431,8 +431,9 @@ class UnplannedInstallDeadline(InstallDeadline):
         return [f"INSTALL not planned; waiting: {', '.join(waiting)}"] * bool(waiting)
 
     def refusal(self, work: str, commander: str) -> str:
-        return (f"{work.capitalize()} is the installer's work, and no install is planned. Plan one "
-                f"with agent-comms-commander order install HH:MM UNIT, then order the {work} from that unit.")
+        return (f"{work.capitalize()} is the installer's work, and no install is planned. "
+                "Plan one with agent-comms-commander order install HH:MM UNIT, "
+                f"then order the {work} from that unit.")
 
 
 @dataclass(frozen=True)
