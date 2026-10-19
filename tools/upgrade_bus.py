@@ -37,6 +37,7 @@ import sys
 import tarfile
 import tempfile
 import time
+from abc import ABC, abstractmethod
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass, replace
@@ -149,6 +150,10 @@ class Stack:
     @property
     def python(self) -> Path:
         return self.checkout / "stack/.venv/bin/python"
+
+    @property
+    def lock(self) -> Path:
+        return self.checkout / "stack/uv.lock"
 
     @property
     def uv(self) -> Path:
@@ -412,15 +417,65 @@ def upgrade(checkout: Path, root: Path, target: str, installer: str, rehearse_on
         try:
             staged = Stack(revisions.tree(target))
             staged.relock()
+            install = Install.of(checkout, root, current, target, pending, installed, staged, revisions,
+                                 installer)
             report = {"from": current, "to": target, "pending": [step.name for step in pending],
-                      "rehearsal": rehearse(root, pending, staged, revisions)}
+                      "rehearsal": install.rehearsal()}
             if rehearse_only:
                 return report
-            report["live"] = live(checkout, root, current, target, pending, installed, staged, revisions,
-                                  installer)
+            report["live"] = install.live()
             return report
         finally:
             revisions.close()
+
+
+@dataclass(frozen=True)
+class Install(ABC):
+    """One run once the target's stack is relocked: what it changes on the bus."""
+
+    checkout: Path
+    root: Path
+    current: str
+    target: str
+    pending: tuple[Step, ...]
+    installed: Stack
+    staged: Stack
+    revisions: Revisions
+    installer: str
+
+    @classmethod
+    def of(cls, checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
+           installed: Stack, staged: Stack, revisions: Revisions, installer: str) -> Install:
+        unchanged = current == target and staged.lock.read_bytes() == installed.lock.read_bytes()
+        member = (ChangedInstall, UnchangedInstall)[unchanged]
+        return member(checkout, root, current, target, pending, installed, staged, revisions, installer)
+
+    @abstractmethod
+    def rehearsal(self) -> dict: ...
+
+    @abstractmethod
+    def live(self) -> dict: ...
+
+
+class ChangedInstall(Install):
+    def rehearsal(self) -> dict:
+        return rehearse(self.root, self.pending, self.staged, self.revisions)
+
+    def live(self) -> dict:
+        return live(self.checkout, self.root, self.current, self.target, self.pending,
+                    self.installed, self.staged, self.revisions, self.installer)
+
+
+class UnchangedInstall(Install):
+    """The checkout already sits at the target and the relocked lock is the installed one:
+    nothing to rehearse, hold or restart. It only plans the next install."""
+
+    def rehearsal(self) -> dict:
+        return {"unchanged": self.target}
+
+    def live(self) -> dict:
+        PlannedInstallDeadline.after(self.installer, time.time()).plan(self.root)
+        return {"unchanged": self.target}
 
 
 def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[Step, ...],
@@ -432,7 +487,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     before_stop(root, pending, staged, revisions)
     maintenance = MaintenanceBarrier(root / "registry.json")
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
-    lock = checkout / "stack/uv.lock"
+    lock = installed.lock
     transcripts = ExitStack()
     try:
         for name in running:
