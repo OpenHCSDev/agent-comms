@@ -70,7 +70,7 @@ from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
 from .message_page import PageBounds
 from .message_reference import MessageReference
 from .page_traversal import OlderTraversal, PageCursor
-from .messages import InfoKind, Message, MessageKind
+from .messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, MessageRoleName
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
@@ -1060,6 +1060,9 @@ class SendCliCommand(CliCommand):
     type: Type[MessageKind] = option(
         "--type", default=InfoKind, choices=MessageKind.sendable_names(), editor=ChoiceTargetField
     )
+    role: Annotated[MessageRole, MessageRoleName] = option(
+        "--role", default_factory=ConversationRole, choices=MessageRole.names(),
+    )
     report: dict[str, Any] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
         normalize=_report_fields,
@@ -1067,7 +1070,7 @@ class SendCliCommand(CliCommand):
 
     def apply(self, ctx: Comms) -> CliResult:
         result = ctx.messaging.send(
-            self.sender, self.target, self.body, self.type,
+            self.sender, self.target, self.body, self.type, role=self.role,
             report=None if self.report is None
             else FieldCodec.decode(ChangeReport, self.report),
         )

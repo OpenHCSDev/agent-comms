@@ -16,7 +16,7 @@ from .change_report import FileLine, ChangeReport
 from .declared_family import DeclaredFamily
 from .envelope_claim_transitions import ClaimTransition
 from .errors import RelationViolationError
-from .field_codec import FieldCodec, InlineRecord, MalformedRecord, NullMember, projected
+from .field_codec import FieldCodec, FieldRepresentation, InlineRecord, MalformedRecord, NullMember, projected
 from .mentions import ThreadMention
 from .message_reference import MessageReference
 from .response_policy import InformationalPolicy, ResponseEligibility
@@ -148,7 +148,7 @@ class MessageRoleWire:
         return role.as_notice() if self.notice else role
 
 
-class MessageRole(InlineRecord):
+class MessageRole(InlineRecord, DeclaredFamily, affix="Role"):
     category: ClassVar[type[MessageCategory]]
 
     @classmethod
@@ -176,6 +176,22 @@ class MessageRole(InlineRecord):
             raise ValueError("a direct message must have exactly one frozen eligible recipient.")
         if tuple(member.canonical_thread for member in audience.recipients) != target.direct_names:
             raise ValueError("direct frozen recipient must match the exact stored target.")
+
+
+class MessageRoleName(FieldRepresentation):
+    """Command input names a sendable role; persisted messages keep their inline wire form."""
+
+    @classmethod
+    def encode(cls, value: MessageRole) -> str:
+        return FieldCodec.encode(type(value), type[MessageRole])
+
+    @classmethod
+    def decode(cls, value: object) -> MessageRole:
+        return FieldCodec.decode(type[MessageRole], value)()
+
+    @classmethod
+    def schema(cls):
+        return FieldCodec.value_schema(type[MessageRole])
 
 
 class InformationalMessage:
@@ -254,13 +270,13 @@ class Membership(InformationalMessage):
 
 
 @dataclass(frozen=True, slots=True)
-class MembershipConversationRole(Membership, ConversationRole):
+class MembershipConversationRole(Membership, ConversationRole, declared_name=None):
     def as_historical(self):
         return HistoricalMembershipConversationRole(self.change)
 
 
 @dataclass(frozen=True, slots=True)
-class MembershipNoticeRole(Membership, NoticeRole):
+class MembershipNoticeRole(Membership, NoticeRole, declared_name=None):
     def as_historical(self):
         return HistoricalMembershipNoticeRole(self.change)
 
@@ -281,19 +297,19 @@ class HistoricalRole:
         return super().as_notice().as_historical()
 
 
-class HistoricalConversationRole(HistoricalRole, ConversationRole):
+class HistoricalConversationRole(HistoricalRole, ConversationRole, declared_name=None):
     pass
 
 
-class HistoricalNoticeRole(HistoricalRole, NoticeRole):
+class HistoricalNoticeRole(HistoricalRole, NoticeRole, declared_name=None):
     pass
 
 
-class HistoricalMembershipConversationRole(HistoricalRole, MembershipConversationRole):
+class HistoricalMembershipConversationRole(HistoricalRole, MembershipConversationRole, declared_name=None):
     pass
 
 
-class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole):
+class HistoricalMembershipNoticeRole(HistoricalRole, MembershipNoticeRole, declared_name=None):
     pass
 
 

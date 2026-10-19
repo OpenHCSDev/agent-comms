@@ -14,7 +14,7 @@ from contextlib import ExitStack, closing, contextmanager
 from dataclasses import dataclass, field, replace
 from functools import cached_property, partial
 from pathlib import Path
-from typing import ClassVar, Generic, Literal, Self, TypeVar
+from typing import Annotated, ClassVar, Generic, Literal, Self, TypeVar
 
 from metaclass_registry import RegistryConfig
 from pydantic import Field, TypeAdapter, model_validator
@@ -38,7 +38,7 @@ from agent_comms.declared_family import DeclaredFamily
 from agent_comms.field_codec import FieldCodec
 from agent_comms.launch_runtime import LaunchRuntime
 from agent_comms.message_reference import MessageReference
-from agent_comms.messages import InfoKind, Message, MessageKind
+from agent_comms.messages import ConversationRole, InfoKind, Message, MessageKind, MessageRole, MessageRoleName
 from agent_comms.read_basis import ExplicitWatchAcknowledgment
 from agent_comms.runtime_updates import RuntimeUpdate, ThreadOutput
 from agent_comms.send_result import SendResult
@@ -256,16 +256,19 @@ class Send(Operation):
     target: str = field(metadata={'wire_name': 'to'})
     body: str
     kind: type[MessageKind] = field(metadata={'wire_name': 'type'})
+    role: Annotated[MessageRole, MessageRoleName] = field(default_factory=ConversationRole)
 
     @classmethod
     def add_arguments(cls, parser: argparse.ArgumentParser) -> None:
         parser.add_argument('--to', required=True)
         parser.add_argument('--body', required=True)
         parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
+        parser.add_argument('--role', default=MessageRoleName.encode(ConversationRole()),
+                            choices=MessageRole.names())
 
     async def run(self, bridge: CliBridge) -> None:
         result = await asyncio.to_thread(bridge.comms.messaging.send, bridge.binding.bus,
-                                         self.target, self.body, self.kind)
+                                         self.target, self.body, self.kind, role=self.role)
         await bridge.show_sent(result)
 
 
