@@ -17,6 +17,14 @@ def test_repository_identity_hash_and_existing_wire_form():
     assert FieldCodec.decode(RepositoryName, FieldCodec.encode(first)) == first
 
 
+def test_identity_uses_owned_components_not_rendered_text(monkeypatch):
+    first = RepositoryName("org", "first")
+    second = RepositoryName("org", "second")
+    monkeypatch.setattr(RepositoryName, "to_wire", lambda self: "display")
+    assert first != second
+    assert first == RepositoryName("ORG", "FIRST")
+
+
 def test_repository_config_json_and_saved_todo_have_the_same_identity(commander):
     comms, _ = commander
     todo = create(commander, "P1")

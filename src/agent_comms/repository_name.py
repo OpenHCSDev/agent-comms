@@ -21,19 +21,23 @@ class RepositoryName(WireValue):
         ):
             raise ValueError("Repo ID must have the exact owner/repo form.")
 
+    @property
+    def key(self) -> tuple[str, str]:
+        return self.owner.casefold(), self.name.casefold()
+
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, RepositoryName):
             return NotImplemented
-        return self.to_wire() == other.to_wire()
+        return self.key == other.key
 
     def __hash__(self) -> int:
-        return hash(self.to_wire())
+        return hash(self.key)
 
     def named(self, name: str) -> bool:
         return self.name.casefold() == name.casefold()
 
     def to_wire(self) -> str:
-        return f"{self.owner.casefold()}/{self.name.casefold()}"
+        return "/".join(self.key)
 
     @classmethod
     def from_wire(cls, data: object) -> RepositoryName:

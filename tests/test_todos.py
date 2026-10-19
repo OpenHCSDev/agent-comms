@@ -100,7 +100,8 @@ def test_commander_reads_decode_only_open_todos(tmp_path, monkeypatch):
                 assignment=None, order=delivered).insert(db)
     with closing(CoordinationStore.writer(store.path)) as db:
         indexes = tuple(name for name, in db.execute(
-            "SELECT name FROM sqlite_master WHERE type='index' AND name NOT LIKE 'sqlite_%'"))
+            "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='todo' "
+            "AND name NOT LIKE 'sqlite_%'"))
         for name in indexes:
             db.execute(f'DROP INDEX "{name}"')
         db.commit()
