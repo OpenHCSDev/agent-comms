@@ -23,7 +23,7 @@ from .native_transcript import RecordsCut
 from .thread_identity import ThreadIncarnation
 from .transcript_events import TranscriptEvent, TurnDigest
 from .transcript_sources import NoDraft, TranscriptDraft, TranscriptSource
-from .typed_table import Column, TypedRow, TypedStore, TypedTable
+from .typed_table import Column, ForeignKey, Index, TypedRow, TypedStore, TypedTable
 from .wire_watch import WatchSource, WireWatch
 
 if TYPE_CHECKING:
@@ -155,8 +155,15 @@ class ExternalPageRow(TypedRow):
 class ExternalItemRow(ExternalPageRow, TypedTable):
     """A stable item position; older pages prepend without moving saved cursors."""
 
-    events: tuple[TranscriptEvent, ...]
     unique = (("thread", "seq"),)
+    indexes = (Index(("thread", "turn_id", "seq")),)
+
+    def events_in(self, connection) -> tuple[TranscriptEvent, ...]:
+        return tuple(row.event for row in ExternalEventRow.select(
+            connection, thread=self.thread, seq=self.seq, order_by=("ordinal",)))
+
+    def record(self, connection) -> ExternalRecord:
+        return ExternalRecord(self.seq, self.events_in(connection))
 
     @classmethod
     def recent_turn_ids(cls, connection: Connection, thread: str) -> Generator[str]:
@@ -168,6 +175,57 @@ class ExternalItemRow(ExternalPageRow, TypedTable):
                 if row.turn_id not in identities:
                     identities.add(row.turn_id)
                     yield row.turn_id
+
+
+@dataclass(frozen=True)
+class ExternalEventRow(TypedTable):
+    """Each saved event exists once; SQL derives its query keys from that event."""
+
+    thread: str = field(metadata={"sql": Column(primary_key=True)})
+    seq: int = field(metadata={"sql": Column(primary_key=True)})
+    ordinal: int = field(metadata={"sql": Column(primary_key=True)})
+    event: TranscriptEvent
+    timestamp: float | None = field(metadata={"sql": Column(
+        generated="json_extract({event}, '$.timestamp')")})
+    kind: str = field(metadata={"sql": Column(generated="json_extract({event}, '$.kind')")})
+    tool: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool.tool')")})
+    call_id: str | None = field(metadata={"sql": Column(generated="json_extract({event}, '$.tool_call_id')")})
+
+    foreign_keys = (ForeignKey(("thread", "seq"), ExternalItemRow, ("thread", "seq"), on_delete="CASCADE"),)
+    indexes = (Index(("thread", "kind", "tool", "timestamp", "call_id")),)
+
+    @classmethod
+    def append(cls, connection, thread, seq, events) -> None:
+        for ordinal, event in enumerate(events):
+            cls(thread, seq, ordinal, event, None, "", None, None).insert(connection)
+
+    @classmethod
+    def unjudged_query(cls, thread, todo):
+        from .native_tools import MutatingPathTool
+        from .tool_declaration import ToolDeclaration
+        from .transcript_events import ToolStartTranscript
+
+        tools = tuple(tool.declared_name for tool in ToolDeclaration.members_with(MutatingPathTool))
+        judged = tuple(verdict.tool_call_id for verdict in todo.verdicts)
+        placeholders = lambda values: ",".join("?" for _ in values)
+        since = todo.order.at.recorded_at("An order")
+        # Undated calls belong to their turn: keep them only if that turn is
+        # undated or has dated evidence at/after the order. No history body is read.
+        table, items = cls.declared_name, ExternalItemRow.declared_name
+        where = (
+            f'e.thread=? AND e.kind=? AND e.tool IN ({placeholders(tools)}) '
+            'AND (e.timestamp>=? OR (e.timestamp IS NULL AND COALESCE(('
+            f'SELECT dated.timestamp FROM "{items}" item JOIN "{items}" sibling '
+            'ON sibling.thread=item.thread AND sibling.turn_id=item.turn_id '
+            f'JOIN "{table}" dated ON dated.thread=sibling.thread AND dated.seq=sibling.seq '
+            'WHERE item.thread=e.thread AND item.seq=e.seq AND dated.timestamp IS NOT NULL '
+            'ORDER BY sibling.seq DESC, dated.ordinal DESC LIMIT 1), ?) >= ?))'
+        )
+        parameters = (thread, ToolStartTranscript.declared_name, *tools, since, since, since)
+        if judged:
+            where += f' AND e.call_id NOT IN ({placeholders(judged)})'
+            parameters += judged
+        return where, parameters
 
 
 @dataclass(frozen=True)
@@ -272,7 +330,7 @@ class StoreRead(TranscriptSource):
             self.connection, where=where, parameters=parameters, order_by=("seq",),
             descending=descending, thread=self.transcript.lookup)) as rows:
             for row in rows:
-                yield ExternalRecord(row.seq, row.events)
+                yield row.record(self.connection)
 
     def turns(self, bound: TurnBound) -> tuple[TurnDigest, ...]:
         with closing(ExternalItemRow.recent_turn_ids(self.connection, self.transcript.lookup)) as ids:
@@ -282,8 +340,25 @@ class StoreRead(TranscriptSource):
                     for row in ExternalItemRow.select(
                         self.connection, thread=self.transcript.lookup, turn_id=turn_id,
                         order_by=("seq",))
-                    for event in row.events))
+                    for event in row.events_in(self.connection)))
                 for turn_id in ids)
+
+    def unjudged(self, todo):
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
+        with closing(self.connection.execute(
+            f'SELECT e.event FROM "{ExternalEventRow.declared_name}" e '
+            f'WHERE {where} ORDER BY e.seq DESC, e.ordinal DESC', parameters)) as rows:
+            from .field_codec import FieldCodec
+            for encoded, in rows:
+                event = FieldCodec.decode(TranscriptEvent, FieldCodec.parse(encoded))
+                yield from event.edit_calls(todo.held().owner, todo.id,
+                                            todo.order.at.recorded_at("An order"))
+
+    def unjudged_count(self, todo) -> int:
+        where, parameters = ExternalEventRow.unjudged_query(self.transcript.lookup, todo)
+        return self.connection.execute(
+            f'SELECT count(DISTINCT e.call_id) FROM "{ExternalEventRow.declared_name}" e WHERE {where}',
+            parameters).fetchone()[0]
 
 @dataclass(frozen=True, slots=True)
 class ExternalTranscript(TranscriptSource, TypedStore):
@@ -292,7 +367,7 @@ class ExternalTranscript(TranscriptSource, TypedStore):
     root: Path
     incarnation: ThreadIncarnation
     filename: ClassVar[str] = "external_transcripts.sqlite3"
-    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalDraftRow)
+    rows: ClassVar[tuple[type[TypedTable], ...]] = (ExternalItemRow, ExternalEventRow, ExternalDraftRow)
     # The CLI keeps its own items; a lost tail is republished when a watch starts.
     synchronous: ClassVar[str] = "NORMAL"
 
@@ -317,7 +392,8 @@ class ExternalTranscript(TranscriptSource, TypedStore):
         key = dict(thread=self.lookup, turn_id=turn_id, item_id=item_id)
         if ExternalItemRow.count(connection, **key):
             return False
-        ExternalItemRow(seq=seq, events=events, **key).insert(connection)
+        ExternalItemRow(seq=seq, **key).insert(connection)
+        ExternalEventRow.append(connection, self.lookup, seq, events)
         return True
 
     def oldest(self, connection) -> ExternalPageRow | NoItems:

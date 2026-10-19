@@ -17,6 +17,7 @@ from .tool_declaration import EditCall
 
 if TYPE_CHECKING:
     from .threads import Thread
+    from .todos import Todo
 
 
 @dataclass(frozen=True)
@@ -91,19 +92,43 @@ class TurnDigestRead(ConversationPreparation):
         return ThreadTurns(self.thread.incarnation,
                            self.thread.execution.prepare_conversation(self))
 
-    def unjudged(self, todo) -> tuple[EditCall, ...]:
-        """Each native call once, judged only by this order's own verdicts."""
-        judged = {verdict.tool_call_id for verdict in todo.verdicts}
-        since = todo.order.at.recorded_at("An order")
-        edits = {edit.id: edit for turn in reversed(self.read().turns)
-                 for event in turn.events
-                 for edit in event.edit_calls(self.thread.name, todo.id, since)
-                 if edit.id not in judged}
-        return tuple(reversed(edits.values()))
-
     def native(self) -> tuple[TurnDigest, ...]:
         return self.thread.runtime.history_source(self.root, self.thread.incarnation).turns(self.bound)
 
     def external(self) -> tuple[TurnDigest, ...]:
         with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
             return source.turns(self.bound)
+
+
+@dataclass(frozen=True)
+class OrderEditsRead(TurnDigestRead):
+    """Original unjudged calls; the transcript owner selects its indexed read."""
+
+    todo: Todo
+
+    def read(self):
+        return self.thread.execution.prepare_conversation(self)
+
+    def native(self) -> tuple[EditCall, ...]:
+        judged = {verdict.tool_call_id for verdict in self.todo.verdicts}
+        since = self.todo.order.at.recorded_at("An order")
+        edits = {edit.id: edit for turn in reversed(super().native())
+                 for event in turn.events
+                 for edit in event.edit_calls(self.thread.name, self.todo.id, since)
+                 if edit.id not in judged}
+        return tuple(reversed(edits.values()))
+
+    def external(self) -> tuple[EditCall, ...]:
+        with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
+            return tuple(source.unjudged(self.todo))
+
+
+class OrderEditCountRead(OrderEditsRead):
+    """Load needs a count, never external event bodies or edit hunks."""
+
+    def native(self) -> int:
+        return len(super().native())
+
+    def external(self) -> int:
+        with ExternalTranscript(self.root, self.thread.incarnation).reading() as source:
+            return source.unjudged_count(self.todo)
