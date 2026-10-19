@@ -49,6 +49,9 @@ class GoalWait(ABC):
     def consume_reply(self, waits: GoalWaits, goal_id: str) -> bool:
         return False
 
+    def idle_execution(self) -> IdleGoalExecution:
+        return IdleGoalExecution()
+
     def project(self, goal: Goal, snapshot: RegistrySnapshot, agents: AgentActivity) -> GoalExecution:
         return GoalExecution(
             GoalExecutionState.for_domain_state(goal.state),
@@ -310,10 +313,7 @@ class GoalWaits(RootFile, ThreadOwnedState, LockedStore[dict[str, RecordedGoalWa
         agents: AgentActivity,
     ) -> ThreadGoalExecution:
         """Resolve absence once beside the goal/wait acquisition."""
-        return goal.project(
-            lambda current: cls.for_goal(current, rows).project(current, snapshot, agents),
-            IdleGoalExecution,
-        )
+        return goal.describe_execution(cls.for_goal(goal, rows), snapshot, agents)
 
     @staticmethod
     def current_waits(goal: GoalDeclaration, rows: dict[str, RecordedGoalWait],

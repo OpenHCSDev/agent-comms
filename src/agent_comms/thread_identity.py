@@ -12,7 +12,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from dataclasses import dataclass, field, fields, replace
 from functools import cached_property
-from typing import TYPE_CHECKING, Callable, ClassVar, TypeVar
+from typing import TYPE_CHECKING, Callable, ClassVar, Self, TypeVar
 
 from .agent_backend import AgentBackend, RuntimeLocation
 from .channel_targets import Tag
@@ -342,6 +342,35 @@ class TurnIdentity:
     def resolved(self, snapshot: RegistryProvenance) -> TurnIdentity:
         """Resolve the original incarnation; retain this turn allocation."""
         return replace(self, incarnation=self.incarnation.resolved(snapshot))
+
+
+@dataclass(frozen=True, slots=True)
+class TurnFence:
+    """One exact turn identity and its recorded input generation."""
+
+    identity: TurnIdentity
+    turn_id: str
+    claimed_generation: int = field(metadata={"wire_name": "admission_generation"})
+
+    def renamed(self, name: str) -> Self:
+        """Registry alias resolution changes the name, never incarnation or epochs."""
+        return replace(self, identity=replace(
+            self.identity, incarnation=replace(self.identity.incarnation, name=name)
+        ))
+
+    def can_attest(self, claim_scope: int) -> bool:
+        return (self.identity.generation > 0 and self.claimed_generation > 0
+                and self.claimed_generation == claim_scope)
+
+    def __eq__(self, other: object) -> bool:
+        """Lease and finished observations share the same turn identity."""
+        if not isinstance(other, TurnFence):
+            return NotImplemented
+        return (
+            self.identity == other.identity
+            and self.turn_id == other.turn_id
+            and self.claimed_generation == other.claimed_generation
+        )
 
 
 @dataclass(slots=True)

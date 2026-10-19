@@ -41,7 +41,7 @@ from .errors import (
 from .coordination_errors import StaleRevision
 from .field_codec import FieldCodec, MalformedRecord
 from .messages import Message
-from .private_path import FileIdentity, FileRevision
+from .private_path import AbsentPath, FileIdentity, FileRevision, ObservedPath
 from .private_bus_checkpoint import RecordedContextManifestSources
 from .store_files import (
     ExclusiveLock,
@@ -66,7 +66,7 @@ def _notify_candidates(log: WireLog, through_bytes: int) -> None:
 
 
 @dataclass(frozen=True)
-class WireSnapshot(ABC):
+class WireSnapshot(ObservedPath):
     """One fixed bus cut; its concrete source owns availability and reading."""
 
     metadata: WireMetadata
@@ -86,9 +86,6 @@ class WireSnapshot(ABC):
     @property
     @abstractmethod
     def position(self) -> int: ...
-
-    @abstractmethod
-    def same_file(self, identity: FileIdentity) -> bool: ...
 
     @abstractmethod
     def changed_since(self, revision) -> bool: ...
@@ -175,14 +172,11 @@ class WireSnapshot(ABC):
                 yield message, raw_size
 
 
-class AbsentWireSnapshot(WireSnapshot):
+class AbsentWireSnapshot(WireSnapshot, AbsentPath):
     """No descriptor existed at acquisition; later appends stay outside this cut."""
 
     complete_prefix = EmptyWirePrefix()
     boundary = position = 0
-
-    def same_file(self, identity: FileIdentity) -> bool:
-        return False
 
     def changed_since(self, revision) -> bool:
         return revision is not None
