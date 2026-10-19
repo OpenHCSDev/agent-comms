@@ -1416,8 +1416,9 @@ class ThreadCliCommand(CliCommand):
     help = "Detail for one thread"
     name: str = option("--name")
     read: InboxRead = option(
-        "--no-pending", help="Skip the inbox count for fast metadata reads", default_factory=CountedRead,
-        parser_default=CountedRead.declared_name, action="store_const", const=UncountedRead.declared_name)
+        "--no-pending", help="Skip the inbox count for fast metadata reads",
+        default_factory=CountedRead, parser_default=CountedRead.declared_name,
+        action="store_const", const=UncountedRead.declared_name)
 
     def apply(self, ctx: Comms) -> CliResult:
         return ctx.views.thread_detail(self.name, self.read)

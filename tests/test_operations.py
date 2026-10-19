@@ -7,18 +7,18 @@ from dataclasses import replace
 
 import pytest
 
-from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
-from agent_comms.presentation import CountedRead, UncountedRead
 from agent_comms.activity import ActivityState
 from agent_comms.agent_events import AgentInfo, ContextUsageObservation
 from agent_comms.child_process import ParentedProcess, ProcessIdentity
 from agent_comms.comms import wire
 from agent_comms.errors import RelationViolationError, UnregisteredThreadError
+from agent_comms.history_views import CallingThreadTarget, NamedThreadTarget
 from agent_comms.launch_runtime import CallingThreadUnavailable, ThreadLaunch
 from agent_comms.message_page import PageBounds
 from agent_comms.messages import QuestionKind
 from agent_comms.pi_counts import PiCount
 from agent_comms.pi_vocabulary import HighThinkingLevel
+from agent_comms.presentation import CountedRead, UncountedRead
 from agent_comms.read_basis import NamedViewer
 from agent_comms.thread_management import ForkSpec, NewThreadSpec
 from agent_comms.threads import Thread
@@ -272,7 +272,8 @@ class TestThreadOps:
         """list_threads, thread_detail and who/presence write one thread's record from one parent."""
         views = wired.views
         rows = {
-            "detail": views.thread_detail("fixer", CountedRead() if counted else UncountedRead()).encoded(),
+            "detail": views.thread_detail(
+                "fixer", CountedRead() if counted else UncountedRead()).encoded(),
             "roster": next(row for row in (views.who() if counted else views.presence())
                            if row["name"] == "fixer"),
             **({"list": next(row for row in views.list_threads() if row["name"] == "fixer")}
