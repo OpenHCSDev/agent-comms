@@ -129,11 +129,11 @@ def test_managed_and_ephemeral_launches_own_distinct_extension_arguments(
 
     options = dict(package=native_runtime_package, worktree=tmp_path, root=tmp_path)
     ephemeral = NativePiRpcLaunch.catalog("pi", (), **options)
-    managed = NativePiRpcLaunch.managed("pi", (), **options)
+    managed = NativePiRpcLaunch.managed("pi", (), **options, directory=tmp_path)
     assert "--no-extensions" in ephemeral.argv and "-e" not in ephemeral.argv
     assert managed.argv.index("--no-extensions") < managed.argv.index("-e")
     assert managed.retained_managed("pi", (), worktree=tmp_path, root=tmp_path,
-        environment=None, session_file=None) == managed
+        environment=None, session_file=None, directory=tmp_path) == managed
     print("P576_EPHEMERAL=" + shlex.join(ephemeral.argv))
     print("P576_MANAGED=" + shlex.join(managed.argv))
 
