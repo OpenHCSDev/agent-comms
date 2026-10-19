@@ -27,7 +27,7 @@ from ..tool_caller import ThreadCaller
 from ..tools import CommsRuleReviewTool, StandingRulesRead
 from .config import CommanderConfig
 from .context import CommanderContext
-from .order import CommanderVerb
+from .order import Commander, CommanderVerb
 
 PAPER = f'{CommanderConfig.packaged_rules()}/correct-maintenance.md'
 DRAWN = 3
@@ -87,8 +87,8 @@ class RulesVerb(CommanderVerb):
 class ReviewVerb(RulesVerb):
     help = "print the standing rules and draw the required review"
 
-    def run(self) -> None:
-        review(self.context, self.who)
+    def run(self, ctx: Commander) -> None:
+        review(ctx, self.who(ctx))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -97,19 +97,19 @@ class AnswerVerb(RulesVerb):
     n: int = option("n", help="the drawn rule number")
     text: str = option("text", help="how this tick obeys or breaks that rule")
 
-    def run(self) -> None:
-        answer(self.context, self.n, self.text, self.who)
+    def run(self, ctx: Commander) -> None:
+        answer(ctx, self.n, self.text, self.who(ctx))
 
 
 class StaleVerb(RulesVerb):
     help = "show whether the acting commander's rule review is due"
 
-    def run(self) -> None:
-        print('\n'.join(due.why for due in RulesDue.violations(self.context.comms, self.who)) or 'fresh')
+    def run(self, ctx: Commander) -> None:
+        print('\n'.join(due.why for due in RulesDue.violations(ctx.comms, self.who(ctx))) or 'fresh')
 
 
-def main(a: list[str], commander: CommanderContext) -> None:
+def main(a: list[str], commander: Commander) -> None:
     try:
-        RulesVerb.parse(a, __doc__, commander).apply()
+        RulesVerb.parse(a, __doc__).apply(commander)
     except ValueError as refused:  # Core owns what a review and an answer may say
         sys.exit(f'REFUSED: {refused}')

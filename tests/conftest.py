@@ -294,7 +294,7 @@ def commander_script(commander, tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     for command in (("init", "-q"), ("remote", "add", "origin", "https://github.com/OpenHCSDev/agent-comms.git")):
         subprocess.run(["git", "-C", str(repo), *command], check=True)
     from agent_comms.commander import order
-    context = order.Commander.of(CommanderConfig.read_root(comms.root))
+    context = order.Commander.read_root(comms.root)
     from agent_comms.rule_reviews import DrawnRuleReviewEntry, AnsweredRuleReviewEntry
     from agent_comms.tools import CommsRuleReviewTool
     from agent_comms.tool_caller import ThreadCaller

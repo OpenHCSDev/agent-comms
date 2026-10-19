@@ -17,7 +17,7 @@ from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
 from ..todos import Todo
 from .context import CommanderContext
-from .order import CommanderVerb, RuledVerb, hhmm
+from .order import Commander, CommanderVerb, RuledVerb, hhmm
 
 
 def open_requests(commander: CommanderContext) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
@@ -36,8 +36,8 @@ class RequestAddVerb(RequestVerb, RuledVerb, declared_name="add"):
     help = "record an owner request as the commander's Goal; prints its id"
     text: str = option("text")
 
-    def run(self) -> None:
-        goal = self.context.comms.goals.update_goal(self.context.commander, SetGoalAction(text=self.text, order=RequestGoalOrder()))
+    def run(self, ctx: Commander) -> None:
+        goal = ctx.comms.goals.update_goal(ctx.commander, SetGoalAction(text=self.text, order=RequestGoalOrder()))
         print(goal.require().id)
 
 
@@ -47,17 +47,17 @@ class RequestCompleteVerb(RequestVerb, RuledVerb, declared_name="complete"):
     id: str = option("id")
     why: str = option("--why")
 
-    def run(self) -> None:
+    def run(self, ctx: Commander) -> None:
         expect = GoalPrecondition(goal_id=self.id, expected_state=ActiveGoal())
-        self.context.comms.goals.update_goal(self.context.commander, CompletedGoalAction(progress=self.why, expect=expect))
+        ctx.comms.goals.update_goal(ctx.commander, CompletedGoalAction(progress=self.why, expect=expect))
         print(f"{self.id} done")
 
 
 class RequestListVerb(RequestVerb, declared_name="list"):
     help = "the open request and the open orders serving it"
 
-    def run(self) -> None:
-        requests = open_requests(self.context)
+    def run(self, ctx: Commander) -> None:
+        requests = open_requests(ctx)
         if not requests:
             print("No open request.")
         for goal, served in requests:
@@ -66,5 +66,5 @@ class RequestListVerb(RequestVerb, declared_name="list"):
                 print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
 
 
-def main(a: list[str], commander: CommanderContext) -> None:
-    RequestVerb.parse(a, __doc__, commander).apply()
+def main(a: list[str], commander: Commander) -> None:
+    RequestVerb.parse(a, __doc__).apply(commander)

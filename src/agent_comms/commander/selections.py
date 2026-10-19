@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, replace
 
 from ..change_report import FileLine
@@ -11,17 +10,11 @@ from ..thread_identity import ThreadIncarnation
 from ..todos import Assignment, WithdrawTodo
 
 
-class AssignmentTrace(ABC):
+class AssignmentTrace:
     @classmethod
     def read(cls, text: str) -> AssignmentTrace:
-        return TracedAssignment(FileLine.from_wire(text)) if text else UntracedAssignment()
+        return TracedAssignment(FileLine.from_wire(text)) if text else cls()
 
-    @abstractmethod
-    def order(self, action: OrderGoalAction) -> OrderGoalAction: ...
-
-
-@dataclass(frozen=True)
-class UntracedAssignment(AssignmentTrace):
     def order(self, action: OrderGoalAction) -> OrderGoalAction:
         return action
 
@@ -34,17 +27,11 @@ class TracedAssignment(AssignmentTrace):
         return replace(action, traced=self.where)
 
 
-class TransferReason(ABC):
+class TransferReason:
     @classmethod
     def read(cls, text: str) -> TransferReason:
-        return ChangedAssignee(text) if text else SameAssignee()
+        return ChangedAssignee(text) if text else cls()
 
-    @abstractmethod
-    def errors(self) -> tuple[str, ...]: ...
-
-
-@dataclass(frozen=True)
-class SameAssignee(TransferReason):
     def errors(self) -> tuple[str, ...]:
         return ()
 
@@ -63,17 +50,11 @@ class ChangedAssignee(TransferReason):
         )
 
 
-class StrikeSelection(ABC):
+class StrikeSelection:
     @classmethod
     def read(cls, text: str) -> StrikeSelection:
-        return StrikeAt(text) if text else LatestStrike()
+        return StrikeAt(text) if text else cls()
 
-    @abstractmethod
-    def includes(self, clock: str) -> bool: ...
-
-
-@dataclass(frozen=True)
-class LatestStrike(StrikeSelection):
     def includes(self, clock: str) -> bool:
         return True
 
@@ -86,19 +67,11 @@ class StrikeAt(StrikeSelection):
         return self.clock == clock
 
 
-class WithdrawalSelection(ABC):
+class WithdrawalSelection:
     @classmethod
     def read(cls, text: str) -> WithdrawalSelection:
-        return SupersededOrder(text) if text else MistakenOrder()
+        return SupersededOrder(text) if text else cls()
 
-    @abstractmethod
-    def operation(
-        self, revision: int, actor: ThreadIncarnation, previous: Assignment, why: str
-    ) -> WithdrawTodo: ...
-
-
-@dataclass(frozen=True)
-class MistakenOrder(WithdrawalSelection):
     def operation(
         self, revision: int, actor: ThreadIncarnation, previous: Assignment, why: str
     ) -> WithdrawTodo:

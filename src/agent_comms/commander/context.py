@@ -7,7 +7,6 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Self, cast
 
 from pydantic import PrivateAttr
 
@@ -16,10 +15,10 @@ from ..external_transcript import ExternalTranscript
 from ..goals import OrderCheck
 from ..messages import Message
 from ..recorded_time import EventTime
-from ..todos import OrderProgress, Todo, VerdictAudience
+from ..todos import OrderProgresses, Todo, VerdictAudience
 from ..tool_caller import ThreadCaller
 from ..tool_result import ToolResult
-from ..tools import CommsSendTool, CommsTodoListTool, MessagePublished, TodoList, ToolRequest
+from ..tools import CommsSendTool, CommsTodoListTool, ToolRequest
 from .config import CommanderConfig
 
 
@@ -59,25 +58,16 @@ class CommanderContext(CommanderConfig):
     def comms(self) -> Comms:
         return self._comms
 
-    @classmethod
-    def of(cls, config: CommanderConfig) -> Self:
-        return cls.model_construct(
-            **{name: getattr(config, name) for name in type(config).model_fields}
-        )
-
-    def call(self, tool: ToolRequest[ThreadCaller]) -> ToolResult:
+    def call[Result: ToolResult](self, tool: ToolRequest[ThreadCaller, Result]) -> Result:
         """Every write uses the selected commander's identity and root."""
         return ThreadCaller(self.commander).invoke(tool, self.comms)
 
     def post(self, audience: VerdictAudience, body: str) -> str:
         target = audience.threads[0] if len(audience.threads) == 1 else "#comms"
-        message = cast(
-            MessagePublished,
-            self.call(
-                CommsSendTool(
-                    sender=self.commander, target=target, body=body, audience=audience.threads
-                )
-            ),
+        message = self.call(
+            CommsSendTool(
+                sender=self.commander, target=target, body=body, audience=audience.threads
+            )
         )
         return message.id
 
@@ -99,8 +89,8 @@ class CommanderContext(CommanderConfig):
     def units(self) -> frozenset[str]:
         return self.comms.goals.todos.units(self.comms.registry.require(self.commander).incarnation)
 
-    def progress(self) -> dict[str, OrderProgress]:
-        listed = cast(TodoList, self.call(CommsTodoListTool()))
+    def progress(self) -> OrderProgresses:
+        listed = self.call(CommsTodoListTool())
         return listed.progress
 
     def importers(self, modules: set[str], check: OrderCheck) -> list[str]:

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Annotated, NoReturn
+from typing import TYPE_CHECKING, Annotated, NoReturn, Self
 
 from .cli_result import ToolCatalogResult, ThreadToolCatalogResult
 from .launch_runtime import CallingThreadUnavailable
@@ -30,7 +30,9 @@ class ToolCaller(ABC):
         return ThreadCaller(actor) if actor else NoThreadCaller()
 
     @abstractmethod
-    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult: ...
+    def invoke[Result: ToolResult](
+        self, request: ToolRequest[Self, Result], comms: Comms
+    ) -> Result: ...
 
     @abstractmethod
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing: ...
@@ -55,7 +57,9 @@ class ToolCaller(ABC):
 
 @dataclass(frozen=True)
 class NoThreadCaller(ToolCaller):
-    def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
+    def invoke[Result: ToolResult](
+        self, request: ToolRequest[NoThreadCaller, Result], comms: Comms
+    ) -> Result:
         return request.apply_without_thread(comms, self)
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
@@ -86,7 +90,9 @@ class NoThreadCaller(ToolCaller):
 class ThreadCaller(ToolCaller):
     name: str
 
-    def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
+    def invoke[Result: ToolResult](
+        self, request: ToolRequest[ThreadCaller, Result], comms: Comms
+    ) -> Result:
         return request.apply(comms, self)
 
     def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:

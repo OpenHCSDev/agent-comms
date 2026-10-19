@@ -1055,6 +1055,23 @@ class LocatedProblemFinding(ProblemFinding):
         return (f"Where: {self.where.to_wire()}",)
 
 
+@dataclass(frozen=True)
+class ProgressedOrder:
+    order: ProblemOrder
+    progress: OrderProgress
+
+
+@dataclass(frozen=True)
+class OrderProgresses:
+    entries: tuple[ProgressedOrder, ...] = ()
+
+    def __getitem__(self, order: ProblemOrder) -> OrderProgress:
+        for entry in self.entries:
+            if entry.order == order:
+                return entry.progress
+        raise KeyError(order)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
@@ -1078,7 +1095,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     def withdrawals(self, todo: Todo) -> tuple[str, ...]:
         return ()
 
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+    def waiting_on_install(self, todo: Todo, read: OrderProgresses) -> tuple[Todo, ...]:
         return ()
 
     def closing_artifact(self) -> str:
@@ -1246,7 +1263,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
         """How this order retired its problem without delivery, as the record and board say."""
         return ()
 
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+    def waiting_on_install(self, todo: Todo, read: OrderProgresses) -> tuple[Todo, ...]:
         """The order waiting on the fleet's install to record it working."""
         return ()
 
@@ -1270,9 +1287,9 @@ class PendingProblemOrder(CheckedProblemOrder):
         if self.id != order_id:
             raise ValueError("The order changed; refresh its state before delivering it.")
 
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+    def waiting_on_install(self, todo: Todo, read: OrderProgresses) -> tuple[Todo, ...]:
         """An undelivered order waits on install once its PR merged."""
-        return read[todo.id].waiting_on_install(todo)
+        return read[self].waiting_on_install(todo)
 
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
@@ -1314,7 +1331,7 @@ class DeliveredProblemOrder(CheckedProblemOrder):
     def require_checked(self, problem: str) -> None:
         """The delivery passed the order's check, so its result is recorded."""
 
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+    def waiting_on_install(self, todo: Todo, read: OrderProgresses) -> tuple[Todo, ...]:
         return (todo,)
 
 
@@ -1337,7 +1354,7 @@ class InstalledProblemOrder(DeliveredProblemOrder):
     def require_close(self):
         pass
 
-    def waiting_on_install(self, todo: Todo, read: dict[str, OrderProgress]) -> tuple[Todo, ...]:
+    def waiting_on_install(self, todo: Todo, read: OrderProgresses) -> tuple[Todo, ...]:
         return ()
 
 

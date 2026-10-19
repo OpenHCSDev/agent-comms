@@ -7,7 +7,7 @@ from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
 from dataclasses import MISSING, dataclass, field, fields, replace
-from typing import TYPE_CHECKING, ClassVar, Literal, NoReturn, TextIO, Type
+from typing import TYPE_CHECKING, ClassVar, Generic, Literal, NoReturn, TextIO, Type, TypeVar
 
 from pydantic import JsonValue
 
@@ -64,7 +64,7 @@ from .restart_queue import status as restart_status
 from .thread_management import RenameThreadResult
 from .transcript_events import SentTranscript
 from .todos import (CorrectCheckTodo, ServeTodo, DeliverTodo, InstallTodo, OrderDelivery,
-                    OrderProgress, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
+                    OrderProgress, OrderProgresses, ProgressedOrder, OrderVerdict, PlainText, PullRequests, StrikeReason, Todo,
                     TodoOperation, VerdictAudience)
 from .change_report import ChangeReport
 from .messages import InfoKind, MessageKind, NoticeRole
@@ -166,7 +166,7 @@ class TodoChanged(ToolResult):
 @dataclass(frozen=True)
 class TodoList(ToolResult):
     todos: tuple[Todo, ...]
-    progress: dict[str, OrderProgress] = field(default_factory=dict)
+    progress: OrderProgresses = field(default_factory=OrderProgresses)
 
 
 @dataclass(frozen=True)
@@ -289,8 +289,12 @@ def tool_field(
     return field(default=default, default_factory=default_factory, metadata=metadata)
 
 
+Caller = TypeVar("Caller", bound=ToolCaller, contravariant=True, default=ToolCaller)
+Result = TypeVar("Result", bound=ToolResult, covariant=True, default=ToolResult)
+
+
 @dataclass(frozen=True, kw_only=True)
-class ToolRequest[Caller: ToolCaller = ToolCaller](
+class ToolRequest(Generic[Caller, Result],
     ThreadCommandAvailability, NativeRequestTools, NativeToolDeclaration
 ):
     description: ClassVar[str]
@@ -329,7 +333,7 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
 
     @classmethod
     def invoke(
-        cls, comms: Comms, arguments: Mapping[str, object], *, caller: ToolCaller
+        cls, comms: Comms, arguments: Mapping[str, object], *, caller: Caller
     ) -> dict[str, JsonValue]:
         """The reply every adapter receives: the encoding of the tool's declared result."""
         if cls.family_discriminator in arguments:
@@ -343,12 +347,12 @@ class ToolRequest[Caller: ToolCaller = ToolCaller](
         return FieldCodec.encode(caller.invoke(request, comms).to_wire())
 
     @abstractmethod
-    def apply(self, comms: Comms, caller: Caller) -> ToolResult:
+    def apply(self, comms: Comms, caller: Caller) -> Result:
         """Each tool declares its own result record; invoke alone encodes it."""
 
     def apply_without_thread(
-        self: ToolRequest[ToolCaller], comms: Comms, caller: NoThreadCaller
-    ) -> ToolResult:
+        self: ToolRequest[NoThreadCaller, Result], comms: Comms, caller: NoThreadCaller
+    ) -> Result:
         return self.apply(comms, caller)
 
 
@@ -366,15 +370,15 @@ class ReadTool:
 
 
 @dataclass(frozen=True, kw_only=True)
-class ThreadReadTool(ReadTool, ToolRequest):
+class ThreadReadTool[Result: ToolResult = ToolResult](ReadTool, ToolRequest[ToolCaller, Result]):
     thread: str = tool_field("Thread to read; omit to read your own", default="")
 
 
-class ThreadToolRequest(ToolRequest[ThreadCaller]):
+class ThreadToolRequest[Result: ToolResult = ToolResult](ToolRequest[ThreadCaller, Result]):
     """Self-relative requests declare their required caller at the shared boundary."""
 
     def apply_without_thread(self, comms: Comms, caller: NoThreadCaller) -> NoReturn:
-        return caller.refuse_thread()
+        caller.refuse_thread()
 
 
 def _tag_set(value: str) -> frozenset[str]:
@@ -720,7 +724,7 @@ class CommsGoalHistoryTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTodoTool(ThreadToolRequest):
+class CommsTodoTool(ThreadToolRequest[TodoChanged]):
     label = "Change problem"
     description = "Apply an exact revision-checked Todo command; only its commander may invoke this tool."
     id: str = tool_field("Problem ID")
@@ -767,7 +771,7 @@ class CommsUnjudgedTool(ThreadReadTool):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsFireTool(ThreadToolRequest):
+class CommsFireTool(ThreadToolRequest[TodoList]):
     label = "Fire unit"
     description = ("Release every open problem the unit holds in one operation, recording one "
                    "plain reason on each; only their commander may invoke this tool.")
@@ -805,7 +809,7 @@ class CommsCorrectWordingTool(ThreadToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsTodoListTool(ThreadReadTool):
+class CommsTodoListTool(ThreadReadTool[TodoList]):
     label = "Read problems"
     description = "Read the commander's canonical Todo orders, deadlines, strikes and hunts."
 
@@ -813,8 +817,9 @@ class CommsTodoListTool(ThreadReadTool):
         actor = comms.registry.require(caller.subject(self.thread)).incarnation
         listed = tuple(comms.goals.todos.for_commander(actor))
         pulls, storage = PullRequests(listed), comms.registry.storage_rule
-        return TodoList(listed, {todo.id: OrderProgress.read(todo, storage, pulls)
-                                 for todo in listed if todo.holder})
+        return TodoList(listed, OrderProgresses(tuple(
+            ProgressedOrder(todo.order, OrderProgress.read(todo, storage, pulls))
+            for todo in listed if todo.holder)))
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1057,7 +1062,7 @@ class CommsSendRefusalsTool(ReadTool, ToolRequest):
 
 
 @dataclass(frozen=True, kw_only=True)
-class CommsSendTool(ToolRequest):
+class CommsSendTool(ToolRequest[ToolCaller, MessagePublished]):
     label = "Comms Send"
     description = (
         "Send a message to another thread or channel. Address specific threads with "

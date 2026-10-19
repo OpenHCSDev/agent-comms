@@ -21,7 +21,7 @@ def context(root: Path, name: str, text: str) -> Commander:
         state=root / 'state', board=root / 'board.md', narrative=root / 'narrative.md',
         skill=root / 'skill.md', rules=(), repos=(), worktrees=root / 'wt',
         scratch=root / 'scratch', disk=root)
-    return Commander.of(config)
+    return Commander.model_validate(config, from_attributes=True)
 
 
 def test_import_with_empty_home_preserves_the_copied_registry(tmp_path):
@@ -47,7 +47,6 @@ def test_two_commands_keep_their_constructor_context(tmp_path, capsys):
     second = context(tmp_path / 'second', 'other-lead', 'Other owner request')
     for commander, expected in ((first, 'First owner request'), (second, 'Other owner request'),
                                 (first, 'First owner request')):
-        command = RequestVerb.parse(['list'], '', commander)
-        assert command.context is commander
-        command.apply()
+        command = RequestVerb.parse(['list'], '')
+        command.apply(commander)
         assert capsys.readouterr().out == f'request {expected}\n'

@@ -236,30 +236,6 @@ class CatalogTargetField(ChoiceTargetField):
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
 
 
-class CommandNormalization(ABC):
-    @abstractmethod
-    def namespace(self, value: object, annotation: object) -> object: ...
-    @abstractmethod
-    def editor(self, value: object, annotation: object) -> object: ...
-
-
-@dataclass(frozen=True)
-class DecoderNormalization(CommandNormalization):
-    def namespace(self, value: object, annotation: object) -> object:
-        return compile_decoder(annotation).argument_payload(value)
-    def editor(self, value: object, annotation: object) -> object:
-        return compile_decoder(annotation).decode_editor(value)
-
-
-@dataclass(frozen=True)
-class CustomNormalization(CommandNormalization):
-    convert: Callable[..., object]
-    def namespace(self, value: object, annotation: object) -> object:
-        return self.convert(value)
-    def editor(self, value: object, annotation: object) -> object:
-        return self.convert(value)
-
-
 @dataclass(frozen=True)
 class CommandOption:
     """The declared CLI and editor properties of one command field."""
@@ -270,7 +246,7 @@ class CommandOption:
     flags: tuple[str, ...]
     parser_options: Mapping[str, Any]
     group: str | None
-    normalization: CommandNormalization
+    normalize: Callable[..., Any] | None
     parser_default: Any
     parser_default_factory: Any
     editor: type[TargetField]
@@ -304,8 +280,7 @@ def option(
     """One field owns both its CLI projection and JSON boundary conversion."""
     metadata: dict[object, object] = {CommandOption: CommandOption(
         multiline=multiline, target_bound=target_bound, editor_format=editor_format,
-        flags=flags, parser_options=parser_options, group=group,
-        normalization=CustomNormalization(normalize) if normalize else DecoderNormalization(),
+        flags=flags, parser_options=parser_options, group=group, normalize=normalize,
         parser_default=parser_default, parser_default_factory=parser_default_factory,
         editor=CatalogTargetField if catalog is not None else editor, catalog=catalog,
     )}
@@ -789,7 +764,7 @@ class DeclaredOptions(Command):
         parser = subparsers.add_parser(FieldCodec.encode(cls), help=cls.help)
         groups: dict[str, Any] = {}
         hints = get_type_hints(cls, include_extras=True)
-        for declared, _ in FieldCodec.record_fields(cls):
+        for declared in fields(cls):
             option = CommandOption.of(declared)
             group = option.group
             owner = parser
@@ -823,14 +798,16 @@ class DeclaredOptions(Command):
             owner.add_argument(*flags, **options)
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace, **context: object) -> Self:
-        values: dict[str, object] = dict(context)
+    def from_namespace(cls, args: argparse.Namespace) -> Self:
+        payload: dict[str, object] = {"kind": FieldCodec.encode(cls)}
         hints = get_type_hints(cls, include_extras=True)
-        for declared, key in FieldCodec.record_fields(cls):
+        for declared in fields(cls):
+            key = FieldCodec.wire_key(declared)
             value = getattr(args, key)
-            raw = CommandOption.of(declared).normalization.namespace(value, hints[declared.name])
-            values.update(FieldCodec.field_plan(cls, declared.name).decoded({key: raw}))
-        return FieldCodec.construct(cls, values)
+            normalize = CommandOption.of(declared).normalize
+            payload[key] = (normalize(value) if normalize is not None
+                            else compile_decoder(hints[declared.name]).argument_payload(value))
+        return cls.from_payload(payload)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -948,7 +925,8 @@ class CliCommand(
         result = {}
         for key, text in values.items():
             item = declared[key]
-            result[key] = CommandOption.of(item).normalization.editor(text, hints[item.name])
+            normalize = CommandOption.of(item).normalize
+            result[key] = normalize(text) if normalize else compile_decoder(hints[item.name]).decode_editor(text)
         return result
 
     def confirmation(self) -> str:
@@ -1796,7 +1774,7 @@ class ContextCliCommand(CliCommand):
         parser.add_argument("--imported", action="store_true")
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace, **context: object) -> ContextCliCommand:
+    def from_namespace(cls, args: argparse.Namespace) -> ContextCliCommand:
         if args.imported:
             if "turn" in vars(args) or args.diff:
                 raise ValueError("--imported cannot be combined with --turn or --diff")
