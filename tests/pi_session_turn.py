@@ -8,6 +8,7 @@ from pathlib import Path
 import agent_comms.backend as backend
 from agent_comms.pi_native_backend import PersistentPiSession
 from agent_comms.native_package import VerifiedNativePackage, pinned_native_package
+from agent_comms.selected_actions import NoSelectedTools
 
 
 async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None, **kwargs):
@@ -16,7 +17,7 @@ async def one_turn_events(agent_bin, agent_args, task, cwd, env_extra=None, **kw
     try:
         async with aclosing(
             backend.stream_agent_events(agent_bin, agent_args, task, cwd, env_extra,
-                                        persistent_session=session, root=Path(cwd),
+                                        persistent_session=session, root=Path(cwd), tool_mode=NoSelectedTools(),
                                         package=VerifiedNativePackage.acquire(pinned_native_package()), **kwargs)
         ) as stream:
             async for event in stream:

@@ -1,5 +1,6 @@
 """Channel membership and notifications have one canonical bus authority."""
 
+from bus_history import read_history
 from dataclasses import replace
 from contextlib import AsyncExitStack
 
@@ -32,8 +33,8 @@ def test_membership_changes_keep_canonical_notification_and_history(tmp_path):  
     current = comms.views.message_notifications_for_references((message.reference,))[(message.seq, message.message_id)]
     assert [(row.recipient, type(row.state)) for row in current] == [("beta", SentProgress)]
     assert not comms.registry.require("beta").active_turn.executing
-    assert original.message in list(comms.views.channel_history_page("#team").messages)
-    assert message in list(comms.views.channel_history_page("#team").messages)
+    assert original.message in read_history(comms, "#team")
+    assert message in read_history(comms, "#team")
     assert not (root / "acp_passive_channel_awareness.json").exists()
 
 

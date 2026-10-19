@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 
-class UnregisteredThreadError(ValueError):
+class ToolRefusedError(ValueError):
+    """An intentional refusal safe to return as a tool answer, not a transport failure."""
+
+
+class UnregisteredThreadError(ToolRefusedError):
     """A reference does not resolve to a registered thread."""
 
 
-class UnknownChannelError(ValueError):
+class UnknownChannelError(ToolRefusedError):
     """A target is absent from the catalog and current thread tags."""
 
 
