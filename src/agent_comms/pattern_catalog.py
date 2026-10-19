@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from functools import cache
 from pathlib import Path
 
-from .package_resources import resource
+from .package_stamp import STAMP
 
 
 @dataclass(frozen=True)
@@ -38,7 +38,7 @@ class PatternCatalog:
     @cache
     def pinned(cls) -> PatternCatalog:
         """The catalog this checkout pins under external/, or the copy its wheel carries."""
-        return cls.read(resource("external/refactor-audit/references/patterns", "_catalog"))
+        return cls.read(STAMP.resource("external/refactor-audit/references/patterns", "_catalog"))
 
     @classmethod
     def read(cls, root: Path) -> PatternCatalog:

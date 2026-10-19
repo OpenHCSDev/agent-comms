@@ -1,7 +1,6 @@
 """Provider-free complete-package provenance and filesystem-shape controls."""
 
 import hashlib
-import importlib.util
 import sys
 import json
 import os
@@ -14,8 +13,8 @@ from types import SimpleNamespace
 import pytest
 
 import agent_comms.native_package as native_package
-import agent_comms.package_resources as package_resources
-from agent_comms.core_stamp import CheckoutStamp
+import agent_comms.core_stamp as core_stamp
+from agent_comms.core_stamp import CheckoutStamp, WheelStamp
 from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_package import (
     NativePackageError,
@@ -219,48 +218,19 @@ def test_missing_or_malformed_commitment_is_not_a_success_marker(package, pin):
         verify_native_package(package)
 
 
-def load_resource_module(path, monkeypatch):
-    """Load the copied native_package against the package_resources copied beside it."""
-    shutil.copy2(package_resources.__file__, path.parent / "package_resources.py")
-    for name, file in (("package_resources", path.parent / "package_resources.py"),
-                       ("resource_fixture", path)):
-        spec = importlib.util.spec_from_file_location(f"agent_comms.{name}", file)
-        module = importlib.util.module_from_spec(spec)
-        monkeypatch.setitem(sys.modules, spec.name, module)
-        spec.loader.exec_module(module)
-    return vars(module)
+@pytest.mark.parametrize("stamp, root", [
+    (WheelStamp("c0ffee"), Path(core_stamp.__file__).resolve().parent / "_native"),
+    (CheckoutStamp("/checkout"), Path("/checkout/stack")),
+])
+def test_the_package_stamp_alone_decides_where_native_resources_live(stamp, root):
+    """A wheel never guesses an adjacent stack; a checkout keeps stack even beside build output."""
+    assert stamp.resource("stack", "_native") == root
 
 
-@pytest.mark.parametrize("include_resources", [False, True])
-def test_installed_resource_lookup_never_guesses_adjacent_stack(tmp_path, include_resources,
-                                                               monkeypatch):
-    installed = tmp_path / "site-packages/agent_comms"
-    installed.mkdir(parents=True)
-    module = installed / "native_package.py"
-    shutil.copy2(native_package.__file__, module)
-    if not include_resources:
-        with pytest.raises(ValueError, match="Installed native package resources"):
-            load_resource_module(module, monkeypatch)
-        return
-    resources = installed / "_native"
-    resources.mkdir()
-    (resources / "pi-native.sha256").write_text("packaged pin")
-    namespace = load_resource_module(module, monkeypatch)
-    assert namespace["MANIFEST"] == resources / "pi-native.sha256"
-
-
-def test_checkout_resources_remain_owned_by_stack_when_build_artifacts_exist(tmp_path, monkeypatch):
-    source = tmp_path / "src/agent_comms"
-    source.mkdir(parents=True)
-    module = source / "native_package.py"
-    shutil.copy2(native_package.__file__, module)
-    (tmp_path / "stack").mkdir()
-    artifacts = source / "_native"
-    artifacts.mkdir()
-    (artifacts / "core_stamp.py").write_text("# unrelated build metadata\n")
-    namespace = load_resource_module(module, monkeypatch)
-    assert namespace["MANIFEST"] == tmp_path / "stack/pi-native.sha256"
-    assert namespace["OWNER_INSTRUCTIONS"] == tmp_path / "stack/APPEND_SYSTEM.md"
+def test_absent_native_resources_are_refused(tmp_path, monkeypatch):
+    monkeypatch.setattr(native_package, "STAMP", CheckoutStamp(str(tmp_path)))
+    with pytest.raises(NativePackageError, match="resources are unavailable"):
+        native_package._resource_root()
 
 
 @pytest.fixture
@@ -272,7 +242,11 @@ def launcher(tmp_path):
     source.mkdir(parents=True)
     shutil.copytree(repo / 'src/agent_comms', source, dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns('__pycache__'))
-    CheckoutStamp(str(repo)).write(source / 'package_stamp.py')
+    # The copy is a checkout of its own: its stamp names it, with a commit to report.
+    subprocess.run(("git", "init", "-q", str(tmp_path)), check=True)
+    subprocess.run(("git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t",
+                    "commit", "-q", "--allow-empty", "-m", "fixture"), check=True)
+    CheckoutStamp(str(tmp_path)).write(source / 'package_stamp.py')
     # The environment `uv sync --project stack` installs: this checkout's agent_comms, editable,
     # with its dependencies.
     interpreter = stack / ".venv/bin/python"

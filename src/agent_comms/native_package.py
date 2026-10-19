@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
-from .package_resources import resource
+from .package_stamp import STAMP
 from .private_path import PrivateDirectoryRole, TrustedAncestorRole
 
 TREE_PREFIX = "# agent-comms-native-tree-v1 "
@@ -34,7 +34,7 @@ class NativePackageError(ValueError):
 
 
 def _resource_root() -> Path:
-    root = resource("stack", "_native")
+    root = STAMP.resource("stack", "_native")
     if root.is_dir():
         return root
     raise NativePackageError("Installed native package resources are unavailable")
