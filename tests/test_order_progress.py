@@ -2,10 +2,14 @@
 import subprocess
 import time
 
+from dataclasses import replace
+
 import pytest
 
+from agent_comms.recorded_time import RecordedEventTime
+from agent_comms.tools import CommsOrderDoneTool
 from agent_comms.todos import (CommittedProgress, MergedProgress, NoCommitProgress, OpenPrProgress, OrderProgress,
-    PullRequest, PullRequests, PushedProgress, UnreadProgress)
+    OperationDelivery, PlannedInstallDeadline, PullRequest, PullRequests, PushedProgress, UnreadProgress)
 
 from agent_comms.messages import InfoKind
 from agent_comms.storage_rules import StorageRule
@@ -116,7 +120,7 @@ def test_unread_github_is_said_and_still_draws_a_strike(checkout):
     assert progress == UnreadProgress('gh: not logged in') and progress.strikes
 
 
-def test_board_and_overdue_print_a_merged_order_as_done_not_late(commander, commander_script, monkeypatch, tmp_path):
+def test_board_prints_a_merged_order_as_done_and_overdue_does_not_call_it_late(commander, commander_script, monkeypatch, tmp_path):
     script, _ = commander_script
     # worker's P1 checkout, on the branch its merged PR came from.
     monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
@@ -126,9 +130,7 @@ def test_board_and_overdue_print_a_merged_order_as_done_not_late(commander, comm
     create(commander, 'P1', deadline=1)
     merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0),)
     monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state: merged if state == 'merged' else ())
-    assert deadline_lines(script) == [
-        f'DUE PASSED P1 worker (due {script.hhmm(script.COMMS.goals.todos.get("P1").deadline)}): '
-        'merged as ddddddddd, record done']
+    assert deadline_lines(script) == []
     script.board()
     assert '| merged as ddddddddd, record done |' in (tmp_path / 'board.md').read_text()
 
@@ -236,3 +238,31 @@ def test_overdue_is_announced_once_per_crossing(commander, commander_script):
     replied = deadline_lines(script, since)
     assert len(replied) == 1 and '; REPLIED ' in replied[0] and 'on it' in replied[0]
     assert deadline_lines(script, time.time()) == []
+
+
+def test_merged_and_delivered_orders_wait_on_the_one_install_deadline(commander, commander_script, monkeypatch, tmp_path):
+    """An unrecorded merge and a delivered, uninstalled order wait on the fleet's install; an
+    installed order does not. Nobody is struck, and a late install is named, not the orders."""
+    comms, caller = commander
+    script, _ = commander_script
+    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=tmp_path / 'wt'))
+    unit = tmp_path / 'wt' / 'worker--P1'
+    unit.mkdir(parents=True)
+    git(unit, 'init', '-q', '-b', 'fix/p1')
+    for pid in ('P1', 'P2', 'P3'):
+        create(commander, pid, deadline=1)
+    merged = (PullRequest(8, 'fix/p1', 'b' * 40, 'd' * 40, 500.0, 500.0),)
+    monkeypatch.setattr(PullRequests, 'read', lambda self, repo, state: merged if state == 'merged' else ())
+    for pid in ('P2', 'P3'):
+        CommsOrderDoneTool(problem=pid, delivery=OperationDelivery()).apply(comms, caller)
+    p1, p2, p3 = (comms.goals.todos.get(pid) for pid in ('P1', 'P2', 'P3'))
+    held = (p1, p2, replace(p3, order=p3.order.installed('the check passed', 'p3.png')))
+    read = script.progress()
+    assert script.install_lines(held, read, 1000.0) == ['INSTALL not planned; waiting: P1 worker, P2 worker']
+    PlannedInstallDeadline(RecordedEventTime(2000.0)).plan(comms.root)
+    due = time.strftime('%H:%M', time.localtime(2000.0))
+    assert script.install_lines(held, read, 1000.0) == [f'INSTALL due {due}; waiting: P1 worker, P2 worker']
+    assert script.install_lines(held, read, 2001.0) == [
+        f'INSTALL LATE (due {due}), not the orders; waiting: P1 worker, P2 worker']
+    assert script.install_lines(held[2:], read, 2001.0) == []
+    assert deadline_lines(script) == []
