@@ -254,7 +254,7 @@ class ReplyIndexUpdate(ReplyIndexResult):
             source=self.after.source
         )
         if current != self.before:
-            return  # Another observer's prefix won; never apply these ordinals to it.
+            return  # Another observer changed this suffix; discard the stale delta.
         if not self.before.continues(self.after.revision):
             database.execute(
                 f"DELETE FROM {TranscriptReply.declared_name} WHERE source=?", (self.after.source,)
