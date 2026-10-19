@@ -84,7 +84,7 @@ def prove(scratch: Path) -> None:
                             "type": "held",
                             "error": "Maintenance holds ingress: the bus is under maintenance",
                         }, output
-                        assert wall < 1 and float(curl_seconds) < 1, output
+                        assert wall < 0.1 and float(curl_seconds) < 0.1, output
                         assert barrier.current_unlocked() == held
                         assert (copied / "bus.jsonl").read_bytes() == before
                 print(json.dumps({

@@ -48,7 +48,6 @@ from .connector_store import (
     CODE_SECONDS, AuthorizationRequest, ConnectorGrants, ConnectorStore, IssuedCode,
     RegisteredClient, digest,
 )
-from .maintenance_barrier import MaintenanceHeldError
 from .messages import Message
 from .todos import DirectiveText
 from .tool_caller import ThreadCaller
@@ -292,7 +291,7 @@ class ToolsCallMessage(McpMessage, declared_name="tools/call"):
             )
         try:
             reply = await asyncio.to_thread(connector.invoke, tool, self.params.arguments)
-        except (ToolRefusedError, MaintenanceHeldError) as error:
+        except ToolRefusedError as error:
             return ToolsCallResult.refused(error)
         return ToolsCallResult((TextContent(json.dumps(reply)),), False, reply)
 
@@ -315,7 +314,7 @@ class ToolsCallResult:
     )
 
     @classmethod
-    def refused(cls, error: ToolRefusedError | MaintenanceHeldError) -> ToolsCallResult:
+    def refused(cls, error: ToolRefusedError) -> ToolsCallResult:
         return cls((TextContent(CoreError.from_exception(error).model_dump_json()),), True)
 
 

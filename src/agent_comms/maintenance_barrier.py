@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from .declared_family import DeclaredFamily
-from .errors import RelationViolationError
+from .errors import RelationViolationError, ToolRefusedError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, TextRepresentation
 from .lifecycle import LifecycleState
 from .send_outcome import GrantedSend, HeldSend
@@ -33,7 +33,7 @@ from .store_files import (
 )
 
 
-class MaintenanceHeldError(RelationViolationError):
+class MaintenanceHeldError(RelationViolationError, ToolRefusedError):
     """The bus is in maintenance: its readers close and wait for READY."""
 
 
