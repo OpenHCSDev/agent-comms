@@ -62,6 +62,9 @@ class RecordedEntry(PiPayload):
     def source_coordinates(self):
         return self
 
+    def require_timestamp(self) -> datetime:
+        raise ValueError('This record has no journal timestamp for native session import')
+
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         return self._events(context)
 
@@ -80,9 +83,12 @@ class NativeEntry(RecordedEntry, DeclaredFamily, affix="Entry"):
     wire_tag = "type"
     timestamp: Annotated[RecordedTimestamp, TimestampText]
 
+    def require_timestamp(self) -> datetime:
+        return self.timestamp.at
+
     def events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         """Only the native journal supplies an entry clock, shared by its display parts."""
-        timestamp = self.timestamp.at.timestamp()
+        timestamp = self.require_timestamp().timestamp()
         return [replace(event, timestamp=timestamp) for event in self._events(context)]
 
     def imported_sources(self):
@@ -183,7 +189,7 @@ class ImportedSessionWriter:
         buffer = ImportBuffer(limits)
         buffer.add(events)
         for message in buffer.messages:
-            self.append(message, entry.timestamp.at)
+            self.append(message, entry.require_timestamp())
 
 
 class NativeHeaderState(ABC):
