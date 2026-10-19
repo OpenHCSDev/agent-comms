@@ -18,6 +18,14 @@ class StallExempt:
         return self
 
 
+class ActivityWord:
+    """The activity alone names this phase: Ready while idle, Thinking on the model."""
+
+    @property
+    def activity_detail(self) -> str:
+        return self.detail
+
+
 @dataclass(frozen=True)
 class TurnPhase(DeclaredFamily, affix="Phase"):
     """One phase owns watchdog behavior and its public control projection.
@@ -127,7 +135,7 @@ class PreparingPhase(TurnPhase):
     label = "Preparing input"
 
 
-class IdlePhase(TurnPhase):
+class IdlePhase(ActivityWord, TurnPhase):
     busy = False
     accepts_prompt = True
     accepts_followup = False
@@ -167,13 +175,7 @@ class PublishingPhase(TurnPhase):
         return self
 
 
-class ModelWaitPhase(TurnPhase):
-    """Waiting on the model shows only its activity, Thinking."""
-
-    @property
-    def activity_detail(self) -> str:
-        return self.detail
-
+class ModelWaitPhase(ActivityWord, TurnPhase):
     def model_progress(self) -> TurnPhase:
         return self
 
