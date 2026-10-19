@@ -53,6 +53,7 @@ from agent_comms.external_transcript import ExternalTranscript
 from agent_comms.field_codec import FieldCodec
 from agent_comms.history_result import EverythingHistoryPageResult
 from agent_comms.maintenance_barrier import MaintenanceBarrier, MaintenanceOperator
+from agent_comms.registry_store import RegistryStore
 from agent_comms.store_files import _store_lock
 from agent_comms.todos import PlannedInstallDeadline
 
@@ -385,7 +386,7 @@ def live(checkout: Path, root: Path, current: str, target: str, pending: tuple[S
     running = [thread["name"] for thread in installed.cli(root, "threads")["threads"]
                if thread["role"] == "agent" and thread["status"] == "running"]
     before_stop(root, pending, staged, revisions)
-    maintenance = MaintenanceBarrier(root / "registry.json")
+    maintenance = MaintenanceBarrier(RegistryStore.at(root).path)
     held = maintenance.begin(MaintenanceOperator("upgrade-bus"))
     try:
         installed.require_idle(root, running)

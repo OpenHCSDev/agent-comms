@@ -31,7 +31,7 @@ from agent_comms.read_basis import (
 from agent_comms.private_path import FileIdentity
 from agent_comms.read_ledger import ReadDocument, ReadLedger
 from agent_comms.recorded_bus import RecordedBus
-from agent_comms.registry_store import RegistryStore
+from agent_comms.registry_store import RegistryNeedsConversion, RegistryStore
 from agent_comms.thread_execution import ExternalThreadExecution
 from agent_comms.thread_identity import RecordedThreadIncarnation
 from agent_comms.todos import GoalRef, Todo, TodoStore
@@ -443,6 +443,36 @@ def test_every_step_carries_an_older_bus_once_and_writes_only_what_it_names(tmp_
     with closing(sqlite3.connect(TodoStore.path_in(root))) as db:
         (todo,) = Todo.stream(db)
     assert (todo.id, todo.corrections, todo.messages) == ("one", (), ())
+
+
+def test_an_unversioned_registry_is_converted_by_its_step_and_then_reads(tmp_path, monkeypatch):
+    """The installer's carries convert a P669-old registry, so its later reads succeed."""
+    tmp_path.chmod(0o700)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    root = tmp_path / "bus"
+    comms = Comms(root)
+    comms.messaging.initialize_private_initial_protocol()
+    comms.registry.declare(comms.registry.new_thread("worker", frozenset(), str(tmp_path)))
+    store = RegistryStore.at(root)
+    old = json.loads(store.path.read_text())
+    old.pop("version")
+    old["threads"]["worker"]["goal"] = {}
+    with store.locked():
+        store._write_unlocked(json.dumps(old, indent=2))
+    with pytest.raises(RegistryNeedsConversion):
+        RegistryStore.at(root).read()
+    chain = CarryChain.at(REPO, "HEAD").steps
+    for step in chain[:-1]:
+        CarryLedger(root).record(step.name)
+    assert chain[-1].name == "carry_registry_version"
+
+    before = bus_files(root)
+    carried(root, before, [run_step("carry_registry_version", root)])
+    applied = run_step("carry_registry_version", root, "--apply")
+    assert carried(root, before, [applied]) == {"identical": len(before) - 3, "rewritten": 3}
+    assert run_step("carry_registry_version", root, "--apply")["changed"] == 0
+    (thread,) = Comms(root).registry.snapshot().threads.values()
+    assert thread.goal.to_wire() is None
 
 
 @pytest.mark.parametrize("stored, carried_count", [(None, 1), ({"turn_id": "t"}, None)])
