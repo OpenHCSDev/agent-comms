@@ -27,7 +27,7 @@ from agent_comms.field_codec import FieldCodec, MalformedRecord
 from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
 from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
-from agent_comms.progress_claims import WorkingClaim
+from agent_comms.progress_claims import MeasuredClaim, WorkingClaim
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
@@ -174,6 +174,19 @@ def test_failed_check_keeps_problem_pending(commander):
         CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(), claims=working(comms)).apply(comms, caller)
     assert comms.goals.todos.get('P1') == original
     assert comms.registry.require('worker').goal.state.active
+
+
+def test_done_report_of_a_wrong_measure_is_refused_and_the_declared_check_passes(commander):
+    comms, caller = commander
+    original = create(commander, 'P1')
+    for command, count in (('grep -c x tests', 1), ('printf 1', 2)):
+        with pytest.raises(ValueError, match=f"measured '{command}' -> {count}; the order's Check is 'printf 1'"):
+            CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(),
+                               claims=(*working(comms), MeasuredClaim(command, count))).apply(comms, caller)
+    assert comms.goals.todos.get('P1') == original
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery(),
+                       claims=(*working(comms), MeasuredClaim('printf 1', 1))).apply(comms, caller)
+    assert not comms.goals.todos.get('P1').pending
 
 
 def test_close_records_evidence_once_and_does_not_depend_on_artifact_lifetime(commander):
