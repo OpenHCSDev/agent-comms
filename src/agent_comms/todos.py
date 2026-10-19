@@ -178,7 +178,11 @@ class CommitDelivery(RecordedCommitDelivery, declared_name="delivered_commit"):
         if len(parents.split()) > 2:  # a main merge is never the unit's answer, only its arrival
             raise ValueError(f"Delivered commit {self.delivered} is a merge; deliver the unit's "
                              "first pushed commit that answers the order.")
-        await self.run(check, "git", "merge-base", "--is-ancestor", self.delivered, "origin/main")
+        pushed = await self.run(check, "git", "branch", "--remotes", "--contains", self.delivered,
+                                "--list", "origin/*")
+        if not pushed.strip():
+            raise ValueError(
+                f"Delivered commit {self.delivered} is on no origin branch; push it first.")
 
 
 @dataclass(frozen=True, kw_only=True)
