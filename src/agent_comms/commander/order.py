@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse, asyncio, os, re, subprocess, sys, time
 from abc import abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from uuid import uuid4
 
