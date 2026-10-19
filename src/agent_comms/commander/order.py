@@ -758,17 +758,17 @@ class CitedState:
 
     def __init_subclass__(cls) -> None:
         cls.__annotations__ = {**cls.__annotations__,
-                               **{member.declared_name: tuple[str, ...]
+                               **{member.form.split()[0].removeprefix('--'): tuple[str, ...]
                                   for member in Evidence.members_with(Evidence)}}
         for member in Evidence.members_with(Evidence):
             flag, metavar = member.form.split()
-            setattr(cls, member.declared_name, option(
+            setattr(cls, flag.removeprefix('--'), option(
                 flag, action='append', default=(), parser_default_factory=list, metavar=metavar))
         super().__init_subclass__()
 
     def evidence(self) -> tuple[Evidence, ...]:
         return tuple(member.cited(value) for member in Evidence.members_with(Evidence)
-                     for value in getattr(self, member.declared_name))
+                     for value in getattr(self, member.form.split()[0].removeprefix('--')))
 
 
 @dataclass(frozen=True, kw_only=True)
