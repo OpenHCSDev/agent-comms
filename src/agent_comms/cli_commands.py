@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import builtins
 import json
 import os
 import re
@@ -19,7 +20,7 @@ from contextlib import aclosing
 from dataclasses import MISSING, Field, dataclass, field, fields, replace
 from itertools import dropwhile, takewhile
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, Type, cast, get_type_hints
+from typing import Annotated, Any, ClassVar, Literal, Self, TextIO, cast, get_type_hints
 
 from acp.exceptions import RequestError
 from acp.schema import SessionConfigSelectOption
@@ -1057,10 +1058,10 @@ class SendCliCommand(CliCommand):
     sender: str = option("--from")
     target: str = option("--to")
     body: str = option("--body")
-    type: Type[MessageKind] = option(
+    type: builtins.type[MessageKind] = option(
         "--type", default=InfoKind, choices=MessageKind.sendable_names(), editor=ChoiceTargetField
     )
-    role: Type[MessageRole] = option("--role", default=ConversationRole)
+    role: builtins.type[MessageRole] = option("--role", default=ConversationRole)
     report: dict[str, Any] | None = option(
         "--report", help="Change report fields as a JSON object", default=None,
         normalize=_report_fields,

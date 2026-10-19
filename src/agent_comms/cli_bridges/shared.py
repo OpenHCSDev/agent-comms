@@ -263,7 +263,7 @@ class Send(Operation):
         parser.add_argument('--to', required=True)
         parser.add_argument('--body', required=True)
         parser.add_argument('--type', default=FieldCodec.encode(InfoKind), choices=MessageKind.sendable_names())
-        parser.add_argument('--role', default=ConversationRole.declared_name, choices=MessageRole.names())
+        parser.add_argument('--role', default=cls.role.declared_name, choices=MessageRole.names())
 
     async def run(self, bridge: CliBridge) -> None:
         result = await asyncio.to_thread(bridge.comms.messaging.send, bridge.binding.bus,
