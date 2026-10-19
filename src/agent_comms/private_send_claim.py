@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from .coordinated_runtime import SelectedExecution
     from .selected_participant import SelectedParticipant
     from .selected_session import SelectedSession
+    from .turn_lease import TurnLeaseFence
 from .private_registry_guard import _require_no_private_owner_rename
 from .private_send_stage import NativeSendStage
 
@@ -60,6 +61,7 @@ class PrivateSendClaim(PromptBoundary):
     token_digest: str
     prompt: RenderedInput
     session: SelectedSession
+    lease: TurnLeaseFence
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
     _measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements,
                                                   init=False, compare=False, repr=False)
@@ -104,6 +106,7 @@ class PrivateSendClaim(PromptBoundary):
         A failed binding leaves the durable reservation intact; construction must
         never roll it back or make another input eligible for automatic replay.
         """
+        lease = selected.owner.turn_lease
         digest = TextDigest.of(token).value
         def reserve(store):
             input_id = stage.reserve(store, selected.identity, digest)
@@ -125,6 +128,7 @@ class PrivateSendClaim(PromptBoundary):
             token_digest=digest,
             prompt=prompt,
             session=session,
+            lease=lease,
         )
 
     def verify(self, store: Coordination, context: NativeContextProof) -> None:
@@ -154,7 +158,6 @@ class PrivateSendClaim(PromptBoundary):
         follows cleanup; disconnect and unknown outcomes are never committed here.
         The raw writer keeps the single-use send token after the input is recorded.
         """
-        lease = self.owner.thread.require_turn_lease()
         registry = await Coordination.run_worker(self.bus._registry.snapshot)
         try:
             result = await TrackedTurnSession.execute(
@@ -175,7 +178,7 @@ class PrivateSendClaim(PromptBoundary):
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
-                    record_request_progress, self.bus.log.path.parent, lease,
+                    record_request_progress, self.bus.log.path.parent, self.lease,
                 ),
                 prompt_send_boundary=self,
                 execution=execution,
@@ -197,7 +200,7 @@ class PrivateSendClaim(PromptBoundary):
             raise
         finally:
             await Coordination.run_worker(partial(
-                record_acquisition_progress, self.bus.log.path.parent, lease,
+                record_acquisition_progress, self.bus.log.path.parent, self.lease,
                 self.input_id, self._measurements,
             ))
         await Coordination.run_read_async(self.store_path, lambda store: self.verify(store, result.context))
