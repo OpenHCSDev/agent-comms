@@ -98,8 +98,7 @@ class FailedTurnEvidence(GoalLedgerTable, TypedTable):
             return False
         if self.worktree != owner.worktree:
             return False
-        observed = owner.observed_turn(claim_scope)
-        if observed is None or self.turn != observed:
+        if self.turn != owner.observed_turn(claim_scope):
             return False
         return owner.has_goal_revision(self.goal_id, self.goal_revision)
 

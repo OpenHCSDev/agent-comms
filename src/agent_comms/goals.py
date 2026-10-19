@@ -392,8 +392,8 @@ class ProblemGoalOrder(GoalOrder):
 
 @dataclass(frozen=True)
 class GoalPeerChange:
-    goal: GoalRevision | None
-    state: type[GoalState] | None
+    goal: GoalRevision | NoGoal
+    state: type[GoalState] | NoGoal
     progress: str
 
 
@@ -568,7 +568,7 @@ class NoGoal(NullMember, GoalDeclaration):
         return wait.idle_execution()
 
     def peer_change_values(self) -> GoalPeerChange:
-        return GoalPeerChange(goal=None, state=None, progress="")
+        return GoalPeerChange(goal=self, state=self, progress="")
 
     def failed_turn_projection(self, path: Path, owner: Thread, owner_status: ThreadStatus,
                                claim_scope: int) -> FailedTurnProjection:
