@@ -56,14 +56,14 @@ async def test_original_pending_wave_has_one_fenced_input_and_late_arrivals_stay
         original_capture = SelectedParticipant.capture_sent_outcomes
 
         def capture_before_turn(selected_comms, owner, sources, assignment_read):
-            assert not selected_comms.registry.require(owner.name).active_turn.phase.busy
+            assert not selected_comms.registry.require(owner.name).turn_record.read().executing
             return original_capture(selected_comms, owner, sources, assignment_read)
 
         def forbid_full_presentation(*_args, **_kwargs):
             raise AssertionError("selected outcome capture prepared a full thread presentation")
 
         monkeypatch.setattr(SelectedParticipant, "capture_sent_outcomes", capture_before_turn)
-        monkeypatch.setattr(comms.views, "thread_presentation", forbid_full_presentation)
+        monkeypatch.setattr(comms.views, "thread_views", forbid_full_presentation)
         monkeypatch.setattr(
             CoordinationStore, "observing",
             staticmethod(lambda *_args, **_kwargs: (_ for _ in ()).throw(

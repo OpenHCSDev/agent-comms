@@ -92,11 +92,7 @@ class SelectedSession:
         for_launch remains a separate verified lookup.
         """
         def acquire() -> SelectedSession:
-            directory = participant.comms.root / "native-sessions" / participant.lookup
-            worktree = Path(participant.owner.thread.worktree).absolute()
-            if not worktree.is_dir():
-                raise IdentityConflict("registered participant worktree is unavailable")
-            directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+            directory = execution.session_directory
             thread = participant.owner.thread
             runtime = thread.runtime if path is None else thread.backend.location_type(str(path))
             return runtime.select_session(directory, execution, source_reads)
