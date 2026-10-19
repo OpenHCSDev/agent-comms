@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import threading
 from abc import abstractmethod
 from collections.abc import Mapping
 from pathlib import Path
@@ -1081,7 +1082,9 @@ class CommsSendTool(ToolRequest):
             body = VerdictAudience(self.audience).addressed(self.target, self.body)
             result = comms.messaging.send(self.sender, self.target, body, self.type, report=self.report)
         except ToolRefusedError as error:
-            SendRefusal.record(comms.root, self.sender, self.target, error)
+            # The caller hears the refusal now; the record waits for the wire lock on its own.
+            threading.Thread(target=SendRefusal.record,
+                             args=(comms.root, self.sender, self.target, error)).start()
             raise
         caller.sent(comms, result.message)
         return MessagePublished.from_send(result)
@@ -1180,17 +1183,18 @@ class StandbyRequest:
 @dataclass(frozen=True, kw_only=True)
 class CommsHistoryTool(ReadTool, ToolRequest):
     label = "Conversation history"
-    description = ("Read one bounded, newest-first page of a two-participant conversation. "
-                   "Pass before from the previous page to read older messages. Does not acknowledge messages.")
-    peer: str = tool_field("Other participant's thread name; channels are not accepted")
+    description = ("Read one bounded, newest-first channel or DM history page. "
+                   "Pass before for older messages. Does not acknowledge messages.")
+    peer: str = tool_field("Channel name or other participant's thread name")
     participant: str = tool_field("Participant reading the conversation; omit to use the caller", default="")
     limit: int = tool_field("Maximum messages in this page", default=20)
     before: PageCursor | None = tool_field("Exclusive older-page cursor from the previous result", default=None)
 
     def apply(self, comms: Comms, caller: ToolCaller) -> HistoryPageResult:
-        peer = comms.registry.require(self.peer).name
+        target = CommandTarget.named(self.peer)
         return HistoryCliCommand(
-            target=f"@{peer}", me=caller.subject(self.participant),
+            target=target.canonical_name(lambda name: comms.registry.require(name).name),
+            me=caller.subject(self.participant),
             limit=self.limit, before=self.before,
         ).apply(comms)
 

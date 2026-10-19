@@ -370,7 +370,7 @@ class NativeContextProof(NativeContextRecord):
                 row = NativeContextJournal.for_input(db, input_id, request_generation)
             if row is None:
                 raise NativePiUnavailable("The input has no assembled-context proof")
-            header, _entries = evidence.observe_input(input_id, row.session_entry_id)
+            header, _entries = evidence.observe()
             entry = evidence.tracked(input_id)
             return row.corroborate(session_file, header, entry)
 
@@ -521,6 +521,7 @@ class NativePiRpcLaunch:
         package: VerifiedNativePackage,
         worktree: Path,
         root: Path,
+        directory: Path,
         environment: dict[str, str] | None = None,
         session_file: str | None = None,
     ) -> NativePiRpcLaunch:
@@ -534,14 +535,11 @@ class NativePiRpcLaunch:
         cwd = worktree.resolve(strict=True)
         if not cwd.is_dir():
             raise NativePiUnavailable("Native Pi worktree is unavailable")
-        from .selected_session import SelectedSession, SavedSelectedSession
-        from .native_session_reopen import NativeSessionIdentity
+        from .selected_session import SelectedSession
 
         saved = Path(session_file).absolute() if session_file is not None else None
-        directory = saved.parent if saved is not None else cwd
-        session = (SavedSelectedSession(directory,
-            identity=NativeSessionIdentity.locate(str(saved)))
-            if saved is not None else SelectedSession(directory))
+        _durable_private_session_dir(directory)
+        session = SelectedSession.for_launch(directory, saved)
         return cls._managed(package, arguments, cwd, environment, session, runtime, root)
 
     @classmethod
@@ -560,6 +558,7 @@ class NativePiRpcLaunch:
 
     def retained_managed(
         self, command: str, arguments: tuple[str, ...], *, worktree: Path, root: Path,
+        directory: Path,
         environment: dict[str, str] | None, session_file: str | None,
     ) -> NativePiRpcLaunch | None:
         """Derive a candidate from this acquired immutable launch, not a path cache.
@@ -570,7 +569,7 @@ class NativePiRpcLaunch:
         """
         self._command_selection(command, self.runtime, self.package)
         saved = Path(session_file).absolute() if session_file is not None else None
-        if saved != self.session.path:
+        if (saved, directory) != (self.session.path, self.session.directory):
             return None
         return self._managed(self.package,
             NativeArguments.parse(arguments).managed_rpc(self.package.path),
@@ -825,23 +824,6 @@ class PrivateEvidenceRead:
         """Validate this acquired source without decoding or moving its input position."""
         size, revision = self._capture_append()
         self._commit_snapshot(size, revision)
-
-    def start_at_entry(self, session_entry_id: str) -> dict:
-        """Locate a recorded native identity backwards within the pinned verified cut.
-
-        The durable native acknowledgement supplies identity, never a byte offset.
-        Only the needed suffix is decoded and indexed by the input reader.
-        """
-        from .native_transcript import reverse_records
-
-        size, revision = self._capture_append()
-        for _start, end, raw in reverse_records(self.path, size, stream=self.stream):
-            row = self._decode_row(raw)
-            if row.get('id') == session_entry_id:
-                self._commit_snapshot(size, revision)
-                self.decoded_through = end
-                return row
-        raise NativePiUnavailable('Recorded native input entry is absent from its source')
 
     def _commit_snapshot(self, size, revision) -> None:
         try:

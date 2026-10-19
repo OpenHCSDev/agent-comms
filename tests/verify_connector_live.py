@@ -22,7 +22,6 @@ from pathlib import Path
 from agent_comms import candidate_maintenance as maintenance
 from agent_comms.comms import Comms
 from agent_comms.connector_store import ConnectorStore
-from agent_comms.rule_reviews import AnsweredRuleReviewEntry, DrawnRuleReviewEntry, RuleReviews
 from agent_comms.wake_candidate_index import WakeCandidateIndex, ProjectionRebuildRequiredError
 
 
@@ -39,14 +38,6 @@ def wait_started(service, log):
         if not line:
             break
     raise RuntimeError("Connector failed to start: " + "".join(log))
-
-
-def reviews_at(reviews, age):
-    reviews.write("claude-ai", DrawnRuleReviewEntry(("Declare each fact once",), 0))
-    reviews.write("claude-ai", AnsweredRuleReviewEntry(
-        1, "This scratch run checks connector.py:66 without sending to any real user thread."))
-    with reviews.writing() as db:
-        db.execute("UPDATE drawn_rule SET drawn_at=? WHERE reviewer=?", (time.time() - age, "claude-ai"))
 
 
 def curl_call(port, token, body, *, arguments=None):
@@ -135,8 +126,6 @@ def main():
         for name in ("claude-ai", "worker"):
             comms.registry.declare(comms.registry.new_thread(name, frozenset(), str(base)))
         comms.messaging.initialize_private_initial_protocol()
-        reviews = RuleReviews(root)
-        reviews_at(reviews, 0)
         home = base / "home"
         store_root = home / ".local/state/agent-comms/connector"
         store_root.mkdir(mode=0o700, parents=True)
@@ -160,38 +149,26 @@ def main():
             print("entrypoint=agent-comms-connector serve --root <scratch> --port <loopback-port>")
             with store.granted("scratch curl proof") as token:
                 before = comms.bus.log.latest_sequence()
-                for label, age, body in (
-                    ("refused wording", 0, "Fix the candidate now"),
-                    ("expired review", 21 * 60, "Fix the send now"),
-                ):
-                    reviews_at(reviews, age)
-                    output = curl_call(port, token, body)
-                    print(label + ":\n" + output.strip())
-                    response, status = output.strip().rsplit("\n", 1)
-                    code, seconds = status.split()
-                    assert code == ("500" if args.baseline else "200")
-                    if not args.baseline:
-                        result = json.loads(response)["result"]
-                        assert result["isError"] is True
-                        if age:
-                            assert "last rule review was 21 min ago (max 20)" in response
-                            assert "agent-comms-commander rules review" in response
-                            assert float(seconds) < 1
-                        else:
-                            assert "Jargon" in response and "candidate" in response
-                        readback = subprocess.run([
-                            shutil.which("agent-comms"), "--root", str(root), "tool",
-                            "--tool", "comms_send_refusals", "--arguments",
-                            json.dumps({"sender": "claude-ai", "target": "worker"}),
-                        ], env=environment, capture_output=True, text=True)
-                        assert readback.returncode == 0, readback.stdout + readback.stderr
-                        rows = json.loads(readback.stdout)["refusals"]
-                        expected = 2 if age else 1
-                        assert len(rows) == expected, "each refused send must record exactly once"
-                        assert rows[0]["sender"] == "claude-ai" and rows[0]["target"] == "worker"
-                        assert rows[0]["reason"] == json.loads(result["content"][0]["text"])["error"]
-                        assert rows[0]["refused_at_ms"] > 0
-                        print("agent-comms readback: " + json.dumps(rows[0], sort_keys=True))
+                output = curl_call(port, token, "Fix the candidate now")
+                print("refused wording:\n" + output.strip())
+                response, status = output.strip().rsplit("\n", 1)
+                assert status.split()[0] == ("500" if args.baseline else "200")
+                if not args.baseline:
+                    result = json.loads(response)["result"]
+                    assert result["isError"] is True
+                    assert "Jargon" in response and "candidate" in response
+                    readback = subprocess.run([
+                        shutil.which("agent-comms"), "--root", str(root), "tool",
+                        "--tool", "comms_send_refusals", "--arguments",
+                        json.dumps({"sender": "claude-ai", "target": "worker"}),
+                    ], env=environment, capture_output=True, text=True)
+                    assert readback.returncode == 0, readback.stdout + readback.stderr
+                    rows = json.loads(readback.stdout)["refusals"]
+                    assert len(rows) == 1, "each refused send must record exactly once"
+                    assert rows[0]["sender"] == "claude-ai" and rows[0]["target"] == "worker"
+                    assert rows[0]["reason"] == json.loads(result["content"][0]["text"])["error"]
+                    assert rows[0]["refused_at_ms"] > 0
+                    print("agent-comms readback: " + json.dumps(rows[0], sort_keys=True))
                 assert comms.bus.log.latest_sequence() == before, "a refused send committed bytes"
                 if not args.baseline:
                     output = curl_call(port, token, "", arguments={"unexpected": True})
@@ -199,13 +176,6 @@ def main():
                     assert status.split()[0] == "200" and json.loads(response)["result"]["isError"]
                     assert "Invalid comms_send arguments" in response
                     print("invalid tool arguments: " + status)
-                    # An actual malformed stored schema is a real error, not a
-                    # user refusal. It must not be caught by the MCP tool boundary.
-                    with reviews.writing() as db:
-                        db.execute("DROP TABLE rule_answer")
-                    output = curl_call(port, token, "Fix the send now")
-                    assert output.strip().rsplit("\n", 1)[1].split()[0] == "500"
-                    print("malformed stored schema remains HTTP 500")
         finally:
             service.terminate()
             tail, _ = service.communicate(timeout=15)

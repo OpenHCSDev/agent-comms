@@ -25,6 +25,26 @@ def test_sparse_prefix_drops_only_its_covered_exceptions():
     assert cursor.add((30, 20, 5)) == ConversationCursor(3, (5, 20, 30, 40, 60))
 
 
+def test_in_order_additions_become_one_prefix():
+    cursor = ConversationCursor()
+    for sequence in range(1, 10_001):
+        cursor = cursor.add((sequence,))
+    assert cursor.high_water == 10_000
+    assert cursor.exceptions == ()
+
+
+def test_add_closes_gaps_without_losing_sparse_reads_or_mutating_the_source():
+    original = ConversationCursor(3, (7, 9, 12))
+    cursor = original.add((6, 4, 11, 5, 11, 2))
+    assert cursor == ConversationCursor(7, (9, 11, 12))
+    assert cursor.add((8, 10)) == ConversationCursor(12)
+    assert original == ConversationCursor(3, (7, 9, 12))
+    assert cursor.through(8) == ConversationCursor(8, (9, 11, 12))
+    assert ConversationCursor.union((ConversationCursor(3, (5, 7)),
+                                     ConversationCursor(4, (6, 9)))) == ConversationCursor(
+                                         4, (5, 6, 7, 9))
+
+
 def setup_conversations(root):
     comms = wire(root)
     for name in ("sender", "reader"):

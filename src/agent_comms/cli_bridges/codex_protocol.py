@@ -293,8 +293,8 @@ class Item(TaggedWire, ABC):
     doing: ClassVar[str] = ''
 
     @abstractmethod
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        """The finished item's presentation."""
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        """The finished item's presentation at its source record's time."""
 
     def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
         return CompletedItem(turn_id, self.id, events)
@@ -312,8 +312,8 @@ class TextBody(WireModel):
     def accumulator(self, started_at: EventTime) -> TextDraft:
         return TextDraft.from_parts(AssistantTranscript, (self.text,), started_at, self.id)
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.accumulator(UnrecordedEventTime()).events
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return self.accumulator(EventTime.capture(timestamp)).events
 
 
 class AssistantItem(TextBody, Item):
@@ -335,8 +335,8 @@ class ReasoningItem(Item):
         # Only public summaries; private/raw reasoning is never projected.
         return ParagraphDraft.from_parts(ThinkingTranscript, self.summary, started_at, self.id)
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.accumulator(UnrecordedEventTime()).events
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return self.accumulator(EventTime.capture(timestamp)).events
 
 
 class UserItem(Item):
@@ -344,8 +344,8 @@ class UserItem(Item):
     content: list[CodexUserInput]
     clientId: str | None = None
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (UserTranscript('\n'.join(part.display for part in self.content), position=self.id),)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return (UserTranscript('\n'.join(part.display for part in self.content), position=self.id, timestamp=timestamp),)
 
     def completed(self, turn_id: str, events: tuple[TranscriptEvent, ...]) -> RuntimeUpdate:
         # Bus inputs already appear in Core's inbox; the live view does not echo them as new input.
@@ -377,8 +377,8 @@ class ToolItem(Item, ABC):
         tool = ToolDeclaration.record(self.tool_name, self.arguments, call_id=self.id)
         return shown.recorded(tool) if tool else shown
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return self.call.finished(self.output, self.succeeded, self.id)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return self.call.finished(self.output, self.succeeded, self.id, timestamp)
 
     @property
     def activity_detail(self) -> str:
@@ -529,14 +529,14 @@ class FunctionOutputItem(Item):
     name: str
     output: str
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (ToolEndTranscript(position=self.id, tool_call_id=self.id, tool_name=self.name, text=self.output),)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return (ToolEndTranscript(position=self.id, timestamp=timestamp, tool_call_id=self.id, tool_name=self.name, text=self.output),)
 
 
 class SendOutputItem(FunctionOutputItem):
     name: Literal[SEND_TOOL]
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         # The bridge's send result is already rendered from the bus in Toad.
         return ()
 
@@ -545,14 +545,14 @@ class CompactionItem(Item):
     wire_tag = 'contextCompaction'
     doing = 'Compacting context'
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript('Context compacted.', position=self.id),)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return (NoticeTranscript('Context compacted.', position=self.id, timestamp=timestamp),)
 
 
 class HookPromptItem(Item):
     wire_tag = 'hookPrompt'
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         # Harness instructions are not assistant output.
         return ()
 
@@ -560,8 +560,8 @@ class HookPromptItem(Item):
 class ReviewBody(WireModel):
     review: str
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(self.review, position=self.id),)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return (NoticeTranscript(self.review, position=self.id, timestamp=timestamp),)
 
 
 class EnteredReviewItem(ReviewBody, Item):
@@ -576,8 +576,8 @@ class SleepItem(Item):
     wire_tag = 'sleep'
     durationMs: int
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).', position=self.id),)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return (NoticeTranscript(f'Waited ({self.durationMs} ms requested).', position=self.id, timestamp=timestamp),)
 
     @property
     def activity_detail(self) -> str:
@@ -588,8 +588,8 @@ class ImageViewItem(Item):
     wire_tag = 'imageView'
     path: str
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'Image: {self.path}', position=self.id),)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return (NoticeTranscript(f'Image: {self.path}', position=self.id, timestamp=timestamp),)
 
 
 class ImageGenerationItem(Item):
@@ -598,9 +598,9 @@ class ImageGenerationItem(Item):
     result: str
     savedPath: str | None = None
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'Image generation: {self.status}' +
-                                 (f' — {self.savedPath}' if self.savedPath else ''), position=self.id),)
+                                 (f' — {self.savedPath}' if self.savedPath else ''), position=self.id, timestamp=timestamp),)
 
 
 class WebSearchItem(Item):
@@ -609,9 +609,9 @@ class WebSearchItem(Item):
     action: JsonValue = None
     results: JsonValue = None
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         # Search status carries no success flag. Do not invent a successful end.
-        return (NoticeTranscript(f'Web search: {self.query}', position=self.id),)
+        return (NoticeTranscript(f'Web search: {self.query}', position=self.id, timestamp=timestamp),)
 
     @property
     def activity_detail(self) -> str:
@@ -657,10 +657,10 @@ class FileChange(WireModel):
     diff: str
     kind: PatchChange.declared_union()
 
-    def events(self, call_id: str, ok: bool) -> tuple[TranscriptEvent, ...]:
+    def events(self, call_id: str, ok: bool, timestamp: float) -> tuple[TranscriptEvent, ...]:
         call = ToolCall(call_id, 'edit', {'path': self.path}).recorded(FilePatchTool(path=self.path))
         diff = self.kind.patch(self.path, self.diff)
-        return (call.patched(diff) if diff else call).finished('', ok, call_id)
+        return (call.patched(diff) if diff else call).finished('', ok, call_id, timestamp)
 
 
 class FileChangeItem(Item):
@@ -669,11 +669,11 @@ class FileChangeItem(Item):
     changes: list[FileChange]
     status: Literal['inProgress', 'completed', 'failed', 'declined']
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         if self.status == 'inProgress':
             raise ValueError('File change completion still says inProgress')
         return tuple(event for index, change in enumerate(self.changes)
-                     for event in change.events(f'{self.id}:{index}', self.status == 'completed'))
+                     for event in change.events(f'{self.id}:{index}', self.status == 'completed', timestamp))
 
 
 class AgentState(WireModel):
@@ -688,10 +688,10 @@ class AgentToolItem(Item):
     receiverThreadIds: list[str]
     agentsStates: dict[str, AgentState]
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
         return (NoticeTranscript(f'{self.tool}: {self.status}\n' + '\n'.join(
             f'{name}: {state.status}' + (f' — {state.message}' if state.message else '')
-            for name, state in self.agentsStates.items()), position=self.id),)
+            for name, state in self.agentsStates.items()), position=self.id, timestamp=timestamp),)
 
 
 class AgentActivityItem(Item):
@@ -700,8 +700,8 @@ class AgentActivityItem(Item):
     agentThreadId: str
     kind: str
 
-    def events(self) -> tuple[TranscriptEvent, ...]:
-        return (NoticeTranscript(f'{self.agentPath}: {self.kind}', position=self.id),)
+    def events(self, timestamp: float) -> tuple[TranscriptEvent, ...]:
+        return (NoticeTranscript(f'{self.agentPath}: {self.kind}', position=self.id, timestamp=timestamp),)
 
 
 # The existing registration owner derives this wire grammar from declarations.
@@ -741,8 +741,7 @@ class ItemEntry(WireModel):
         if self.completedAtMs is None:
             raise ValueError(f'Item {self.item.id} has not finished')
         event_time = self.started_at.continued_from(self.completedAtMs / 1000)
-        return self.item.completed(self.turnId, tuple(
-            event_time.stamp(event) for event in self.item.events()))
+        return self.item.completed(self.turnId, self.item.events(event_time.transcript_timestamp()))
 
 
 class ItemsPage(WireModel):

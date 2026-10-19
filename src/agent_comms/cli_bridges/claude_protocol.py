@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import ClassVar, Literal
 from xml.etree import ElementTree
 
@@ -18,7 +17,7 @@ from pydantic import (
 )
 
 from agent_comms.activity import ActivityState
-from agent_comms.cli_protocol import TaggedWire, WireHeader, WireModel
+from agent_comms.cli_protocol import TaggedWire, TimestampedWire, WireHeader, WireModel
 from agent_comms.runtime_updates import (
     ActiveItem,
     FinishedItem,
@@ -203,7 +202,7 @@ class KnownTurn(ClaudeTurn):
 @dataclass
 class ClaudeSession:
     turn: ClaudeTurn = field(default_factory=UnknownTurn)
-    tools: dict[str, ToolCall] = field(default_factory=dict)
+    tools: dict[str, tuple[ToolCall, TimedRecord]] = field(default_factory=dict)
     phase: ClaudeReaderPhase = field(default_factory=CatchUp)
     project: str = ''
 
@@ -213,30 +212,26 @@ class ClaudeSession:
         self.project = cwd
         return (SessionFacts(project=cwd),)
 
-    def started(self, call: ToolCall) -> None:
-        self.tools[call.id] = call
+    def started(self, call: ToolCall, record: TimedRecord) -> None:
+        self.tools[call.id] = call, record
 
-    def tool_result(self, tool_id: str, text: str, ok: bool, position: int) -> tuple[RuntimeUpdate, ...]:
+    def tool_result(self, tool_id: str, text: str, ok: bool, record: TimedRecord) -> tuple[RuntimeUpdate, ...]:
         try:
-            call = self.tools.pop(tool_id)
+            call, started = self.tools.pop(tool_id)
         except KeyError:
             return self.phase.missing_tool(tool_id)
-        return (*self.finished(tool_id, call.finished(text, ok, position)),
+        return (*self.finished(tool_id, (
+                    call.started(started.position, started.timestamp),
+                    call.ended(text, ok, record.position, record.timestamp))),
                 *self.turn.active(tool_id, self.phase, ActivityState.WORKING, ''))
 
     def finished(self, item: str, events: tuple[TranscriptEvent, ...]) -> tuple[RuntimeUpdate, ...]:
         return self.turn.finished(item, events, self.phase)
 
 
-class TimedRecord(WireModel):
+class TimedRecord(TimestampedWire):
     position: int = Field(exclude=True)
     uuid: str
-    timestamp: float
-
-    @field_validator('timestamp', mode='before')
-    @classmethod
-    def epoch(cls, value: str) -> float:
-        return datetime.fromisoformat(value).timestamp()
 
 
 class ClaudeHeader(WireHeader):
@@ -331,7 +326,7 @@ class ToolUse(AssistantBlock):
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         call = self.call()
-        session.started(call)
+        session.started(call, record)
         return session.turn.active(self.id, session.phase, ActivityState.WORKING, call.title)
 
 
@@ -546,7 +541,7 @@ class ToolResult(UserBlock, ContentBlocks):
     is_error: bool = False
 
     def updates(self, record: TimedRecord, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
-        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record.position)
+        return session.tool_result(self.tool_use_id, '\n'.join(part.result_text() for part in self.content), not self.is_error, record)
 
 
 class UserMessage(ContentBlocks):
