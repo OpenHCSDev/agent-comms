@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
+from uuid import uuid4
 
 from .coordination_errors import IdentityConflict
 from .coordinator import Coordination
 from .native_arguments import NativeArguments
 from .native_session_reopen import NativeSessionIdentity
-from .native_pi import NativePiUnavailable, _session_location
+from .native_pi import NativePiUnavailable, _durable_private_session_dir, _session_location
 from .private_path import NativeSessionFileRole
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .pi_vocabulary import ThinkingChoice
@@ -28,6 +29,14 @@ class SelectedSession:
     saved journal may live elsewhere.
     """
     directory: Path
+
+    def managed(self, root: Path) -> SelectedSession:
+        directory = root / "native-sessions" / self.managed_lookup()
+        _durable_private_session_dir(directory)
+        return replace(self, directory=directory)
+
+    def managed_lookup(self) -> str:
+        return uuid4().hex
 
     @property
     def path(self) -> Path | None:
@@ -106,6 +115,9 @@ class SelectedSession:
 class SavedSelectedSession(SelectedSession):
     """Continue the exact captured native identity, irrespective of storage parent."""
     identity: NativeSessionIdentity = field(kw_only=True)
+
+    def managed_lookup(self) -> str:
+        return self.identity.lookup
 
     @property
     def path(self) -> Path:
