@@ -28,8 +28,8 @@ import socket
 import time
 import urllib.request
 from abc import abstractmethod
-from collections.abc import Mapping, Sequence
-from contextlib import suppress
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Annotated, ClassVar, Literal, Self, get_args
@@ -346,15 +346,22 @@ class Connector:
     def exposed() -> dict[str, type[ToolRequest]]:
         return {tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)}
 
+    @contextmanager
+    def opened_wire(self) -> Iterator[Comms]:
+        """The connector's caller must exist at startup and at each later call."""
+        with client_wire(self.root) as comms:
+            comms.registry.require(CALLER.name)
+            yield comms
+
     def invoke(
         self, tool: type[ToolRequest], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
-        with client_wire(self.root) as comms:
+        with self.opened_wire() as comms:
             return tool.invoke(comms, arguments, caller=CALLER)
 
     def application(self) -> web.Application:
-        with client_wire(self.root) as comms:
-            comms.registry.require(CALLER.name)
+        with self.opened_wire():
+            pass
         app = web.Application()
         app.add_routes(
             [

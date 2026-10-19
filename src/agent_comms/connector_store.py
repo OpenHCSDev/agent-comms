@@ -105,12 +105,13 @@ class ConnectorStore(RootFile, LockedStore[ConnectorGrants], lock_rank=9):
         """An access token for a caller on this machine, revoked when its call is done."""
         token = secrets.token_urlsafe(32)
         held = IssuedAccess(client_id, time.time() + CODE_SECONDS)
-        self.update(lambda grants: replace(grants, access=grants.access | {digest(token): held}))
+        key = digest(token)
+        self.update(lambda grants: replace(grants, access=grants.access | {key: held}))
         try:
             yield token
         finally:
             self.update(
                 lambda grants: replace(
-                    grants, access={k: v for k, v in grants.access.items() if v is not held}
+                    grants, access={k: v for k, v in grants.access.items() if k != key}
                 )
             )
