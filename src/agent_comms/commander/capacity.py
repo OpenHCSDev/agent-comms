@@ -37,38 +37,44 @@ def beat(name: str):
 
 @dataclass(frozen=True)
 class Load:
-    """The commander load on one Comms: its open and overdue orders and its unjudged edits."""
+    """The commander load on one Comms: its open and overdue orders, its unjudged edits, live forks."""
     owed: int
     overdue: int
     unjudged: int
+    forks: tuple[str, ...]
 
     @classmethod
     def of(cls, comms: Comms, commander: str) -> Load:
         from . import judge
-        actor = comms.registry.require(commander).incarnation
+        actor, now = comms.registry.require(commander).incarnation, time.time()
         owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
-        return cls(len(owed), sum(t.late_since(time.time()) is not None for t in owed),
-                   len(judge.Edit.unjudged(comms, commander)))
+        # owed is pending, so a passed deadline is the whole of lateness
+        return cls(len(owed), sum(t.deadline.recorded_at("An order deadline") < now for t in owed),
+                   len(judge.Edit.unjudged(comms, commander)), tuple(live_forks()))
 
     @property
     def total(self) -> float:
         return self.owed + 2 * self.overdue + self.unjudged / 10
 
-    def short(self) -> str | None:
-        """Why the commander must fork now, or None when live forks cover the load."""
-        needed = math.ceil(self.total / PER_COMMANDER) - 1
-        forks = live_forks()
-        if len(forks) < needed:
-            return (f'load {self.total:.0f} ({self.owed} open orders, {self.overdue} overdue, '
-                    f'{self.unjudged} unjudged edits) needs {needed} live fork(s), '
-                    f'{len(forks)} live {forks}; fork a slice now (each fork passes --fork NAME to order)')
-        return None
+    @property
+    def needed(self) -> int:
+        return math.ceil(self.total / PER_COMMANDER) - 1
+
+    @property
+    def short(self) -> bool:
+        """Live forks do not cover the load: the commander must fork now."""
+        return len(self.forks) < self.needed
+
+    def __str__(self) -> str:
+        return (f'load {self.total:.0f} ({self.owed} open orders, {self.overdue} overdue, '
+                f'{self.unjudged} unjudged edits) needs {self.needed} live fork(s), '
+                f'{len(self.forks)} live {list(self.forks)}; fork a slice now (each fork passes --fork NAME to order)')
 
     def require(self) -> None:
-        if why := self.short():
-            sys.exit(f'REFUSED, nothing recorded: overloaded: {why}.')
+        if self.short:
+            sys.exit(f'REFUSED, nothing recorded: overloaded: {self}.')
 
 
 def main(a):
     load = Load.of(order.COMMS, order.ME)
-    print(load.short() or f'covered: load {load.total:.0f}, forks {live_forks()}')
+    print(load if load.short else f'covered: load {load.total:.0f}, forks {list(load.forks)}')

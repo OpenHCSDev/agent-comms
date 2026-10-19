@@ -33,12 +33,18 @@ class IdleUnits(ReasonedStandingRule):
 
 
 @dataclass(frozen=True)
-class ForkNow(ReasonedStandingRule):
-    text = "FORK NOW: {why}"
+class ForkNow(StandingRule):
+    """The load on the asked Comms needs more live forks than there are."""
+
+    load: capacity.Load
 
     @classmethod
-    def reason(cls, comms: Comms, commander: str) -> str | None:
-        return capacity.Load.of(comms, commander).short()
+    def violations(cls, comms: Comms, commander: str) -> tuple[ForkNow, ...]:
+        load = capacity.Load.of(comms, commander)
+        return (cls(load),) * load.short
+
+    def line(self) -> str:
+        return f"FORK NOW: {self.load}"
 
 
 @dataclass(frozen=True)
