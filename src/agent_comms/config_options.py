@@ -403,19 +403,19 @@ class SessionConfigOptions(ConfigOptions):
         await self.effects.turns.goals.sync_goal_execution(session_id, name)
         await self.use_stored_settings(session_id, name)
 
-    async def observe_configuration(self, session_id: str, client: Client | SocketClient | None) -> None:
+    async def observe_configuration(self, session_id: str, client: Client | SocketClient) -> None:
         """Subscribe an ACP consumer and supply its own initial configuration."""
-        if client is None:
-            return
         self._publication_sessions.add(session_id)
         self.runtime.background(self.send_menu(client, session_id))
 
     async def send_menu(self, client: Client | SocketClient, session_id: str) -> None:
         options = await self.options_for_session(session_id)
         async with self.catalog_publish_lock:
-            await client.session_update(session_id=session_id, update=ConfigOptionUpdate(
+            update = ConfigOptionUpdate(
                 session_update="config_option_update", config_options=options,
-            ))
+            )
+            await client.session_update(session_id=session_id, update=update)
+            self.publications[session_id] = update
 
     async def options_for_session(
         self, session_id: str,
