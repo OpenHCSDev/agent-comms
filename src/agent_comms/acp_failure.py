@@ -8,12 +8,12 @@ from __future__ import annotations
 import json
 import re
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from typing import ClassVar, NoReturn, TYPE_CHECKING
 
-from acp import RequestError
-
 if TYPE_CHECKING:
+    from acp import RequestError
     from .agent_events import Done, Error
     from .input_disposition import InputDocument
     from .turn_input_source import OriginalTurnInput
@@ -198,9 +198,6 @@ class RequestFailure:
     def error_data(self):
         return {"agentCommsFailure": FieldCodec.encode(self)}
 
-    def request_error(self):
-        return RequestError.internal_error(self.error_data())
-
     @classmethod
     def from_error(cls, error: RequestError) -> RequestFailure:
         return FieldCodec.decode(ErrorValue, error.data).original_root().request_failure(
@@ -215,11 +212,11 @@ class NativeTurnOutcome(ABC):
     async def publish(self, client, session_id: str) -> NativeTurnOutcome: ...
 
     @abstractmethod
-    def raise_if_failed(self) -> None: ...
-
-    def raise_fault(self, cause: Exception) -> NoReturn:
-        """Without a completed failure, preserve the original fault."""
-        raise cause
+    def raise_if_failed(
+        self, error_type: Callable[[dict[str, object]], Exception], *, cause: Exception | None = None,
+    ) -> None:
+        """Keep the shared failure facts; its caller owns the transport exception."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -227,7 +224,9 @@ class UnresolvedNativeTurnOutcome(NativeTurnOutcome):
     async def publish(self, client, session_id: str) -> NativeTurnOutcome:
         raise RuntimeError("Native completion has not been resolved at its input boundary")
 
-    def raise_if_failed(self) -> None:
+    def raise_if_failed(self, error_type, *, cause=None) -> None:
+        if cause is not None:
+            raise cause
         raise RuntimeError("Native completion has not been resolved at its input boundary")
 
 
@@ -236,7 +235,7 @@ class SuccessfulNativeTurnOutcome(NativeTurnOutcome):
     async def publish(self, client, session_id: str) -> NativeTurnOutcome:
         return self
 
-    def raise_if_failed(self) -> None:
+    def raise_if_failed(self, error_type, *, cause=None) -> None:
         pass
 
 
@@ -287,11 +286,8 @@ class FailedNativeTurnOutcome(NativeTurnOutcome):
         # returns False when nobody accepted the notification.
         return replace(self, request=replace(self.request, notification_published=accepted is not False))
 
-    def raise_fault(self, cause: Exception) -> NoReturn:
-        raise self.request.request_error() from cause
-
-    def raise_if_failed(self) -> None:
-        raise self.request.request_error()
+    def raise_if_failed(self, error_type, *, cause=None) -> NoReturn:
+        raise error_type(self.request.error_data()) from cause
 
 
 class RequestACPFailure(ACPFailure):
