@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from importlib import import_module
+from pkgutil import iter_modules
 from typing import Final
+
+import agent_comms.coordination_tables as coordination_tables
 
 from agent_comms.assignment_states import AssignmentState
 from agent_comms.attempt_states import AttemptState, RetryPredecessor
@@ -22,6 +26,16 @@ COORDINATION_SNAPSHOT_VERSION: Final = 3
 
 class CoordinatorTable:
     """Capability for the coordinator schema; cases and transitions come from their owners."""
+
+    @classmethod
+    def declarations(cls):
+        for module in iter_modules(coordination_tables.__path__, coordination_tables.__name__ + "."):
+            import_module(module.name)
+        return TypedTable.members_with(cls)
+
+    @classmethod
+    def configure_connection(cls, connection) -> None:
+        """A row may install connection behavior required by its own SQL."""
 
     @classmethod
     def schema_objects(cls, *, if_not_exists: bool = False):
@@ -128,11 +142,9 @@ def _schema_context():
 
 
 def coordinator_schema():
-    import agent_comms.coordination_tables as coordination_tables
-
     tables = "\n".join(
         statement + ";"
-        for row_type in TypedTable.members_with(CoordinatorTable)
+        for row_type in CoordinatorTable.declarations()
         for statement in row_type.schema_objects().values()
     )
     return tables + "\n" + ("""CREATE VIEW retry_disposition_basis AS

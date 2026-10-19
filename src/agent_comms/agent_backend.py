@@ -26,14 +26,15 @@ from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, ClassVar, Protocol, Self
 
 from .declared_family import DeclaredFamily
+from .pi_counts import PiCount
 from .pi_vocabulary import ThinkingLevelField
 from .send_outcome import SendBoundary
 from .tool_result import DeclaredReply
 
 if TYPE_CHECKING:
-    from .launch_runtime import LaunchRuntime
     from .agent_events import AgentEvent
     from .image_inputs import ImageInput
+    from .launch_runtime import LaunchRuntime
     from .threads import Thread
     from .turn_context import InputContributionCoordinates
 
@@ -243,14 +244,6 @@ class ClearQueue(TurnInboxItem):
         return receiver.clear_queue(turn, self)
 
 
-@dataclass(frozen=True)
-class ContextUsage:
-    """Context size measured by the backend's own estimator."""
-
-    tokens: int | None
-    window: int | None
-
-
 class CompactionOutcome(DeclaredFamily, DeclaredReply, affix="Compaction"):
     """The result of one requested compaction."""
 
@@ -261,7 +254,7 @@ class PlacedCompaction(CompactionOutcome):
 
     summary: str
     first_kept: str | None
-    tokens_before: int | None
+    tokens_before: PiCount
 
 
 @dataclass(frozen=True)
@@ -346,14 +339,6 @@ class Compacts(ABC):
         """Compact ``thread`` now, guided by ``instructions``."""
 
 
-class ReportsContext(ABC):
-    """Context size from the backend's own estimator. Core never estimates."""
-
-    @abstractmethod
-    async def context_usage(self, thread: Thread) -> ContextUsage:
-        """The thread's current context size."""
-
-
 class Forks(ABC):
     """Creates a child runtime location from a parent thread's history."""
 
@@ -381,7 +366,6 @@ class ConfiguresModel(ABC):
 THREAD_CAPABILITIES: tuple[type, ...] = (
     Steers,
     Compacts,
-    ReportsContext,
     ConfiguresModel,
 )
 

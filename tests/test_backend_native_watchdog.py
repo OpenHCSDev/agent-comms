@@ -15,7 +15,11 @@ from agent_comms.agent_backend import InputContent, InputId, InputRequest, SendN
 @pytest.mark.parametrize("outcome", ["failure", "stall"])
 async def test_actual_native_watchdog_failure_never_replays(native_backend, outcome):
     owner = native_backend
-    owner.provider.status = 503 if outcome == "failure" else 0
+    # Retryable refusals belong to the native recovery excursion below. This
+    # terminal refusal must settle once, without resubmitting the saved input.
+    owner.provider.status = 400 if outcome == "failure" else 0
+    owner.provider.error_message = "loopback terminal failure"
+    owner.provider.error_type = "invalid_request_error"
     result = await owner.run("One diagnostic input", model_wait=ModelWait(2.0))
     print("native_outcome", outcome, repr(result), flush=True)
     assert isinstance(result[-1], events.Done) and not result[-1].ok, result[-1]
@@ -26,7 +30,7 @@ async def test_actual_native_watchdog_failure_never_replays(native_backend, outc
         assert [item.state for item in states] == ["model_stalled", "aborting", "failed"]
         assert "no RPC progress" in result[-1].text
     else:
-        assert "loopback retryable failure" in result[-1].text
+        assert "loopback terminal failure" in result[-1].text
     assert all(not child.alive() for child in owner.children)
 
 

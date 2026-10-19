@@ -35,10 +35,10 @@ class TaskScope(DeclaredFamily, affix="TaskScope"):
 
     @classmethod
     def for_goal(cls, project: str, goal: GoalDeclaration) -> TaskScope:
-        return goal.active().project(
-            lambda current: GoalTaskScope(project=project, goal=current.checkpoint),
-            lambda: TurnTaskScope(project=project),
-        )
+        return goal.active().task_scope(TurnTaskScope(project=project))
+
+    def with_goal(self, goal: GoalRevision) -> TaskScope:
+        return GoalTaskScope(project=self.project, goal=goal)
 
     def require_current(self, owner: Thread) -> None:
         if self.project != owner.worktree:

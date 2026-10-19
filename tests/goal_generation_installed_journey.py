@@ -16,12 +16,14 @@ import shlex
 import sys
 
 from agent_comms.comms import Comms
+from agent_comms.native_package import VerifiedNativePackage
+from agent_comms.storage_rules import StorageRule
 from agent_comms.goal_management import Goals
 from agent_comms.goal_generation import BlockedGeneration, CompletedGeneration
 from native_backend_fixture import native_backend_fixture
 
 
-async def run(stage: Path, extension: Path):
+async def run(stage: Path, extension: Path, *, package: VerifiedNativePackage):
     assert '/site-packages/' in inspect.getfile(Goals), 'Use the installed candidate, not editable source'
     from toad.agent_schema import AgentDefinition
     from toad.app import ToadApp
@@ -31,7 +33,7 @@ async def run(stage: Path, extension: Path):
                       XDG_STATE_HOME=str(stage / 'ui-state'),
                       XDG_DATA_HOME=str(stage / 'ui-data'))
     (stage / 'native').mkdir(mode=0o700)
-    async with native_backend_fixture(stage / 'native') as native:
+    async with native_backend_fixture(stage / 'native', package=package) as native:
         await native.author_history()
         original = native.session.read_bytes()
         options = ('--extension', str(extension))
@@ -115,8 +117,10 @@ async def run(stage: Path, extension: Path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--native-cache', type=Path, default=StorageRule.native_cache)
     parser.add_argument('--stage', type=Path, required=True)
     parser.add_argument('--extension', type=Path, required=True,
                         help='Approved compiled comms entry from the native deployment manifest')
     args = parser.parse_args()
-    asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True)))
+    asyncio.run(run(args.stage.resolve(), args.extension.resolve(strict=True),
+                    package=VerifiedNativePackage.from_environment(args.native_cache)))

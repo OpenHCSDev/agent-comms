@@ -22,9 +22,8 @@ from .order import COMMS, ME, CommanderVerb, RuledVerb, hhmm
 def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
     thread = COMMS.registry.require(ME)
-    return thread.goal.active().project(
-        lambda goal: goal.order.open_requests(goal, COMMS.goals, thread.incarnation), tuple,
-    )
+    return tuple(request for goal in thread.goal.active()
+                 for request in goal.order.open_requests(goal, COMMS.goals, thread.incarnation))
 
 
 def stalled() -> list[str]:

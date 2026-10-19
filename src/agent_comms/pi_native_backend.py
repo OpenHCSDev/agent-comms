@@ -20,32 +20,30 @@ from typing import TYPE_CHECKING, Any, ClassVar, Self
 
 from .agent_backend import (
     AgentBackend,
-    Compacts,
     CompactionOutcome,
+    Compacts,
     ConfiguresModel,
-    ContextUsage,
     FailedCompaction,
     Forks,
     InputContent,
     Interrupts,
     NothingToCompaction,
     PlacedCompaction,
-    ReportsContext,
     RuntimeLocation,
     TurnDelivery,
 )
-from .unstarted_runtime import UnstartedRuntime
+from .fresh_private_session import create_fresh_private_session
 from .native_pi import NativePiRpcLaunch
-from .native_transcript import NativeTranscript
 from .native_session_files import NativeSessionFiles
 from .native_session_reopen import SessionIdentityHelper
+from .native_transcript import NativeTranscript
 from .selected_session import SavedSelectedSession
-from .fresh_private_session import create_fresh_private_session
+from .unstarted_runtime import UnstartedRuntime
 
 if TYPE_CHECKING:
-    from .launch_runtime import LaunchRuntime
     from .agent_events import AgentEvent, AgentInfo
     from .comms import Comms
+    from .launch_runtime import LaunchRuntime
     from .native_arguments import NativeArguments
     from .native_child import NativeChildState, PiSessionChild
     from .native_session_reopen import NativeSessionIdentity
@@ -175,7 +173,6 @@ class PiNativeBackend(
     PersistentPiSession,
     Interrupts,
     Compacts,
-    ReportsContext,
     Forks,
     ConfiguresModel,
     AgentBackend,
@@ -282,17 +279,6 @@ class PiNativeBackend(
         from . import backend
 
         await backend.terminate_task_process(owner)
-
-    # -- ReportsContext ---------------------------------------------------
-
-    async def context_usage(self, thread: Thread) -> ContextUsage:
-        from .pi_commands import GetSessionStats
-
-        stats = await self.inspect(thread, GetSessionStats())
-        usage = stats.context_usage
-        if usage is None:
-            return ContextUsage(tokens=None, window=None)
-        return ContextUsage(tokens=usage.tokens, window=usage.context_window)
 
     # -- Compacts ---------------------------------------------------------
 
