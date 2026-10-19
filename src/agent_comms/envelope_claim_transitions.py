@@ -203,8 +203,7 @@ class ClaimTransition:
     claims: tuple[Annotated[str, ResourcePathText], ...] = field(
         default=(), metadata={"wire_required": True})
     releases: tuple[ClaimRelease, ...] = field(default=(), metadata={"wire_required": True})
-    generation: Annotated[str, Id128Text] | None = field(
-        default=None, metadata={"wire_required": True})
+    generation: str | None = field(default=None, metadata={"wire_required": True})
     claim_scope: WakeClaim | None = field(
         default=None, metadata={"wire_name": 'admission', "wire_omit_default": True, "wire_nonnull": True}
     )
@@ -215,9 +214,13 @@ class ClaimTransition:
             raise ClaimTransitionError("Empty claim transitions are not meaningful.")
         if len(set(self.resources)) != len(self.resources):
             raise ClaimTransitionError("Duplicate or overlapping resources are not supported.")
-        if bool(self.claims) == (self.generation is None):
-            raise ClaimTransitionError("A claim mints a generation; a release-only one cannot.")
-        if self.claim_scope is not None and (not self.claims or self.releases):
+        if self.claims:
+            Id128Text.decode(self.generation)
+        elif self.generation is not None:
+            raise ClaimTransitionError("A release-only envelope cannot mint a generation.")
+        if self.claim_scope is not None and (
+            not self.claims or self.releases
+        ):
             raise ClaimTransitionError("Wake claim_scope requires a claim-only transition.")
 
     def require_new_operation(self, is_used: Callable[[str], bool]) -> None:

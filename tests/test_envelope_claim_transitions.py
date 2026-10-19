@@ -170,6 +170,7 @@ def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
     mistyped = (
         lambda: transition(True, claims=(a,), generation=G1),
         lambda: transition(0, claims=(a,), generation=G1),
+        lambda: transition(1, claims=(a,), generation=None),
         lambda: transition(1, claims=(a,), generation="f" * 31),
         lambda: transition(1, claims=(a,), generation=G1.upper()),
         lambda: ClaimTransition("owner", "epoch", 1, "m", (a,), ("bad",), G1),
@@ -180,7 +181,6 @@ def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
             candidate()
     for candidate in (
         lambda: transition(1),
-        lambda: transition(1, claims=(a,), generation=None),
         lambda: transition(1, releases=(ClaimRelease(a, G1),), generation=G2),
     ):
         with pytest.raises(ClaimTransitionError):
