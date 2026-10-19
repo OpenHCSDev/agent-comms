@@ -13,7 +13,7 @@ import json
 import os
 import stat
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -80,6 +80,11 @@ class MaintenancePhase(DeclaredFamily, LifecycleState, affix="Phase"):
     def send_running(cls, delegate, *args):
         return cls.running_sends.open(delegate, *args)
 
+    @classmethod
+    def hold_restore(cls, barrier: MaintenanceBarrier, operator: MaintenanceOperator,
+                     drained: Callable[[], None]) -> None:
+        """A failed upgrade's restore runs under the hold it began, still in place here."""
+
 
 class DrainingPhase(MaintenancePhase):
     running_sends = GrantedSends
@@ -109,6 +114,14 @@ class ReadyPhase(MaintenancePhase):
     @classmethod
     def successors(cls):
         return (DrainingPhase,)
+
+    @classmethod
+    def hold_restore(cls, barrier: MaintenanceBarrier, operator: MaintenanceOperator,
+                     drained: Callable[[], None]) -> None:
+        """The round trip failed on the reopened bus: hold it again and wait for its readers
+        to drain; the restored bus brings back the upgrade's own hold."""
+        barrier.begin(operator)
+        drained()
 
 
 class MaintenanceStatus:
