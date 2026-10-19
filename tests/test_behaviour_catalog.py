@@ -12,5 +12,4 @@ def test_behaviour_catalog_members_name_existing_checks_and_generate_the_file():
     assert members
     for member in members:
         assert member.checks and member.sources, member.declared_name
-        assert all(check.exists() for check in member.checks), member.declared_name
     assert (ROOT / "docs/agents/behaviour-catalog.md").read_text() == BehaviourPattern.catalog()

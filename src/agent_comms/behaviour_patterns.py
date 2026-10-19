@@ -8,15 +8,19 @@ with ``python -m agent_comms.behaviour_patterns > docs/agents/behaviour-catalog.
 
 from __future__ import annotations
 
-import ast
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass
-from inspect import isabstract
-from pathlib import Path
 from typing import ClassVar
 
+from .channel_targets import ChannelTarget
+from .commander import order
+from .commander.send_guard import TacticalCommand
+from .connector import DirectorCaller
 from .declared_family import DeclaredFamily
+from .goals import NoIntegerPrinted, OrderCheck
 from .standing_rules import BoardDisagrees, PlanIdle, StandingRule
+from .todos import StrikeTodo, VoidStrikeTodo
 
 POSTMORTEM = "https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md"
 COMMANDER_SKILL = "../../src/agent_comms/skills/comms-commander/SKILL.md"
@@ -24,9 +28,6 @@ COMMANDER_SKILL = "../../src/agent_comms/skills/comms-commander/SKILL.md"
 
 class PatternCheck(ABC):
     """An existing check that enforces a pattern."""
-
-    @abstractmethod
-    def exists(self) -> bool: ...
 
     @abstractmethod
     def cite(self) -> str: ...
@@ -38,9 +39,6 @@ class RuleCheck(PatternCheck):
 
     rule: type[StandingRule]
 
-    def exists(self) -> bool:
-        return issubclass(self.rule, StandingRule) and not isabstract(self.rule)
-
     def cite(self) -> str:
         where = f"{self.rule.__module__}.{self.rule.__qualname__}"
         return f"standing rule `{self.rule.declared_name}` (`{where}`)"
@@ -48,29 +46,13 @@ class RuleCheck(PatternCheck):
 
 @dataclass(frozen=True)
 class RefusalCheck(PatternCheck):
-    """A refusal located by its definition, read from source: the commander verbs
-    open the installed bus when imported, so the catalog never imports them."""
+    """A refusal, held as the function or class that refuses."""
 
-    module: str
-    qualname: str
+    refusal: Callable[..., object]
     surface: ClassVar[str]
 
-    def exists(self) -> bool:
-        path = Path(__file__).parent.joinpath(*self.module.split(".")[1:]).with_suffix(".py")
-        scope = ast.parse(path.read_text()).body
-        for name in self.qualname.split("."):
-            defined = {
-                node.name: node.body
-                for node in scope
-                if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
-            }
-            if name not in defined:
-                return False
-            scope = defined[name]
-        return True
-
     def cite(self) -> str:
-        return f"{self.surface} in `{self.module}.{self.qualname}`"
+        return f"{self.surface} in `{self.refusal.__module__}.{self.refusal.__qualname__}`"
 
 
 class VerbRefusal(RefusalCheck):
@@ -185,7 +167,7 @@ class TacticalCommandPattern(BehaviourPattern):
         "The commander's own session runs an install, maintenance, connector restart or carry"
         " command instead of ordering a unit to."
     )
-    checks = (ToolRefusal("agent_comms.commander.send_guard", "TacticalCommand"),)
+    checks = (ToolRefusal(TacticalCommand),)
     sources = (ProblemFix("P171", "cba7b09c3"),)
 
 
@@ -195,15 +177,15 @@ class PlainTextPattern(BehaviourPattern):
         " the declared jargon list in `PlainText`."
     )
     checks = (
-        VerbRefusal("agent_comms.commander.order", "refuse"),
-        ToolRefusal("agent_comms.connector", "DirectorCaller.require_directive"),
+        VerbRefusal(order.refuse),
+        ToolRefusal(DirectorCaller.require_directive),
     )
     sources = (CommanderRule("Hate jargon."), PostmortemFailure(8))
 
 
 class UndeclaredAudiencePattern(BehaviourPattern):
     signature = "A send to a channel, which reaches many threads, names no thread as its audience."
-    checks = (ToolRefusal("agent_comms.channel_targets", "ChannelTarget.addressed"),)
+    checks = (ToolRefusal(ChannelTarget.addressed),)
     sources = (Commit("dc4fb3bfa"), PostmortemFailure(8))
 
 
@@ -213,8 +195,8 @@ class RepeatedStrikePattern(BehaviourPattern):
         " send-back strike on an order already struck since it was sent."
     )
     checks = (
-        ToolRefusal("agent_comms.todos", "StrikeTodo.repeats"),
-        VerbRefusal("agent_comms.commander.order", "send"),
+        ToolRefusal(StrikeTodo.repeats),
+        VerbRefusal(order.send),
     )
     sources = (ProblemFix("P184", "7af14a520"),)
 
@@ -225,8 +207,8 @@ class StrikeInErrorPattern(BehaviourPattern):
         " recorded beside it with a plain reason."
     )
     checks = (
-        VerbRefusal("agent_comms.commander.order", "unstrike"),
-        ToolRefusal("agent_comms.todos", "VoidStrikeTodo.apply"),
+        VerbRefusal(order.unstrike),
+        ToolRefusal(VoidStrikeTodo.apply),
     )
     sources = (ProblemFix("P47", "15d435152"),)
 
@@ -237,9 +219,9 @@ class UncountedCheckPattern(BehaviourPattern):
         " integer, or already prints its target before any work."
     )
     checks = (
-        VerbRefusal("agent_comms.goals", "OrderCheck.parse"),
-        VerbRefusal("agent_comms.goals", "NoIntegerPrinted"),
-        VerbRefusal("agent_comms.commander.order", "correct_check"),
+        VerbRefusal(OrderCheck.parse),
+        VerbRefusal(NoIntegerPrinted),
+        VerbRefusal(order.correct_check),
     )
     sources = (ProblemFix("P114", "d889df612"), PostmortemFailure(4), PostmortemFailure(7))
 
@@ -250,8 +232,8 @@ class StrikeOnNamedProblemPattern(BehaviourPattern):
         " as one moved by a problem number inside its reason."
     )
     checks = (
-        VerbRefusal("agent_comms.commander.order", "strike"),
-        VerbRefusal("agent_comms.commander.order", "hunt"),
+        VerbRefusal(order.strike),
+        VerbRefusal(order.hunt),
     )
     sources = (ProblemFix("P194", "b26843727"), CommanderRule("Strikes, then fire."))
 
