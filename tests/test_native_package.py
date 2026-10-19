@@ -15,6 +15,7 @@ import pytest
 
 import agent_comms.native_package as native_package
 from agent_comms.core_stamp import CheckoutStamp
+from agent_comms.native_build_inputs import INPUTS_PREFIX, NativeBuildInputs
 from agent_comms.native_package import (
     NativePackageError,
     package_tree_digest,
@@ -23,6 +24,24 @@ from agent_comms.native_package import (
 )
 
 pytestmark = pytest.mark.skipif(os.name != "posix", reason="POSIX native package filesystem")
+
+
+def test_native_environment_refuses_changed_patch(tmp_path, monkeypatch):
+    stack = tmp_path / "stack"
+    stack.mkdir()
+    patch = stack / "patch-native-example.py"
+    patch.write_bytes(b"first patch byte\n")
+    manifest = stack / "pi-native.sha256"
+    stock = "# agent-comms-native-stock-v1 fixture@1\n"
+    manifest.write_text(stock)
+    inputs = NativeBuildInputs(tmp_path)
+    manifest.write_text(stock + INPUTS_PREFIX + inputs.digest(manifest) + "\n")
+    monkeypatch.setattr(native_package, "MANIFEST", manifest)
+    monkeypatch.setattr(native_package, "_resource_root", lambda: stack)
+    assert native_package.native_environment(tmp_path / "cache").parent == tmp_path / "cache"
+    patch.write_bytes(b"First patch byte\n")
+    with pytest.raises(ValueError, match="inputs changed.*--update-pins"):
+        native_package.native_environment(tmp_path / "cache")
 
 
 @pytest.fixture

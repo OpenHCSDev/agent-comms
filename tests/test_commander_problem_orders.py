@@ -905,6 +905,29 @@ def order_message(commander, problem, text):
     return message
 
 
+def native_judge_edits(commander, judge, edits):
+    """Use the actual native reader and original call IDs, never an edit journal."""
+    comms, _ = commander
+    path = comms.root / 'judge-session.jsonl'
+    from datetime import datetime, timezone
+    stamp = datetime.fromtimestamp(199., timezone.utc).isoformat()
+    rows = [dict(type='session', id='judge-session', version=3, timestamp=stamp),
+            dict(type='message', id='input', timestamp=stamp, message=dict(role='user', content='Repair the owner', timestamp=199000))]
+    parent = 'input'
+    for edit in edits:
+        entry = 'entry-' + edit['id']
+        rows.append(dict(type='message', id=entry, parentId=parent,
+            timestamp=datetime.fromtimestamp(max(200., edit['at']), timezone.utc).isoformat(), message=dict(
+            role='assistant', timestamp=max(200., edit['at']) * 1000, stopReason='toolUse', content=[dict(
+                type='toolCall', id=edit['id'], name='edit', arguments=dict(path=edit['path'],
+                edits=[dict(oldText=h['old'], newText=h['new']) for h in edit['hunks']]))])))
+        parent = entry
+    path.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+    path.chmod(0o600)
+    comms.registry.register(replace(comms.registry.require('worker'), session_file=str(path)))
+    return {edit.id: edit for edit in judge.Edit.unjudged(comms, 'lead')}
+
+
 def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, commander_script):
     """The cited message's recorded order receives the verdict, whatever P-number its text names."""
     import json
@@ -915,9 +938,9 @@ def test_a_verdict_lands_on_the_order_its_message_was_sent_in(commander, command
     create(commander, 'P2')
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='edit-1', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
-    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
+    recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P2 was the last order; this one repairs the existing owner')
-    judge.OkVerb(ids=(f'edit-1:{judge.Edit.from_row(**edit).code()}',), msg=message,
+    judge.OkVerb(ids=(f'edit-1:{recorded[edit['id']].code()}',), msg=message,
                  why='The change repairs the existing canonical state owner',
                  serves='Repair the existing owner', lines=('value = 2',)).run()
     assert [v.tool_call_id for v in comms.goals.todos.get('P1').verdicts] == ['edit-1']
@@ -934,9 +957,9 @@ def test_judge_ok_writes_the_todo_not_a_second_store(commander, commander_script
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edits = [dict(id=f'edit-{n}', at=time.time(), thread='worker', path='value.py',
                   hunks=[dict(old='value = 1', new='value = 2')]) for n in range(2)]
-    Path(judge.EDITS).write_text(''.join(json.dumps(edit) + '\n' for edit in edits))
+    recorded = native_judge_edits(commander, judge, edits)
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
-    judge.OkVerb(ids=tuple(f'{e["id"]}:{judge.Edit.from_row(**e).code()}' for e in edits),
+    judge.OkVerb(ids=tuple(f'{e["id"]}:{recorded[e["id"]].code()}' for e in edits),
                  why='The changes repair the existing canonical state owner', msg=message,
                  serves='Repair the existing owner', lines=('value = 2',)).run()
     saved = comms.goals.todos.get('P1')
@@ -955,14 +978,14 @@ def test_judge_refuses_an_edit_without_an_open_order(commander, commander_script
     comms, _ = commander
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='orphan-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
-    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
-    fields = dict(ids=(f'orphan-edit:{judge.Edit.from_row(**edit).code()}',),
+    recorded = native_judge_edits(commander, judge, [edit])
+    fields = dict(ids=('orphan-edit:0000',),
                   why='The changes repair the existing canonical state owner', lines=('value = 2',),
                   msg=comms.messaging.send('lead', 'worker', 'P1 Repair the existing owner').message.message_id)
     command = judge.OkVerb(**fields, serves='Repair the existing owner') if verb == 'ok' else judge.BackVerb(
         **fields, roast='r', fix='f', slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
         derive='delete-copy', by=f'{__file__}:1')
-    with pytest.raises(SystemExit, match=r'edit orphan-edit: .* was sent in \[\] of the open orders worker holds'):
+    with pytest.raises(SystemExit, match=r'unknown edit ids.*orphan-edit'):
         command.run()
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
 
@@ -975,12 +998,12 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     create(commander, 'P1')
     judge = importlib.reload(importlib.import_module('agent_comms.commander.judge'))
     edit = dict(id='bad-edit', at=1.0, thread='worker', path='value.py', hunks=[dict(old='value = 1', new='value = 2')])
-    Path(judge.EDITS).write_text(json.dumps(edit) + '\n')
+    recorded = native_judge_edits(commander, judge, [edit])
     message = order_message(commander, 'P1', 'P1 Repair the existing owner')
     posted = []
     monkeypatch.setattr(judge.order, 'post', lambda to, body: posted.append((to, body)) or 'sent')
     why = 'The unit copied the same state into a second writable store'
-    judge.BackVerb(ids=(f'bad-edit:{judge.Edit.from_row(**edit).code()}',), why=why, msg=message,
+    judge.BackVerb(ids=(f'bad-edit:{recorded[edit['id']].code()}',), why=why, msg=message,
         lines=('value = 2',), roast='This is stupid because the unit copied the same state instead of using its existing owner',
         fix='Delete the copied state and read the value from its existing owner',
         slop_kind='state', fact='the one value being stored', at=f'{__file__}:1',
