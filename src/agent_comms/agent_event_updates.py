@@ -10,7 +10,6 @@ from acp.schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     ContentToolCallContent,
-    SessionInfoUpdate,
     TextContentBlock,
     ToolCallProgress,
     ToolCallStart,
@@ -20,7 +19,6 @@ from acp.schema import (
 from . import agent_events as events
 from .acp_extension import (
     CompactionChangedUpdate,
-    GoalChangedUpdate,
     McpClientAcknowledgementUpdate,
     PromptCancelledUpdate,
     encode_updates,
@@ -52,13 +50,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(events.GoalChanged)
     async def goal_changed(self, event: events.GoalChanged) -> None:
-        await self.client.session_update(
-            session_id=self.session_id,
-            update=SessionInfoUpdate(
-                session_update="session_info_update",
-                field_meta=encode_updates(GoalChangedUpdate.from_snapshot(event.snapshot)),
-            ),
-        )
+        await self.agent.sessions.publish_metadata(self.session_id)
 
     @handles(events.Chunk, events.Notice)
     async def text(self, event: events.Chunk | events.Notice) -> None:
@@ -158,18 +150,7 @@ class AcpEventConsumer(MroDispatch):
 
     @handles(UnmeasuredContext)
     async def on_unmeasured_context(self, _reading: UnmeasuredContext) -> None:
-        """Publish the canonical typed reading; never leave the client's old usage silently."""
-        thread_name = self.agent.sessions.require(self.session_id)
-        configuration = await Coordination.run_worker(partial(
-            self.agent.comms.configuration.answer, thread_name,
-        ))
-        await self.client.session_update(
-            session_id=self.session_id,
-            update=SessionInfoUpdate(
-                session_update="session_info_update",
-                field_meta=encode_updates(configuration),
-            ),
-        )
+        await self.agent.sessions.publish_metadata(self.session_id)
 
     @handles(events.CompactionEvent)
     async def on_compaction(
