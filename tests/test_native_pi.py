@@ -51,9 +51,9 @@ def _evidence(tmp_path: Path) -> Path:
     sessions.mkdir(mode=0o700)
     session = sessions / "test.jsonl"
     entries = [
-        {"type": "session", "id": "sid", "version": 3},
+        {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid", "version": 3},
         {
-            "type": "message",
+            "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
             "id": "entry",
             "message": {
                 "role": "user",
@@ -451,28 +451,23 @@ async def test_context_proof_alone_cannot_validate_a_failed_model_reply(tmp_path
     import agent_comms.native_pi as native
 
     fake = tmp_path / "fake_rpc.py"
-    fake.write_text(child_writer_imports() + """import json, os, sys
-from pathlib import Path
-file = Path(sys.argv[1])
+    # The parent writes the session and its proof; the child imports nothing slower than json.
+    session_file = tmp_path / "sessions" / "test.jsonl"
+    proof = {"schema": 2, "type": "context_committed", "sessionId": "sid", "inputId": INPUT_ID,
+             "sessionEntryId": "entry", "requestGeneration": 1, "llmContextDigest": "c" * 64,
+             "committedAtMs": 1_791_964_800_001}
+    fake.write_text("""import json, sys
 reason = sys.argv[2]
+proof = json.loads(sys.argv[3])
 def send(value):
     print(json.dumps(value), flush=True)
 print('fixture-ready', flush=True)
 state = json.loads(sys.stdin.readline())
 send({'type':'response','id':state['id'],'command':'get_state','success':True,
       'data':{'nativeInputProofCapability':'pi-native-input-v1-live-only',
-              'sessionId':'sid','sessionFile':str(file)}})
+              'sessionId':'sid','sessionFile':sys.argv[1]}})
 command = json.loads(sys.stdin.readline())
 input_id = command['inputId']
-entry = {'type':'message','id':'entry','message':{'role':'user',
-    'inputId':input_id,'inputDigest':'b'*64}}
-file.write_text(json.dumps({'type':'session','id':'sid'})+'\\n'+json.dumps(entry)+'\\n')
-proof = {'schema':2,'type':'context_committed','sessionId':'sid',
-    'inputId':input_id,'sessionEntryId':'entry','requestGeneration':1,
-    'llmContextDigest':'c'*64,'committedAtMs':1_791_964_800_001}
-write_proof_rows(file, [proof])
-os.chmod(file,0o600)
-os.chmod(str(file)+'.input-proof',0o600)
 send({'type':'response','id':command['id'],'command':'prompt','success':True})
 send({'type':'input_committed','sessionId':'sid','inputId':input_id,'sessionEntryId':'entry'})
 send(proof)
@@ -484,14 +479,13 @@ send({'type':'agent_settled'})
     original = AttachedChild.start
 
     async def launch(*_argv, **kwargs):
+        entry = {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "entry",
+                 "message": {"role": "user", "inputId": INPUT_ID, "inputDigest": "b" * 64}}
+        session_file.write_text(json.dumps({"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "sid"}) + "\n" + json.dumps(entry) + "\n")
+        write_proof_rows(session_file, [proof])
+        session_file.chmod(0o600)
         child = await original(
-            (
-                sys.executable,
-                "-u",
-                str(fake),
-                str(tmp_path / "sessions" / "test.jsonl"),
-                stop_reason,
-            ),
+            (sys.executable, "-u", str(fake), str(session_file), stop_reason, json.dumps(proof)),
             **kwargs,
         )
         assert await asyncio.wait_for(child.stdout.readline(), timeout=30) == b"fixture-ready\n"
@@ -1103,12 +1097,14 @@ def test_native_owner_entrypoint_uses_pinned_package_and_preserves_arguments(tmp
     assert "NODE_OPTIONS" not in environment
 
 
-def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch):
+def test_native_owner_entrypoint_refuses_unconfigured_route(monkeypatch, tmp_path):
     import agent_comms.native_pi as native_pi
-    import agent_comms.private_nk_entrypoint as private_nk_entrypoint
+    from agent_comms.coordination_errors import PublicationActivationBlocked
 
-    monkeypatch.setattr(private_nk_entrypoint.PrivateNkLaunch, "derive", classmethod(lambda cls, root=None: None))
-    with pytest.raises(NativePiUnavailable, match="configured private route"):
+    # A root with no private marker resolves to a shared launch, which refuses before any exec.
+    monkeypatch.setenv("AGENT_COMMS_ROOT", str(tmp_path))
+    monkeypatch.setattr(native_pi.os, "execvpe", lambda *call: pytest.fail(f"started a real Pi: {call}"))
+    with pytest.raises(PublicationActivationBlocked, match="requires a private bus root"):
         native_pi.main()
 
 

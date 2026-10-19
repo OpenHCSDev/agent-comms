@@ -13,7 +13,7 @@ from agent_comms.page_traversal import HistoryCursor
 from agent_comms.comms import Comms
 from agent_comms.coordination_errors import HistoricalSourceChanged
 from agent_comms.historical_views import HistoryArchive
-from agent_comms.read_basis import Conversation, ReadCursor
+from agent_comms.read_basis import ChannelConversation, ConversationCursor, ReadCursor
 from agent_comms.read_ledger import ReadLedger
 from agent_comms.routing import MessageRoute, TurnRouting
 from agent_comms.threads import Thread
@@ -124,7 +124,9 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
     live.views.mark_historical_view_read(page.historical_display.select([page.messages[1].seq]))
     snapshot = live.registry.snapshot()
     assert ReadLedger.at(source.root).read().messages == {
-        viewer.incarnation: {Conversation('#team'): ReadCursor(exceptions=(page.messages[1].seq,))}
+        viewer.incarnation: ReadCursor({
+            ChannelConversation('#team'): ConversationCursor(exceptions=(page.messages[1].seq,)),
+        })
     }
     assert live.bus.reads.cursor(viewer.name, snapshot) == ReadCursor()
     assert live.bus.pending_count("bob", CommandTarget.named("#team")) == 2
@@ -135,6 +137,29 @@ def test_sparse_historical_ack_does_not_ack_live(migrated):
                 displayed=replace(page.historical_display.displayed, viewer_created_at=-9.0),
             )
         )
+
+
+@pytest.mark.parametrize("conversation", ["channel", "dm"])
+@pytest.mark.parametrize("archived", [False, True])
+def test_select_painted_page_keeps_its_source_with_attached_history(migrated, conversation, archived):
+    _, _, live, source = migrated
+    bounds = PageBounds(OlderTraversal(100, source.key), 2) if archived else PageBounds(limit=2)
+    if conversation == "channel":
+        page = live.views.channel_display_page(
+            "#team", viewer=live.views.display_viewer(str(live.root)), bounds=bounds,
+        )
+    else:
+        page = live.views.dm_display_page("alice", worktree=str(live.root), bounds=bounds)
+    message = page.messages[-1]
+    selected = page.select((message.seq,))
+    assert selected.messages == (message,)
+    assert selected.history_revision == page.history_revision
+    if archived:
+        assert selected.historical_display.source == source
+        assert selected.display_basis is None and selected.display_scope is None
+    else:
+        assert selected.historical_display is None
+        assert selected.display_basis is not None or selected.display_scope is not None
 
 
 def test_duplicate_and_newer_incarnations_sessions(tmp_path):

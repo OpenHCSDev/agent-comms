@@ -46,6 +46,9 @@ def test_present_session_rejects_a_read_past_its_cut(tmp_path):
         cut.mark_read(reads, "viewer", str(source), 3)
 
 
+STAMPED = 1790812800.0  # "2026-10-01T00:00:00.000Z", the time every fixture row records
+
+
 def encoded(value):
     return json.dumps(value).encode() + b"\n"
 
@@ -54,7 +57,7 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
     entry = NativeEntry.read(
         encoded(
             {
-                "type": "message",
+                "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
                 "id": "input",
                 "message": {
                     "role": "user",
@@ -71,8 +74,8 @@ def test_native_discriminator_is_separate_from_normalized_family_codec():
     assert normalized["kind"] == "message" and normalized["message"]["kind"] == "user"
     assert "type" not in normalized and "role" not in normalized["message"]
     assert entry.events(TranscriptProjection()) == [
-        UserTranscript("look"),
-        UserTranscript("[Image attachment: image/png]"),
+        UserTranscript("look", timestamp=STAMPED),
+        UserTranscript("[Image attachment: image/png]", timestamp=STAMPED),
     ]
     assert entry.message.parts[1].data == "aGVsbG8="
 
@@ -83,7 +86,7 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
         b"".join(
             encoded(
                 {
-                    "type": "message",
+                    "type": "message", "timestamp": "2026-10-01T00:00:00.000Z",
                     "message": {
                         "role": "assistant",
                         "content": [{"type": "text", "text": str(i)}],
@@ -118,10 +121,10 @@ def test_known_native_entries_decode_once_in_both_bounded_directions(tmp_path, m
 
 def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     path = tmp_path / "session.jsonl"
-    extension = {"type": "plugin-note", "custom": {"future": True}}
+    extension = {"type": "plugin-note", "timestamp": "2026-10-01T00:00:00.000Z", "custom": {"future": True}}
     path.write_bytes(
         encoded(extension)
-        + encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
+        + encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "valid"}]}})
         + b'{"type":"message","message":'
     )
     reader = NativeTranscript(path)
@@ -131,13 +134,13 @@ def test_unknown_and_partial_entries_keep_byte_boundaries(tmp_path):
     assert forward == list(reversed(reverse))
     assert isinstance(forward[0].entry, UnknownEntry) and forward[0].entry.payload == extension
     assert forward[0].entry.events(TranscriptProjection()) == []
-    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid")]
+    assert forward[1].entry.events(TranscriptProjection()) == [AssistantTranscript("valid", timestamp=STAMPED)]
     assert forward[-1].entry is None and not forward[-1].complete
     assert forward[0].start == 0 and forward[-1].end == path.stat().st_size
 
 
 @pytest.mark.parametrize("raw, error, match", [
-    (encoded({"type": "message", "message": {"role": "assistant", "content": 42}}),
+    (encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": 42}}),
      ValueError, r"^Expected a JSON array\.$"),
     (b'{"type":"message"\n', json.JSONDecodeError,
      r"^Expecting ',' delimiter: line 2 column 1 \(char 18\)$"),
@@ -179,7 +182,7 @@ def test_large_record_retained_in_tail_and_both_page_directions(tmp_path):
     bodies = ["before", "λ" * (300 * 1024), "after"]
     path.write_bytes(
         b"".join(
-            encoded({"type": "message", "message": {"role": "assistant", "content": [{"type": "text", "text": body}]}})
+            encoded({"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "message": {"role": "assistant", "content": [{"type": "text", "text": body}]}})
             for body in bodies
         )
     )
@@ -212,11 +215,11 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
         store.participants.register(lookup, thread.name, thread.name, committed=True)
     path = tmp_path / "session.jsonl"
     path.write_bytes(b"".join(encoded(row) for row in (
-        {"type": "session", "id": "source", "version": 3},
-        {"type": "message", "id": "user", "message": {
+        {"type": "session", "timestamp": "2026-10-01T00:00:00.000Z", "id": "source", "version": 3},
+        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "user", "message": {
             "role": "user", "content": [{"type": "text", "text": "request"}],
             "inputId": "a" * 32, "inputDigest": "b" * 64}},
-        {"type": "message", "id": "reply", "parentId": "user", "message": {
+        {"type": "message", "timestamp": "2026-10-01T00:00:00.000Z", "id": "reply", "parentId": "user", "message": {
             "role": "assistant", "content": [{"type": "text", "text": "answer"}],
             "stopReason": "stop"}},
     )))
@@ -258,5 +261,6 @@ def test_native_ancestry_is_acquired_before_coordinator_read(tmp_path, monkeypat
     assert walks == [tuple(record.entry.id for record in records)] and headers == [path]
     assert not active
     assert tuple(event for _, events in projected for event in events) == (
-        UserTranscript("request", native_id="a" * 32), AssistantTranscript("answer"),
+        UserTranscript("request", timestamp=STAMPED, native_id="a" * 32),
+        AssistantTranscript("answer", timestamp=STAMPED),
     )

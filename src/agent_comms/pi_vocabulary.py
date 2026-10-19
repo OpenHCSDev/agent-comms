@@ -22,6 +22,10 @@ class PiStopReason(DeclaredFamily, affix="StopReason"):
     tracked_failure = "Provider returned an unsuccessful terminal"
 
     @classmethod
+    def error_notice(cls, message) -> str:
+        return ""
+
+    @classmethod
     def unpublished_attempt(cls):
         from .attempt_states import UnknownOutcomeAttempt
         from .coordination_tables.attempts import ReplayFact
@@ -98,6 +102,10 @@ class FailedPiStop(FinishedPiStop):
     """An explicit failed terminal records the same failure on every live path."""
 
     failed = True
+
+    @classmethod
+    def error_notice(cls, message) -> str:
+        return (message.error_message or "").strip()
 
     @classmethod
     async def apply(cls, session, message):

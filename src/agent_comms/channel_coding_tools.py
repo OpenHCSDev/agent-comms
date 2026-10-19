@@ -28,6 +28,7 @@ from .envelope_claim_transitions import (
     WakeClaim,
 )
 from .native_tool_call import NativeToolCall, NativeToolMode, SelectedToolDenied, UncertainClaim
+from .native_arguments import NativeArguments
 from .native_tools import NativeExecutableTool
 from .selected_tool_broker import (
     OwnerToolSocket,
@@ -208,7 +209,7 @@ class CodingToolMode(NativeToolMode):
         arguments = ("--tools", ",".join(tool.declared_name for tool in declarations),
                      *(argument for extension in extensions for argument in ("-e", str(extension))))
         thread = self.owner.comms.registry.require(self.owner.owner_name)
-        return thread.native_launch_arguments(arguments)
+        return thread.native_launch_arguments(NativeArguments.parse(arguments), package)
 
     async def open_transport(self, turn, ownership) -> OwnerToolSocket:
         return await CodingToolSocket.open(turn, ownership, self.owner)

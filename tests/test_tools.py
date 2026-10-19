@@ -14,6 +14,7 @@ class TestToolCatalog:
     def test_native_launch_carries_the_existing_catalog_and_thread_tier(self, comms, tmp_path, monkeypatch):
         from pathlib import Path
         from agent_comms.pi_vocabulary import ServiceTier
+        from agent_comms.native_arguments import NativeArguments
         from agent_comms.tools import ToolsCliCommand
 
         monkeypatch.setenv("AGENT_COMMS_NATIVE_CONFIG_DIR", str(tmp_path / "config"))
@@ -22,7 +23,7 @@ class TestToolCatalog:
             name="catalog-owner", tags=frozenset(), worktree="/wt", service_tier=ServiceTier.STANDARD,
         )
         comms.registry.declare(thread)
-        flag, path = thread.native_launch_arguments(())
+        flag, path = thread.native_launch_arguments(NativeArguments(()), tmp_path / "package")
         assert flag == "--comms-catalog"
         payload = json.loads(Path(path).read_text())
         assert payload == ToolsCliCommand(name=thread.name).apply(comms).encoded()

@@ -1,6 +1,7 @@
 """Claude Code sessions: their stored transcripts, and the live bridge that follows one."""
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from contextlib import aclosing
 from functools import cached_property
@@ -28,6 +29,9 @@ class ClaudeJsonLines(JsonLinesFile):
 
     records = CLAUDE_RECORD
     state = ClaudeSession
+
+    def decode_line(self, raw: bytes, position: int):
+        return self.records.validate_python({**json.loads(raw), 'position': position})
 
     def record_updates(self, record: ClaudeRecord, state: ClaudeSession, offset: int,
                        raw: bytes) -> Iterator[TranscriptUpdate]:
