@@ -143,6 +143,10 @@ class FilesystemRole(DeclaredFamily, affix="Role"):
     def accepts_permissions(cls, mode: int) -> bool: ...
 
     @classmethod
+    def accepts_links(cls, nlink: int) -> bool:
+        return True
+
+    @classmethod
     def violation(cls, observed: os.stat_result) -> type[FilesystemRule] | None:
         return next((rule for rule in FilesystemRule.members_with(FilesystemRule)
                      if rule.violated(cls, observed)), None)
@@ -168,6 +172,12 @@ class PrivateFileRole(PrivateRole):
     @classmethod
     def accepts_kind(cls, mode: int) -> bool:
         return stat.S_ISREG(mode)
+
+
+class NativeSessionFileRole(PrivateFileRole):
+    @classmethod
+    def accepts_links(cls, nlink: int) -> bool:
+        return nlink == 1
 
 
 class PrivateDirectoryRole(PrivateRole):
@@ -252,3 +262,9 @@ class UnsafeNodePermissionsRule(FilesystemRule):
     @classmethod
     def violated(cls, role, observed):
         return not role.accepts_permissions(observed.st_mode)
+
+
+class MultipleLinksRule(FilesystemRule):
+    @classmethod
+    def violated(cls, role, observed):
+        return not role.accepts_links(observed.st_nlink)

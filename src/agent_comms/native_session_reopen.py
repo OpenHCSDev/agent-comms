@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -73,10 +72,6 @@ class NativeSessionIdentity:
         from .native_pi import NativePiUnavailable
 
         file = evidence.source.path
-        if file != file.resolve(strict=True):
-            raise NativeReopenError("Saved native session path is not canonical")
-        if os.fstat(evidence.source.stream.fileno()).st_nlink != 1:
-            raise NativeReopenError("Saved native session has multiple links")
         try:
             header, _entries = evidence.observe()
             header.require_reopen()

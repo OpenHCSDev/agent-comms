@@ -26,7 +26,7 @@ from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
 from .native_input_record import NativeInputCommit
-from .private_path import FileIdentity, FileRevision, PrivateFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
+from .private_path import FileIdentity, FileRevision, NativeSessionFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode
 from .pi_vocabulary import NoThinkingOverride, PendingStopReason, ThinkingChoice
@@ -291,7 +291,7 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
                     os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb")
                 ))
                 before = os.fstat(held.fileno())
-                PrivateFileRole.require(before)
+                NativeSessionFileRole.require(before)
                 if before.st_nlink != 1:
                     raise NativePiUnavailable("Native proof must be private and unaliased")
                 db = ownership.enter_context(closing(CoordinationStore.recovering_snapshot(path)))
@@ -753,8 +753,10 @@ class PrivateEvidenceRead:
     def _open_stream(cls, path):
         stream = None
         try:
+            if path != path.resolve(strict=True):
+                raise NativePiUnavailable("Native Pi evidence session path is not canonical")
             stream = os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW), "rb")
-            PrivateFileRole.require(os.fstat(stream.fileno()))
+            NativeSessionFileRole.require(os.fstat(stream.fileno()))
             return stream
         except FileNotFoundError as error:
             if stream is not None:
@@ -788,7 +790,7 @@ class PrivateEvidenceRead:
         """Verify and hash original bytes without retaining the complete prefix."""
         try:
             info = os.fstat(self.stream.fileno())
-            PrivateFileRole.require(info)
+            NativeSessionFileRole.require(info)
             revision = FileRevision.from_stat(info)
             if revision.identity != self.identity:
                 raise NativeEvidencePrefixChanged("Native Pi evidence inode changed")
@@ -922,7 +924,7 @@ class PrivateEvidenceRead:
         a later observation rechecks them again before exposing more rows.
         """
         before = os.fstat(self.stream.fileno())
-        PrivateFileRole.require(before)
+        NativeSessionFileRole.require(before)
         revision = self._observe_revision_after(FileRevision.from_stat(before))
         if revision.identity != self.identity or revision.size < size:
             raise NativeEvidencePrefixChanged("Native Pi evidence snapshot source changed")
@@ -942,7 +944,7 @@ class PrivateEvidenceRead:
         the descriptor cannot be hidden by shrinking the named file back.
         """
         for info in (os.fstat(self.stream.fileno()), self.path.lstat()):
-            PrivateFileRole.require(info)
+            NativeSessionFileRole.require(info)
             observed = FileRevision.from_stat(info)
             if observed.identity != self.identity or (
                 observed != revision and observed.size <= revision.size

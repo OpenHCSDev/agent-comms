@@ -19,7 +19,6 @@ from .coordinated_runtime_schema import assert_native_runtime_schema
 from .coordination_errors import IdentityConflict, RetryScheduled
 from .coordinator import Coordination
 from .diagnostics import (
-    PublicationMeasurements,
     record_acquisition_progress,
     record_request_progress,
 )
@@ -61,8 +60,6 @@ class PrivateSendClaim(PromptBoundary):
     prompt: RenderedInput
     session: SelectedSession
     _once: threading.Lock = field(default_factory=threading.Lock, init=False, repr=False)
-    _measurements: PublicationMeasurements = field(default_factory=PublicationMeasurements,
-                                                  init=False, compare=False, repr=False)
 
     @property
     def bus(self) -> MessageBus:
@@ -175,7 +172,10 @@ class PrivateSendClaim(PromptBoundary):
                     self.owner.thread.worktree,
                 ),
                 ingress=MaintenanceBarrier(self.bus._registry.store.path),
-                startup=NativeStartup(self.bus.log.path.parent, measurements=self._measurements),
+                startup=NativeStartup(
+                    self.bus.log.path.parent,
+                    measurements=self.selected.cursor_delivery.measurements,
+                ),
                 selected_tool_mode=selected_tool_mode,
                 observe_event=observe_event,
                 request_observer=partial(
@@ -203,7 +203,7 @@ class PrivateSendClaim(PromptBoundary):
         finally:
             await Coordination.run_worker(partial(
                 record_acquisition_progress, self.bus.log.path.parent, lease,
-                self.input_id, self._measurements,
+                self.input_id, self.selected.cursor_delivery.measurements,
             ))
         async with self.selected.cursor_delivery.reading() as source_reads:
             await Coordination.run_read_async(
@@ -224,30 +224,30 @@ class PrivateSendClaim(PromptBoundary):
         subsequent owner loss permits replay.
         """
         with ExitStack() as authority:
-            with self._measurements.operation("coordinator_open"):
+            with self.selected.cursor_delivery.measurements.operation("coordinator_open"):
                 store = authority.enter_context(Coordination(str(self.store_path)))
-            with self._measurements.operation("maintenance_ingress"):
+            with self.selected.cursor_delivery.measurements.operation("maintenance_ingress"):
                 authority.enter_context(MaintenanceBarrier(
                     self.bus._registry.store.path
                 ).allow_input())
-            with self._measurements.operation("registry_exclusion"):
+            with self.selected.cursor_delivery.measurements.operation("registry_exclusion"):
                 document = authority.enter_context(self.bus._registry.store.reading())
-            with self._measurements.operation("registry_snapshot"):
+            with self.selected.cursor_delivery.measurements.operation("registry_snapshot"):
                 registry = document.snapshot()
-            with self._measurements.operation("prompt_binding"):
+            with self.selected.cursor_delivery.measurements.operation("prompt_binding"):
                 authority.enter_context(self.stage.bound_prompt(
                     store, self.input_id, self.participant, self.wire_root_id,
                     self.prompt.text, blocking=True,
                 ))
-            with self._measurements.operation("coordinator_exclusive"):
+            with self.selected.cursor_delivery.measurements.operation("coordinator_exclusive"):
                 db = authority.enter_context(store.session.transaction())
-            with self._measurements.operation("selected_source_check"):
+            with self.selected.cursor_delivery.measurements.operation("selected_source_check"):
                 self.session.verify_start(identity)
             # From token consumption through COMMIT/fsync, every failure
             # remains uncertain and propagates without another send attempt.
             if not self._once.acquire(blocking=False):
                 raise IdentityConflict("native send claim_scope cannot be reused")
-            with self._measurements.operation("claim_checks"):
+            with self.selected.cursor_delivery.measurements.operation("claim_checks"):
                 _require_no_private_owner_rename(self.bus.log.path.parent)
                 self.owner.require_snapshot(
                     registry, "recipient registry owner changed before native send"
@@ -258,7 +258,7 @@ class PrivateSendClaim(PromptBoundary):
                     db, self.input_id, self.participant, self.token_digest
                 )
                 self.stage.require_claim(store)
-            with self._measurements.operation("native_claim_record"):
+            with self.selected.cursor_delivery.measurements.operation("native_claim_record"):
                 reserved.sent_owner_claimed_generation.record(
                     reserved, db, self.owner.claimed_generation, identity
                 )
