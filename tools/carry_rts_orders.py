@@ -27,7 +27,8 @@ from agent_comms.todos import (ApplicationOrderRun, Assignment, AwaitingFirstCal
     MergedProblemOrder, NoGoalReference, ObservedFirstCall, OrderMessage,
     PendingProblemOrder, ReleaseTodo, StrikeReason, StrikeTodo, TodoStore, WithdrawTodo)
 
-SOURCES = ('deadlines.json', 'problems.json', 'strikes.jsonl', 'sent.jsonl', 'hunts.jsonl')
+RETIRED = ('deadlines.json', 'strikes.jsonl', 'sent.jsonl', 'hunts.jsonl')
+SOURCES = ('problems.json', *RETIRED)
 TOOLS = ('order.py', 'judge.py', 'rotate.py', 'tool_watch.py', 'shift_after_window.py')
 
 
@@ -182,8 +183,9 @@ def carry(rts: Path, root: Path, apply: bool, retire: bool) -> None:
     for path in staging.iterdir():
         path.unlink()
     staging.rmdir()
-    for name in (TOOLS + tuple(name for name in SOURCES if name != 'problems.json')) * retire:
-        (rts / name).rename(rts / f'{name}.retired-p707')
+    if retire:
+        for name in TOOLS + RETIRED:
+            (rts / name).rename(rts / f'{name}.retired-p707')
     print(json.dumps(report, indent=2))
 
 

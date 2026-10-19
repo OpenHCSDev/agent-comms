@@ -33,7 +33,7 @@ def main(a):
             unit = units[turn % len(units)]
             turn += 1
             read = order.progress()
-            orders = ', '.join(f"{t.id} due {order.hhmm(t.deadline)} ({read[t.id].line})"
+            orders = ', '.join(f"{t.id} due {t.deadline.clock()} ({read[t.id].line})"
                                for t in owed[unit])
             edits = judge.Edit.unjudged(order.COMMS, order.ME)
             waiting = sum(edit.thread == unit for edit in edits)

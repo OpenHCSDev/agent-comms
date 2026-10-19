@@ -16,7 +16,7 @@ from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
 from ..todos import Todo
-from .order import COMMS, ME, CommanderVerb, RuledVerb, hhmm
+from .order import COMMS, ME, CommanderVerb, RuledVerb
 
 
 def open_requests() -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
@@ -62,7 +62,7 @@ class RequestListVerb(RequestVerb, declared_name="list"):
         for goal, served in requests:
             print(f"{goal.id} {goal.text}")
             for todo in served:
-                print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
+                print(f"  {todo.id} due {todo.deadline.clock()}: {todo.text}")
 
 
 def main(a: list[str]) -> None:
