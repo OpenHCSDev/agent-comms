@@ -437,7 +437,8 @@ def problem(text, unit, due, order_file, request):
 
 def close(pid, works, working):
     """Core owns closing: the installed evidence and the no-open-order rule live on the Todo."""
-    ThreadCaller(ME).invoke(CommsProblemCloseTool(problem=pid, works=works, working=WorkingClaim(working)), COMMS)
+    closing = CommsProblemCloseTool(problem=pid, works=works, working=WorkingClaim(working))
+    ThreadCaller(ME).invoke(closing, COMMS)
     board()
     print(f'{pid} closed')
 
@@ -535,7 +536,8 @@ def done(pid, sha, delivered=None):
         COMMS.registry.storage_rule.require_quota(thread)
     except SelectedToolDenied as quota:
         sys.exit(f'Refused: {unit}: {quota}; storage rule: it cleans up before the order counts as done.')
-    delivery = OperationDelivery() if operation else CommitDelivery(commit=sha, delivered_commit=delivered or sha)
+    delivery = (OperationDelivery() if operation
+                else CommitDelivery(commit=sha, delivered_commit=delivered or sha))
     call(CommsOrderDoneTool(problem=pid, delivery=delivery))
     lateness = COMMS.goals.todos.get(pid).order.delivery.at.lateness(todo.deadline)
     # An op has no commit time: recording it later is my delay, so lateness is judged at the OVERDUE alarm.
