@@ -206,14 +206,12 @@ def test_selected_candidates_are_not_sealed_work_and_no_wake_is_delivery_only(
         ).entries
         == ()
     )
-    passive = index.page(
-        root_id=root_id,
-        recipient_lookup=lookup["Bob"],
-        after_seq=0,
-        required_through_seq=message.seq,
-        delivery_only=True,
-    )
-    assert len(passive.entries) == 1 and passive.entries[0].wake_mode is None
+    # Passive deliveries stay stored but are not part of the wake page.
+    with sqlite3.connect(index.path) as db:
+        assert db.execute(
+            "SELECT count(*) FROM candidate WHERE recipient_lookup=? AND wake_mode IS NULL",
+            (lookup["Bob"],),
+        ).fetchone() == (1,)
     # Bus projection is only a candidate: coordinator has not sealed ANY wake.
     with Coordination(str(comms.root / "coordination.sqlite3")) as store:
         for name in ("Alice", "Bob"):
