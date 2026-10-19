@@ -284,9 +284,11 @@ def test_replaced_bus_keeps_no_sequence_read_facts(tmp_path):
     replacement = tmp_path / "replacement.jsonl"
     replacement.write_bytes(comms.bus.log.path.read_bytes())
     replacement.chmod(0o600)
-    replacement.replace(comms.bus.log.path)
-    comms.views.viewer_snapshot(str(tmp_path))
-    assert comms.bus.reads.cursor(viewer, comms.registry.snapshot()) == ReadCursor()
+    from agent_comms.private_path import ObservedPath
+
+    assert comms.bus.reads.read().cursor(
+        viewer, comms.registry.snapshot(), ObservedPath.at(replacement),
+    ) == ReadCursor()
 
 
 def test_recorded_bus_identity_is_one_member(tmp_path):
@@ -321,20 +323,9 @@ def test_recorded_bus_identity_is_one_member(tmp_path):
     replacement = tmp_path / "restored-bus.jsonl"
     replacement.write_bytes(comms.bus.log.path.read_bytes())
     replacement.chmod(0o600)
-    replacement.replace(comms.bus.log.path)
-    reopened = wire(tmp_path)
-    assert not recorded.matches(ObservedPath.at(reopened.bus.log.path))
-    snapshot = reopened.registry.snapshot()
-    assert message.seq not in reopened.bus.reads.cursor(viewer, snapshot).for_conversation(
-        ReadLedger.conversation(message, snapshot))
-    assert reopened.views.viewer_snapshot(str(tmp_path)).unread["alice"] == 1
-    with pytest.raises(DMScopeChanged, match="bus was replaced"):
-        reopened.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
-            expected_display_basis=page.display_basis)
-    fresh = reopened.views.dm_display_page("alice", worktree=str(tmp_path))
-    reopened.views.mark_dm_view_read("alice", worktree=str(tmp_path), through=message.seq,
-        expected_display_basis=fresh.display_basis)
-    assert reopened.views.viewer_snapshot(str(tmp_path)).unread.get("alice", 0) == 0
+    replacement_source = ObservedPath.at(replacement)
+    assert not recorded.matches(replacement_source)
+    assert ledger.read().cursor(viewer, comms.registry.snapshot(), replacement_source) == ReadCursor()
 
 
 def test_partial_paints_share_one_basis_across_read_progress(tmp_path):

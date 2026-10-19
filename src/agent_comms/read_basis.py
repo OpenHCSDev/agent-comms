@@ -881,8 +881,10 @@ class AllChannelDisplayScope(ChannelDisplayScope):
 
     def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
                     source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
-        return reads.capture_indexed(viewer, index.scope_rows(self, source.boundary),
-                                     snapshot, source, index, document=document)
+        return DisplayBasis(viewer, snapshot.require(viewer).created_at,
+            tuple(DisplayedConversation(self.read_key(row.sender, row.target, snapshot), (), row.seq)
+                  for row in index.latest_by_conversation(self, source.boundary)),
+            source.bus_identity)
 
 
 @dataclass(frozen=True, slots=True)
@@ -890,6 +892,14 @@ class MemberActivityDisplayScope(AllChannelDisplayScope):
     """Member activity may match a sender, DM peer or mention on any target."""
 
     participant_names: frozenset[str] = frozenset()
+
+    def capture_all(self, reads: ReadLedger, viewer: str, snapshot: RegistrySnapshot,
+                    source: OpenedWireSource, index: BusPageIndex, *, document) -> DisplayBasis:
+        # Mentions and authorship may select only part of a channel conversation.
+        # Unlike the whole-bus view, they cannot grant its unseen prefix.
+        rows = self.offsets(index, lower=None, upper=None, descending=False,
+                            before_offset=source.boundary)
+        return reads.capture_indexed(viewer, rows, snapshot, source, index, document=document)
 
     @classmethod
     def capture(cls, channel: TagChannel, snapshot: RegistryProvenance) -> MemberActivityDisplayScope:
