@@ -32,7 +32,7 @@ from collections.abc import AsyncIterator, Iterator, Mapping, Sequence
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
-from typing import Annotated, Any, ClassVar, Literal, Self, get_args
+from typing import Annotated, ClassVar, Literal, Self, get_args
 from urllib.parse import urlencode
 
 from aiohttp import web
@@ -363,11 +363,12 @@ class Connector:
         return f"{self.issuer}/.well-known/oauth-protected-resource"
 
     @staticmethod
-    def exposed() -> dict[str, type[ToolRequest[Any]]]:
-        tools: tuple[type[ToolRequest[Any]], ...] = (
-            *ToolRequest.members_with(ToolRequest), *ConnectorTool.members_with(ConnectorTool)
-        )
-        return {tool.declared_name: tool for tool in tools}
+    def exposed() -> dict[str, type[ToolRequest] | type[ConnectorTool]]:
+        tools: dict[str, type[ToolRequest] | type[ConnectorTool]] = {
+            tool.declared_name: tool for tool in ToolRequest.members_with(ToolRequest)
+        }
+        tools.update({tool.declared_name: tool for tool in ConnectorTool.members_with(ConnectorTool)})
+        return tools
 
     @contextmanager
     def opened_wire(self) -> Iterator[Comms]:
@@ -377,7 +378,7 @@ class Connector:
             yield comms
 
     def invoke(
-        self, tool: type[ToolRequest], arguments: Mapping[str, object]
+        self, tool: type[ToolRequest] | type[ConnectorTool], arguments: Mapping[str, object]
     ) -> dict[str, JsonValue]:
         with self.opened_wire() as comms:
             return tool.invoke(comms, arguments, caller=CALLER)
