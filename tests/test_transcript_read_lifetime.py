@@ -12,16 +12,18 @@ import pytest
 
 from agent_comms.view_unread import transcript_read_state
 from agent_comms.comms import wire
-from native_unread_fixture import native_reader, reader_counts
+from native_unread_fixture import native_reader
+from agent_comms.registry_document import DEFAULT_ROSTER
 
 
 def test_collected_reader_cancels_and_joins_its_worker_then_closes_sqlite(tmp_path):
     source = tmp_path / "session.jsonl"
-    source.write_text(json.dumps({"type": "message", "message": {
+    source.write_text(json.dumps({"type": "message", "timestamp": "2026-10-19T05:00:00.000Z", "message": {
         "role": "assistant", "content": [{"type": "text", "text": "one reply"}],
     }}) + "\n")
     state = native_reader(tmp_path / 'read_ledger.json')
-    assert reader_counts(state, 'viewer', {'worker': (str(source),)}, document=state.reads.read()).pending == {"worker"}
+    state.registry.declare(state.registry.new_thread('worker', frozenset(), str(tmp_path), session_file=str(source)))
+    assert state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER).pending == {"worker"}
     state.preparation.future.result(timeout=10)
     workers = tuple(state._pool._processes.values())
     database, cancelled = state._connection, state._cancelled
@@ -60,7 +62,7 @@ def test_explicit_close_is_idempotent_and_factory_replaces_closed_unused_reader(
     state.close()
     state.close()
     with pytest.raises(RuntimeError, match="closed"):
-        reader_counts(state, 'viewer', {}, document=state.reads.read())
+        state.counts('viewer', document=state.reads.read(), visibility=DEFAULT_ROSTER)
     fresh = transcript_read_state(path, wire(tmp_path).registry)
     assert fresh is not state
     fresh.close()

@@ -25,11 +25,11 @@ from .native_entries import NativeEntry
 from .native_transcript import SessionCut
 from .private_path import FileRevision
 from .read_ledger import ReadDocument, ReadLedger
-from .registry_document import DEFAULT_ROSTER, RosterVisibility
+from .registry_document import RosterVisibility
 from .store_files import SharedLock, _store_lock
 from .thread_owned_state import ThreadOwnedState
 from .typed_table import Column, SQLiteUserVersion, TypedRow, TypedTable
-from .wire_watch import FileWatch, NativeFileWatch, WatchSource
+from .wire_watch import FileWatch, NativeFileWatch, PollingWireWatch, WatchSource
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -488,7 +488,7 @@ class TranscriptReadState(ThreadOwnedState):
     def __init__(self, path: Path, registry: Registration):
         self.registry = registry
         self._thread_keys: dict[str, TranscriptReadKeys] = {}
-        self._source_watch: FileWatch | None = None
+        self._source_watch: FileWatch = PollingWireWatch(())
         self._source_resources = ExitStack()
         self.path = ReadLedger.path_in(path.parent)
         self.reads = ReadLedger(self.path)
@@ -615,8 +615,8 @@ class TranscriptReadState(ThreadOwnedState):
         self._preparation = self._preparation.started(self, needed)
 
     def _refresh_keys(self, visibility: RosterVisibility) -> None:
-        changed = self._source_watch.changed_paths() if self._source_watch is not None else frozenset()
-        invalid = self._source_watch is not None and self._source_watch.invalid
+        changed = self._source_watch.changed_paths()
+        invalid = self._source_watch.invalid
         threads = {thread.name: thread for thread in self.registry.snapshot().visible_threads(visibility)}
         rebuild = self._thread_keys.keys() != threads.keys() or invalid
         for name in self._thread_keys.keys() - threads.keys():
@@ -643,8 +643,9 @@ class TranscriptReadState(ThreadOwnedState):
             if not sources:
                 self._preparation.cancel()
                 self._preparation = self._idle
-            self._source_watch = (self._source_resources.enter_context(closing(NativeFileWatch.open(*sources)))
-                                  if sources else None)
+            self._source_watch = self._source_resources.enter_context(closing(
+                NativeFileWatch.open(*sources) if sources else PollingWireWatch(())
+            ))
             # Cover a write between the first capture and installing its watch.
             for name, keys in tuple(self._thread_keys.items()):
                 observed = {key: FileRevision.capture(Path(key)) for key in keys.revisions}
@@ -652,7 +653,7 @@ class TranscriptReadState(ThreadOwnedState):
                     self._thread_keys[name] = TranscriptReadKeys.capture(threads[name], observed)
 
     def counts(self, viewer: str, *, document: ReadDocument,
-               visibility: RosterVisibility = DEFAULT_ROSTER) -> TranscriptUnread:
+               visibility: RosterVisibility) -> TranscriptUnread:
         # Counts never wait for native decoding or another in-process reader.
         if not self._lock.acquire(blocking=False):
             raise CoordinationReadUnavailable("Transcript counts are being read")
