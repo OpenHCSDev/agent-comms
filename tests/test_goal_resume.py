@@ -14,6 +14,7 @@ from agent_comms.goal_actions import (
     CompletedGoalAction,
     GoalPrecondition,
     PausedGoalAction,
+    RetryGoalAction,
     SetGoalAction,
 )
 from agent_comms.goal_attempts import GoalAttemptStore
@@ -399,3 +400,38 @@ def test_exhausted_goal_revision_refuses_transition_without_write(comms):
             BlockedGoalAction(expect=GoalPrecondition(goal_id="goal-id"), progress="do not write"),
         )
     assert (comms.root / "registry.json").read_bytes() == before
+
+
+def test_a_blocked_goal_is_retried_by_its_unit_or_commander_and_authorize_retry_guards_each(comms, monkeypatch):
+    """No owner session exists: the unit retries through comms_goal, the commander retries and
+    replaces through the runtime actor, and an unresolved attempt still refuses a retry."""
+    goal_id = _goal(comms, monkeypatch)["id"]
+    store = comms.goals.open_goal_store()
+
+    def failed_turn(diagnostic):
+        started = comms.registry.require("owner").goal
+        blocked = comms.goals.block_goal_after_failed_turn(
+            "owner", started_goal=started, expected_worktree="/wt", diagnostic=diagnostic)
+        assert blocked.state.declared_name == "blocked"
+        return blocked
+
+    failed_turn("Backend outcome uncertain.")
+    retried = invoke_tool(comms, "comms_goal",
+                          {"goal_id": goal_id, "status": "retry", "progress": "cause fixed"})
+    goal = comms.registry.require("owner").goal
+    assert retried["goal"]["state"] == {"kind": "active"} and goal.state.active and goal.progress == "cause fixed"
+
+    failed_turn("Provider failed again.")
+    commander_retry = comms.goals.update_goal(
+        "owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
+    assert commander_retry.state.active and comms.registry.require("owner").goal == commander_retry
+
+    failed_turn("Provider failed a third time.")
+    store.reserve(goal_id, store.require_generation(goal_id).number)
+    with pytest.raises(ValueError, match="unresolved"):
+        comms.goals.update_goal("owner", RetryGoalAction(expect=GoalPrecondition(goal_id=goal_id)))
+    assert comms.registry.require("owner").goal.state.declared_name == "blocked"
+
+    replaced = comms.goals.update_goal("owner", SetGoalAction(text="a fresh objective"))
+    assert replaced.id != goal_id and replaced.state.active
+    assert comms.registry.require("owner").goal == replaced

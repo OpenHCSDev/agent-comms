@@ -366,10 +366,10 @@ def test_wake_frame_rejects_no_wake_forgery_and_unengaged_full(tmp_path: Path) -
         selected = sealed_cohort_assignments(store, beta_lookup)[0]
     # A pending FULL claim has no response obligation, and no frame may grant one.
     with pytest.raises(IdentityConflict, match="response obligation"):
-        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, selected),), people[2]),)).text
+        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, selected),), people[2], comms.goals),)).text
     forged = replace(selected, recipient="alpha", recipient_lookup=alpha_lookup)
     with pytest.raises(IdentityConflict, match="selected N/K"):
-        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[1]),)).text
+        TurnContext.render_segments((SelectedWakeSegment.capture(((initial, forged),), people[1], comms.goals),)).text
     assert len(list(comms.views.channel_history_page("#team").messages)) == 1  # Framing never publishes a row.
 
 
@@ -378,7 +378,7 @@ def test_triage_frame_is_read_only_and_does_not_promote_message_body(tmp_path: P
     with Coordination(str(root / "coordination.sqlite3")) as store:
         lookup = RecordedThreadIncarnation("fixture", people[1].created_at).lookup
         assignment = sealed_cohort_assignments(store, lookup)[0]
-    frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1]),)).text
+    frame = TurnContext.render_segments((SelectedWakeSegment.capture(((initial, assignment),), people[1], comms.goals),)).text
     assert f'"source_seq":{initial.message.seq}' in frame
     assert '"wake_mode":"bounded_triage"' in frame
     assert f'"body":{json.dumps(initial.message.body)}' in frame
@@ -400,7 +400,7 @@ def test_wake_frame_includes_bounded_changed_sent_outcomes(tmp_path: Path) -> No
     sent_outcome = notification.sent_outcome()
     assert sent_outcome is not None
     frame = TurnContext.render_segments((SelectedWakeSegment.capture(
-        ((initial, assignment),), people[1], sent_outcomes=(sent_outcome,)
+        ((initial, assignment),), people[1], _comms.goals, sent_outcomes=(sent_outcome,)
     ),)).text
     assert 'recent_sent_outcomes: [{"source_seq":' in frame
     assert '"state":"Read"' in frame
