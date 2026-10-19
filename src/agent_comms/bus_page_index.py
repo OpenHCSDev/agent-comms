@@ -147,13 +147,8 @@ class BusPageIndex(TypedStore):
             return covered
 
     @contextmanager
-    def prepared(self, opened: WireSnapshot):
-        with self.covered_snapshot(opened) as covered:
-            if covered:
-                yield
-                return
-        opened.metadata.access.require_append()
-        self.prepare(opened)
+    def covered_read(self, opened: WireSnapshot):
+        """Pin a covered read; only the append or explicit sync builds offsets."""
         with self.covered_snapshot(opened) as covered:
             if not covered:
                 raise StaleBusPageIndexError("Page index does not cover its opened source")

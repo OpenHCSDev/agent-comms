@@ -28,7 +28,7 @@ from .bus_publication import (
     has_private_wire_fields,
 )
 from .bus_source_page import AddressedPage
-from .bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
+from .bus_page_index import BusPageIndex, BusPageRow
 from .bus_projection import (AppendCheckpoint, BusAppendIndex, Checkpoint, NoCheckpoint,
                              WirePrefix, EmptyWirePrefix, CompleteWirePrefix)
 from .envelope_claim_transitions import (
@@ -310,19 +310,12 @@ class OpenedWireSnapshot(WireSnapshot):
     def query_page_index[T](
         self, read: Callable[[BusPageIndex], T]
     ) -> T:
-        """Prepare/query this cut; source absence and index repair stay owned here."""
+        """Query this cut without writing or repairing its derived offsets."""
         if self.boundary == 0:
             from .bus_page_index import EmptyBusPageIndex
             return read(EmptyBusPageIndex())
-        access = self.metadata.access
         with BusPageIndex(Path(self.stream.name)) as index:
-            try:
-                with index.prepared(self):
-                    return read(index)
-            except StaleBusPageIndexError:
-                access.require_append()
-                index.invalidate()
-            with index.prepared(self):
+            with index.covered_read(self):
                 return read(index)
 
     def indexed_records(self, rows: Iterable[BusPageRow], *,
@@ -748,6 +741,10 @@ class WireLog:
                 raise RelationViolationError(
                     "Private bus checkpoint publication outcome UNKNOWN."
                 ) from error
+        # The append owns derived offsets too: readers never advance them.
+        with ExitStack() as resources, BusPageIndex(self.path) as index:
+            opened = self._open_snapshot_unlocked(resources, metadata, metadata.last_seq)
+            index.prepare(opened)
         StoreLock.current_release().callback(_notify_candidates, self, self.path.stat().st_size)
 
     def read_delivery_cohort(self, wire_root_id: str, wire_seq: int) -> CommittedDelivery:

@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 
 import pytest
 
-from agent_comms.bus_page_index import BusPageIndex, BusPageRow
+from agent_comms.bus_page_index import BusPageIndex, BusPageRow, StaleBusPageIndexError
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.errors import RelationViolationError
@@ -48,36 +48,42 @@ def retained_source(root, count, *, access=ArchivedAccess()):
     return comms.bus
 
 
-def test_page_queries_prepare_owned_offsets_and_leave_archives_unchanged(tmp_path):
+def test_page_queries_require_owned_offsets_and_leave_archives_unchanged(tmp_path):
     empty = Comms(tmp_path / 'empty').bus
     assert empty.full_history_page().messages == ()
     assert not (empty.log.path.parent / 'bus_page_index.sqlite3').exists()
 
     bus = retained_source(tmp_path / 'owned', 9, access=WritableAccess())
     path = bus.log.path.with_name('bus_page_index.sqlite3')
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute(f"UPDATE {BusPageRow.declared_name} SET offset=0 WHERE seq=9")
+    with pytest.raises(StaleBusPageIndexError):
+        bus.incoming_page('b', after=6)
+    with BusPageIndex(bus.log.path) as index:
+        index.invalidate()
+        index.sync()  # explicit administrative rebuild, never a reader repair
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
-    path.unlink()
-    assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
-    path.unlink()
-    sqlite3.connect(path).close()
-    assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
-    path.unlink()
-    with sqlite3.connect(path) as db:  # an earlier declaration of the offsets table
+    for member in CoordinationStore.files(path):
+        member.unlink(missing_ok=True)
+    with pytest.raises(StaleBusPageIndexError):
+        bus.incoming_page('b', after=6)
+    assert not path.exists()
+    with closing(sqlite3.connect(path)) as db, db:  # an earlier declaration
         db.execute(f'CREATE TABLE "{BusPageRow.declared_name}" ("seq" INTEGER NOT NULL, '
                    '"offset" INTEGER NOT NULL, PRIMARY KEY ("seq")) STRICT')
+    with pytest.raises(StaleBusPageIndexError):
+        bus.incoming_page('b', after=6)
+    with BusPageIndex(bus.log.path) as index:
+        index.sync()
     assert [message.seq for message in bus.incoming_page('b', after=6).messages] == [9]
-    with sqlite3.connect(path) as db:
-        BusPageIndex._schema(db)
 
     archive = retained_source(tmp_path / 'archive', 9)
     assert [message.seq for message in archive.incoming_page('b', after=6).messages] == [9]
     path = archive.log.path.with_name('bus_page_index.sqlite3')
-    with sqlite3.connect(path) as db:
+    with closing(sqlite3.connect(path)) as db, db:
         db.execute(f"UPDATE {BusPageRow.declared_name} SET offset=0 WHERE seq=9")
     original = (path.read_bytes(), archive.log.path.read_bytes())
-    with pytest.raises(RelationViolationError, match='read-only'):
+    with pytest.raises(StaleBusPageIndexError):
         archive.incoming_page('b', after=6)
     assert (path.read_bytes(), archive.log.path.read_bytes()) == original
 
@@ -99,8 +105,7 @@ def test_references_decode_only_their_indexed_rows(tmp_path, monkeypatch, openin
     assert decoded == [7, 150]
 
 
-@pytest.mark.parametrize('direct', (False, True))
-def test_two_stale_readers_share_sqlite_writer_exclusion(tmp_path, direct):
+def test_stale_readers_do_not_write_and_the_next_append_builds_offsets(tmp_path):
     bus = retained_source(tmp_path / 'race', 9, access=WritableAccess())
     with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
         message, _ = next(opened.public_records())
@@ -115,26 +120,21 @@ def test_two_stale_readers_share_sqlite_writer_exclusion(tmp_path, direct):
                 assert not index.covers(opened)
                 captured.release()
                 readers_ready.wait(timeout=5)
-                if direct:
-                    index.prepare(opened)
-                    assert index.covers(opened)
-                    return tuple(row.seq for row in BusPageRow.select(index.connection, order_by=('seq',)))
                 return opened.messages_for_references((message.reference,))
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         readers = (executor.submit(read_reference), executor.submit(read_reference))
-        # Both readers see stale coverage. Only SQLite's writer transaction
-        # blocks preparation; the bus is not locked while they rebuild.
+        # A SQLite writer does not turn stale readers into competing writers.
         for _ in readers:
             assert captured.acquire(timeout=5)
         with closing(CoordinationStore.writer(bus.log.path.with_name('bus_page_index.sqlite3'))) as db, db:
             db.execute('BEGIN IMMEDIATE')
             readers_ready.wait(timeout=5)
             for reader in readers:
-                with pytest.raises(TimeoutError):
-                    reader.result(timeout=0.05)
-        expected = tuple(range(1, 10)) if direct else (message,)
-        assert [reader.result(timeout=5) for reader in readers] == [expected, expected]
+                with pytest.raises(StaleBusPageIndexError):
+                    reader.result(timeout=5)
+    appended = Comms(bus.log.path.parent).messaging.send('a', 'b', 'append owns the offsets').message
+    assert appended in bus.incoming_page('b').messages
     with BusPageIndex(bus.log.path) as index:
         with bus.log.opened_wire_snapshot(opening=CurrentSnapshotOpening()) as opened:
             assert index.covers(opened)
