@@ -254,14 +254,6 @@ class StoreLock:
             yield refreshed
 
 
-class LockOwner:
-    """A physical lock's owner declares its rank and the lock type it opens."""
-
-    __slots__ = ()
-    lock_rank: ClassVar[int]
-    lock_type: ClassVar[type[StoreLock]] = StoreLock
-
-
 def store_lock_path(store_path: Path) -> Path:
     """The original named inode for one store's physical lock."""
     return store_path.with_name(f'.{store_path.name}.lock')
