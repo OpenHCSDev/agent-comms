@@ -15,6 +15,10 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from agent_comms.thread_status import ThreadStatus
 
 from agent_comms_hooks import ClaudeHook, ClaudeHookProgram
 
@@ -53,7 +57,7 @@ class WatchClaim:
             try:
                 fcntl.flock(lock, fcntl.LOCK_SH | fcntl.LOCK_NB)
             except BlockingIOError:
-                return LiveWatch()
+                return LiveWatch(self, WatchRecord(**json.load(lock)))
             text = lock.read()
         if not text:
             return UnclaimedWatch()
@@ -61,6 +65,9 @@ class WatchClaim:
 
 
 class WatchState:
+    def observe_compaction(self, status: ThreadStatus) -> None:
+        """An absent watch never acquires bridge presence from a hook."""
+
     def report(self, event: str) -> None:
         """Silent unless the conversation is meant to be watched and is not."""
 
@@ -69,8 +76,25 @@ class UnclaimedWatch(WatchState):
     pass
 
 
+@dataclass(frozen=True)
 class LiveWatch(WatchState):
-    pass
+    claim: WatchClaim
+    record: WatchRecord
+
+    def observe_compaction(self, status: ThreadStatus) -> None:
+        # Hooks on every prompt keep their stdlib-only import path. Only an
+        # actual compaction observation needs the registry transaction owner.
+        from agent_comms.registration import Registration
+
+        registry = Registration(Path(self.record.root) / 'registry.json')
+        original = registry.entry(self.record.bus).entry
+        # The watch must still be the one read before importing Core. Its claim
+        # is held inside its registered endpoint lifetime; the transaction then
+        # fences that exact incarnation, generation and process, not a name.
+        if self.claim.state() == self:
+            registry.observe_external_status(
+                original.owner_identity, original.thread.require_process(), status)
+
 
 
 @dataclass(frozen=True)

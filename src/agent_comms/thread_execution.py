@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from .declared_family import DeclaredFamily
 from .child_process import ProcessState
 from .errors import RelationViolationError
-from .thread_status import ConnectedThreadStatus, NoBridgeThreadStatus, ThreadStatus
+from .thread_status import NoBridgeThreadStatus, ThreadStatus
 
 if TYPE_CHECKING:
     from .threads import Thread
@@ -165,7 +165,7 @@ class ExternalThreadExecution(ThreadExecution):
     def registered_status(cls, thread: Thread, requested: ThreadStatus) -> ThreadStatus:
         """Core launches no process here: the inbox is connected while its bridge lives."""
         if requested.active and thread.process_alive:
-            return ConnectedThreadStatus()
+            return requested.with_bridge()
         return NoBridgeThreadStatus()
 
     @classmethod
