@@ -781,6 +781,8 @@ class WireRevision(ReadState):
         *STATUS_SOURCE)
     runtime_info: tuple[FileRevision, ...] = revision_source(lambda views: (views.agents.runtime_info.path,),
         *STATUS_SOURCE)
+    work_room: tuple[FileRevision, ...] = revision_source(
+        lambda views: views.registry.storage_rule.room_ledger.source_paths(), *STATUS_SOURCE)
     reads: tuple[FileRevision, ...] = revision_source(lambda views: (views.bus.reads.path,),
         *STATUS_SOURCE, NotificationsView)
     native_unread: tuple[FileRevision, ...] = revision_source(lambda views: (views.transcript_reads.index_path,),
@@ -844,8 +846,8 @@ class WireRevision(ReadState):
             changed.update(alias for alias, target in snapshot.aliases.items() if target in changed)
         activity_changed = {name for name in activity
                             if activity[name] != previous.activity.get(name)}
-        status_names = names if (self.goal_waits, self.expiry_period) != (
-            earlier.goal_waits, earlier.expiry_period) else names & activity_changed
+        status_names = names if (self.goal_waits, self.expiry_period, self.work_room) != (
+            earlier.goal_waits, earlier.expiry_period, earlier.work_room) else names & activity_changed
         if status_names:
             status_batch = comms.views.thread_presentations(status_names)
             changed.update(name for name in status_names

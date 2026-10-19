@@ -1138,10 +1138,12 @@ class ObservationService:
     async def watch(self) -> None:
         from agent_comms.wire_watch import ModifiedWatchSource, WireWatch
 
-        source = ModifiedWatchSource(self.comms.root, frozenset(
-            os.fsencode(path.name) for group in WireRevision.source_paths(self.comms.views).values()
-            for path in group if path.parent == self.comms.root))
-        async for _ in WireWatch.observations(source):
+        paths = tuple(path for group in WireRevision.source_paths(self.comms.views).values()
+                      for path in group)
+        sources = tuple(ModifiedWatchSource(directory, frozenset(
+            os.fsencode(path.name) for path in paths if path.parent == directory))
+            for directory in dict.fromkeys(path.parent for path in paths))
+        async for _ in WireWatch.observations(*sources):
             self.observe_again()
 
     def observe_again(self) -> None:

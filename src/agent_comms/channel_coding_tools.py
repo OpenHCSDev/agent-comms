@@ -29,7 +29,8 @@ from .envelope_claim_transitions import (
 from .native_tool_call import CodingCall, NativeToolMode, SelectedToolDenied
 from .native_arguments import NativeArguments
 from .native_tools import NativeToolDeclaration
-from .native_tool_transport import ToolTransport
+from .native_tool_transport import ToolTransport, ToolCallIdentity
+from .child_process import ProcessIdentity
 from .selected_tool_broker import (
     consume_selected_slot,
     verify_sent_full_input,
@@ -49,10 +50,6 @@ class CodingToolOwner(ABC):
             slot = call.slot(turn.command.input_id, round_number)
             consume_selected_slot(turn.launch.session.directory, slot, slot)
             owner = self.comms.registry.require(self.owner_name)
-            try:
-                call.decide_storage(self.comms.registry, self.owner_name)
-            except SelectedToolDenied as error:
-                raise SelectedToolDenied(f'{error}\n{self.comms.registry.storage_rule.render(owner.storage_roots)}') from error
             resource = call.allowed_claim()
             if resource is not None:
                 canonical = resource.normalized(Path(owner.worktree))
@@ -130,6 +127,8 @@ class CodingToolSocket(ToolTransport[CodingCall]):
     def __init__(self, directory: Path, token: str, owner: CodingToolOwner) -> None:
         super().__init__(directory, token)
         self.owner = owner
+        self.reservations = {}
+        self.completions = set()
 
     def decode_call(self, call_id: object, name: object, arguments: object) -> CodingCall:
         return CodingCall.decode(call_id, name, arguments)
@@ -147,7 +146,42 @@ class CodingToolSocket(ToolTransport[CodingCall]):
         return CodingCall.decode(value["call_id"], value["name"], value["arguments"])
 
     async def allow(self, round_number: int, call: CodingCall) -> None:
-        await self.owner.allow(self.turn, round_number, call)
+        registry = self.owner.comms.registry
+        thread = registry.require(self.owner.owner_name)
+        effects = call.storage_effects(Path(thread.worktree))
+        await asyncio.to_thread(registry.decide_storage, thread.name, effects)
+        work = tuple(dict.fromkeys(kind for effect in effects for kind in effect.work))
+        reservation = None
+        if work:
+            reservation = await registry.storage_rule.wait_for_room(
+                work, thread, self.owner.comms.root,
+                process=ProcessIdentity.capture(self.expected_pid))
+        try:
+            # Recheck turn authority only after waiting, with no database or
+            # registry lock carried across admission.
+            await self.owner.allow(self.turn, round_number, call)
+        except BaseException:
+            if reservation is not None:
+                await asyncio.to_thread(reservation.finish, completed=False)
+            raise
+        if reservation is not None:
+            self.reservations[ToolCallIdentity(round_number, call.call_id)] = reservation
+
+    def tool_finished(self, event, input_id):
+        super().tool_finished(event, input_id)
+        identity, _ = self.calls.require_current(event.tool_call_id, 'Missing completed tool')
+        reservation = self.reservations.pop(identity, None)
+        if reservation is not None:
+            task = asyncio.create_task(asyncio.to_thread(reservation.finish))
+            self.completions.add(task)
+
+    async def close(self):
+        await super().close()
+        if self.completions:
+            await asyncio.gather(*tuple(self.completions))
+        for reservation in self.reservations.values():
+            await asyncio.to_thread(reservation.abandon)
+        self.reservations.clear()
 
     def failure_response(self, error: Exception) -> dict[str, object]:
         return {"ok": False, "error": str(error)}

@@ -270,8 +270,10 @@ class CodingCall(NativeToolCall):
     @abstractmethod
     def digest(self) -> str: ...
 
-    def decide_storage(self, registry, thread: str) -> None:
-        """A call without executable effects has nothing to decide."""
+    @classmethod
+    def storage_effects(cls, cwd):
+        """A call without executable effects needs no room."""
+        return ()
 
     def commit_terminal(
         self, is_error: bool, directory: Path, input_id: str, round_number: int
