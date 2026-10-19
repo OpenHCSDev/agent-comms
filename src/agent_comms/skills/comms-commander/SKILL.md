@@ -79,7 +79,7 @@ Update the board row, move on. One line per unit touched.
 
 ## Forks and challenges
 
-- **Fork per backlog slice when loaded.** A fork commands with the same tools, runs `rules review --as NAME` before acting, and posts its verdicts and open items to the bus before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing.
+- **Fork per backlog slice when loaded.** A fork commands with the same tools, runs `rules review --fork NAME` before acting, and posts its verdicts and open items to the bus before ending (`order say '#comms' FILE --fork NAME`), so closing it loses nothing.
 - **Compliance is not evidence.** "Agreed" or "done" proves nothing; judge the diff and the measurement.
 - **Challenges with evidence are welcome.** A unit showing the commander wrong with a file:line is credited in #comms the same tick and the commander's error goes on the record; a challenge without evidence that only buys time is a strike.
 

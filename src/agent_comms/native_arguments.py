@@ -97,6 +97,40 @@ class ExtensionArgument(NamedOption, ValueArgument):
     short = "-e"
 
 
+class ProviderMeta(type(DeclaredFamily)):
+    """This family declares a real None key, unlike unnamed intermediate classes."""
+
+    @classmethod
+    def _handle_missing_key(meta, name, config, declaration):
+        if "__registry__" in declaration.__dict__:
+            return super()._handle_missing_key(name, config, declaration)
+        config.registry_dict[declaration.declared_name] = declaration
+        return declaration
+
+
+class ModelProvider(DeclaredFamily, metaclass=ProviderMeta, affix="Provider"):
+    """Provider declarations own command permission; unknown names are refused."""
+
+    may_command: ClassVar[bool]
+
+
+class NoSelectedModel(ModelProvider, declared_name=None):
+    """External commanders without a native model remain valid commanders."""
+    may_command = True
+
+
+class AnthropicProvider(ModelProvider, declared_name="anthropic"):
+    may_command = True
+
+
+class OpenAIProvider(ModelProvider, declared_name="openai"):
+    may_command = True
+
+
+class OpenAICodexProvider(ModelProvider, declared_name="openai-codex"):
+    may_command = False
+
+
 @dataclass(frozen=True)
 class SelectedModel:
     provider: str
@@ -116,6 +150,10 @@ class SelectedModel:
             raise IdentityConflict("Selected owner has no configured provider/model")
         provider, model = selection.split("/", 1)
         return cls(provider, model)
+
+    @property
+    def provider_type(self) -> type[ModelProvider]:
+        return ModelProvider.member_named(self.provider)
 
     @property
     def qualified(self) -> str:
@@ -288,6 +326,10 @@ class NativeArguments:
                 or ExtensionArgument(str(extension)) in self.entries)
 
     @property
+    def provider_type(self) -> type[ModelProvider]:
+        return ModelProvider.member_named(self.value(ProviderArgument))
+
+    @property
     def model(self) -> str | None:
         selected = self.value(ModelArgument)
         provider = self.value(ProviderArgument)
@@ -306,7 +348,7 @@ class NativeArguments:
         )
 
     def with_model(self, selected: str | None) -> NativeArguments:
-        if selected is None or "/" not in selected:
+        if selected is None:
             return self
         return self.replace(ProviderArgument).replace(
             ModelArgument, *SelectedModel.decode(selected).arguments
