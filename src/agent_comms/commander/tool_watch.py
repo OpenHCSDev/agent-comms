@@ -12,7 +12,7 @@ from ..field_codec import MalformedRecord
 from ..native_entries import NativeEntry
 from ..native_tool_call import SelectedToolDenied
 from ..native_tools import CodingTool
-from ..pi_payloads import TextContent
+from ..pi_payloads import PiMessage, TextContent
 from ..tool_declaration import ToolDeclaration, one_line
 from ..registration import Registration
 
@@ -21,7 +21,7 @@ B = str(CONFIG.root)
 LOG = f'{CONFIG.state}/activity.log'
 
 
-def thread_names(registry):
+def thread_names(registry: Registration) -> dict[str, str]:
     """Session file -> thread name, from the registry snapshot's threads."""
     return {thread.session_file: name for name, thread in registry.snapshot().threads.items()
             if thread.session_file}
@@ -74,9 +74,11 @@ def emit(turns, thread, final=''):
     print('\n'.join(lines)[:3000], flush=True)
 
 
-def follow(registry, turns, thread, path, start, data):
-    """Each complete session line from byte `start` is decoded once by Core's native entry family;
-    each assistant tool call is logged, digested and judged for storage. A refused line is reported."""
+def follow(registry: Registration, turns: dict[str, list[str]], thread: str, path: str,
+           start: int, data: bytes) -> None:
+    """Each complete session line from byte `start` is decoded once by Core's native entry
+    family; each assistant tool call is logged, digested and judged for storage. A line
+    Core refuses is reported."""
     offset = start
     for line in data.splitlines(keepends=True):
         at, offset = offset, offset + len(line)
@@ -90,7 +92,8 @@ def follow(registry, turns, thread, path, start, data):
                 walk(registry, turns, thread, message)
 
 
-def walk(registry, turns, thread, message):
+def walk(registry: Registration, turns: dict[str, list[str]], thread: str,
+         message: PiMessage) -> None:
     for call in message.tool_calls:
         name, args = call.name, call.arguments
         tool = decoded(name, args)
@@ -102,7 +105,8 @@ def walk(registry, turns, thread, message):
         if len(turns[thread]) >= 25:
             emit(turns, thread)
     if message.stop_reason.successful:
-        emit(turns, thread, ''.join(part.text for part in message.parts if isinstance(part, TextContent)))
+        text = ''.join(part.text for part in message.parts if isinstance(part, TextContent))
+        emit(turns, thread, text)
 
 
 def main(a):
