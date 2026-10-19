@@ -15,20 +15,36 @@ whole edit on screen: a show piped into head or /dev/null yields no codes.
 A verdict without a reason is refused; a send-back must cite a real message from
 the commander to that unit. Nothing here judges code; it only refuses to let an edit pass unread.
 """
-import hashlib, json, os, re, sys, time
+import hashlib
+import json
+import os
+import re
+import sys
+import time
 from abc import abstractmethod
 from dataclasses import asdict, dataclass
 
+from ..cli_commands import option
 from ..comms import Comms
-from ..todos import AcceptedVerdict, PeerAcceptedVerdict, BluntText, OrderVerdict, SendBackVerdict, StrikeReason, Todo, Slop, SlopKind, Derivation, SupersededVerdict
-from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from ..field_codec import FieldCodec
+from ..todos import (
+    AcceptedVerdict,
+    BluntText,
+    Derivation,
+    OrderVerdict,
+    PeerAcceptedVerdict,
+    SendBackVerdict,
+    Slop,
+    SlopKind,
+    StrikeReason,
+    SupersededVerdict,
+    Todo,
+)
 from ..tool_caller import ThreadCaller
 from ..tool_declaration import EditCall, ReplacementEdit
+from ..tools import CommsUnjudgedTool, CommsVerdictTool
 from . import order
-from ..cli_commands import option
 from .order import CommanderVerb, RuledVerb
-
 
 BRANCH = re.compile(r'\bisinstance\(|\bhasattr\(|^\s*(if|elif|match|case)\b|\bif\b.*\belse\b')
 

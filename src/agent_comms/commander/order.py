@@ -19,38 +19,74 @@ and refuses to let a deadline lapse silently.
 """
 from __future__ import annotations
 
-import argparse, asyncio, os, re, subprocess, sys, time
+import argparse
+import asyncio
+import os
+import re
+import subprocess
+import sys
+import time
 from abc import abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from uuid import uuid4
 
 from ..change_report import FileLine
-from ..comms import Comms
-from ..child_process import BoundedRun
+from ..child_process import BoundedRun, CheckPrinted
 from ..cli_commands import DeclaredOptions, option
 from ..declared_family import DeclaredFamily
-from ..external_transcript import ExternalTranscript
 from ..goal_actions import CreateProblemGoalAction, OrderGoalAction
-from ..child_process import CheckPrinted
 from ..goals import OrderCheck, ProblemGoalOrder
 from ..native_tool_call import SelectedToolDenied
-from ..messages import Message
 from ..plan_phases import OrderPhase, UnplannedPhase
 from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
-from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
-                     CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
-                     CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
-from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
-                     OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     OrderDeletion, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding, FileDeliveryEvidence, NoDeliveryEvidence,
-                     WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
+from ..todos import (
+    ApplicationOrderRun,
+    AssignTodo,
+    BluntText,
+    CleanHunt,
+    CommitDelivery,
+    DirectiveText,
+    FileDeliveryEvidence,
+    InstallDeadline,
+    LocatedProblemFinding,
+    MechanicalOrderRun,
+    NoDeliveryEvidence,
+    NotifiedFirstCallEvent,
+    ObservedFirstCallEvent,
+    OperationDelivery,
+    OrderDeletion,
+    OrderedHunt,
+    OrderMessage,
+    OrderProgress,
+    OrderRun,
+    PendingProblemOrder,
+    PlannedInstallDeadline,
+    RecordFirstCallTodo,
+    Slop,
+    StrikeReason,
+    StrikeTodo,
+    Todo,
+    UnlocatedProblemFinding,
+    VerdictAudience,
+    VoidStrikeTodo,
+)
+from ..tools import (
+    CommsFireTool,
+    CommsOrderCheckTool,
+    CommsOrderDoneTool,
+    CommsOrderServeTool,
+    CommsOrderTool,
+    CommsProblemCloseTool,
+    CommsTodoCreateTool,
+    CommsTodoTool,
+)
 from . import capacity
-from .config import CommanderConfig, CommanderRole, Repo
-from pydantic import PrivateAttr
+from .config import CommanderRole, Repo
+from .context import CommanderContext
+from .selections import AssignmentTrace, StrikeSelection, TransferReason, WithdrawalSelection
 
 OUTGOING = DirectiveText.OUTGOING  # every commander text passes each one
 
@@ -141,72 +177,12 @@ def revision(repo: str, ref: str) -> str:
         ['git', '-C', repo, 'rev-parse', '--verify', f'{ref}^{{commit}}'], text=True).strip()
 
 
-def replied(latest: Message | None) -> str:
-    """The reply an overdue alarm is read against."""
-    if latest is None:
-        return '; no reply since the order'
-    at = time.strftime('%H:%M', time.localtime(latest.timestamp))
-    return f'; REPLIED {at} [{latest.message_id}]: {" ".join(latest.body.split())[:160]} -- read it before pushing'
+class Commander(CommanderContext):
+    """Order workflows use the selected root's inherited services."""
 
 
-class Commander(CommanderConfig):
-    """One command's configuration and opened bus; nothing is resolved at import."""
-
-    _comms: Comms = PrivateAttr()
-
-    def model_post_init(self, context) -> None:
-        self._comms = Comms(self.root)
-
-    @property
-    def comms(self) -> Comms:
-        return self._comms
-
-    @classmethod
-    def of(cls, config: CommanderConfig) -> Commander:
-        return cls.model_construct(**config.model_dump())
-
-    def post(self, audience: VerdictAudience, body: str) -> str:
-        """Send one message its caller refused with OUTGOING; judge reads it from bus history.
-
-        One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
-        """
-        target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-        return self.call(CommsSendTool(sender=self.commander, target=target, body=body,
-                                  audience=audience.threads)).id
-
-
-    def call(self, tool):
-        """Every order write is one Core tool request made as the commander's thread."""
-        return ThreadCaller(self.commander).invoke(tool, self.comms)
-
-
-    def todos(self):
-        """The problems this commander created; Core's Todo store is their one owner."""
-        return self.comms.goals.todos.for_commander(self.comms.registry.require(self.commander).incarnation)
-
-
-    def held_orders(self) -> tuple[Todo, ...]:
-        """This commander's open orders that a unit holds."""
-        return self.comms.goals.todos.held_for_commander(self.comms.registry.require(self.commander).incarnation)
-
-
-    def held_by(self, unit: str) -> tuple[Todo, ...]:
-        """This commander's open orders held by one unit."""
-        return self.comms.goals.todos.held_by(self.comms.registry.require(self.commander).incarnation, unit)
-
-
-    def units(self) -> frozenset[str]:
-        return self.comms.goals.todos.units(self.comms.registry.require(self.commander).incarnation)
-
-
-    def progress(self) -> dict[str, OrderProgress]:
-        """Each held order's progress, derived by Core's Todo list from the unit's checkout and PRs."""
-        listed: TodoList = self.call(CommsTodoListTool())
-        return listed.progress
-
-
-    def send(self, unit, due, body: str, clean=False, mechanical=False, reassign=None, new=None,
-             traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
+    def send(self, unit, due, body: str, clean=False, mechanical=False, reassign='', new=None,
+             traced='', replaces=None, disk=False, finding=UnlocatedProblemFinding()):
         """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
         Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -283,14 +259,10 @@ class Commander(CommanderConfig):
                 listed[pid].require_replacement(replaces)
         if replaces and not replacing:
             raise ValueError('--replaces must name the current order on these problems to the same unit.')
-        trace = FileLine.from_wire(traced) if traced is not None else None
-        for pid in group:
-            if pid in listed and listed[pid].assignment:
-                listed[pid].assignment.require_trace(unit, trace)
+        trace = AssignmentTrace.read(traced)
         if holders and not reassign:
             problems.append(f'fact already owned by {holders}; keep that owner, or pass --reassign "<the concrete failure: provider diagnostic, strikes, missed deadline>"')
-        if reassign is not None and len(reassign.split()) < 8:
-            problems.append('--reassign needs the concrete failure that forces replacement (8+ words), told to the old and new owner')
+        problems.extend(TransferReason.read(reassign).errors())
         if problems:
             sys.exit('Refused order:\n  ' + '\n  '.join(problems))
         message = (f'{body.rstrip()}' + ('\nThis replaces my earlier order on it; drop that one.' if replacing else '') + (f'\nTaken over because: {reassign}' if reassign else '') + '\n' + self.comms.registry.storage_rule.order_text(unit, [f'{repo.checkout}/.venv/bin/python' for repo in self.repos]) + '\nIf two lines of this order conflict, take the narrower reading, say which one you took, and proceed; do not stop to ask.'
@@ -317,8 +289,8 @@ class Commander(CommanderConfig):
             self.call(CommsTodoCreateTool(owner=unit, order=CreateProblemGoalAction(
                 problem=new[0], repo=Repo.of(Path(check.directory)).github, text=new[1], **common)))
         for pid in [] if new else group:
-            self.call(CommsOrderTool(owner=unit, order=OrderGoalAction(
-                problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision, traced=trace, **common)))
+            self.call(CommsOrderTool(owner=unit, order=trace.order(OrderGoalAction(
+                problem=pid, expected_revision=self.comms.goals.todos.get(pid).revision, **common))))
         message += "\n" + "\n".join(order.pull_request_instruction(pid) for pid in group)
         sent = self.post(VerdictAudience((unit,)), message)
         # The message is each order's recorded link; a verdict citing it lands on that order.
@@ -336,17 +308,6 @@ class Commander(CommanderConfig):
             # Done here so the commander cannot send work back and forget either.
             verdict = next(l for l in body.splitlines() if BluntText.found(l)).strip()
             self.strike(unit, group[0], f'sent back on {group[0]}: {verdict}')
-
-
-    def importers(self, modules: set[str], check: OrderCheck) -> list[str]:
-        """The other configured repos whose `from agent_comms` imports name a module, unless the
-        check reads them."""
-        pattern = rf'^\s*(from|import) agent_comms\b.*\b({"|".join(sorted(modules))})\b'
-        return [str(repo.checkout) for repo in self.repos
-                if repo.checkout != Path(check.directory).resolve()
-                and str(repo.checkout) not in check.command
-                and subprocess.run(['grep', '-rqE', '--include=*.py', pattern,
-                                    str(repo.checkout / repo.source)]).returncode == 0]
 
 
     def correct_check(self, pid: str, line: str, why: str) -> None:
@@ -405,13 +366,9 @@ class Commander(CommanderConfig):
     def close(self, pid, works, artifact=''):
         """Core owns closing: the installed evidence, the artifact and the no-open-order rule live on the Todo."""
         evidence = artifact or self.comms.goals.todos.get(pid).order.closing_artifact()
-        ThreadCaller(self.commander).invoke(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence), self.comms)
+        self.call(CommsProblemCloseTool(problem=pid, works=works, artifact=evidence))
         self.write_board()
         print(f'{pid} closed')
-
-
-    def last_activity(self, unit):
-        return ExternalTranscript(self.comms.root, self.comms.registry.require(unit).incarnation).last_tool_call()
 
 
     def write_board(self):
@@ -470,16 +427,24 @@ class Commander(CommanderConfig):
         todo.state.require_open(todo)
         if todo.held().owner != unit:
             sys.exit(f'Refused: {unit} does not hold {task}; strike the unit that holds it.')
-        refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the strike
-        recorded = self.call(CommsTodoTool(id=task, operation=kind(
-            todo.revision, self.comms.registry.require(self.commander).incarnation, todo.held(), f'{why} (caught by {caught})')))
-        if recorded.todo.revision == todo.revision:
-            return
-        n = struck(self.comms.goals.todos.get(task), unit)
-        line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {task}{f", {task} taken away" if n >= 2 else ""}; '
-                f'caught by {caught}): {why}')
+        self.recorded(unit, todo, kind(
+            todo.revision, self.comms.registry.require(self.commander).incarnation,
+            todo.held(), f'{why} (caught by {caught})'))
+
+    def recorded(self, unit: str, todo: Todo, strike: StrikeTodo) -> None:
+        """Record once, then post the resulting strike without recording it again."""
+        refuse(strike.reason, *OUTGOING)
+        if self.call(CommsTodoTool(id=todo.id, operation=strike)).todo.revision != todo.revision:
+            self.posted(unit, self.comms.goals.todos.get(todo.id), strike)
+
+    def posted(self, unit: str, todo: Todo, strike: StrikeTodo) -> None:
+        """Publish a strike already recorded by Core, including delivery lateness."""
+        n = struck(todo, unit)
+        line = (f'{time.strftime("%Y-%m-%d %H:%M")} {unit} (strike {n} on {todo.id}'
+                f'{f", {todo.id} taken away" if n >= 2 else ""}): {strike.reason}')
         self.on_record(line, 'Strike', VerdictAudience.of(unit, todo.goal))
-        print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
+        print(f'{unit}: {n} strike(s) on {todo.id}'
+              + (f'. Reassign {todo.id} now and freeze its branch.' if n >= 2 else ''))
 
 
     def done(self, pid, sha, screenshot='', seen='', repo=''):
@@ -521,7 +486,7 @@ class Commander(CommanderConfig):
         self.call(CommsOrderDoneTool(problem=pid, order_id=todo.order.id, delivery=delivery, claims=(claim,)))
         delivered_todo = self.comms.goals.todos.get(pid)
         for late in delivered_todo.strikes[len(todo.strikes):]:
-            self.on_record(late.story(todo.id)[0].text, 'Strike', VerdictAudience.of(unit, todo.goal))
+            self.posted(unit, delivered_todo, late)
         print(f'{unit}: order {todo.order.id} delivered as {delivery.delivered if not operation else sha}')
 
 
@@ -577,14 +542,6 @@ class Commander(CommanderConfig):
         return min(candidates, key=lambda f: hunted.get(f, 0)) if candidates else None
 
 
-    def reply(self, unit: str, since: float) -> Message | None:
-        """The unit's newest message to me after ``since`` in the recent bus window."""
-        with self.comms.bus.log.opened_wire_snapshot() as source:
-            return next((message for message in source.newest_messages()
-                         if message.sender == unit and message.timestamp > since
-                         and message.target in (self.commander, '#comms')), None)
-
-
     def deadline_lines(self, pending: list[Todo], read: dict[str, OrderProgress], since: float = 0.0) -> list[str]:
         """Every past-due unrecorded order alarms with its state until recorded.
         Stall crossings remain separate from deadline alarms."""
@@ -598,7 +555,7 @@ class Commander(CommanderConfig):
                 continue
             answer = self.reply(t.holder, ordered)
             due = f'due {hhmm(t.deadline)}, order {t.order.id}'
-            late.append(f'{t.holder} ({due}, {work.line}{replied(answer)})')
+            late.append(f'{t.holder} ({due}, {work.line}{answer.suffix()})')
         alarm = (f'OVERDUE: {", ".join(late)} -> record merged work; '
                  'push or merge unfinished work now')
         return [alarm] * bool(late) + stalled
@@ -644,10 +601,11 @@ class Commander(CommanderConfig):
             time.sleep(60)
 
 
-    def unstrike(self, task: str, why: str, at: str | None = None) -> None:
+    def unstrike(self, task: str, why: str, at: str = '') -> None:
         """A strike recorded in error is voided in Core, then narrated and posted to #comms."""
         todo = self.comms.goals.todos.get(task)
-        live = [s for s in todo.live_strikes() if at in (None, hhmm(s.at))]
+        selection = StrikeSelection.read(at)
+        live = [s for s in todo.live_strikes() if selection.includes(hhmm(s.at))]
         if not live:
             sys.exit(f'Refused: {task} has no live strike' + (f' recorded at {at}.' if at else '.'))
         voided = live[-1]
@@ -679,15 +637,14 @@ class Commander(CommanderConfig):
         print(f'{pid}: due {hhmm(moved)}')
 
 
-    def withdraw(self, pid: str, why: str, superseded_by: str | None = None) -> None:
+    def withdraw(self, pid: str, why: str, superseded_by: str = '') -> None:
         """Core retires an undelivered order sent in error.
 
         The reason goes on the public record and to the unit that held it."""
         todo = self.comms.goals.todos.get(pid)
         refuse(why, *OUTGOING)  # posted to #comms and the holder, so refused before Core records it
-        self.call(CommsTodoTool(id=pid, operation=WithdrawTodo(
-            todo.revision, self.comms.registry.require(self.commander).incarnation, todo.assignment, why,
-            superseded_by)))
+        self.call(CommsTodoTool(id=pid, operation=WithdrawalSelection.read(superseded_by).operation(
+            todo.revision, self.comms.registry.require(self.commander).incarnation, todo.assignment, why)))
         unit = todo.held().owner
         withdrawal, = self.comms.goals.todos.get(pid).order.withdrawals(todo)
         self.on_record(f'{time.strftime("%Y-%m-%d %H:%M")} {withdrawal}', 'Withdrawal',
@@ -782,10 +739,10 @@ class SendVerb(OrderVerb, LoadedVerb):
     body_file: str = option("body_file", metavar="BODYFILE")
     clean: bool = option("--clean", default=False, help="the unit showed no incompetence")
     mechanical: bool = option("--mechanical", default=False)
-    reassign: str | None = option("--reassign", default=None, help="the concrete failure that forces replacement")
+    reassign: str = option("--reassign", default='', help="the concrete failure that forces replacement")
     replaces: str | None = option("--replaces", default=None, help="the current message this order replaces")
     disk: bool = option("--disk", default=False, help="a cleanup order; never overrides a tool's storage rule")
-    traced: str | None = option("--traced", default=None, metavar="PATH:LINE",
+    traced: str = option("--traced", default='', metavar="PATH:LINE",
                                 help="the first failing source line, required after two owners")
 
     def run(self) -> None:
@@ -823,7 +780,7 @@ class UnstrikeVerb(OrderVerb, RuledVerb):
     help = "void a strike recorded in error; it stays on the record and stops counting"
     pid: str = option("pid")
     why: str = option("--why")
-    at: str | None = option("--at", default=None,
+    at: str = option("--at", default='',
                             help="HH:MM the strike was recorded; default the newest")
 
     def run(self) -> None:
@@ -857,7 +814,7 @@ class WithdrawVerb(OrderVerb, RuledVerb):
     help = "retire an undelivered order sent in error; its problem closes with no strike"
     pid: str = option("pid")
     why: str = option("--why")
-    superseded_by: str | None = option("--superseded-by", default=None, metavar="PID",
+    superseded_by: str = option("--superseded-by", default='', metavar="PID",
                                        help="the problem that already owns this fix")
 
     def run(self) -> None:

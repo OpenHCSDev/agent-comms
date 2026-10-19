@@ -152,7 +152,7 @@ class CarryCommand(TacticalCommand):
     shapes = (('cutover',),)
 
 
-def main(a, commander):
+def main(a: list[str], commander: Commander) -> None:
     hook = ClaudeBashHook.read()
     session = CommanderSession(hook.session_id, commander)
     reasons = GuardedCommand.refusals(hook.tool_input.command, session)

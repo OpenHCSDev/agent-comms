@@ -28,19 +28,15 @@ from .active_route import ActiveRoute, replace_unreadable_active_route
 from .activity import ActivityState
 from .catalog_document import CatalogDocument
 from .change_report import ChangeReport
-from .check_root import CheckRoot
 from .channel_management import KeepThreadsTagDisposition, TagChangeResult, TagDisposition
 from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChannel, ResolvedChannel
-from .channels import ANY_CHANNEL
-from .channels import Channel
+from .channels import ANY_CHANNEL, Channel
+from .check_root import CheckRoot
 from .child_process import NoProcess, ProcessIdentity, ProcessState
 from .cli_bridges.claude import ClaudeTranscript
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
-from .history_result import HistoryPageResult
-from .send_result import SendResult
-from .maintenance_barrier import MaintenanceHeldError
 from .command import Command
 from .comms import Comms
 from .config_options import (
@@ -63,22 +59,25 @@ from .exporting import (
     SelectableWireExportFormat,
 )
 from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
-from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
-from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .harness_install import Harness, HarnessInstalled
+from .history_result import HistoryPageResult
+from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .maintenance_barrier import MaintenanceHeldError
 from .message_page import PageBounds
 from .message_reference import MessageReference
-from .page_traversal import OlderTraversal, PageCursor
 from .messages import InfoKind, Message, MessageKind
 from .native_settings import NativeThreadDefaults
 from .native_turn_context import NativeContextData
 from .owner_lifecycle import OwnerRestartResult, OwnerStartResult
+from .page_traversal import OlderTraversal, PageCursor
 from .pi_vocabulary import ServiceTier, ThinkingLevelField
+from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .read_basis import OnReadWatchAcknowledgment, WatchAcknowledgment
 from .registry_document import RegistrySnapshot
 from .runtime import RuntimeConnection, socket_path
 from .schema_report import StoreSchemaReport, StoreSchemaReports
+from .send_result import SendResult
 from .shared_ledger import LedgerDocument
 from .thread_execution import (
     ArchiveOwnerControl,
@@ -237,6 +236,30 @@ class CatalogTargetField(ChoiceTargetField):
         return {**FieldCodec.value_schema(self.annotation), 'configuration': FieldCodec.encode(self.catalog)}
 
 
+class CommandNormalization(ABC):
+    @abstractmethod
+    def namespace(self, value: object, annotation: object) -> object: ...
+    @abstractmethod
+    def editor(self, value: object, annotation: object) -> object: ...
+
+
+@dataclass(frozen=True)
+class DecoderNormalization(CommandNormalization):
+    def namespace(self, value: object, annotation: object) -> object:
+        return compile_decoder(annotation).argument_payload(value)
+    def editor(self, value: object, annotation: object) -> object:
+        return compile_decoder(annotation).decode_editor(value)
+
+
+@dataclass(frozen=True)
+class CustomNormalization(CommandNormalization):
+    convert: Callable[..., object]
+    def namespace(self, value: object, annotation: object) -> object:
+        return self.convert(value)
+    def editor(self, value: object, annotation: object) -> object:
+        return self.convert(value)
+
+
 @dataclass(frozen=True)
 class CommandOption:
     """The declared CLI and editor properties of one command field."""
@@ -247,7 +270,7 @@ class CommandOption:
     flags: tuple[str, ...]
     parser_options: Mapping[str, Any]
     group: str | None
-    normalize: Callable[..., Any] | None
+    normalization: CommandNormalization
     parser_default: Any
     parser_default_factory: Any
     editor: type[TargetField]
@@ -281,7 +304,8 @@ def option(
     """One field owns both its CLI projection and JSON boundary conversion."""
     metadata: dict[object, object] = {CommandOption: CommandOption(
         multiline=multiline, target_bound=target_bound, editor_format=editor_format,
-        flags=flags, parser_options=parser_options, group=group, normalize=normalize,
+        flags=flags, parser_options=parser_options, group=group,
+        normalization=CustomNormalization(normalize) if normalize else DecoderNormalization(),
         parser_default=parser_default, parser_default_factory=parser_default_factory,
         editor=CatalogTargetField if catalog is not None else editor, catalog=catalog,
     )}
@@ -804,9 +828,7 @@ class DeclaredOptions(Command):
         hints = get_type_hints(cls, include_extras=True)
         for declared, key in FieldCodec.record_fields(cls):
             value = getattr(args, key)
-            normalize = CommandOption.of(declared).normalize
-            raw = (normalize(value) if normalize is not None
-                   else compile_decoder(hints[declared.name]).argument_payload(value))
+            raw = CommandOption.of(declared).normalization.namespace(value, hints[declared.name])
             values.update(FieldCodec.field_plan(cls, declared.name).decoded({key: raw}))
         return FieldCodec.construct(cls, values)
 
@@ -926,8 +948,7 @@ class CliCommand(
         result = {}
         for key, text in values.items():
             item = declared[key]
-            normalize = CommandOption.of(item).normalize
-            result[key] = normalize(text) if normalize else compile_decoder(hints[item.name]).decode_editor(text)
+            result[key] = CommandOption.of(item).normalization.editor(text, hints[item.name])
         return result
 
     def confirmation(self) -> str:
@@ -1774,7 +1795,7 @@ class ContextCliCommand(CliCommand):
         parser.add_argument("--imported", action="store_true")
 
     @classmethod
-    def from_namespace(cls, args: argparse.Namespace) -> ContextCliCommand:
+    def from_namespace(cls, args: argparse.Namespace, **context: object) -> ContextCliCommand:
         if args.imported:
             if "turn" in vars(args) or args.diff:
                 raise ValueError("--imported cannot be combined with --turn or --diff")

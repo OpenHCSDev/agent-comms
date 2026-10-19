@@ -16,10 +16,11 @@ from ..goal_actions import CompletedGoalAction, GoalPrecondition, SetGoalAction
 from ..goal_states import ActiveGoal
 from ..goals import Goal, RequestGoalOrder
 from ..todos import Todo
+from .context import CommanderContext
 from .order import CommanderVerb, RuledVerb, hhmm
 
 
-def open_requests(commander) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
+def open_requests(commander: CommanderContext) -> tuple[tuple[Goal, tuple[Todo, ...]], ...]:
     """The commander's open owner requests and their undelivered orders."""
     thread = commander.comms.registry.require(commander.commander)
     return tuple(request for goal in thread.goal.active()
@@ -65,5 +66,5 @@ class RequestListVerb(RequestVerb, declared_name="list"):
                 print(f"  {todo.id} due {hhmm(todo.deadline)}: {todo.text}")
 
 
-def main(a, commander):
+def main(a: list[str], commander: CommanderContext) -> None:
     RequestVerb.parse(a, __doc__, commander).apply()
