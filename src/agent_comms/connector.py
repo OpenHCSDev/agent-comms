@@ -565,6 +565,34 @@ class ServeVerb(ConnectorVerb):
 
 
 @dataclass(frozen=True, kw_only=True)
+class RoundTripVerb(ConnectorVerb):
+    """What an upgrade proves last: a message sent through the connector's tool calls reads
+    back through them, as claude.ai would send and read it."""
+
+    help = "Send a message through the connector's tool calls and read it back"
+    root: Annotated[Path, PathText] | None = option(
+        "--root", default=None, help="Comms root (default: the active route)"
+    )
+
+    def apply(self, ctx: ConnectorStore) -> int | str:
+        connector = Connector(ctx, f"http://{LOOPBACK}:{PORT}", self.root)
+        body = f"Upgrade round trip {secrets.token_hex(8)}"
+        sent, read = (
+            asyncio.run(ToolsCallMessage(jsonrpc="2.0", id=call, params=params).result(connector))
+            for call, params in enumerate((
+                ToolCall("comms_send", {"from": CALLER.name, "to": CALLER.name, "body": body}),
+                ToolCall("comms_inbox", {"thread": CALLER.name, "target": CALLER.name}),
+            ))
+        )
+        if refused := next((reply for reply in (sent, read) if reply["isError"]), None):
+            return f"The connector round trip was refused: {json.dumps(refused['content'])}"
+        if body not in {message["body"] for message in read["structuredContent"]["messages"]}:
+            return f"The connector sent {body!r} but did not read it back"
+        print(json.dumps({"round_trip": body}))
+        return 0
+
+
+@dataclass(frozen=True, kw_only=True)
 class PendingVerb(ConnectorVerb):
     help = "List authorizations waiting for approval"
 
