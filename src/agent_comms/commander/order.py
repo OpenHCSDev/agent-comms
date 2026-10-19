@@ -187,7 +187,10 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
         COMMS.registry.storage_rule.require_quota(COMMS.registry.require(unit))
     except SelectedToolDenied as quota:
         problems.append(f'{unit}: {quota}: it cleans up its own checkouts and scratch before it gets new work')
-    Todo.require_order_body(body)
+    try:
+        Todo.require_order_body(body)
+    except ValueError as invalid_body:
+        sys.exit(f'REFUSED, nothing recorded: {invalid_body}')
     if not clean and (timid := BluntText.refused(body)):  # blunt at all times unless nothing was incompetent
         problems.append(timid)
     works = re.search(rf'(?m)^{re.escape(OrderRun.label)}\s*(.+)$', body)
@@ -444,7 +447,7 @@ def on_record(line: str, recorded: str, audience: VerdictAudience) -> None:
         f.write(f'- {line}\n')
     try:
         post(audience, f'On the record: {line}')
-    except SystemExit as failed:
+    except (SystemExit, ValueError) as failed:
         print(f'{recorded} recorded, but the post failed ({failed}). '
               'Repost with order.post; do not record it again.', file=sys.stderr)
 
