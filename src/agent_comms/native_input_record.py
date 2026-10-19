@@ -29,21 +29,27 @@ class NativeInputCommit:
     })
     session_id: str = field(metadata={"wire_name": "sessionId"})
     session_entry_id: str = field(metadata={"wire_name": "sessionEntryId"})
-    session_entry_start: int = field(kw_only=True, metadata={
-        "wire_name": "sessionEntryStart", "sql": Column(check="session_entry_start>0"),
-    })
-
     def __post_init__(self):
         Id128Text.decode(self.input_id)
-        FieldCodec.decode(int, self.session_entry_start)
-        if not self.session_id or not self.session_entry_id or not 0 < self.session_entry_start <= 2**53 - 1:
-            raise ValueError('Native input lacks a committed session byte offset')
+        if not self.session_id or not self.session_entry_id:
+            raise ValueError('Native input lacks a committed session identity')
 
-    @classmethod
-    def from_event(cls, event):
-        emitted = FieldCodec.encode(event)
-        return FieldCodec.decode(cls, {key: emitted[key]
-                                       for _, key in FieldCodec.record_fields(cls)})
+    @property
+    def input_commit(self) -> NativeInputCommit:
+        return NativeInputCommit(self.input_id, self.session_id, self.session_entry_id)
+
+
+@dataclass(frozen=True)
+class NativeInputLocation(NativeInputCommit):
+    """Emitted byte placement; only the original runtime input row persists it."""
+
+    session_entry_start: int = field(kw_only=True, metadata={"wire_name": "sessionEntryStart"})
+
+    def __post_init__(self):
+        super().__post_init__()
+        FieldCodec.decode(int, self.session_entry_start)
+        if not 0 < self.session_entry_start <= 2**53 - 1:
+            raise ValueError('Native input lacks a committed byte offset')
 
 
 class NativeInputExecution(DeclaredFamily, affix="NativeExecution"):

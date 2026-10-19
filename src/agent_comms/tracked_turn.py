@@ -27,7 +27,6 @@ from .mro_dispatch import handles
 from .native_arguments import SelectedModel
 from .native_attestation import AttestationError, ObservedAttestation
 from .native_package import VerifiedNativePackage
-from .native_input_record import NativeInputCommit
 from .native_pi import (
     NativeContextProof,
     NativeEmptyAnswer,
@@ -467,7 +466,7 @@ class TrackedTurnSession(TurnSession):
             self.prompt_state = self.prompt_state.start(event)
             async with self.cursor_delivery.reading() as source_reads:
                 await Coordination.run_worker(lambda:
-                    source_reads.for_source(self.active_session_file).observe(NativeInputCommit.from_event(event))
+                    source_reads.for_source(self.active_session_file).observe(event)
                 )
             await self.following.open(self)
 

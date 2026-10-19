@@ -24,7 +24,7 @@ from .native_package import MANIFEST, OWNER_INSTRUCTIONS, VerifiedNativePackage
 from .launch_runtime import LaunchRuntime, RestartEnvironment, ThreadLaunch
 from .errors import RelationViolationError
 from .field_codec import FieldCodec, Id128Text, MalformedRecord, Sha256Text
-from .native_input_record import NativeInputCommit
+from .native_input_record import NativeInputCommit, NativeInputLocation
 from .private_path import FileIdentity, FileRevision, NativeSessionFileRole, PrivateDirectoryRole, TrustedAncestorRole, fsync_directory
 from .typed_table import Column, Index, SQLiteSchemaObject, TypedTable
 from .native_tool_call import NativeToolMode
@@ -184,17 +184,11 @@ class NativeContextRecord(NativeInputCommit):
         emitted = FieldCodec.encode(context_event)
         record = FieldCodec.decode(cls, {key: emitted[key]
                                          for _, key in FieldCodec.record_fields(cls)})
-        if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id,
-                                                  session_entry_start=record.session_entry_start):
+        if record.input_commit != NativeInputCommit(input_id, session_id, record.session_entry_id):
             raise NativePiUnavailable("Native Pi context names another original input")
-        if record.input_commit != NativeInputCommit.from_event(input_event):
+        if record.input_commit != input_event.input_commit:
             raise NativePiUnavailable("Native Pi input/context events disagree")
         return record
-
-    @property
-    def input_commit(self) -> NativeInputCommit:
-        return NativeInputCommit(self.input_id, self.session_id, self.session_entry_id,
-                                 session_entry_start=self.session_entry_start)
 
     def __post_init__(self):
         super(NativeContextRecord, self).__post_init__()
@@ -204,7 +198,7 @@ class NativeContextRecord(NativeInputCommit):
         if not 0 < self.committed_at_ms <= 2**53 - 1:
             raise ValueError("Native context commit time is outside its native range")
 
-    def at(self, session_file: Path) -> NativeContextProof:
+    def at(self, session_file: Path, *, session_entry_start: int) -> NativeContextProof:
         """Locate recorded facts; this does not grant acceptance or replay."""
         return NativeContextProof(
             self.input_id,
@@ -214,7 +208,7 @@ class NativeContextRecord(NativeInputCommit):
             self.llm_context_digest,
             self.committed_at_ms,
             session_file,
-            session_entry_start=self.session_entry_start,
+            session_entry_start=session_entry_start,
         )
 
 
@@ -222,7 +216,7 @@ class NativeContextRecord(NativeInputCommit):
 class NativeContextJournal(NativeContextRecord, TypedTable):
     """One proof declaration owns wire facts and the indexed durable journal."""
 
-    schema: Literal[3]
+    schema: Literal[2]
     type: Literal["context_committed"]
 
     without_rowid = True
@@ -319,15 +313,15 @@ class NativeContextJournal(NativeContextRecord, TypedTable):
         return next(iter(rows), None)
 
     def corroborate(
-        self, session_file: Path, header: SessionEntry, entry: NativeEntry
+        self, session_file: Path, header: SessionEntry, entry: NativeEntry, *, session_entry_start: int
     ) -> NativeContextProof:
         if self.session_id != header.id or self.session_entry_id != entry.id:
             raise NativePiUnavailable("Native Pi proof journal source lineage differs")
-        return self.at(session_file)
+        return self.at(session_file, session_entry_start=session_entry_start)
 
 
 @dataclass(frozen=True, slots=True)
-class NativeContextProof(NativeContextRecord):
+class NativeContextProof(NativeContextRecord, NativeInputLocation):
     session_file: Path
 
     def corroborates_input(
@@ -343,12 +337,13 @@ class NativeContextProof(NativeContextRecord):
         return self.read_evidence(
             self.session_file, input_id,
             request_generation=self.request_generation, evidence=evidence,
+            session_entry_start=self.session_entry_start,
         ) == self
 
     @classmethod
     def read_evidence(
-        cls, session_file: Path, input_id: str, *, request_generation: int | None = None,
-        evidence: NativeEvidenceRead | None = None,
+        cls, session_file: Path, input_id: str, *, session_entry_start: int,
+        request_generation: int | None = None, evidence: NativeEvidenceRead | None = None,
     ) -> NativeContextProof:
         """Corroborate live recorded events; parsed bytes alone grant no authority."""
         Id128Text.decode(input_id)
@@ -360,9 +355,11 @@ class NativeContextProof(NativeContextRecord):
         if row is None:
             raise NativePiUnavailable("The input has no assembled-context proof")
         with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-            header, _entries = evidence.observe(row)
+            location = NativeInputLocation(input_id, row.session_id, row.session_entry_id,
+                                           session_entry_start=session_entry_start)
+            header, _entries = evidence.observe(location)
             entry = evidence.tracked(input_id)
-            return row.corroborate(session_file, header, entry)
+            return row.corroborate(session_file, header, entry, session_entry_start=session_entry_start)
 
 class NativePiTerminalFailure(NativePiUnavailable):
     """A proved input ended in a failed terminal and its owned process was reaped."""
@@ -944,12 +941,8 @@ def read_tracked_input_commitment(
     session_file = Path(session_file).absolute()
     from .native_entries import NativeInputEvidenceRead
 
-    with NativeContextJournal.open_evidence(session_file) as db:
-        row = NativeContextJournal.for_input(db, input_id)
-    if row is None:
-        raise NativePiUnavailable('Native input byte offset is missing')
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:
-        evidence.observe(row)
+        evidence.observe()
         try:
             return CommittedInput(evidence.tracked(input_id).message.input_digest)
         except NativeInputUncommitted:
@@ -967,7 +960,8 @@ def _verify_context(
     from .native_entries import NativeInputEvidenceRead
 
     try:
-        emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(session_file)
+        emitted = NativeContextRecord.from_events(input_id, session_id, input_event, context_event).at(
+            session_file, session_entry_start=input_event.session_entry_start)
     except MalformedRecord as error:
         raise NativePiUnavailable("Native Pi input/context acknowledgement is malformed") from error
     with NativeInputEvidenceRead.borrow(session_file, evidence) as evidence:

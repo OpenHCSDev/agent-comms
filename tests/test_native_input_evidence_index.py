@@ -17,6 +17,8 @@ def test_shared_input_reader_indexes_the_whole_committed_cut(tmp_path, newest_fi
     user = json.loads(session.read_text().splitlines()[1])
     user['id'] = 'newer'
     user['message']['inputId'] = newer
+    offsets = {INPUT_ID: len(session.read_bytes().splitlines(keepends=True)[0]),
+               newer: session.stat().st_size}
     with session.open('a') as stream:
         stream.write(json.dumps(user) + '\n')
     write_proof_rows(session, [dict(
@@ -29,7 +31,8 @@ def test_shared_input_reader_indexes_the_whole_committed_cut(tmp_path, newest_fi
         evidence = scope.for_source(session)
         NativeSessionIdentity.from_evidence(evidence)
         order = (newer, INPUT_ID) if newest_first else (INPUT_ID, newer)
-        proofs = [NativeContextProof.read_evidence(session, input_id, evidence=evidence)
+        proofs = [NativeContextProof.read_evidence(session, input_id, evidence=evidence,
+                                                  session_entry_start=offsets[input_id])
                   for input_id in order]
         assert {proof.input_id for proof in proofs} == {INPUT_ID, newer}
         assert set(evidence.inputs) == {INPUT_ID, newer}
