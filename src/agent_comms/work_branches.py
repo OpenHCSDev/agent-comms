@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar
 
@@ -162,12 +163,12 @@ query($owner: String!, $name: String!, $after: String) {
   }
 }"""
 
-    def _run(self, *command: str, input: str | None = None) -> str:
+    def _run(self, *command: str, input: str = "") -> str:
         result = subprocess.run(
             command,
             cwd=self.checkout,
             capture_output=True,
-            input=input.encode() if input is not None else None,
+            input=input.encode(),
             timeout=self.timeout,
         )
         if result.returncode != 0:
@@ -278,7 +279,7 @@ query($owner: String!, $name: String!, $after: String) {
                     WorkBranch(
                         branch,
                         ahead,
-                        date,
+                        datetime.fromisoformat(date).astimezone(UTC).isoformat().replace("+00:00", "Z"),
                         tuple(links.get(branch, ())),
                         tuple(self._checkout(snapshot, path) for path in worktrees.get(branch, ())),
                     )

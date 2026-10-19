@@ -348,7 +348,7 @@ def run(output: Path, checkout: Path, selected: list[str]) -> None:
                 wait_started(service, [])
                 with ConnectorStore.at(store_path).granted("scratch timing") as token:
 
-                    def call(payload):
+                    def call(payload, case=case, port=port, service=service):
                         request = case / (payload["method"].replace("/", "-") + "-request.json")
                         request.write_text(json.dumps(payload))
                         curl = subprocess.Popen(

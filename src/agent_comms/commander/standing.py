@@ -39,17 +39,13 @@ class Detached(UndatedStandingRule):
         for todo in cls.todos(comms, commander):
             owed.setdefault(todo.holder, []).append(todo.id)
         statuses = comms.registry.snapshot().statuses
-        away = [
-            unit for unit in sorted(owed) if unit not in statuses or not statuses[unit].receiving
-        ]
+        away = [unit for unit in sorted(owed) if unit not in statuses or not statuses[unit].receiving]
         unread = comms.bus.pending_counts_all(tuple(unit for unit in away if unit in statuses))
         return tuple(cls(unit, unread.get(unit, 0), tuple(owed[unit])) for unit in away)
 
     def line(self) -> str:
-        return (
-            f"DETACHED {self.unit}: {self.unread} unread, orders {', '.join(self.orders)}"
-            " -> wake it or reassign"
-        )
+        return (f"DETACHED {self.unit}: {self.unread} unread, orders {', '.join(self.orders)}"
+                " -> wake it or reassign")
 
 
 @dataclass(frozen=True)
@@ -59,18 +55,13 @@ class RequestStalled(UndatedStandingRule):
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[RequestStalled, ...]:
         thread = comms.registry.require(commander)
-        return tuple(
-            cls(request)
-            for goal in thread.goal.active()
-            for request, served in goal.order.open_requests(goal, comms.goals, thread.incarnation)
-            if not served
-        )
+        return tuple(cls(request) for goal in thread.goal.active()
+                     for request, served in goal.order.open_requests(goal, comms.goals, thread.incarnation)
+                     if not served)
 
     def line(self) -> str:
-        return (
-            f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
-            " -> order its next step or mark it done"
-        )
+        return (f"REQUEST STALLED: {self.goal.id} {self.goal.text}"
+                " -> order its next step or mark it done")
 
 
 @dataclass(frozen=True)
@@ -88,32 +79,19 @@ class WheelSpin(StandingRule, declared_name=None):
         held = {todo.holder for todo in cls.todos(comms, commander)}
         excluded = held | CONFIG.parked | {commander, ""}
         bound = TurnsSince(time.time() - cls.recent)
-        return sorted(
-            (
-                thread
-                for thread in comms.registry.all_threads().values()
-                if thread.name not in excluded
-                and TurnDigestRead(comms.root, thread, bound).native()
-            ),
-            key=lambda thread: thread.name,
-        )
+        return sorted((thread for thread in comms.registry.all_threads().values()
+                       if thread.name not in excluded
+                       and TurnDigestRead(comms.root, thread, bound).native()),
+                      key=lambda thread: thread.name)
 
     def assign(self, comms: Comms, commander: str, unit: Thread) -> None:
         """The order sent again to ``unit`` through its Goal, with the order's own text."""
         todo = comms.goals.todos.get(self.todo.id)
         order = todo.order.reissued(time.time())
-        comms.goals.update_goal(
-            unit.name,
-            OrderGoalAction(
-                problem=todo.id,
-                expected_revision=todo.revision,
-                order=order,
-                request=todo.goal.request(),
-                deadline=todo.deadline,
-                commander=commander,
-                traced=todo.order.owner,
-            ),
-        )
+        comms.goals.update_goal(unit.name, OrderGoalAction(
+            problem=todo.id, expected_revision=todo.revision, order=order,
+            request=todo.goal.request(), deadline=todo.deadline, commander=commander,
+            traced=todo.order.owner))
         comms.messaging.send(commander, unit.name, f"{self.line()}\n{order.instructions(todo)}")
 
 
@@ -128,46 +106,29 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
         held = tuple(todo for todo in cls.todos(comms, commander) if todo.pending)
         pulls = PullRequests(held)
         storage = comms.registry.storage_rule
-        trends = (
-            (todo, OrderProgress.read(todo, storage, pulls).distance_readings().trend)
-            for todo in held
-        )
+        trends = ((todo, OrderProgress.read(todo, storage, pulls).distance_readings().trend)
+                  for todo in held)
         flat = ((todo, trend.since) for todo, trend in trends if isinstance(trend, FlatTrend))
-        return tuple(
-            cls(todo, since)
-            for todo, since in flat
-            if TurnDigestRead(
-                comms.root, comms.registry.require(todo.held().owner), TurnsSince(since)
-            )
-            .read()
-            .turns
-        )
+        return tuple(cls(todo, since) for todo, since in flat
+                     if TurnDigestRead(comms.root, comms.registry.require(todo.held().owner),
+                                       TurnsSince(since)).read().turns)
 
     def began(self) -> float:
         return self.since
 
     def line(self) -> str:
-        return (
-            f"WHEEL SPIN: {self.todo.holder} kept working on {self.todo.id} while its distance"
-            " to done did not fall across two readings -> Core strikes it and gives the order"
-            " to an idle unit"
-        )
+        return (f"WHEEL SPIN: {self.todo.holder} kept working on {self.todo.id} while its distance"
+                " to done did not fall across two readings -> Core strikes it and gives the order"
+                " to an idle unit")
 
     def enforce(self, comms: Comms, commander: str) -> None:
         todo = comms.goals.todos.get(self.todo.id)
         held = todo.held()
         if not todo.struck_on_order(held.owner):
-            comms.goals.change_problem(
-                todo.id,
-                StrikeTodo(
-                    todo.revision,
-                    comms.registry.require(commander).incarnation,
-                    held,
-                    f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
-                    " across two readings",
-                ),
-                commander,
-            )
+            comms.goals.change_problem(todo.id, StrikeTodo(
+                todo.revision, comms.registry.require(commander).incarnation, held,
+                f"{held.owner} kept working on {todo.id} while the distance to done did not fall"
+                " across two readings"), commander)
         for unit in self.idle(comms, commander)[:1]:
             self.assign(comms, commander, unit)
 
@@ -180,21 +141,14 @@ class UnownedWheelSpin(WheelSpin, UndatedStandingRule):
 
     @classmethod
     def violations(cls, comms: Comms, commander: str) -> tuple[UnownedWheelSpin, ...]:
-        rows = (
-            todo
-            for todo in comms.goals.todos.for_commander(
-                comms.registry.require(commander).incarnation
-            )
-            if todo.pending and not todo.holder
-        )
+        rows = (todo for todo in comms.goals.todos.for_commander(
+            comms.registry.require(commander).incarnation) if todo.pending and not todo.holder)
         idle = cls.idle(comms, commander)
         return tuple(cls(todo, unit.name) for unit, todo in zip(idle, rows, strict=False))
 
     def line(self) -> str:
-        return (
-            f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
-            f" -> Core gives it to {self.unit}"
-        )
+        return (f"WHEEL SPIN: {self.unit} holds no order while {self.todo.id} is unowned"
+                f" -> Core gives it to {self.unit}")
 
     def enforce(self, comms: Comms, commander: str) -> None:
         self.assign(comms, commander, comms.registry.require(self.unit))
