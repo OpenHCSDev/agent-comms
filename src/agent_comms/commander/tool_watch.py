@@ -46,7 +46,7 @@ STRUCK = {}  # (thread, violation) -> time of the strike, so one repeated comman
 def enforce_storage(registry, thread, tool):
     """Core's StorageRule decides the decoded call; a denial is a public strike on the unit's
     current task, at once."""
-    if tool is None or thread in CONFIG.storage_exempt or thread not in registry:
+    if tool is None or thread not in order.units() or thread not in registry:
         return  # Core decides nothing for a call or unit it does not know
     try:
         worktree = Path(registry.require(thread).worktree)
