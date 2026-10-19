@@ -381,12 +381,12 @@ def test_commander_script_records_every_order_step_in_core(commander, commander_
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     due = '23:59'
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body), 'request')
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', due, str(body), f'{__file__}:1')
     created = comms.goals.todos.get('P1')
     assert (created.assignment.owner, created.order.edits, created.order.banned) == (
         'worker', ('Set count.txt to 1.',), ('no second store', 'no cache'))
 
-    script.send('worker', due, str(body), 'request')  # the same holder again without --clean is a send-back
+    script.send('worker', due, str(body))  # the same holder again without --clean is a send-back
     sent_back = comms.goals.todos.get('P1')
     assert sent_back.order.id != created.order.id and script.struck(sent_back, 'worker') == 1
     (link,) = sent_back.messages[-1:]
@@ -423,7 +423,7 @@ def order_body(repo, check=None, edit='Set count.txt to 1.', extra=''):
 
 
 def problem(script, body):
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, 'request')
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', body, f'{__file__}:1')
 
 
 def test_resend_after_strike_counts_one_miss(commander, commander_script, monkeypatch):
@@ -435,9 +435,9 @@ def test_resend_after_strike_counts_one_miss(commander, commander_script, monkey
     body = order_body(repo)
     problem(script, body)
     script.strike('worker', 'P1', 'P1 left count.txt at zero and reported it fixed')
-    script.send('worker', '23:59', body, 'request')
+    script.send('worker', '23:59', body)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 1
-    script.send('worker', '23:59', body, 'request')
+    script.send('worker', '23:59', body)
     assert script.struck(comms.goals.todos.get('P1'), 'worker') == 2
 
 
@@ -504,7 +504,7 @@ def test_order_check_replaces_a_wrong_check_so_done_runs_the_corrected_one(comma
                     "Works when: the installed app shows the counter at one after restart\n"
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
-    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
+    script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
     script.strike('worker', 'P1', 'P1 was sent back once before its check was corrected')
     sent = comms.goals.todos.get('P1')
     corrected = f'{repo} :: cat count.txt -> 1'
@@ -544,7 +544,7 @@ def test_commander_refuses_jargon_before_core_records_the_problem(commander_scri
                     "The counter custody is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='^REFUSED, nothing recorded'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
     assert script.held_orders() == () and 'Problem: NEW' in body.read_text()
 
 
@@ -557,7 +557,7 @@ def test_commander_refuses_a_check_that_prints_no_count(commander_script):
                     "The counter is wrong and that is stupid.\n1. Set count.txt to 1.\n"
                     "Banned: no second store; no cache\nReport: the commit and the count before -> after\n")
     with pytest.raises(SystemExit, match='the check printed no integer'):
-        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), 'request')
+        script.problem('The counter file holds zero where the fleet needs one', 'worker', '23:59', str(body), f'{__file__}:1')
     assert script.held_orders() == ()
 
 
@@ -1222,7 +1222,7 @@ def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_
 
 VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
-    'ok-unowned': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner' --no-owner proof",
+    'superseded': "e1:ab --line one --why why --by m2",
     'back': "e1:ab --msg m1 --line one --why 'The unit wrapped the old store' --roast r --fix f --slop state"
             " --fact 'four words of fact' --at a.py:1 --derive delete-copy --by b.py:2",
 }
@@ -1236,7 +1236,8 @@ def test_each_verdict_kind_requires_its_facts_and_records_its_verdict(commander,
     create(commander, 'P1')
     for name, line in VERDICT_LINES.items():
         argv = [name, *shlex.split(line)]
-        for at in [i for i, token in enumerate(argv) if token.startswith('--')]:
+        for at in [i for i, token in enumerate(argv)
+                   if token.startswith('--') and (token != '--msg' or name == 'back')]:
             with pytest.raises(SystemExit):
                 judge.JudgeVerb.parse(argv[:at] + argv[at + 2:], '')
         operation = judge.JudgeVerb.parse(argv, '').operation(comms.goals.todos.get('P1'), f'toolu_{name}')

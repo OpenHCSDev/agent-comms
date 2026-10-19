@@ -987,12 +987,33 @@ class FamilyDeletion(OrderDeletion):
                 f"{self.count.command}",)
 
 
+@dataclass(frozen=True)
+class ProblemFinding(DeclaredFamily, affix="ProblemFinding"):
+    def instructions(self) -> tuple[str, ...]:
+        return ()
+
+
+@dataclass(frozen=True)
+class UnlocatedProblemFinding(ProblemFinding):
+    pass
+
+
+@dataclass(frozen=True)
+class LocatedProblemFinding(ProblemFinding):
+    where: FileLine
+
+    def instructions(self) -> tuple[str, ...]:
+        return (f"Where: {self.where.to_wire()}",)
+
+
 @dataclass(frozen=True, kw_only=True)
 class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
     """A problem's order state; an unassigned finding is not a fabricated order."""
     pending: ClassVar[bool] = False
     line: ClassVar[str] = "No order"
     pull_request_label: ClassVar[str] = "Agent-Comms-Order:"
+    finding: ProblemFinding = field(default_factory=UnlocatedProblemFinding,
+                                   metadata={"wire_omit_default": True})
 
     @classmethod
     def pull_request_ids(cls, body: str) -> tuple[str, ...]:
@@ -1030,17 +1051,16 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
 
 @dataclass(frozen=True, kw_only=True)
 class UnorderedProblemOrder(ProblemOrder):
-    finding: FileLine
 
     def require_transfer(self, todo: Todo) -> None:
         pass
 
     def instructions(self, todo: Todo) -> str:
-        return f"Problem: {todo.id}: {todo.text}\nWhere: {self.finding.to_wire()}\nNo order"
+        return "\n".join((f"Problem: {todo.id}: {todo.text}",
+                          *self.finding.instructions(), "No order"))
 
     def linked(self, order: PendingProblemOrder) -> PendingProblemOrder:
-        return FoundPendingProblemOrder(**{item.name: getattr(order, item.name) for item in fields(order)
-                                           if item.name not in FoundProblemOrder.finding_fields()}, finding=self.finding)
+        return replace(order, finding=self.finding)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1134,7 +1154,7 @@ class CheckedProblemOrder(ProblemOrder, declared_name=None):
                 "--title '<title>' --body-file <file>; Core writes its required order identity.")
 
     def instructions(self, todo):
-        return "\n".join((f"Problem: {todo.id}: {todo.text}", f"Order: {self.id}",
+        return "\n".join((f"Problem: {todo.id}: {todo.text}", *self.finding.instructions(), f"Order: {self.id}",
             f"Owner: {self.owner.to_wire()}", self.pull_request_instruction(todo.id),
             f"Check: {self.check.directory} :: {self.check.command}",
             *self.deletes.instructions(),
@@ -1205,25 +1225,6 @@ class PendingProblemOrder(CheckedProblemOrder):
     def withdrawn(self, previous: Assignment, why: str, superseded_by: str | None) -> ProblemOrder:
         return self.copy_as(WithdrawnProblemOrder, previous=previous, why=why,
                             superseded_by=superseded_by)
-
-
-@dataclass(frozen=True, kw_only=True)
-class FoundProblemOrder(CheckedProblemOrder, declared_name=None):
-    finding: FileLine
-
-    @classmethod
-    def finding_fields(cls) -> frozenset[str]:
-        return frozenset(cls.__annotations__)
-
-    def copy_as(self, kind: type[ProblemOrder], **evidence) -> ProblemOrder:
-        found, = (member for member in ProblemOrder.members_with(kind, FoundProblemOrder)
-                  if kind in member.__bases__)
-        return found(**{item.name: getattr(self, item.name) for item in fields(self)}, **evidence)
-
-
-@dataclass(frozen=True, kw_only=True)
-class FoundPendingProblemOrder(FoundProblemOrder, PendingProblemOrder):
-    pass
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -1299,26 +1300,6 @@ class WithdrawnProblemOrder(CheckedProblemOrder):
         superseded = f" (superseded by {self.superseded_by})" if self.superseded_by else ""
         return (f"{todo.id}: order {self.id} withdrawn from {self.previous.owner}, "
                 f"no strike: {self.why}{superseded}",)
-
-
-@dataclass(frozen=True, kw_only=True)
-class FoundDeliveredProblemOrder(FoundProblemOrder, DeliveredProblemOrder):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class FoundInstalledProblemOrder(FoundProblemOrder, InstalledProblemOrder):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class FoundWithdrawnProblemOrder(FoundProblemOrder, WithdrawnProblemOrder):
-    pass
-
-
-@dataclass(frozen=True, kw_only=True)
-class FoundDroppedProblemOrder(FoundProblemOrder, DroppedProblemOrder):
-    pass
 
 
 @dataclass(frozen=True)

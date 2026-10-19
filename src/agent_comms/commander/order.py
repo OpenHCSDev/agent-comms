@@ -20,7 +20,6 @@ and refuses to let a deadline lapse silently.
 import argparse, asyncio, json, os, re, subprocess, sys, time
 from abc import abstractmethod
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from uuid import uuid4
 
@@ -37,12 +36,12 @@ from ..progress_claims import MergedClaim, WorkingClaim
 from ..recorded_time import RecordedEventTime
 from ..standing_rules import HuntDue, RulesDue
 from ..tool_caller import ThreadCaller
-from ..tools import (CommsFireTool, CommsOrderCheckTool,
+from ..tools import (CommsFireTool, CommsSendTool, CommsOrderCheckTool,
                      CommsOrderServeTool, CommsOrderDoneTool, CommsOrderTool,
                      CommsProblemCloseTool, CommsTodoCreateTool, CommsTodoListTool, CommsTodoTool, TodoList)
 from ..todos import (ApplicationOrderRun, VerdictAudience, InstallDeadline, PlannedInstallDeadline, OrderMessage, MechanicalOrderRun, OrderRun, BluntText, CommitDelivery, NotifiedFirstCallEvent, ObservedFirstCallEvent,
                      OperationDelivery, CleanHunt, OrderedHunt, PendingProblemOrder, RecordFirstCallTodo,
-                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo, FoundPendingProblemOrder,
+                     OrderDeletion, RecordHuntTodo, StrikeReason, StrikeTodo, VoidStrikeTodo, LocatedProblemFinding, UnlocatedProblemFinding,
                      WithdrawTodo, AssignTodo, DirectiveText, OrderProgress, Todo, Slop)
 from . import capacity
 from .config import CommanderConfig, Repo
@@ -69,12 +68,8 @@ def post(audience: VerdictAudience, body: str) -> str:
     One thread gets a DM; a larger audience is mentioned on #comms, which wakes no one else.
     """
     target = audience.threads[0] if len(audience.threads) == 1 else '#comms'
-    out = subprocess.run(['timeout', '300', CLI, '--root', B, 'send', '--from', ME, '--to', target,
-                          '--type', 'info', '--body', audience.addressed(target, body)],
-                         capture_output=True, text=True)
-    if '"id"' not in out.stdout:
-        sys.exit(f'Send failed: {out.stdout}{out.stderr}')
-    return json.loads(out.stdout)['id']
+    return call(CommsSendTool(sender=ME, target=target, body=body,
+                              audience=audience.threads)).id
 
 
 def call(tool):
@@ -181,7 +176,7 @@ def forwarders_added(diff, sources=()):
                if m.group(2) not in kept and not state_call.search(diff[m.start():m.end() + 200].split('\n+', 2)[1] if '\n+' in diff[m.start():m.end()+200] else '')])
 
 
-def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, order_type=PendingProblemOrder):
+def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new=None, traced=None, replaces=None, disk=False, finding=UnlocatedProblemFinding()):
     """Validate an order body and record it in Core: a new problem (new=(PID, TEXT)) or the listed open problems.
 
     Sending to a unit that already holds the problem replaces its order there; without --clean that is a send-back."""
@@ -291,7 +286,7 @@ def send(unit, due, body_file, clean=False, mechanical=False, reassign=None, new
     struck_already = replacing and listed[group[0]].struck_on_order(unit)
     at = time.time()
     try:
-        order = order_type(
+        order = PendingProblemOrder(finding=finding,
             id=uuid4().hex[:12], owner=FileLine(owner[1], int(owner[2])),
             check=check, edits=edits, banned=banned,
             report=report[1], run=run, serves=phase,
@@ -374,7 +369,7 @@ def say(units, body_file):
         sys.exit('Refused: a numbered edit list or a Report/Due line is an order. Use `order send` so it gets a tracked deadline.')
     refuse(body, *OUTGOING)
     Slop.from_order(body)
-    print(post(units.split(','), body.rstrip()))
+    print(post(VerdictAudience(tuple(units.split(','))), body.rstrip()))
 
 
 def problem(text, unit, due, order_file, where, disk=False):
@@ -391,7 +386,7 @@ def problem(text, unit, due, order_file, where, disk=False):
     open(order_file, 'w').write(body.replace('Problem: NEW', f'Problem: {pid}'))
     try:
         send(unit, due, order_file, new=(pid, text), disk=disk,
-             order_type=partial(FoundPendingProblemOrder, finding=location))
+             finding=LocatedProblemFinding(location))
     except SystemExit:
         open(order_file, 'w').write(body)
         raise
@@ -480,13 +475,15 @@ def strike(unit: str, task: str, why: str, caught: str = f'{ME} at review', *,
     print(f'{unit}: {n} strike(s) on {task}' + (f'. Reassign {task} now and freeze its branch.' if n >= 2 else ''))
 
 
-def done(pid, sha, delivered=None, screenshot='', seen=None):
+def done(pid, sha, delivered=None, screenshot='', seen='', repo=''):
     """Core runs the delivery's check at its checked commit; a late delivered commit is a strike."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.state.open or not todo.pending:
         sys.exit(f'Refused: {pid} has no pending order')
     unit = todo.assignment.owner
     todo.order.run.require_artifact(seen or screenshot)
+    if repo and Path(repo).resolve() != Path(todo.order.check.directory).resolve():
+        sys.exit('Refused: --repo must name the recorded order check directory.')
     repo = todo.order.check.directory
     operation = sha == 'op'  # an operation on live state, not a commit: the check runs now and now is delivery
     if not operation:
@@ -823,12 +820,14 @@ class SendVerb(OrderVerb, LoadedVerb):
 class StrikeVerb(OrderVerb, RuledVerb):
     help = "a send-back, a missed deadline or a false claim"
     unit: str = option("unit")
-    pid: str = option("pid", help="the problem the strike is for; strikes count per problem")
     why: str = option("--why")
     caught: str = option("--caught", default=f'{ME} at review', help='"WHO at STAGE"; stage is review/install/live/user')
 
     def run(self) -> None:
-        strike(self.unit, self.pid, self.why, self.caught)
+        references = set(re.findall(r'\bP\d+\b', self.why))
+        if len(references) != 1:
+            sys.exit('Refused: name exactly one problem in --why; strikes count per problem.')
+        strike(self.unit, references.pop(), self.why, self.caught)
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -898,11 +897,12 @@ class DoneVerb(OrderVerb, RuledVerb):
     screenshot: str = option("--screenshot", default="", metavar="PATH",
                              help="for an op: the screenshot the working claim stands on")
 
-    seen: str | None = option("--seen", default=None)
+    seen: str = option("--seen", default="")
+    repo: str = option("--repo", default="", help="the recorded order check directory")
 
     def run(self) -> None:
         todo = COMMS.goals.todos.resolve_order(COMMS.registry.require(ME).incarnation, self.unit, self.message)
-        done(todo.id, self.sha, self.delivered, self.screenshot, self.seen)
+        done(todo.id, self.sha, self.delivered, self.screenshot, self.seen, self.repo)
 
 
 @dataclass(frozen=True, kw_only=True)
