@@ -112,6 +112,7 @@ class AssignmentBinding:
     execution_id: Annotated[str, BoundedText]
 
     def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
         if ":" in self.execution_id:
             raise ClaimTransitionError("Execution ID cannot contain a colon.")
         if FieldCodec.decode(int, self.source.seq) <= 0:
@@ -185,6 +186,9 @@ class ClaimRelease:
     resource: Annotated[str, ResourcePathText]
     generation: Annotated[str, Id128Text]
 
+    def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimTransition:
@@ -204,6 +208,7 @@ class ClaimTransition:
     )
 
     def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
         if not self.claims and not self.releases:
             raise ClaimTransitionError("Empty claim transitions are not meaningful.")
         if len(set(self.resources)) != len(self.resources):
@@ -266,15 +271,20 @@ class ClaimOwner:
     message_id: Annotated[str, BoundedText]
     claim_scope: WakeClaim | None = field(default=None, metadata={"wire_name": 'admission'})
 
+    def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner]):
     """Immutable sorted claim table plus the last processed envelope sequence."""
 
     last_seq: Annotated[int, ProjectionSequence] = 0
-    _claims: Mapping[str, ClaimOwner] = field(default_factory=dict)
+    # Built from a dict, which the codec checks; held afterwards as a read-only view.
+    _claims: dict[str, ClaimOwner] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        FieldCodec.require_fields(self)
         if any(value.resource != key or value.seq > self.last_seq for key, value in self._claims.items()):
             raise ClaimTransitionError("Previous projection is malformed.")
         object.__setattr__(self, "_claims", MappingProxyType(dict(sorted(self._claims.items()))))

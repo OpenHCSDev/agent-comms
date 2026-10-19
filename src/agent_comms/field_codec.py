@@ -811,9 +811,18 @@ class FieldCodec(Sealed):
             )
 
     @classmethod
-    def rebuilt(cls, record: T) -> T:
-        """A record built in code, held to every rule its field types state on the wire."""
-        return cls.decode(type(record), cls.encode(record))
+    def require_fields(cls, record: object) -> None:
+        """A record built in code holds each field to the rule its declared type states on the wire."""
+        for name, annotation in cls.field_types(type(record)):
+            value = getattr(record, name)
+            if cls.decode(annotation, cls.encode(value)) != value:
+                raise MalformedRecord(f"{type(record).__name__}.{name} is not its declared type")
+
+    @staticmethod
+    @cache
+    def field_types(target: type) -> tuple[tuple[str, object], ...]:
+        hints = get_type_hints(target, include_extras=True)
+        return tuple((item.name, hints[item.name]) for item in fields(target) if item.init)
 
     @staticmethod
     def construct(target: Callable[..., T], values: dict[str, object]) -> T:

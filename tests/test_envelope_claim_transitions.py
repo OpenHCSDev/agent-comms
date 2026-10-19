@@ -129,7 +129,7 @@ def test_exact_incarnation_and_generation_fence_releases(tmp_path):
     assert new[a].owner == "peer" and new[a].seq == 3
     with pytest.raises(ClaimTransitionError, match="malformed"):
         ClaimProjection(0, {a: ClaimOwner(a, "peer", "epoch", G2, 3, "msg-3")})
-    with pytest.raises(ClaimTransitionError, match="malformed"):
+    with pytest.raises(MalformedRecord, match="JSON object"):
         ClaimProjection(1, [])
     with pytest.raises(ClaimTransitionError, match="exact owner"):
         transition(4, releases=(ClaimRelease(a, G1),)).apply(new)
@@ -167,17 +167,22 @@ def test_owned_application_is_deterministic_and_requires_order(tmp_path):
 
 def test_only_exact_typed_nonempty_sequenced_envelopes(tmp_path):
     _, a, _ = resources(tmp_path)
-    invalid = (
+    mistyped = (
         lambda: transition(True, claims=(a,), generation=G1),
-        lambda: transition(0, claims=(a,), generation=G1), lambda: transition(1),
-        lambda: transition(1, claims=(a,), generation=None),
+        lambda: transition(0, claims=(a,), generation=G1),
         lambda: transition(1, claims=(a,), generation="f" * 31),
-        lambda: transition(1, releases=(ClaimRelease(a, G1),), generation=G2),
         lambda: transition(1, claims=(a,), generation=G1.upper()),
         lambda: ClaimTransition("owner", "epoch", 1, "m", (a,), ("bad",), G1),
         lambda: ClaimTransition("owner", "epoch", 1, "m", [a], (), G1),
     )
-    for candidate in invalid:
+    for candidate in mistyped:
+        with pytest.raises(MalformedRecord):
+            candidate()
+    for candidate in (
+        lambda: transition(1),
+        lambda: transition(1, claims=(a,), generation=None),
+        lambda: transition(1, releases=(ClaimRelease(a, G1),), generation=G2),
+    ):
         with pytest.raises(ClaimTransitionError):
             candidate()
 
@@ -197,20 +202,18 @@ def test_raw_path_aliases_cannot_acquire_or_release_same_file(tmp_path):
     aliases = (f"{worktree}//a.py", f"{worktree}/./a.py")
     for alias in aliases:
         assert alias != a
-        with pytest.raises(ClaimTransitionError, match="canonical absolute"):
+        with pytest.raises(MalformedRecord, match="canonical absolute"):
             transition(2, owner="competitor", claims=(alias,), generation=G2)
-        with pytest.raises(ClaimTransitionError, match="canonical absolute"):
+        with pytest.raises(MalformedRecord, match="canonical absolute"):
             ClaimRelease(alias, G1)
         claiming_row = FieldCodec.encode(transition(2, owner="competitor", claims=(a,), generation=G2))
         claiming_row[FieldCodec.record_key(ClaimTransition, "claims")] = [alias]
-        with pytest.raises(MalformedRecord, match="canonical absolute") as refused:
+        with pytest.raises(MalformedRecord, match="canonical absolute"):
             FieldCodec.decode(ClaimTransition, claiming_row)
-        assert type(refused.value.__cause__) is ClaimTransitionError
         releasing_row = FieldCodec.encode(transition(2, releases=(ClaimRelease(a, G1),)))
         releasing_row["releases"][0]["resource"] = alias
-        with pytest.raises(MalformedRecord, match="canonical absolute") as refused:
+        with pytest.raises(MalformedRecord, match="canonical absolute"):
             FieldCodec.decode(ClaimTransition, releasing_row)
-        assert type(refused.value.__cause__) is ClaimTransitionError
         assert list(held) == [a] and held[a].owner == "owner" and held.last_seq == 1
     with pytest.raises(ClaimConflict) as loser:
         transition(2, owner="competitor", claims=(a,), generation=G2).apply(held)
