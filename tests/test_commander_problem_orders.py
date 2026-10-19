@@ -23,9 +23,9 @@ from agent_comms.child_process import BoundedRun
 from agent_comms.comms import Comms
 from agent_comms.coordination_database import CoordinationStore
 from agent_comms.field_codec import FieldCodec, MalformedRecord
-from agent_comms.goal_actions import CreateProblemGoalAction, OrderGoalAction, SetGoalAction
+from agent_comms.goal_actions import BlockedGoalAction, CreateProblemGoalAction, ModelInvocable, OrderGoalAction, SetGoalAction
 from agent_comms.goal_states import CompletedGoal
-from agent_comms.goals import CountCheckResult, OrderCheck
+from agent_comms.goals import CountCheckResult, OrderCheck, ProblemGoalOrder
 from agent_comms.recorded_time import RecordedEventTime, UnrecordedEventTime
 from agent_comms.threads import Thread
 from agent_comms.tool_caller import ThreadCaller
@@ -37,6 +37,7 @@ from agent_comms.todos import (AwaitingFirstCall, OrderMessage, OrderDeletion, G
     NotifiedFirstCallEvent, ObservedFirstCallEvent, PendingProblemOrder, RecordFirstCallTodo,
     AcceptedVerdict, Assignment, AssignTodo, DoneTodoState, RecordHuntTodo, ReleaseTodo, SendBackVerdict, StrikeReason,
     StrikeTodo, Todo, TodoConflict, TodoError, VoidStrikeTodo)
+from agent_comms.turn_context import GoalSegment
 
 
 def order(root, identity, command='printf 1', expected=1):
@@ -92,7 +93,7 @@ def test_two_orders_keep_one_original_goal_and_independent_facts(commander):
     first = create(commander, 'P1')
     second = create(commander, 'P2', 'printf 2', 2, deadline=2000)
     goal = comms.registry.require('worker').goal
-    assert (goal.id, goal.text, goal.progress, goal.state) == (original.id, original.text, original.progress, original.state)
+    assert (goal.id, goal.text, goal.progress, goal.state) == (original.id, ProblemGoalOrder.text, '', original.state)
     assert first.assignment.generation == second.assignment.generation == goal.id
     assert first.deadline == RecordedEventTime(1000)
     assert second.deadline == RecordedEventTime(2000)
@@ -115,7 +116,7 @@ def test_existing_goal_reads_changed_todo_without_a_text_mirror(commander):
     CommsOrderTool(owner='worker', order=OrderGoalAction(problem='P1', order=replacement,
         request='request', deadline=RecordedEventTime(3000), commander='lead',
         expected_revision=todo.revision)).apply(comms, caller)
-    assert comms.registry.require('worker').goal.text == 'Original commander brief'
+    assert comms.registry.require('worker').goal.text == ProblemGoalOrder.text
     worker = comms.registry.require('worker').incarnation
     rows, rendered = comms.goals.todos.for_goal(worker, goal.id), '\n'.join(goal.instructions_for(comms.goals, worker))
     assert 'printf 7' in rendered and 'printf 1' not in rendered
@@ -1040,7 +1041,8 @@ def test_judge_back_writes_one_strike_and_posts_the_roast(commander, commander_s
     saved = comms.goals.todos.get('P1')
     assert len(saved.verdicts) == len(saved.strikes) == 1
     assert isinstance(saved.verdicts[0], SendBackVerdict)
-    assert why in comms.registry.require('worker').goal.progress
+    worker = comms.registry.require('worker')
+    assert why in GoalSegment.capture(worker, worker.goal, comms.goals).progress
     assert judge.Edit.unjudged(comms, 'lead') == []
     assert any(to == ['worker', '#comms'] for to, _ in posted)
     assert not (judge.CONFIG.state / 'verdicts.jsonl').exists()
@@ -1073,9 +1075,33 @@ def test_a_send_back_strikes_the_holder_and_revises_its_goal_in_one_revision(com
     judged = comms.goals.todos.get('P1')
     assert (judged.verdicts, judged.revision, judged.strike_count) == ((sent_back,), todo.revision + 1, 1)
     assert judged.strikes[0].reason == why
-    revised = comms.registry.require('worker').goal
-    assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, f'Sent back on P1: {why}')
+    worker = comms.registry.require('worker')
+    revised = worker.goal
+    assert (revised.id, revised.revision, revised.progress) == (goal.id, goal.revision + 1, '')
+    assert f'Sent back: {why}' in GoalSegment.capture(worker, revised, comms.goals).progress
 
+
+
+def test_a_problem_goal_shows_only_its_live_orders_through_convert_deliver_send_back_and_block(commander):
+    """The converted goal keeps no prose: each turn reads its pending Todos, and a model block is refused."""
+    comms, caller = commander
+    create(commander, 'P1')
+    todo = create(commander, 'P2')
+    worker = comms.registry.require('worker')
+    goal = worker.goal
+    assert (goal.text, goal.progress) == (ProblemGoalOrder.text, '')
+    assert [line.split(':')[0] for line in GoalSegment.capture(worker, goal, comms.goals).progress.splitlines()] == ['P1', 'P2']
+    CommsOrderDoneTool(problem='P1', delivery=OperationDelivery()).apply(comms, caller)
+    why = 'The unit kept a second copy of the goal text.'
+    CommsVerdictTool(id='P2', operation=SendBackVerdict(todo.revision, comms.registry.require('lead').incarnation,
+        todo.assignment, 'toolu_3', reason=StrikeReason(why))).apply(comms, caller)
+    worker = comms.registry.require('worker')
+    progress = GoalSegment.capture(worker, worker.goal, comms.goals).progress
+    assert progress.startswith('P2: ') and progress.endswith(f'Sent back: {why}') and 'P1' not in progress
+    assert (worker.goal.text, worker.goal.progress) == (ProblemGoalOrder.text, '')
+    with pytest.raises(ValueError, match='block the problem.s Todo, or standby with wait_for'):
+        comms.goals.update_goal('worker', BlockedGoalAction(block_reason='Waiting on lead.'), actor=ModelInvocable)
+    assert comms.registry.require('worker').goal == worker.goal
 
 VERDICT_LINES = {
     'ok': "e1:ab --msg m1 --line one --why why --serves 'Repair the existing owner'",
