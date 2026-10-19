@@ -66,6 +66,34 @@ def test_no_commit_since_the_order_is_explicit(checkout):
     assert progress.line == 'no commit since the order'
 
 
+def test_uncounted_check_keeps_other_overdue_orders_visible(commander, commander_script, checkout, monkeypatch):
+    from agent_comms.child_process import CountPrinted, NoIntegerPrinted
+    from agent_comms.todos import DistanceReading, UncountedTrend
+
+    script, _ = commander_script
+    todo, unit = checkout
+    comms, _ = commander
+    monkeypatch.setattr(script.COMMS.registry, 'storage_rule', StorageRule(checkout_base=unit.parent))
+    monkeypatch.setattr(PullRequests, 'read', lambda *args: ())
+    broken = replace(todo.order, check=replace(todo.order.check, command="printf 'no count here'"))
+    with comms.goals.todos.writing() as db:
+        replace(todo, order=broken).upsert(db)
+    create(commander, 'P2', deadline=1)
+    commit(unit)
+
+    progress = read((comms.goals.todos.get('P1'), unit))
+    assert progress.line.endswith("; check prints no integer: printf 'no count here'")
+    lines = deadline_lines(script)
+    alarm = next(line for line in lines if line.startswith('OVERDUE:'))
+    assert "order order-P1" in alarm and "order order-P2" in alarm
+    assert "check prints no integer: printf 'no count here'" in alarm
+    assert 'distance 0' not in alarm and 'projected done' not in alarm
+    missing = NoIntegerPrinted()
+    assert missing.distance(1) is missing and missing.plus(3) is missing
+    assert DistanceReadings((DistanceReading(1, missing, 'printf missing'),)).trend == UncountedTrend('printf missing')
+    assert DistanceReadings((DistanceReading(1, missing), DistanceReading(2, CountPrinted(2)))).trend.projection == ''
+
+
 def test_an_unpushed_commit_names_its_sha_and_time(checkout):
     sha = commit(checkout[1])
     progress = read(checkout)
