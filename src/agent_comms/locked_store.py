@@ -15,7 +15,7 @@ from inspect import isabstract
 from typing import Any, ClassVar, Generic, TypeVar
 
 from .field_codec import FieldCodec, MalformedRecord
-from .store_files import ExclusiveLock, LockMode, SharedLock, StoreLock, _store_lock
+from .store_files import SharedLock, StoreLock, StoreLockOwner
 
 T = TypeVar("T")
 
@@ -168,24 +168,17 @@ class RuntimeFile(RootFile):
 
 
 @dataclass(frozen=True, slots=True)
-class LockedStore(JsonDocument[T]):
+class LockedStore(StoreLockOwner, JsonDocument[T]):
     """Ordered document transactions; callbacks never mutate or reenter."""
 
     path: Path
     lock_rank: ClassVar[int]
-    lock_type: ClassVar[type[StoreLock]] = StoreLock
 
     def __init_subclass__(cls, **kwargs):
         super(LockedStore, cls).__init_subclass__(**kwargs)
         rank = vars(cls).get("lock_rank")
         if not isabstract(cls) and rank is None:
             raise TypeError(f"{cls.__name__} must declare its own lock_rank")
-
-    @contextmanager
-    def locked(self, *, mode: LockMode = ExclusiveLock(), blocking: bool = True) -> Iterator[int]:
-        """Canonical lock, including a descriptor for scoped child authority."""
-        with _store_lock(self.path, mode=mode, blocking=blocking, lock_type=self.lock_type) as lock:
-            yield lock.descriptor
 
     @contextmanager
     def reading(self, *sources, blocking: bool = True) -> Iterator[T]:

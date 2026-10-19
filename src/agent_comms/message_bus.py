@@ -33,7 +33,7 @@ from .read_basis import (
     CapturedSelection,
 )
 from .routing import DeliveryScope
-from .store_files import SharedLock, _store_lock
+from .store_files import SharedLock, StoreLockOwner, _store_lock
 
 if TYPE_CHECKING:
     from .registration import Registration
@@ -46,7 +46,7 @@ from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
-class MessageBus[Writes: Publisher]:
+class MessageBus[Writes: Publisher](StoreLockOwner):
     lock_rank = 0
 
     @property
