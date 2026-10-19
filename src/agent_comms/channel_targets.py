@@ -97,13 +97,16 @@ class CommandTarget(ABC):
 class NamedTarget(CommandTarget):
     name: str
     batchable = False
-    direct_names = ()
     guidance_scope = ""
     default_audience = MessageAudience.DIRECT
 
     @property
     def names(self) -> tuple[str, ...]:
         return (self.name,)
+
+    @property
+    def direct_names(self) -> tuple[str, ...]:
+        return ()
 
     @abstractmethod
     def conversation_key(self, sender: str, snapshot: RegistryProvenance,
@@ -157,7 +160,7 @@ class ThreadTarget(NamedTarget):
         message.role.require_recipients(self, audience)
 
     @property
-    def direct_names(self):
+    def direct_names(self) -> tuple[str, ...]:
         return self.names
 
     def canonical_name(self, canonical):
