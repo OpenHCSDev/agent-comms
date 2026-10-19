@@ -11,6 +11,39 @@ from agent_comms.errors import RelationViolationError
 from agent_comms.registry_document import RegistryDocument
 from agent_comms.runtime_requests import ProjectRuntimeRequest
 from agent_comms.threads import Thread
+from agent_comms.thread_execution import ExternalThreadExecution
+from agent_comms.maintenance_barrier import (
+    InstallingPhase, MaintenanceOperator, PausedPhase, ReadyPhase,
+)
+from agent_comms.thread_status import NoBridgeThreadStatus
+
+
+@pytest.mark.parametrize('phases', [(), (PausedPhase,), (PausedPhase, InstallingPhase)])
+def test_bridge_releases_during_maintenance_without_allowing_a_new_owner(tmp_path, phases):
+    comms = wire(tmp_path)
+    registry = comms.registry
+    registry.declare(registry.new_thread(
+        'bridge', frozenset(), str(tmp_path), execution=ExternalThreadExecution,
+    ))
+    gate = comms.owners.maintenance
+    process = ProcessIdentity.capture(os.getpid())
+    with registry.external_process('bridge', process):
+        hold = gate.begin(MaintenanceOperator('bridge-release'))
+        for phase in phases:
+            hold = gate.advance(hold, phase)
+        with pytest.raises(RelationViolationError, match='Maintenance'):
+            registry.register(registry.require('bridge'), new_owner=True)
+    assert registry.require('bridge').process_identity == NoProcess()
+    assert registry.status('bridge') == NoBridgeThreadStatus()
+    assert gate.read() == hold
+    with pytest.raises(RelationViolationError, match='Maintenance'):
+        with registry.external_process('bridge', process):
+            pytest.fail('A new bridge entered during maintenance')
+    while hold.phase is not ReadyPhase:
+        hold = gate.advance(hold, hold.phase.successors()[0])
+    with registry.external_process('bridge', process):
+        assert registry.require('bridge').process_identity == process
+    assert registry.require('bridge').process_identity == NoProcess()
 
 
 def test_claim_attach_and_reload_preserve_the_captured_process(tmp_path):
