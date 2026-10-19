@@ -17,10 +17,13 @@ import asyncio
 from abc import abstractmethod
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, field, fields, replace
+from functools import cache
+from importlib.resources import files
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Final, Self
 from uuid import uuid4
 
+from . import skills
 from .change_report import FileLine
 from .child_process import BoundedRun, ChildResult, ExitedOutcome
 from .command import Command
@@ -834,8 +837,8 @@ class FairText(OrderWords):
                          r"|diamond problem|fragile base|(avoid|no|stop using|drop) (inheritance|mixins?|multiple (parents|inheritance))"
                          r"|too many (parents|base classes|mixins)|deep (inheritance|hierarch)|mixing (of )?\w+ and \w+"
                          r"|inheritance (abuse|soup|hell|is wrong)", re.I)
-    refusal = ("{1} faults inheritance itself. Name the restated fact in a Slop: line (identity, membership, "
-               "implementation or state) and the declaration that derives it.")
+    refusal = ("{1} faults inheritance itself. Cite a refactor-audit pattern ID in a Slop: line, "
+               "name the restated fact and the declaration that derives it.")
 
 
 class HierarchyText(OrderWords):
@@ -865,26 +868,6 @@ class DefectText(BluntWords, OrderWords):
     @classmethod
     def found(cls, text: str) -> list[str]:
         return [] if super().found(cls.SLOP.sub(' ', text)) else cls.SLOP.findall(text)
-
-
-class SlopKind(DeclaredFamily, affix="SlopKind"):
-    sentence: ClassVar[str]
-
-
-class IdentitySlopKind(SlopKind):
-    sentence = "which meaning this is"
-
-
-class MembershipSlopKind(SlopKind):
-    sentence = "which contract or set it belongs to"
-
-
-class ImplementationSlopKind(SlopKind):
-    sentence = "which implementation it gets"
-
-
-class StateSlopKind(SlopKind):
-    sentence = "a second writable copy of one value"
 
 
 class Derivation(DeclaredFamily, affix="Derivation"):
@@ -925,15 +908,28 @@ class DeleteCopyDerivation(Derivation, declared_name="delete-copy"):
 
 @dataclass(frozen=True)
 class Slop:
-    kind: type[SlopKind]
+    pattern: str
     fact: str
     at: FileLine
     derive: type[Derivation]
     by: FileLine
+    USAGE: ClassVar[str] = ('An order naming slop needs Slop: PATTERN-ID; fact WORDS; '
+                            'at PATH:LINE; derive MECHANISM on PATH:LINE')
     LINE: ClassVar[re.Pattern] = re.compile(
-        r'^Slop: (?P<kind>\w+); fact (?P<fact>.+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)\s*$', re.M)
+        r'^Slop: (?P<pattern>\S+); fact (?P<fact>[^\n]+?); at (?P<at>\S+:\d+); derive (?P<derive>[\w-]+) on (?P<by>\S+:\d+)[ \t]*$', re.M)
+
+    PATTERN_ENTRY: ClassVar[re.Pattern] = re.compile(r'^## ([A-Z]+-\d+)\s+\S', re.M)
+
+    @classmethod
+    @cache
+    def patterns(cls) -> frozenset[str]:
+        root = files(skills) / 'refactor-audit' / 'references' / 'patterns'
+        return frozenset(found[1] for source in root.iterdir() if source.name.endswith('.md')
+                         for found in cls.PATTERN_ENTRY.finditer(source.read_text(encoding='utf-8')))
 
     def __post_init__(self):
+        if self.pattern not in self.patterns():
+            raise ValueError(f'{self.USAGE}. Unknown refactor-audit pattern ID {self.pattern!r}.')
         if len(self.fact.split()) < 4:
             raise ValueError('The duplicated fact needs 4+ words.')
         self.at.require_exists()
@@ -941,13 +937,16 @@ class Slop:
 
     @classmethod
     def from_order(cls, body):
-        found = [FieldCodec.decode(cls, m.groupdict()) for m in cls.LINE.finditer(body)]
+        matches = tuple(cls.LINE.finditer(body))
+        if len(matches) != len(re.findall(r'(?m)^Slop:.*$', body)):
+            raise ValueError(cls.USAGE)
+        found = [FieldCodec.decode(cls, cited.groupdict()) for cited in matches]
         if re.search(r'\bslop\b', re.sub(r'^Slop:.*$', '', body, flags=re.M), re.I) and not found:
-            raise ValueError('An order naming slop needs Slop: KIND; fact WORDS; at PATH:LINE; derive MECHANISM on PATH:LINE')
+            raise ValueError(cls.USAGE)
         return found
 
     def render(self):
-        return (f'{self.at.to_wire()} restates a {self.kind.declared_name} fact ({self.kind.sentence}): {self.fact}. '
+        return (f'{self.at.to_wire()} restates {self.pattern}: {self.fact}. '
                 f'{self.by.to_wire()} owns it; {self.derive.sentence}, so the copy is deleted.')
 
 
