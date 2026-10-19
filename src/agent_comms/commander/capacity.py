@@ -45,7 +45,7 @@ class Load:
         from . import judge
         actor, now = comms.registry.require(commander).incarnation, time.time()
         owed = [t for t in comms.goals.todos.held_for_commander(actor) if t.pending]
-        return cls(len(owed), sum(t.deadline.recorded_at("An order deadline") < now for t in owed),
+        return cls(len(owed), sum(t.overdue(now) for t in owed),
                    len(judge.Edit.unjudged(comms, commander)), tuple(live_forks()))
 
     @property
