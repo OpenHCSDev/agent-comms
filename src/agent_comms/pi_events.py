@@ -753,14 +753,6 @@ class Response(NativePiEvent, DurablePiEvent):
     def responds_to(self, request: PiCommand) -> bool:
         return self.id == request.id and self.command is type(request)
 
-    async def consume(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
-        if self.command.invalidates_identity(self, session):
-            async for event in session.invalidate_identity():
-                yield event
-            return
-        async for event in super().consume(session):
-            yield event
-
     def rejection_details(self) -> dict:
         """Private diagnostic projection, excluding response data and prompt content."""
         return {
@@ -791,6 +783,10 @@ class Response(NativePiEvent, DurablePiEvent):
         return super().normalize_field(target, key, value, record)
 
     async def apply(self, session: TurnSession) -> AsyncIterator[events.AgentEvent]:
+        if self.command.invalidates_identity(self, session):
+            async for event in session.invalidate_identity():
+                yield event
+            return
         owner = session.native.reader.correlate(self)
         if owner is None:
             return

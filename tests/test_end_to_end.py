@@ -133,7 +133,7 @@ class TestEndToEndLifecycle:
 
         # 5. Child polls, reads the inbox, and responds through the CLI.
         snap = run_python(
-            "import json\nfrom agent_comms.comms import wire\nc = wire()\nprint(json.dumps(c.views.poll('kid').encoded()))",
+            "import json\nfrom agent_comms.comms import wire\nc = wire()\nprint(json.dumps(c.views.poll('kid').to_wire()))",
             thread="kid",
             parent="PR111",
             root=root,

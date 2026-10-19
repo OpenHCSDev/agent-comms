@@ -18,13 +18,11 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True, slots=True)
-class ChannelCatalog(RootFile, ThreadOwnedState, LockedStore[CatalogDocument], lock_rank=3):
+class ChannelCatalog(RootFile, ThreadOwnedState, LockedStore[CatalogDocument]):
     filename: ClassVar[str] = "catalog.json"
     json_indent = 2
 
-    @property
-    def record_type(self) -> type[CatalogDocument]:
-        return CatalogDocument
+    record_type = CatalogDocument
 
     def empty(self) -> CatalogDocument:
         return CatalogDocument()

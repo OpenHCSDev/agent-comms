@@ -1851,27 +1851,45 @@
      });
 --- a/dist/core/sdk.js
 +++ b/dist/core/sdk.js
-@@ -78,9 +78,9 @@
+@@ -78,9 +78,13 @@
          time("resourceLoader.reload");
      }
      // Check if session has existing data to restore
 -    const existingSession = sessionManager.buildSessionContext();
 -    const hasExistingSession = existingSession.messages.length > 0;
 -    const hasThinkingEntry = sessionManager.getBranch().some((entry) => entry.type === "thinking_level_change");
-+    const existingSession = sessionManager.entryStore.contextSettings(sessionManager.getLeafId());
 +    const hasExistingSession = sessionManager.entryStore.lastId !== null;
-+    const hasThinkingEntry = Boolean(sessionManager.entryStore.latest(sessionManager.getLeafId(), "thinking_level_change"));
++    const existingSession = !options.model || options.thinkingLevel === undefined
++        ? sessionManager.entryStore.contextSettings(sessionManager.getLeafId(), {
++            model: options.model ? {provider: options.model.provider, modelId: options.model.id} : null,
++            thinkingLevel: options.thinkingLevel ?? null,
++        })
++        : undefined;
      let model = options.model;
      let modelFallbackMessage;
      // If session has data, try to restore model from it
-@@ -238,7 +238,6 @@
+@@ -115,9 +119,8 @@
+     let thinkingLevel = options.thinkingLevel;
+     // If session has data, restore thinking level from it
+     if (thinkingLevel === undefined && hasExistingSession) {
+-        thinkingLevel = hasThinkingEntry
+-            ? existingSession.thinkingLevel
+-            : (settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL);
++        thinkingLevel = existingSession.thinkingLevel
++            ?? (settingsManager.getDefaultThinkingLevel() ?? DEFAULT_THINKING_LEVEL);
+     }
+     // Fall back to per-model override, then global default
+     if (thinkingLevel === undefined && model) {
+@@ -238,8 +241,7 @@
      });
      // Restore messages if session has existing data
      if (hasExistingSession) {
 -        agent.state.messages = existingSession.messages;
-         if (!hasThinkingEntry) {
+-        if (!hasThinkingEntry) {
++        if (existingSession?.thinkingLevel === null) {
              sessionManager.appendThinkingLevelChange(thinkingLevel);
          }
+     }
 --- a/dist/core/session-export.js
 +++ b/dist/core/session-export.js
 @@ -1,4 +1,4 @@
@@ -2126,15 +2144,6 @@
                  const latestPromptTokens = entry.message.usage.input + entry.message.usage.cacheRead + entry.message.usage.cacheWrite;
 --- a/dist/modes/interactive/interactive-mode.js
 +++ b/dist/modes/interactive/interactive-mode.js
-@@ -1140,7 +1140,7 @@
-             project: { scope: "project", paths: [], packages: new Map() },
-             path: { scope: "path", paths: [], packages: new Map() },
-         };
--        for (const item of items) {
-+        for (const {entryId, item} of items) {
-             const groupKey = this.getScopeGroup(item.sourceInfo);
-             const group = groups[groupKey];
-             const source = item.sourceInfo?.source ?? "local";
 @@ -2770,12 +2770,12 @@
                  }
                  else if (event.result) {

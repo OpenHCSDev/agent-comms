@@ -184,7 +184,7 @@ class Thread(ThreadProvenance):
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         path = directory / f"comms-catalog-{self.incarnation.require_recorded().lookup}.json"
         catalog = ThreadToolCatalogResult(tuple(NativeRequestTools.catalog()), self.service_tier)
-        _atomic_write_text(path, json.dumps(catalog.encoded(), separators=(",", ":")))
+        _atomic_write_text(path, json.dumps(catalog.to_wire(), separators=(",", ":")))
         return (*arguments.argv, "--comms-catalog", str(path))
 
     def launch(self) -> ThreadLaunch:

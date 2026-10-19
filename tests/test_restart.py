@@ -51,6 +51,6 @@ async def test_real_idle_owner_is_replaced_without_losing_session(tmp_path, monk
         assert comms.ledger.path.read_bytes() == collaboration
         reopened = wire(comms.root)
         assert reopened.agents.agent_info_of("worker").context_used == PiCount.from_wire(23)
-        assert reopened.ledger.read()["saved"] == {"worker": ["work remains", 23]}
+        assert reopened.ledger.read().entries["saved"] == {"worker": ["work remains", 23]}
     finally:
         await asyncio.to_thread(comms.owners.stop, "worker")

@@ -126,16 +126,14 @@ class RegistryEdit:
 
 
 @dataclass(frozen=True, slots=True)
-class RegistryStore(LockedStore[RegistryDocument], lock_rank=2):
+class RegistryStore(LockedStore[RegistryDocument]):
     json_indent = 2
     cache: RegistryCache = field(init=False, compare=False, repr=False)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "cache", RegistryCache.for_path(self.path))
 
-    @property
-    def record_type(self) -> type[RegistryDocument]:
-        return RegistryDocument
+    record_type = RegistryDocument
 
     def empty(self) -> RegistryDocument:
         return RegistryDocument()

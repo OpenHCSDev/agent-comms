@@ -67,13 +67,17 @@ class PiCommand(DeclaredFamily):
     writes_session: ClassVar[bool] = False
     id: str | None = field(default=None, metadata={"wire_omit_default": True})
 
+    def identified(self):
+        """Retain an assigned RPC id, or assign it once before writing."""
+        return self if self.id else replace(self, id=uuid4().hex)
+
     @classmethod
     def invalidates_identity(cls, response: Response, session: TurnSession) -> bool:
         return False
 
     @asynccontextmanager
     async def pending_response(self, channel, writer):
-        command = replace(self, id=self.id or uuid4().hex)
+        command = self.identified()
         future = channel.track(command)
         try:
             writer.write(channel.command_bytes(command))
@@ -106,14 +110,10 @@ class PiCommand(DeclaredFamily):
         data = dict(value)
         kind = data.pop("type", None)
         try:
-            member = cls.member_named(kind)
+            cls.member_named(kind)
         except ValueError:
             return UnknownCommand(wire=value)
-        return FieldCodec.decode(cls, {"kind": kind, **member.decode_parameters(data)})
-
-    @classmethod
-    def decode_parameters(cls, data):
-        return data
+        return FieldCodec.decode(cls, {"kind": kind, **data})
 
     @classmethod
     def response_owner(cls, name: str) -> type[PiCommand]:
@@ -155,46 +155,19 @@ class Prompt(PiCommand):
         default=None, metadata={"wire_omit_default": True, "wire_name": "streamingBehavior"}
     )
 
-    def to_rpc(self):
-        data = super().to_rpc()
-        if self.images is not None:
-            data["images"] = [image.to_rpc() for image in self.images]
-        return data
-
-    @classmethod
-    def decode_parameters(cls, data):
-        if data.get("images") is not None:
-            images = data["images"]
-            if not isinstance(images, list) or any(
-                not isinstance(image, dict) or image.get("type") != "image" for image in images
-            ):
-                raise ValueError("Expected native image inputs")
-            data = {
-                **data,
-                "images": [
-                    {key: value for key, value in image.items() if key != "type"}
-                    for image in images
-                ],
-            }
-        return data
-
     @classmethod
     def on_response(
         cls, response: Response, session: TurnSession
     ) -> Iterable[events.AgentEvent]:
-        if response.id == session.prompt_id:
+        if response.id == session.command.id:
             session.watchdog.progress()
             if response.success:
                 session.prompt_state = session.prompt_state.acknowledge(response)
                 session.watchdog.prompt_accepted = True
                 session.watchdog.phase = phases.ModelWaitPhase()
+                yield events.PromptAccepted()
             else:
-                error = session.output.error(str(response.error or "Prompt was rejected"))
-                yield session.watchdog.state(
-                    "failed", "prompt_rejected", 0, phase=phases.ShutdownPhase()
-                )
-                yield error
-                session.finished = True
+                yield from session.reject_prompt(response)
                 return
         else:
             session.inputs.acknowledge(response)

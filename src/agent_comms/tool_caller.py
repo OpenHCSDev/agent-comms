@@ -3,13 +3,12 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, NoReturn
-
-from pydantic import JsonValue
+from typing import TYPE_CHECKING, Annotated, NoReturn
 
 from .cli_result import ToolCatalogResult, ThreadToolCatalogResult
 from .launch_runtime import CallingThreadUnavailable
-from .presentation import MessageNotification
+from .field_codec import WireForm
+from .presentation import MessageNotification, ThreadRecord
 from .tool_result import ToolResult
 
 if TYPE_CHECKING:
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class ThreadListing(ToolResult):
-    threads: tuple[dict[str, JsonValue], ...]
+    threads: tuple[Annotated[ThreadRecord, WireForm], ...]
     sent_notifications: tuple[MessageNotification, ...]
 
 
@@ -34,7 +33,7 @@ class ToolCaller(ABC):
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult: ...
 
     @abstractmethod
-    def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing: ...
+    def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing: ...
 
     @abstractmethod
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult: ...
@@ -59,7 +58,7 @@ class NoThreadCaller(ToolCaller):
     def invoke(self, request: ToolRequest, comms: Comms) -> ToolResult:
         return request.apply_without_thread(comms, self)
 
-    def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:
+    def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         return ThreadListing(threads, ())
 
     def catalog(self, comms: Comms, tools: tuple[dict[str, object], ...]) -> ToolCatalogResult:
@@ -90,7 +89,7 @@ class ThreadCaller(ToolCaller):
     def invoke(self, request: ToolRequest[ThreadCaller], comms: Comms) -> ToolResult:
         return request.apply(comms, self)
 
-    def listing(self, comms: Comms, threads: tuple[dict[str, JsonValue], ...]) -> ThreadListing:
+    def listing(self, comms: Comms, threads: tuple[ThreadRecord, ...]) -> ThreadListing:
         presentation = comms.views.thread_presentations((self.name,)).require(self.name)
         return ThreadListing(threads, presentation.sent_notifications)
 

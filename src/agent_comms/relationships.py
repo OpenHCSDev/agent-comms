@@ -649,16 +649,14 @@ class RemoveRelationshipEdit(RelationshipEdit):
         )
 
 
-class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocument], lock_rank=5):
+class RelationshipStore(RootFile, ThreadOwnedState, LockedStore[RelationshipDocument]):
     """One current durable typed schema; retired formats are rejected."""
 
     filename = "relationships.json"
     json_indent = 2
     json_suffix = "\n"
 
-    @property
-    def record_type(self) -> type[RelationshipDocument]:
-        return RelationshipDocument
+    record_type = RelationshipDocument
 
     def empty(self) -> RelationshipDocument:
         return RelationshipDocument()

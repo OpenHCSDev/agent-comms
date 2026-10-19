@@ -104,7 +104,7 @@ class ThreadPoll(CliResult):
     ledger: Annotated[LedgerDocument, WireForm]
     peers: tuple[ThreadView, ...]
 
-    def encoded(self) -> object:
+    def to_wire(self) -> object:
         return FieldCodec.project(self, "presence")
 
 
@@ -418,12 +418,11 @@ class HistoryViews:
         """A cheap observer token; activity expiry is checked without rescanning idle logs."""
         return WireRevision.capture(self, expiry_tick=int(time.time()))
 
-    def who(self) -> Sequence[Mapping]:
+    def who(self) -> tuple[ThreadView, ...]:
         """Presence: who is in the chat, with status and unread counts."""
         views = self._presence_views()
         pending = CountedRead().counts(self.bus, tuple(view.thread.name for view in views))
-        counted = (replace(view, pending=pending[view.thread.name]) for view in views)
-        return [FieldCodec.project(view, "presence") for view in counted]
+        return tuple(replace(view, pending=pending[view.thread.name]) for view in views)
 
     def presence(self) -> Sequence[Mapping]:
         """Presence without viewer-specific unread scans."""
@@ -432,14 +431,14 @@ class HistoryViews:
     def _presence_views(self):
         return sorted(self.thread_views(), key=lambda view: view.thread.name)
 
-    def list_threads(self, active_only: bool = False) -> Sequence[Mapping]:
+    def list_threads(self, active_only: bool = False) -> tuple[ThreadRecord, ...]:
         """Summarize threads with status and pending counts."""
         snapshot = self.registry.snapshot()
         threads = tuple(thread for name, thread in sorted(snapshot.threads.items())
                         if not active_only or snapshot.statuses[name].active)
         pending = CountedRead().counts(self.bus, tuple(thread.name for thread in threads))
-        return [FieldCodec.project(record, "presence") for record in ThreadRecord.read(
-            snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)]
+        return ThreadRecord.read(
+            snapshot, self.agents, GoalWaits.at(self.root).read(), threads, pending)
 
     def thread_detail(self, name: str, read: InboxRead) -> ThreadRecord:
         thread = self.registry.require(name)
@@ -453,4 +452,4 @@ class HistoryViews:
         name = target.thread(self.registry).name
         peers = tuple(view for view in self._presence_views() if view.thread.name != name)
         return ThreadPoll(self.thread_detail(name, CountedRead()), tuple(self.bus.inbox(name)),
-                          self.ledger.document(), peers)
+                          self.ledger.read(), peers)

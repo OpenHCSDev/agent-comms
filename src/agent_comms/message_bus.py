@@ -47,7 +47,7 @@ from .wire_log import CurrentSnapshotOpening, WireSnapshot, WireLog
 from .wire_watch import WatchSource, WireWatch
 
 
-class MessageBus[Writes: Publisher](StoreLockOwner, lock_rank=0):
+class MessageBus[Writes: Publisher](StoreLockOwner):
 
     @property
     def path(self) -> Path:

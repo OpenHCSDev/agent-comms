@@ -26,7 +26,7 @@ class ExtensionUiSession:
         # A acknowledgement is informational, never permission to call a tool or send.
         if self.acknowledgement is not None or not session.permits_live_status():
             return None
-        self.acknowledgement = McpLiveAcknowledgement.from_status(text, session.original_input_id)
+        self.acknowledgement = McpLiveAcknowledgement.from_status(text, session.input_id)
         return self.acknowledgement
 
     async def choose(self, request: DialogUiRequest, session: TurnSession) -> ExtensionUiChoice:

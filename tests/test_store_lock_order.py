@@ -1,4 +1,5 @@
 """Actual conversation/native lock paths follow their store declarations."""
+import importlib
 import os
 import threading
 import traceback
@@ -15,6 +16,7 @@ from agent_comms.store_files import (
 )
 from agent_comms.threads import Thread
 from agent_comms.wire_log import WireLog
+from agent_comms import store_order, wire_log
 
 
 def test_undeclared_store_rank_is_rejected_before_acquisition():
@@ -23,24 +25,30 @@ def test_undeclared_store_rank_is_rejected_before_acquisition():
             pytest.fail("Unranked owner was authorized")
 
 
+def test_complete_tuple_derives_every_rank():
+    assert set(store_order.STORE_LOCK_ORDER) == set(StoreLockOwner.members_with(StoreLockOwner))
+    for rank, owner in enumerate(store_order.STORE_LOCK_ORDER):
+        assert vars(owner)["lock_rank"] == rank
+
+
 @pytest.mark.parametrize("owner_type", [MessageBus, WireLog, ChannelCatalog])
 def test_concrete_store_must_be_declared_at_startup(owner_type, monkeypatch):
     monkeypatch.setattr(StoreOwner, "__registry__", dict(StoreOwner.__registry__))
     class UnrankedOwner(owner_type):
         pass
 
-    with pytest.raises(TypeError, match="absent from the declared lock order"):
-        object.__new__(UnrankedOwner).lock_rank
-    with pytest.raises(TypeError, match="must be class keywords"):
-        class MissingRankOwner(owner_type):
-            lock_rank = None
+    with pytest.raises(TypeError, match="missing from the lock order: UnrankedOwner"):
+        importlib.reload(store_order)
 
 
-def test_duplicate_owner_in_order_is_rejected():
-    rank = object.__new__(WireLog).lock_rank
-    with pytest.raises(TypeError, match="Duplicate store lock rank"):
-        class DuplicateOwner(StoreLockOwner, lock_rank=rank):
-            pass
+def test_duplicate_owner_in_order_is_rejected_at_module_load(monkeypatch):
+    try:
+        with monkeypatch.context() as patch:
+            patch.setattr(wire_log, "WireLog", MessageBus)
+            with pytest.raises(TypeError, match="occurs twice"):
+                importlib.reload(store_order)
+    finally:
+        importlib.reload(store_order)
 
 
 def test_conversation_read_and_native_write_share_declared_order(tmp_path):
