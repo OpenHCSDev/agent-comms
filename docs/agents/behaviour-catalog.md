@@ -10,7 +10,7 @@ The [Codex postmortem](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/
 - [Failure 1](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It rewrote the framework instead of questioning its own design: no pattern checks it yet
 - [Failure 2](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It added states instead of removing them: no pattern checks it yet
 - [Failure 3](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It wrote down the right principle and then violated it: no pattern checks it yet
-- [Failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It measured the wrong thing and reported it as progress: `uncounted_check`
+- [Failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It measured the wrong thing and reported it as progress: `uncounted_check`, `wrong_measure`
 - [Failure 5](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It redefined "the real app" until something passed: no pattern checks it yet
 - [Failure 6](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It ignored direct orders: no pattern checks it yet
 - [Failure 7](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md), It described its intentions as its accomplishments: `board_disagrees`, `uncounted_check`
@@ -113,3 +113,53 @@ Checked by:
 - verb refusal in `agent_comms.commander.order.hunt`
 
 Learned from: P194 (b26843727); [comms-commander rule](../../src/agent_comms/skills/comms-commander/SKILL.md) "Strikes, then fire."
+
+## report_instead_of_state
+
+A strike or send-back whose reason cites no state the record can check.
+
+Checked by:
+
+- none yet: P198 (#1744) adds it
+
+Learned from: seed catalog pattern 1 (claude-ai message 1c8729ba0ed7)
+
+## wrong_measure
+
+A done report that names its own measure instead of what its order's Check printed.
+
+Checked by:
+
+- none yet: P197 (#1733) adds it
+
+Learned from: seed catalog pattern 4 (claude-ai message 1c8729ba0ed7); [Codex postmortem, failure 4](https://github.com/OpenHCSDev/toad/blob/main/docs/agents/CODEX-POSTMORTEM.md)
+
+## commander_overloaded
+
+The commander's unread backlog is over the limit while no second commander is forked to share it.
+
+Checked by:
+
+- none yet: P199 (branch cn-phase-0/P199) adds it
+
+Learned from: seed catalog pattern 15 (claude-ai message 1c8729ba0ed7)
+
+## dead_provider
+
+A unit's latest turn ended in a usage or credit limit on its own model and the unit still runs on that model.
+
+Checked by:
+
+- none yet: P200 (#1746) adds it
+
+Learned from: seed catalog pattern 16 (claude-ai message 1c8729ba0ed7)
+
+## unowned_work
+
+Agent-comms work runs under no open order, or on a runtime that publication replaced.
+
+Checked by:
+
+- none yet: P201 (#1739) adds it
+
+Learned from: seed catalog pattern 18 (claude-ai message 1c8729ba0ed7)

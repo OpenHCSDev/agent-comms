@@ -63,6 +63,17 @@ class ToolRefusal(RefusalCheck):
     surface = "tool refusal"
 
 
+@dataclass(frozen=True)
+class PendingCheck(PatternCheck):
+    """The open problem whose change adds the pattern's check; that change replaces this."""
+
+    problem: str
+    change: str
+
+    def cite(self) -> str:
+        return f"none yet: {self.problem} ({self.change}) adds it"
+
+
 class PatternSource(ABC):
     """Where a pattern was learned."""
 
@@ -145,6 +156,16 @@ class ProblemFix(PatternSource):
 
     def cite(self) -> str:
         return f"{self.problem} ({self.commit})"
+
+
+@dataclass(frozen=True)
+class SeedCatalog(PatternSource):
+    """A pattern's seed ID in claude-ai's numbered catalog (message 1c8729ba0ed7)."""
+
+    seed: int
+
+    def cite(self) -> str:
+        return f"seed catalog pattern {self.seed} (claude-ai message 1c8729ba0ed7)"
 
 
 @dataclass(frozen=True)
@@ -294,6 +315,46 @@ class StrikeOnNamedProblemPattern(BehaviourPattern):
         VerbRefusal(order.hunt),
     )
     sources = (ProblemFix("P194", "b26843727"), CommanderRule("Strikes, then fire."))
+
+
+class ReportInsteadOfStatePattern(BehaviourPattern):
+    signature = "A strike or send-back whose reason cites no state the record can check."
+    checks = (PendingCheck("P198", "#1744"),)
+    sources = (SeedCatalog(1),)
+
+
+class WrongMeasurePattern(BehaviourPattern):
+    signature = (
+        "A done report that names its own measure instead of what its order's Check printed."
+    )
+    checks = (PendingCheck("P197", "#1733"),)
+    sources = (SeedCatalog(4), MeasuredWrongThingFailure())
+
+
+class CommanderOverloadedPattern(BehaviourPattern):
+    signature = (
+        "The commander's unread backlog is over the limit while no second commander is forked"
+        " to share it."
+    )
+    checks = (PendingCheck("P199", "branch cn-phase-0/P199"),)
+    sources = (SeedCatalog(15),)
+
+
+class DeadProviderPattern(BehaviourPattern):
+    signature = (
+        "A unit's latest turn ended in a usage or credit limit on its own model and the unit"
+        " still runs on that model."
+    )
+    checks = (PendingCheck("P200", "#1746"),)
+    sources = (SeedCatalog(16),)
+
+
+class UnownedWorkPattern(BehaviourPattern):
+    signature = (
+        "Agent-comms work runs under no open order, or on a runtime that publication replaced."
+    )
+    checks = (PendingCheck("P201", "#1739"),)
+    sources = (SeedCatalog(18),)
 
 
 if __name__ == "__main__":
