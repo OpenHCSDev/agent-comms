@@ -143,6 +143,8 @@ class ModelRequestFailed(TurnFailure):
 class RetryableProviderFailure:
     """Capability shared by declared transient provider failures."""
 
+    max_retries: ClassVar[int] = 3
+
     def prepare_execution_retry(self, db, execution_id: str) -> None:
         """A provider refusal may retry only while durable output facts are absent."""
         from .coordination_tables.attempts import ReplayAssessments

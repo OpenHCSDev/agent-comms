@@ -9,7 +9,7 @@ from __future__ import annotations
 import os
 import stat
 from collections.abc import Callable, Iterator
-from contextlib import ExitStack, contextmanager
+from contextlib import AbstractContextManager, ExitStack, contextmanager
 from pathlib import Path
 
 from agent_comms.coordination_errors import IdentityConflict
@@ -29,6 +29,7 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .message_bus import MessageBus
+from .publisher import Publisher
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .registry_document import RegistrySnapshot
@@ -128,8 +129,9 @@ def _committed_source(
 
 @contextmanager
 def _selected_claim_boundary(
-    comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
-) -> Iterator[tuple[MessageBus, CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
+    comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str,
+    checking: Callable[[], AbstractContextManager[object]],
+) -> Iterator[tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
     """One wire/bus/registry boundary for selected claim acquisition."""
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
@@ -158,7 +160,7 @@ def _selected_claim_boundary(
         initial = _committed_source(
             bus_lock, claim_scope, "Selected wake has no committed initial row"
         )
-        with store.session.read():
+        with checking():
             _verify_selected_wake_state(initial, owner, generation, store, claim_scope)
             yield bus, bus_lock, metadata, registry, owner
 
@@ -178,7 +180,7 @@ def publish_selected_resource_claim(
     """
     with (
         comms.bus.opened_activity() as activity,
-        _selected_claim_boundary(comms, store, claim_scope, owner_name) as (
+        _selected_claim_boundary(comms, store, claim_scope, owner_name, store.session.read) as (
             bus,
             bus_lock,
             metadata,
@@ -195,6 +197,7 @@ def publish_selected_resource_claim(
             claim_scope,
             activity=activity,
         )
+
 
 
 @contextmanager
@@ -276,36 +279,12 @@ def write_selected_claimed_file(
     """
     if len(contents) > 1024 * 1024:
         raise IdentityConflict("Selected write requires bounded bytes")
-    if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
-        raise IdentityConflict("Selected write coordinator belongs to another root")
     if not hasattr(os, "O_NOFOLLOW"):
         raise IdentityConflict("Selected write requires no-follow file descriptors")
-    bus = comms.bus
-    with (
-        _store_lock(comms._wire_lock_path),
-        bus.log.locked() as bus_lock,
-        _store_lock(comms.registry.store.path),
-    ):
-        registry = comms.registry.store.read_snapshot_unlocked()
-        canonical = registry.canonical_name(owner_name)
-        try:
-            captured = RegistryOwner.capture(
-                registry, canonical, "Selected write owner stopped or changed"
-            )
-            captured.require_active_turn()
-        except StaleFence as error:
-            raise IdentityConflict("Selected write owner stopped or changed") from error
-        owner, generation = captured.thread, captured.claimed_generation
-        _require_no_private_owner_rename(comms.root)
-        marker = bus.log.private_marker_unlocked()
-        if marker.root_id != claim_scope.wire_root_id:
-            raise IdentityConflict("Selected write belongs to another private root")
-        initial = _committed_source(bus_lock, claim_scope, "Selected write source is not committed")
-        # The coordinator connection holds the transaction
-        # through fsync. A concurrently settling attempt must not slip between
-        # verification and irreversible file mutation.
-        with Coordination(str(store.session.path)) as scoped, scoped.session.transaction():
-            _verify_selected_wake_state(initial, owner, generation, scoped, claim_scope)
+    with Coordination(str(store.session.path)) as scoped:
+        # The same claim boundary holds the write transaction through fsync.
+        with _selected_claim_boundary(comms, scoped, claim_scope, owner_name,
+                                      scoped.session.transaction) as (bus, bus_lock, marker, registry, owner):
             normalized = ExistingFileClaim(Path(claimed.resource)).normalized(Path(owner.worktree))
             with bus_lock.current_source(bus.log, marker) as source:
                 if claimed.claim_scope != claim_scope or source.claim(normalized) != claimed:

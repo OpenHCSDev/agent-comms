@@ -38,7 +38,7 @@ from .envelope_claim_transitions import (
     ResourceClaim,
     UnclaimedResource,
 )
-from .errors import HumanClaimBlockedError, RelationViolationError
+from .errors import CheckpointNeedsRepairError, HumanClaimBlockedError, RelationViolationError
 from .field_codec import FieldCodec, MalformedRecord
 from .private_path import FileIdentity, FileRevision
 from .store_files import ExclusiveLock, LockMode, SharedLock
@@ -114,7 +114,7 @@ class PrefixWitness(PrefixSeal):
         if self.through_seq > marker.last_seq:
             raise RelationViolationError("Private bus checkpoint exceeds the durable sequence marker.")
         if self.revision.identity != FileIdentity.from_stat(info):
-            raise CheckpointNeedsRepair("Private bus source was relocated.")
+            raise CheckpointNeedsRepairError("Private bus source was relocated.")
 
     def require_append(self, marker: WireMetadata, info: os.stat_result,
                        offset: int, sequence: int) -> None:
@@ -1333,15 +1333,6 @@ def _rebuild_checkpoint_unlocked(
     return expected
 
 
-class CheckpointNeedsRepair(Exception):  # noqa: N818 - names a state
-    """A reader holding the shared bus lock found rows the checkpoint does not
-    cover yet, or an unfinished checkpoint write.
-
-    Only a holder of the exclusive bus lock may repair the checkpoint, so the
-    reader takes the exclusive lock and checks again.
-    """
-
-
 def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWitness:
     """Check a final, up-to-date checkpoint under the shared bus lock; never writes."""
     saved = _saved(db)
@@ -1349,7 +1340,7 @@ def _check_final_checkpoint_read_only(bus, marker, db, stream, path) -> PrefixWi
     saved.require_source(marker, info, stream)
     marker.seal.require_final(saved, path)
     if FileRevision.from_stat(info) != saved.revision:
-        raise CheckpointNeedsRepair("Bus has rows the checkpoint does not cover yet.")
+        raise CheckpointNeedsRepairError("Bus has rows the checkpoint does not cover yet.")
     return saved
 
 
@@ -1384,7 +1375,7 @@ def _verify_open_checkpoint_unlocked(bus, marker, db, stream, path) -> PrefixWit
     info = os.fstat(stream.fileno())
     try:
         saved.require_source(marker, info, stream)
-    except CheckpointNeedsRepair:
+    except CheckpointNeedsRepairError:
         # The copied index rows point at the old file; rebuild them.
         return _rebuild_checkpoint_unlocked(bus, marker, db, path, info, marker.seal)
     recovered = marker.seal.recover(bus, marker, db, path, saved, info)
@@ -1468,7 +1459,7 @@ def opened_private_checkpoint_unlocked(bus: WireLog, marker: WireMetadata, *,
     """Keep only this canonical lock's verified source/index resources open.
 
     Under the shared bus lock other readers run concurrently, so the check is
-    read-only and raises CheckpointNeedsRepair where an exclusive holder would
+    read-only and raises CheckpointNeedsRepairError where an exclusive holder would
     repair the checkpoint.
     """
     path = _path(bus.path)

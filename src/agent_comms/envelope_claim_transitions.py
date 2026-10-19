@@ -367,6 +367,7 @@ class ClaimOwner(AcquiringClaim, ResourceClaim):
         )
 
 
+
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner]):
     """Immutable sorted claim table plus the last processed envelope sequence."""

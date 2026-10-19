@@ -165,7 +165,7 @@ manager.appendMessage({role:'assistant',content:[{type:'text',text:'Original sav
                 steering_queue=queue,
                 native_start=self.started,
                 **options,
-            ):
+             session_directory=self.root):
                 result.append(event)
                 self.observed.append(event)
                 if followup is not None and isinstance(event, events.InputStarted):
