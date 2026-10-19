@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, ClassVar, Self
 
 from .cli_result import CliResult
 from .field_codec import FieldCodec
+from .tool_result import ToolResult
 
 if TYPE_CHECKING:
     from .messages import Message
@@ -13,7 +14,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class HistoryPageResult(CliResult):
+class HistoryPageResult(CliResult, ToolResult):
     messages_key: ClassVar[str] = "messages"
     messages: tuple[Message, ...]
     has_older: bool
