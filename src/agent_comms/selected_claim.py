@@ -29,6 +29,10 @@ from .envelope_claim_transitions import (
 )
 from .errors import RelationViolationError
 from .messages import ClaimNoticeKind
+from .message_bus import MessageBus
+from .publisher import Publisher
+from .registry_document import RegistrySnapshot
+from .wire_metadata import WireMetadata
 from .native_input_owner import RegistryOwner
 from .private_registry_guard import _require_no_private_owner_rename
 from .store_files import SharedLock, _store_lock
@@ -124,7 +128,7 @@ def _committed_source(
 @contextmanager
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
-):
+) -> Iterator[tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
     """One wire/bus/registry boundary for selected claim acquisition."""
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
@@ -179,7 +183,8 @@ def publish_selected_resource_claim(
             existing = source.claim(resource)
             if existing is not None:
                 existing.require_holder(owner.name, str(owner.created_at))
-                if existing.claim_scope == claim_scope:
+                # Same-operation lookup; holder identity was already checked above.
+                if claim_scope == existing.claim_scope:
                     return existing
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
