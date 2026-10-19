@@ -182,10 +182,9 @@ def publish_selected_resource_claim(
     ):
         resource = resource_path.normalized(Path(owner.worktree))
         with bus_lock.current_source(bus.log, metadata) as source:
-            for existing in source.claims_for((resource,)).values():
-                existing.require_holder(owner.name, str(owner.created_at))
-                if existing.claim_scope.same_attempt(claim_scope):
-                    return existing
+            existing = source.claim(resource)
+            if existing is not None and existing.held_by(owner.name, str(owner.created_at), claim_scope):
+                return existing
             if source.claim_operation_used(claim_scope.operation_id):
                 raise IdentityConflict("Wake claim operation was already consumed")
         committed = bus.publisher._publish_claim_envelope_unlocked(

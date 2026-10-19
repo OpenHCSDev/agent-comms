@@ -387,6 +387,10 @@ class ClaimOwner:
         if (self.owner, self.incarnation) != (owner, incarnation):
             raise ClaimConflict(self)
 
+    def held_by(self, owner: str, incarnation: str, scope: WakeClaim) -> bool:
+        self.require_holder(owner, incarnation)
+        return self.claim_scope.same_attempt(scope)
+
 
 @dataclass(frozen=True, slots=True)
 class ClaimProjection(Mapping[str, ClaimOwner]):

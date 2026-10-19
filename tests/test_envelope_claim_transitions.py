@@ -115,6 +115,11 @@ def test_finished_attempt_does_not_block_same_holder_next_attempt(tmp_path):
     held = replace(transition(1, claims=(resource,), generation=G1), claim_scope=old).apply(
         ClaimProjection())
     assert held[resource].claim_scope.finished_turn("turn-A", 1)
+    assert held[resource].held_by("owner", "epoch-1", replace(old, operation_id=G2))
+    assert not held[resource].held_by("owner", "epoch-1", new)
+    for owner, incarnation in (("other", "epoch-1"), ("owner", "new-birth")):
+        with pytest.raises(ClaimConflict):
+            held[resource].held_by(owner, incarnation, new)
     advanced = replace(transition(2, claims=(resource,), generation=G2), claim_scope=new).apply(held)
     assert advanced[resource].claim_scope.same_attempt(new)
     assert not advanced[resource].claim_scope.same_attempt(old)
