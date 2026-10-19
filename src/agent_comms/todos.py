@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import calendar
 import json
-import math
 import re
 import subprocess
 import sqlite3
@@ -232,10 +231,10 @@ class DistanceReadings:
         last = self.readings[-2:]
         return ((last[0], last[1]),) if len(last) == 2 and last[1].distance else ()
 
-    def flat_since(self) -> float:
-        """When the distance stopped falling across the two readings; else infinity."""
-        return next((last.at for first, last in self.pairs if last.distance >= first.distance),
-                    math.inf)
+    @property
+    def flat(self) -> tuple[DistanceReading, ...]:
+        """The last reading, when the distance did not fall across the two readings."""
+        return tuple(last for first, last in self.pairs if last.distance >= first.distance)
 
     @property
     def projection(self) -> str:
@@ -328,11 +327,11 @@ class OrderProgress(DeclaredFamily, affix="Progress"):
 
     @property
     def line(self) -> str:
-        return self.state
+        return self.state + self.distance_readings().projection
 
-    def flat_since(self) -> float:
-        """When the order stopped getting closer to done; infinity while it moves or is unread."""
-        return math.inf
+    def distance_readings(self) -> DistanceReadings:
+        """The order's distance readings; progress that read no commit has none."""
+        return DistanceReadings()
 
     def stalled(self, ordered: float, now: float) -> bool:
         return False
@@ -387,12 +386,8 @@ class Moving(Stalling):
     def stall_at(self, ordered: float) -> float:
         return self.at + 900
 
-    @property
-    def line(self) -> str:
-        return self.state + self.readings.projection
-
-    def flat_since(self) -> float:
-        return self.readings.flat_since()
+    def distance_readings(self) -> DistanceReadings:
+        return self.readings
 
 
 @dataclass(frozen=True)

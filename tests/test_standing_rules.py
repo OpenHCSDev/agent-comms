@@ -177,7 +177,7 @@ def test_wheel_spin_strikes_and_reassigns_an_order_flat_across_two_readings(
 
     commit(2)
     assert "; distance 2, projected done " in progress().line
-    assert progress().flat_since() == float("inf")
+    assert progress().distance_readings().flat == ()
     commit(2)
     assert progress().line.endswith("; distance 2, not falling")
     working(comms, "worker", 2.0)

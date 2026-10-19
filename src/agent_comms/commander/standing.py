@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 import subprocess
 import time
 from collections.abc import Iterator
@@ -102,11 +101,12 @@ class FlatWheelSpin(WheelSpin, DatedStandingRule):
     def violations(cls, comms: Comms, commander: str) -> tuple[FlatWheelSpin, ...]:
         held = tuple(todo for todo in cls.todos(comms, commander) if todo.pending)
         pulls = PullRequests(held)
-        flat = ((todo, OrderProgress.read(todo, comms.registry.storage_rule, pulls).flat_since())
-                for todo in held)
-        return tuple(cls(todo, since) for todo, since in flat if math.isfinite(since)
-                     and TurnDigestRead(comms.root, comms.registry.require(todo.held().owner),
-                                        TurnsSince(since)).read().turns)
+        storage = comms.registry.storage_rule
+        flat = ((todo, reading.at) for todo in held
+                for reading in OrderProgress.read(todo, storage, pulls).distance_readings().flat)
+        return tuple(cls(todo, since) for todo, since in flat
+                     if TurnDigestRead(comms.root, comms.registry.require(todo.held().owner),
+                                       TurnsSince(since)).read().turns)
 
     def began(self) -> float:
         return self.since
