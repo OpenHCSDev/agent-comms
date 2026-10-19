@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable
 from contextlib import ExitStack
-from dataclasses import asdict, dataclass, replace
+from dataclasses import dataclass, replace
 from functools import partial
 from typing import TYPE_CHECKING
 
@@ -19,7 +19,7 @@ from .acp_failure import NativeTurnOutcome
 from .thread_identity import ClaimedIdentity
 from .comms import Comms
 from .coordinator import Coordination
-from .diagnostics import PublicationMeasurements, record_terminal_failure, record_request_progress
+from .diagnostics import PublicationMeasurements, record_request_progress
 from .messages import AlertKind, NoticeRole
 from .send_result import SendResult
 from .mro_dispatch import MroDispatch, handles
@@ -297,15 +297,6 @@ class TurnProgress(events.AgentEventConsumer):
             # Streamed chunks were provisional. A failed or missing terminal
             # result cannot turn them into a completed wire reply. Keep the
             # failure notice non-waking, including for human reply targets.
-            # Backend text may include stderr, secrets, or content from an
-            # unrelated session. Persist only structural facts for headless owners.
-            diagnostic_path = record_terminal_failure(
-                self.comms.root,
-                turn_id=self.turn_lease.turn_id,
-                thread=self.thread_name,
-                event=asdict(self.result) if self.result is not None else {},
-                sequences=tuple(origin.seq for origin in self.origins),
-            )
             notice_targets = tuple(
                 dict.fromkeys(
                     (*self.reply_targets,)
@@ -322,8 +313,7 @@ class TurnProgress(events.AgentEventConsumer):
                 results.append(self.comms.messaging.send(
                     self.thread_name,
                     target,
-                    f"{prefix}: backend turn did not complete. "
-                    f"[Open diagnostic]({diagnostic_path.as_uri()})",
+                    f"{prefix}: {self.result.text}",
                     AlertKind,
                     role=NoticeRole(),
                 ))
