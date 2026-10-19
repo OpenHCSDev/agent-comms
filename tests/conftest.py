@@ -56,13 +56,22 @@ def publish_initial(comms, sender, target, body, type=InfoKind, *, role=Conversa
             origin=AgentOrigin(),
         )
 
+def pytest_addoption(parser):
+    from agent_comms.storage_rules import StorageRule
+
+    parser.addoption("--native-cache", type=Path, default=StorageRule.native_cache,
+                     help="Root of the native test environments stack/bin/pi-native-test-env builds")
+
+
 @pytest.fixture(scope="session")
-def native_runtime_package():
-    """Borrow this interpreter's installed artifact; source and runtime pins must agree."""
-    from importlib.metadata import distribution
+def native_runtime_package(pytestconfig):
+    """The artifact of this checkout's own pin from its test environment; the pins must agree."""
     from agent_comms import native_package
 
-    manifest = Path(distribution("agent-comms").locate_file("agent_comms/_native/pi-native.sha256")).resolve(strict=True)
+    environment = native_package.native_environment(pytestconfig.getoption("native_cache"))
+    manifest = environment / "pi-native.sha256"
+    if not manifest.is_file():
+        pytest.exit(f"No native test environment at {environment}; run stack/bin/pi-native-test-env.", 2)
     assert manifest.read_bytes() == native_package.MANIFEST.read_bytes()
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(native_package, "MANIFEST", manifest)
