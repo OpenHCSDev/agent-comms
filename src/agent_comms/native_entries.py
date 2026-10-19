@@ -69,11 +69,10 @@ class RecordedEntry(PiPayload):
         Decode it once, before splitting into message/tool/routing events; ACP
         consumers receive Unix seconds.
         """
-        timestamp = self.timestamp.at.timestamp()
-        return [replace(event, timestamp=timestamp) for event in self._events(context)]
+        return self._events(context, self.timestamp.at.timestamp())
 
-    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
-        return [event for message in self.messages for event in message.transcript_events(context)]
+    def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
+        return [event for message in self.messages for event in message.transcript_events(context, timestamp)]
 
     @property
     def original_id(self):
@@ -547,9 +546,9 @@ class CompactionEntry(NativeEntry):
 
     summary: str = ""
 
-    def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
+    def _events(self, context: TranscriptProjection, timestamp: float) -> list[TranscriptEvent]:
         text = self.summary.strip()
-        return [NoticeTranscript(f"## Context compacted\n\n{text}", position=context.position)] if text else []
+        return [NoticeTranscript(f"## Context compacted\n\n{text}", position=context.position, timestamp=timestamp)] if text else []
 
 
 @dataclass(frozen=True, kw_only=True)

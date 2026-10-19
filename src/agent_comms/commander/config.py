@@ -58,7 +58,6 @@ class CommanderConfig(CommanderRole, BaseModel):
     state: Path
     board: Path
     narrative: Path
-    rules: tuple[Path, ...]
     repos: tuple[Repo, ...]
     worktrees: Path
     scratch: Path
@@ -81,6 +80,11 @@ class CommanderConfig(CommanderRole, BaseModel):
     @cache
     def installed(cls) -> CommanderConfig:
         return cls.model_validate_json(cls.path().read_text())
+
+    def repo_directory(self, name: str) -> Path:
+        """A configured GitHub repo name takes precedence over a directory spelling."""
+        return next((repo.checkout for repo in self.repos
+                     if repo.github.rsplit('/', 1)[-1] == name), Path(name)).resolve()
 
     def write(self, home: Path) -> Path:
         """Record the config and start each state file empty, so every tool reads a real file."""
