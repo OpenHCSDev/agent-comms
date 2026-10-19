@@ -10,7 +10,7 @@ from agent_comms.comms import Comms
 from agent_comms.field_codec import FieldCodec
 from agent_comms.goals import CheckedCommit, CountCheckResult, OrderCheck
 from agent_comms.todos import CorrectCheckTodo, DistanceReadings, PushedProgress, Todo
-from agent_comms.tools import CommsTodoListTool, CommsTodoTool, TodoList
+from agent_comms.tools import CommsTodoListTool, CommsChangeProblemTool, TodoList
 
 MARKER = ROOT / "explicit-check-count"
 MARKER_CONTENT = b"x"
@@ -25,8 +25,8 @@ def prepare() -> None:
     )
     cli(
         "record-lead",
-        CommsTodoTool(
-            id="P6",
+        CommsChangeProblemTool(
+            problem="P6",
             operation=CorrectCheckTodo(
                 todo.revision,
                 comms.registry.require("record-lead").incarnation,

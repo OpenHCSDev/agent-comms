@@ -38,7 +38,7 @@ from agent_comms.tools import (
     CommsFireTool,
     CommsOrderDoneTool,
     CommsTodoCreateTool,
-    CommsTodoTool,
+    CommsChangeProblemTool,
     CommsVerdictTool,
     ToolRequest,
 )
@@ -158,7 +158,7 @@ def record(session: Path) -> None:
     cli(
         "record-lead",
         CommsVerdictTool(
-            id="P1",
+            problem="P1",
             operation=AcceptedVerdict(
                 todo.revision,
                 comms.registry.require("record-lead").incarnation,
@@ -175,8 +175,8 @@ def record(session: Path) -> None:
         todo = comms.goals.todos.get("P1")
         cli(
             "record-lead",
-            CommsTodoTool(
-                id="P1",
+            CommsChangeProblemTool(
+                problem="P1",
                 operation=StrikeTodo(
                     todo.revision,
                     comms.registry.require("record-lead").incarnation,
@@ -199,8 +199,8 @@ def record(session: Path) -> None:
     todo = comms.goals.todos.get("P1")
     cli(
         "record-lead",
-        CommsTodoTool(
-            id="P1",
+        CommsChangeProblemTool(
+            problem="P1",
             operation=VoidStrikeTodo(
                 todo.revision,
                 comms.registry.require("record-lead").incarnation,
