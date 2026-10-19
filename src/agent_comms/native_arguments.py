@@ -314,6 +314,12 @@ class NativeArguments:
     def with_thinking(self, selected: type[ThinkingChoice]) -> NativeArguments:
         return self.replace(ThinkingArgument, *selected.native_arguments(ThinkingArgument))
 
+    def managed_rpc(self, package: Path) -> tuple[str, ...]:
+        """Managed sessions load the protocol extensions; ephemeral RPC does not."""
+        from .native_tools import NativeExecutableTool
+
+        return (*NativeExecutableTool.extension_arguments(package), *self.rpc())
+
     def rpc(self) -> tuple[str, ...]:
         for entry in self.entries:
             entry.validate_rpc()
