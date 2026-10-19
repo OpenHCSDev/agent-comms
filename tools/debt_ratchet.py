@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import enum
+import importlib
 import io
 import json
 import os
@@ -13,6 +15,7 @@ import subprocess
 import sys
 import tempfile
 import tokenize
+import tomllib
 import typing
 from abc import abstractmethod
 from collections import Counter
@@ -480,13 +483,196 @@ class FunctionLocalImport(PerFileMeasure):
         return collector.found
 
 
-class LiteralGetattr(PerFileOccurrenceMeasure):
+class IdentityReading:
+    """How one literal string stands for an identity instead of a typed reference."""
+
+
+class NamedDeclaration(IdentityReading):
+    """The literal spells a class, module or function this repository declares."""
+
+
+class ComparedKind(IdentityReading):
+    """The literal is one arm of a kind decided by comparing spellings."""
+
+
+class NamedAccess(IdentityReading):
+    """The literal names the attribute, module or family member a call reaches by name."""
+
+
+@dataclass(frozen=True)
+class IdentitySite:
+    line: int
+    spelling: str
+    reading: type[IdentityReading]
+    target: str
+
+
+@dataclass(frozen=True)
+class DeclaredSpellings:
+    """Every spelling a revision's production Python declares as a name.
+
+    Classes count under their own name, src modules under their dotted path, and modules and
+    top-level functions under a multi-word name; a one-word module or function name is also an
+    ordinary word, so a literal equal to it is not taken as naming it. Enum members are the
+    declared boundary spellings of another program's contract, so literals in an enum's body
+    are the one place such a spelling may appear.
+    """
+
+    names: dict[str, str]
+    enums: frozenset[str]
+
+    boundary_enums: typing.ClassVar[frozenset[str]] = frozenset(
+        kind.__name__ for kind in (enum.Enum, enum.StrEnum, enum.IntEnum, enum.Flag, enum.IntFlag))
+    named_calls: typing.ClassVar[frozenset[str]] = frozenset(
+        call.__name__ for call in (getattr, setattr, hasattr, delattr, __import__,
+                                   importlib.import_module))
+    selecting_calls: typing.ClassVar[frozenset[str]] = frozenset(
+        call.__name__ for call in (DeclaredFamily.member_named, DeclaredFamily.field_value))
+    kind_spelling: typing.ClassVar[re.Pattern[str]] = re.compile(r"[A-Za-z_][\w.-]*")
+    entry_guard: typing.ClassVar[str] = ast.dump(ast.parse('__name__ == "__main__"', mode="eval").body)
+
     @staticmethod
-    def occurrences(node: ast.AST) -> int:
-        match node:
-            case ast.Call(func=ast.Name(id="getattr"), args=[_, ast.Constant(value=str()), *_]):
-                return 1
-        return 0
+    def multiword(name: str) -> bool:
+        return name.strip("_").count("_") > 0
+
+    @classmethod
+    def read(cls, sources: list[tuple[str, bytes]]) -> DeclaredSpellings:
+        names: dict[str, str] = {}
+        bases: dict[str, set[str]] = {}
+        for path, source in sources:
+            module = Path(path).with_suffix("")
+            parts = [part for part in module.parts if part != "__init__"]
+            if cls.multiword(module.stem):
+                names[module.stem] = f"module {path}"
+            if module.parts[0] == "src" and len(parts) > 1:
+                names[".".join(parts[1:])] = f"module {path}"
+            tree = ast.parse(source, path)
+            for node in tree.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and cls.multiword(node.name):
+                    names.setdefault(node.name, f"function {path}:{node.name}")
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ClassDef):
+                    names[node.name] = f"class {path}:{node.name}"
+                    bases.setdefault(node.name, set()).update(
+                        base.id if isinstance(base, ast.Name) else base.attr
+                        for base in node.bases if isinstance(base, (ast.Name, ast.Attribute)))
+        enums = set(cls.boundary_enums)
+        while grown := {name for name, parents in bases.items() if parents & enums} - enums:
+            enums |= grown
+        return cls(names, frozenset(enums))
+
+    def exempt(self, tree: ast.AST) -> set[int]:
+        """Literals no reader takes as identity: prose, interpolation pieces, class-header
+        options, enum boundary declarations and the interpreter's entry-point guard."""
+        exempt: set[int] = set()
+        for node in ast.walk(tree):
+            match node:
+                case ast.Module(body=[ast.Expr(value=ast.Constant() as prose), *_]) | ast.ClassDef(
+                        body=[ast.Expr(value=ast.Constant() as prose), *_]) | ast.FunctionDef(
+                        body=[ast.Expr(value=ast.Constant() as prose), *_]) | ast.AsyncFunctionDef(
+                        body=[ast.Expr(value=ast.Constant() as prose), *_]):
+                    exempt.add(id(prose))
+            match node:
+                case ast.JoinedStr():
+                    exempt.update(map(id, ast.walk(node)))
+                case ast.ClassDef(name=name) if name in self.enums:
+                    exempt.update(map(id, ast.walk(node)))
+                case ast.ClassDef(keywords=keywords):
+                    exempt.update(id(part) for keyword in keywords for part in ast.walk(keyword))
+                case ast.Compare() if ast.dump(node) == self.entry_guard:
+                    exempt.update(map(id, ast.walk(node)))
+        return exempt
+
+    def sites(self, source: bytes, filename: str) -> list[IdentitySite]:
+        tree = ast.parse(source, filename)
+        exempt = self.exempt(tree)
+        found: dict[int, IdentitySite] = {}
+
+        def record(literal: ast.AST, reading: type[IdentityReading], target: str) -> None:
+            if (isinstance(literal, ast.Constant) and isinstance(literal.value, str)
+                    and id(literal) not in exempt):
+                found.setdefault(id(literal), IdentitySite(literal.lineno, literal.value, reading, target))
+
+        for node in ast.walk(tree):
+            match node:
+                case ast.Call(func=ast.Name(id=call) | ast.Attribute(attr=call), args=arguments):
+                    if call in self.named_calls:
+                        position = int(call not in {__import__.__name__, importlib.import_module.__name__})
+                        for argument in arguments[position:position + 1]:
+                            record(argument, NamedAccess, f"{call} by name")
+                    if call in self.selecting_calls:
+                        for argument in arguments:
+                            record(argument, NamedAccess, f"family member selected by {call}")
+                case ast.Compare(left=left, ops=operators, comparators=comparators):
+                    for operator, right in zip(operators, comparators, strict=True):
+                        match operator, right:
+                            case ast.Eq() | ast.NotEq(), _:
+                                for side in (left, right):
+                                    if self.kind(side):
+                                        record(side, ComparedKind, "kind compared by spelling")
+                            case ast.In() | ast.NotIn(), ast.Set(elts=items) | ast.Tuple(
+                                    elts=items) | ast.List(elts=items):
+                                for item in filter(self.kind, items):
+                                    record(item, ComparedKind, "kind compared by spelling")
+                        left = right
+                case ast.MatchValue(value=value) if self.kind(value):
+                    record(value, ComparedKind, "kind matched by spelling")
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Constant) and isinstance(node.value, str) and node.value in self.names:
+                record(node, NamedDeclaration, self.names[node.value])
+        return sorted(found.values(), key=lambda site: site.line)
+
+    def kind(self, node: ast.AST) -> bool:
+        return (isinstance(node, ast.Constant) and isinstance(node.value, str)
+                and self.kind_spelling.fullmatch(node.value) is not None)
+
+
+class PytestTestPaths:
+    """Where pytest's configuration declares the test tree; pytest owns these spellings."""
+
+    file = "pyproject.toml"
+    table = ("tool", "pytest", "ini_options")
+    key = "testpaths"
+
+    @classmethod
+    def at(cls, repo: Path, ref: str) -> tuple[str, ...]:
+        """A revision without the configuration file declares no test tree."""
+        if not git(repo, "ls-tree", "--name-only", ref, "--", cls.file).strip():
+            return ()
+        declared = tomllib.loads(git(repo, "show", f"{ref}:{cls.file}").decode())
+        for section in cls.table:
+            declared = declared.get(section, {})
+        return tuple(declared.get(cls.key, ()))
+
+
+def production_paths(repo: Path, ref: str) -> set[str]:
+    """Every Python path the revision tracks outside its declared test tree."""
+    tests = PytestTestPaths.at(repo, ref)
+    return {path for path in python_paths(repo, ref, ".")
+            if not any(Path(path).is_relative_to(tree) for tree in tests)}
+
+
+class StringIdentity(Measure):
+    """Literal strings standing for something the code declares, per production file.
+
+    A class, module or function named by its spelling, a kind decided by comparing spellings,
+    and an attribute, module or family member reached by a literal name all bind by text, so a
+    rename or a second writer of the same spelling breaks them silently. The spellings and the
+    measured files are every production Python path, not only --root: the target of a spelling
+    and its use can sit in any tree, as tools/cutover's step predecessors did.
+    """
+
+    @classmethod
+    def counts(cls, repo: Path, ref: str, selected: set[str]) -> dict[str, int]:
+        sources = GitMeasure.sources(repo, ref, production_paths(repo, ref))
+        spellings = DeclaredSpellings.read(sources)
+        return {f"{cls.__name__}:{path}": len(spellings.sites(source, path))
+                for path, source in sources if path in selected}
+
+    @classmethod
+    def compare(cls, repo: Path, base: str, head: str, changed: set[str], root: str):
+        touched = touched_paths(repo, base, head)
+        return PerFileMeasure.align(cls.counts(repo, base, touched), cls.counts(repo, head, touched))
 
 
 class ForeignFieldSpellings(PerFileOccurrenceMeasure):
@@ -1295,6 +1481,15 @@ def python_paths(repo: Path, ref: str, root: str) -> set[str]:
     }
 
 
+def touched_paths(repo: Path, base: str, head: str) -> set[str]:
+    # Disable rename detection: both sides of a move enter the union, including
+    # moves into/out of the declared production source boundary.
+    return {
+        path.decode()
+        for path in git(repo, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split(b"\0")
+    }
+
+
 @dataclass(frozen=True)
 class Comparison:
     root: str
@@ -1321,13 +1516,7 @@ def compare(repo: Path, base: str, head: str, root: str) -> Comparison:
         raise ValueError("--root must be a repository-relative source directory")
     root = source_root.as_posix().rstrip("/") + "/"
     base, head = revision(repo, base), revision(repo, head)
-    # Disable rename detection: both sides of a move enter the union, including
-    # moves into/out of the declared production source boundary.
-    touched = {
-        path.decode()
-        for path in git(repo, "diff", "--no-renames", "--name-only", "-z", base, head, "--").split(b"\0")
-    }
-    paths = touched & (python_paths(repo, base, root) | python_paths(repo, head, root))
+    paths = touched_paths(repo, base, head) & (python_paths(repo, base, root) | python_paths(repo, head, root))
 
     before, after = {}, {}
     for measure in Measure.members_with(Measure):
