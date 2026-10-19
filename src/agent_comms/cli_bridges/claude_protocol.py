@@ -268,6 +268,9 @@ class ClaudeRecord(TaggedWire, ABC):
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return ()
 
+    def import_updates(self, source, session: ClaudeSession, offset: int, raw: bytes):
+        yield from source.record_updates(self, session, offset, raw)
+
     def begins_history(self) -> bool:
         """Whether Claude replaced everything before this record (compaction)."""
         return False
@@ -784,6 +787,11 @@ class ForkContextReference(MetadataRecord):
     """A forked subagent starts from its parent's context, stored in the parent's transcript."""
     wire_tag = 'fork-context-ref'
     parentSessionId: str
+    parentLastUuid: str
+
+    def import_updates(self, source, session: ClaudeSession, offset: int, raw: bytes):
+        """Resolve the exact inherited cut; later parent work is not this fork's history."""
+        yield from source.inherited_updates(self.parentSessionId, self.parentLastUuid)
 
     def updates(self, session: ClaudeSession) -> tuple[RuntimeUpdate, ...]:
         return (HistoryNotice(f'Context inherited from session {self.parentSessionId} is not imported.'),)

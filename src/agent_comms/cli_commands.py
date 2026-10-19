@@ -34,7 +34,7 @@ from .channel_targets import ChannelSelection, CommandTarget, NoChannel, OneChan
 from .channels import ANY_CHANNEL
 from .channels import Channel
 from .child_process import NoProcess, ProcessIdentity, ProcessState
-from .cli_bridges.claude import ClaudeTranscript
+from .cli_bridges.claude import ClaudeTranscript, SubagentInfo
 from .cli_bridges.history import History, OfflineHistory, OnlineHistory
 from .cli_protocol import ArrivedMessage, EarlierItems
 from .cli_result import CliResult
@@ -66,7 +66,7 @@ from .field_codec import FieldCodec, PathText, WireForm, compile_decoder
 from .history_views import CallingThreadTarget, NamedThreadTarget, PollTarget
 from .presentation import CountedRead, InboxRead, ThreadRecord, ThreadView, UncountedRead
 from .harness_install import Harness, HarnessInstalled
-from .importing import ImportedSessionMetadata, ImportLimits, ThreadImported
+from .importing import ImportedSessionMetadata, ThreadImported
 from .message_page import PageBounds
 from .message_reference import MessageReference
 from .page_traversal import OlderTraversal, PageCursor
@@ -693,6 +693,11 @@ class SubagentsImportedResult(CliResult):
 
 
 @dataclass(frozen=True)
+class SubagentsListedResult(CliResult):
+    subagents: tuple[SubagentInfo, ...]
+
+
+@dataclass(frozen=True)
 class InstallResult(CliResult):
     config: str
     harnesses: Mapping[str, HarnessInstalled]
@@ -986,7 +991,7 @@ class CheckRootCliCommand(CliCommand, declared_name="check-root"):
 
 @dataclass(frozen=True, kw_only=True)
 class ImportingCliCommand(CliCommand):
-    """Where an imported thread works and how much of its source conversation it keeps."""
+    """Where a complete imported conversation resumes through Pi's native lifecycle."""
     worktree: str | None = option(
         "--worktree", help="Override the source project directory", default=None
     )
@@ -998,14 +1003,9 @@ class ImportingCliCommand(CliCommand):
     tags: frozenset[str] = option(
         "--tags", default_factory=frozenset, parser_default="", normalize=_tags
     )
-    max_messages: int = option("--max-messages", default=200)
-    max_characters: int = option("--max-characters", default=120000)
-    max_message_characters: int = option("--max-message-characters", default=12000)
-
     def imported(self, ctx: Comms, history: History, name: str) -> ThreadImported:
         return ctx.threads.import_thread(
             history, name=name, worktree=self.worktree, model=self.model, tags=self.tags,
-            limits=ImportLimits(self.max_messages, self.max_characters, self.max_message_characters),
         )
 
 
@@ -1041,13 +1041,29 @@ class ImportRunningThreadCliCommand(ImportingCliCommand, declared_name="import-r
 
 @dataclass(frozen=True, kw_only=True)
 class ImportSubagentsCliCommand(ImportingCliCommand, declared_name="import-subagents"):
-    help = "Import every subagent of a stored Claude Code session, each as a stopped thread"
+    help = "Import selected subagents (or all), retaining their complete conversations"
     session: Annotated[Path, PathText] = option("--session", help="The Claude Code session JSONL")
     prefix: str = option("--prefix", default="", help="Prepended to each subagent id to name its thread")
+    agents: tuple[str, ...] = option(
+        "--agents", default=(), parser_default="", normalize=_tags,
+        help="Comma-separated subagent ids, without agent-; omitted means all",
+    )
 
     def apply(self, ctx: Comms) -> SubagentsImportedResult:
+        paths = ClaudeTranscript.select_subagents(self.session.expanduser().resolve(), self.agents)
         return SubagentsImportedResult(tuple(
             self.imported(ctx, ClaudeTranscript(path), self.prefix + path.stem.removeprefix("agent-"))
+            for path in paths))
+
+
+@dataclass(frozen=True, kw_only=True)
+class ListSubagentsCliCommand(CliCommand, declared_name="list-subagents"):
+    help = "List Claude subagent ids, launch descriptions and complete portable message counts"
+    session: Annotated[Path, PathText] = option("--session", help="The Claude Code session JSONL")
+
+    def apply(self, ctx: Comms) -> SubagentsListedResult:
+        return SubagentsListedResult(tuple(
+            ClaudeTranscript(path).subagent_info()
             for path in ClaudeTranscript.subagents(self.session.expanduser().resolve())))
 
 

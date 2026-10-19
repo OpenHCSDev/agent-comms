@@ -17,7 +17,6 @@ from .cli_result import CliResult
 from .comms import Comms
 from .fresh_private_session import create_fresh_private_session
 from .goals import NoGoal
-from .importing import ImportLimits
 from .launch_runtime import RestartEnvironment, ThreadLaunch
 from .native_entries import ImportedSessionWriter, NativeEntry
 from .read_basis import MemberActivityDisplayScope
@@ -142,7 +141,6 @@ class CheckRoot:
     def _session(self, original: Thread, directory: Path, project: Path) -> str:
         session = create_fresh_private_session(directory, worktree=project)
         source = original.runtime.history_source(self.source.root, original.incarnation)
-        limits = ImportLimits(messages=self.max_records, characters=self.max_bytes)
         with source.reading() as reader, session.path.open("r+") as output:
             writer = ImportedSessionWriter(output, NativeEntry.read(output.readline().encode()))
             output.seek(0, os.SEEK_END)
@@ -165,7 +163,7 @@ class CheckRoot:
                     ):
                         record.project(
                             lambda current, events=events: writer.import_record(
-                                current.entry, events, limits
+                                current.entry, events
                             )
                         )
         return session.session_file

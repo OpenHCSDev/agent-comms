@@ -23,10 +23,7 @@ from .ui_model.message_category import (
 )
 
 if TYPE_CHECKING:
-    from .importing import ImportBuffer, ImportLimits
-
-
-TRUNCATED = "\n[Import excerpt truncated]"
+    from .importing import ImportBuffer
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,12 +32,6 @@ class ImportedMessage(ABC):
 
     body: str
     truncated: bool = False
-
-    def bounded(self, limits: ImportLimits) -> ImportedMessage:
-        cap = min(limits.per_message, limits.characters)
-        if len(self.body) <= cap:
-            return self
-        return replace(self, body=self.body[: max(0, cap - len(TRUNCATED))] + TRUNCATED[:cap], truncated=True)
 
     def remember(self, buffer: ImportBuffer) -> None:
         """Only a request is the source session's latest request."""
@@ -60,7 +51,7 @@ class ImportedRequest(ImportedInput):
     """A person's or a commanding agent's prompt."""
 
     def remember(self, buffer: ImportBuffer) -> None:
-        buffer.latest_request = self.body[: buffer.limits.per_message]
+        buffer.latest_request = self.body
 
 
 class ImportedReply(ImportedMessage):

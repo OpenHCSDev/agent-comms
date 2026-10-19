@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from contextlib import aclosing
+from dataclasses import dataclass
 from functools import cached_property
 from pathlib import Path
 from typing import AsyncIterator, BinaryIO, Self
@@ -20,6 +21,14 @@ from agent_comms.runtime_updates import RuntimeUpdate, SessionFacts
 
 class SubagentMeta(WireModel):
     description: str
+
+
+@dataclass(frozen=True)
+class SubagentInfo:
+    id: str
+    description: str | None
+    message_count: int
+    source_records: int
 
 
 class ClaudeJsonLines(JsonLinesFile):
@@ -50,14 +59,58 @@ class ClaudeTranscript(ClaudeJsonLines, ClaudeHistory, OfflineHistory):
 
     suffixes = frozenset({'.jsonl'})
 
+    def __init__(self, source: Path, session_id: str | None = None,
+                 *, ancestors: tuple[Path, ...] = ()) -> None:
+        super().__init__(source, session_id)
+        self.ancestors = ancestors
+
     def facts(self, stream: BinaryIO, boundary: int) -> Iterator[RuntimeUpdate]:
         if self.session_id not in (None, self.source.stem):
             raise ValueError('The transcript belongs to a different Claude session.')
         return super().facts(stream, boundary)
 
+    def import_updates(self, record, state, offset: int, raw: bytes) -> Iterator[RuntimeUpdate]:
+        yield from record.import_updates(self, state, offset, raw)
+
+    def inherited_updates(self, session_id: str, last_uuid: str) -> Iterator[RuntimeUpdate]:
+        directory = self.source.parent
+        if directory.name == 'subagents':
+            directory = directory.parent.parent
+        if Path(session_id).name != session_id:
+            raise ValueError(f'Invalid inherited Claude session id: {session_id}')
+        parent = ClaudeTranscript(directory / f'{session_id}.jsonl',
+                                  ancestors=(*self.ancestors, self.source))
+        if parent.source in parent.ancestors:
+            raise ValueError(f'Cyclic inherited Claude context: {parent.source}')
+        state = parent.start_state()
+        for offset, raw in parent.import_records():
+            record = parent.decode_line(raw, offset)
+            yield from parent.import_updates(record, state, offset, raw)
+            if json.loads(raw).get('uuid') == last_uuid:
+                return
+        raise ValueError(f'Inherited Claude context {session_id} has no record {last_uuid}')
+
+    def subagent_info(self) -> SubagentInfo:
+        from agent_comms.importing import ImportSnapshot
+
+        snapshot = ImportSnapshot.read(self)
+        return SubagentInfo(self.source.stem.removeprefix('agent-'), snapshot.title,
+                            len(snapshot.messages), sum(1 for _ in self.import_records()))
+
+    @classmethod
+    def select_subagents(cls, session: Path, agents: tuple[str, ...]) -> tuple[Path, ...]:
+        paths = cls.subagents(session)
+        available = {path.stem.removeprefix('agent-'): path for path in paths}
+        missing = set(agents) - available.keys()
+        if missing:
+            raise ValueError('Unknown subagent id(s): ' + ', '.join(sorted(missing)))
+        return tuple(available[agent] for agent in dict.fromkeys(agents)) if agents else paths
+
     @staticmethod
     def subagents(session: Path) -> tuple[Path, ...]:
         """The subagent transcripts a stored session started, oldest first."""
+        if not session.is_file():
+            raise ValueError(f'Claude session does not exist: {session}')
         return tuple(sorted(session.with_suffix('').glob('subagents/agent-*.jsonl'),
                             key=lambda path: path.stat().st_mtime))
 

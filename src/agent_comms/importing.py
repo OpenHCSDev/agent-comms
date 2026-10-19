@@ -1,10 +1,9 @@
-"""A bounded, portable conversation snapshot of any harness session, written as a Pi session."""
+"""A complete portable conversation snapshot, handed to Pi's native context lifecycle."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-from collections import deque
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -14,7 +13,7 @@ from uuid import uuid4
 
 from .cli_result import CliResult
 from .field_codec import FieldCodec
-from .transcript_events import TRUNCATED, ImportedInput, ImportedMessage, ImportedRequest
+from .transcript_events import ImportedInput, ImportedMessage, ImportedRequest
 from .harness_install import Harness
 from .turn_context import CodexRolloutProvenance, ContextSourceText
 
@@ -24,17 +23,6 @@ if TYPE_CHECKING:
     from .cli_bridges.history import History
     from .runtime_updates import SessionFacts
     from .transcript_events import TranscriptEvent
-
-
-@dataclass(frozen=True, slots=True)
-class ImportLimits:
-    messages: int = 200
-    characters: int = 120_000
-    per_message: int = 12_000
-
-    def __post_init__(self) -> None:
-        if min(self.messages, self.characters, self.per_message) <= 0:
-            raise ValueError("Import budgets must be positive.")
 
 
 @dataclass(frozen=True, slots=True)
@@ -81,10 +69,10 @@ class ImportSnapshot:
     historical_instructions: tuple[CodexRolloutProvenance, ...] = ()
 
     @classmethod
-    def read(cls, history: History, limits: ImportLimits) -> ImportSnapshot:
+    def read(cls, history: History) -> ImportSnapshot:
         async def collect() -> ImportBuffer:
-            buffer = ImportBuffer(limits)
-            async for update in history.history():
+            buffer = ImportBuffer()
+            async for update in history.import_history():
                 update.add_to(buffer)
             return buffer
 
@@ -112,8 +100,6 @@ class ImportSnapshot:
             "are records, not pending tool requests. Use the current thread, project, and tools.\n"
             f"Retained {len(self.messages)} of {self.messages_seen} messages.\n"
         )
-        if self.summary:
-            context += "\nSource compaction/context summary:\n" + self.summary
         if self.latest_request and not self.retains_latest_request:
             context += "\nMost recent user request in the source session:\n" + self.latest_request
         if self.notices:
@@ -130,18 +116,14 @@ class ImportSnapshot:
     def retains_latest_request(self) -> bool:
         retained = next((message for message in reversed(self.messages)
                          if isinstance(message, ImportedRequest)), None)
-        return retained is not None and (
-            retained.body == self.latest_request
-            or (retained.truncated and self.latest_request.startswith(retained.body.removesuffix(TRUNCATED))))
+        return retained is not None and retained.body == self.latest_request
 
 
 @dataclass
 class ImportBuffer:
-    """The newest messages that fit the limits, plus what the source said about itself."""
+    """Complete source messages. Pi alone budgets and compacts the resulting native session."""
 
-    limits: ImportLimits
-    messages: deque[ImportedMessage] = field(default_factory=deque)
-    characters: int = 0
+    messages: list[ImportedMessage] = field(default_factory=list)
     seen: int = 0
     truncated: int = 0
     summary: str = ""
@@ -159,20 +141,13 @@ class ImportBuffer:
                 continue
             self.seen += 1
             message.remember(self)
-            message = message.bounded(self.limits)
-            self.truncated += int(message.truncated)
             self.messages.append(message)
-            self.characters += len(message.body)
-            while len(self.messages) > self.limits.messages or self.characters > self.limits.characters:
-                removed = self.messages.popleft()
-                self.characters -= len(removed.body)
-                self.truncated -= int(removed.truncated)
 
     def summarize(self, text: str) -> None:
-        """A compaction replaced everything before it; only messages after it remain context."""
-        self.summary = text[: self.limits.per_message]
-        self.messages.clear()
-        self.characters = self.truncated = 0
+        """Keep the source checkpoint in order without discarding its original history."""
+        self.summary = text
+        self.messages.append(ImportedInput("Source compaction/context summary:\n" + text))
+        self.seen += 1
 
     def describe(self, facts: SessionFacts) -> None:
         self.source_id = facts.source_id or self.source_id

@@ -31,7 +31,7 @@ from .agent_activity import AgentActivity
 from .catalog_store import ChannelCatalog
 from .collaboration_ledger import CollaborationLedger
 from .errors import RelationViolationError
-from .importing import ImportLimits, ThreadImported, ImportSnapshot
+from .importing import ThreadImported, ImportSnapshot
 from .input_disposition import InputDispositions
 from .message_bus import MessageBus
 from .native_arguments import NativeArguments
@@ -164,10 +164,9 @@ class ThreadManagement:
         worktree: str | None = None,
         model: str | None = None,
         tags: frozenset[str] = frozenset(),
-        limits: ImportLimits | None = None,
     ) -> ThreadImported:
         """Import a stopped, resumable snapshot of any harness session, without adopting its executor."""
-        snapshot = ImportSnapshot.read(history, limits or ImportLimits())
+        snapshot = ImportSnapshot.read(history)
         directory = worktree or snapshot.project
         if not directory:
             raise ValueError("The source has no project directory; supply --worktree.")

@@ -15,7 +15,7 @@ from uuid import uuid4
 
 from .declared_family import DeclaredFamily, UnknownFamilyMember
 from .field_codec import FieldCodec, MalformedRecord, RecordedTimestamp, TimestampText
-from .importing import ImportBuffer, ImportedSessionMetadata, ImportLimits
+from .importing import ImportBuffer, ImportedSessionMetadata
 from .pi_payloads import PiMessage, PiPayload
 from .pi_vocabulary import PendingStopReason, ThinkingLevel
 from .routing import TurnRouting
@@ -179,9 +179,9 @@ class ImportedSessionWriter:
         self.parent = NativeEntry.from_wire(encoded)
 
     def import_record(
-        self, entry: RecordedEntry, events: Iterable[TranscriptEvent], limits: ImportLimits
+        self, entry: RecordedEntry, events: Iterable[TranscriptEvent]
     ) -> None:
-        buffer = ImportBuffer(limits)
+        buffer = ImportBuffer()
         buffer.add(events)
         for message in buffer.messages:
             self.append(message, entry.timestamp.at)
