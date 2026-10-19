@@ -128,7 +128,9 @@ def _committed_source(
 @contextmanager
 def _selected_claim_boundary(
     comms: Comms, store: Coordination, claim_scope: WakeClaim, owner_name: str
-) -> Iterator[tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]]:
+) -> Iterator[
+    tuple[MessageBus[Publisher], CheckedWireStoreLock, WireMetadata, RegistrySnapshot, Thread]
+]:
     """One wire/bus/registry boundary for selected claim acquisition."""
     if store.session.path.resolve() != (comms.root / "coordination.sqlite3").resolve():
         raise IdentityConflict("Wake coordinator does not belong to this wire root")
