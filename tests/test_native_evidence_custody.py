@@ -148,6 +148,9 @@ def test_retained_input_source_decodes_only_verified_append(tmp_path, monkeypatc
         evidence = scope.for_source(session)
         evidence.observe()
         assert len(decoded) == 2
+        from agent_comms.native_session_reopen import NativeSessionIdentity
+
+        assert NativeSessionIdentity.from_evidence(scope.for_source(session)).session_id == "sid"
         evidence.observe()
         assert len(decoded) == 2
         with session.open("a") as output:

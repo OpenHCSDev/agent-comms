@@ -36,8 +36,6 @@ def create_fresh_private_session(
         try:
             info = os.fstat(descriptor)
             NativeSessionFileRole.require(info)
-            if info.st_nlink != 1:
-                raise NativePiUnavailable("Fresh-session file identity is not exclusive")
             pending = memoryview(encoded)
             while pending:
                 written = os.write(descriptor, pending)
