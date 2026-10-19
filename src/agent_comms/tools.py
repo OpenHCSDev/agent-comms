@@ -1149,10 +1149,8 @@ class StandbyRequest:
 @dataclass(frozen=True, kw_only=True)
 class CommsHistoryTool(ReadTool, ToolRequest):
     label = "Conversation history"
-    description = (
-        "Read one bounded, newest-first page of a channel or two-participant conversation. "
-        "Pass before from the previous page to read older messages. Does not acknowledge messages."
-    )
+    description = ("Read one bounded, newest-first channel or DM history page. "
+                   "Pass before for older messages. Does not acknowledge messages.")
     peer: str = tool_field("Channel name or other participant's thread name")
     participant: str = tool_field("Participant reading the conversation; omit to use the caller", default="")
     limit: int = tool_field("Maximum messages in this page", default=20)
