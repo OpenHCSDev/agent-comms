@@ -6,7 +6,7 @@ import math
 import time
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
-from dataclasses import Field, dataclass, field, fields, replace
+from dataclasses import Field, dataclass, field, replace
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
