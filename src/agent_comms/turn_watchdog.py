@@ -252,7 +252,7 @@ class ProgressWatchdog:
                 self.phase = self.phase.model_progress()
 
     def transition(self, event: PiEvent, active_tools: set[str]) -> None:
-        self.phase = event.observed_phase(self.phase.on(event, active_tools))
+        self.phase = event.observed_phase(event.on(self.phase, active_tools))
 
     def wait_for(self, session: TurnSession) -> TurnWait:
         if session.awaiting_native_attestation:
