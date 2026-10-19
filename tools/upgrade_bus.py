@@ -199,7 +199,7 @@ class Stack:
     def verify(self, root: Path) -> dict[str, int]:
         threads = self.cli(root, "threads")["threads"]
         present = self.cli(root, "who")
-        history = self.cli(root, "history", "--everything", "--limit", "50")
+        history = self.cli(root, "history", "--limit", "50")  # #any: every channel
         return {"threads": len(threads), "who": len(present),
                 "history": len(history[EverythingHistoryPageResult.messages_key])}
 
