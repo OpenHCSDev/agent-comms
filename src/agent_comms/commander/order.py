@@ -765,12 +765,17 @@ def unstrike(task: str, why: str, at: str | None = None) -> None:
 
 
 def due(pid: str, at: str, why: str) -> None:
-    """Core moves a held order's deadline, its assignment unchanged; the reason goes on record."""
+    """Shorten a held order's deadline; a missed due is a strike, never a reschedule."""
     todo = COMMS.goals.todos.get(pid)
     if not todo.pending:
         sys.exit(f'Refused: {pid} holds no pending order whose deadline could move.')
     if len(why.split()) < 8:
         sys.exit('Refused: --why says why the deadline moves (8+ words)')
+    if todo.overdue(time.time()):
+        if not todo.struck_on_order(todo.holder):
+            strike(todo.holder, f'{pid} missed its due time {hhmm(todo.deadline)}; '
+                   f'the due time stays unchanged. {why}')
+        sys.exit(f'Refused: {pid} missed its due; strike recorded, deadline unchanged.')
     refuse(why, *OUTGOING)  # posted to #comms, so refused before Core records the deadline
     moved = deadline(at)
     call(CommsTodoTool(id=pid, operation=AssignTodo(
@@ -873,7 +878,7 @@ class UnstrikeVerb(OrderVerb, RuledVerb):
 
 @dataclass(frozen=True, kw_only=True)
 class DueVerb(OrderVerb, RuledVerb):
-    help = "move a held order's deadline; the reason goes on the public record"
+    help = "shorten a held order's deadline; a missed due is a strike, never a reschedule"
     pid: str = option("pid")
     at: str = option("at", help="HH:MM the order is now due")
     why: str = option("--why")

@@ -485,7 +485,7 @@ class ProblemOrderGoalAction(GoalAction[Goal], RuntimeInvocable):
         """Refuse invalid orders before reserving their Todo."""
         commander = ctx.goals.registry.require(self.commander)
         commander.goal.require().require_id(self.request).require_active().order.require_request()
-        self.deadline.require_deadline()
+        self.deadline.require_deadline(self.order.at)
         self.order.owner.require_exists()
         self.order.check.require_directory()
         request = GoalRef(commander.name, commander.created_at, self.request)

@@ -6,7 +6,7 @@ import time
 from abc import abstractmethod
 from dataclasses import dataclass, replace
 from math import isfinite
-from typing import TYPE_CHECKING, TypeVar
+from typing import TYPE_CHECKING, ClassVar, TypeVar
 
 from .declared_family import DeclaredFamily
 
@@ -38,6 +38,8 @@ class Lateness:
 
 
 class EventTime(DeclaredFamily, affix="EventTime"):
+    order_limit_minutes: ClassVar[int] = 15
+
     @classmethod
     def capture(cls, timestamp: float) -> EventTime:
         """Capture a recorded Unix-seconds fact, never the read time."""
@@ -54,8 +56,11 @@ class EventTime(DeclaredFamily, affix="EventTime"):
         """How late this delivery time is against ``deadline``; either unrecorded refuses."""
         return Lateness(deadline.recorded_at("An order deadline"), self.recorded_at("A delivery"))
 
-    def require_deadline(self) -> None:
-        self.require_recorded("An order deadline")
+    def require_deadline(self, ordered: EventTime) -> None:
+        if (self.recorded_at("An order deadline") - ordered.recorded_at("An order")
+                > self.order_limit_minutes * 60):
+            raise ValueError(f"An order's deadline must be within {self.order_limit_minutes} minutes "
+                             "of its recorded send time.")
 
     def require_delivery(self) -> None:
         self.require_recorded("A delivery")

@@ -726,7 +726,7 @@ class ProblemOrder(DeclaredFamily, affix="ProblemOrder"):
             for family in (OrderText, FairText, HierarchyText):
                 family(text)
         self.at.require_recorded("An order")
-        self.first_call_deadline.require_deadline()
+        self.first_call_deadline.require_deadline(self.at)
 
     pending: ClassVar[bool]
 
@@ -1101,7 +1101,11 @@ class AssignTodo(TodoOperation):
     traced: FileLine | None = field(default=None, metadata={"wire_omit_default": True})
 
     def apply(self, current: Todo) -> Todo:
-        self.deadline.require_deadline()
+        self.deadline.require_deadline(self.order.at)
+        if (current.order.id == self.order.id and
+                self.deadline.recorded_at("An order deadline") >
+                current.deadline.recorded_at("An order deadline")):
+            raise TodoError("An order's due time cannot move later; a missed due requires a strike.")
         proposed = current.proposed_assignment(self.proposed)
         if (current.assignment, current.deadline, current.order, current.goal) == (
                 proposed, self.deadline, self.order, self.goal):
@@ -1648,7 +1652,7 @@ class TodoStore(TypedStore):
         _text(text, "Todo text", 2000)
         repo_id = _repo(repo)
         identity, assignee = _participant(creator), _thread(owner)
-        deadline.require_deadline()
+        deadline.require_deadline(order.at)
         goal.require_reference()
         proposed = Todo(
             id=todo_id,
