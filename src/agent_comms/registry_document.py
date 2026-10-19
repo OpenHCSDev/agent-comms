@@ -84,8 +84,7 @@ class RegistryPresence(RegistryNames[Thread]):
         selected = (self.threads.values() if names is None else
                     (self.threads.get(name) for name in {self.canonical_name(name) for name in names}))
         return (executor for thread in selected
-                if thread is not None
-                if self.status(thread.name).in_view(visibility)
+                if thread is not None and self.status(thread.name).in_view(visibility)
                 for executor in thread.role.executor(thread))
 
     def channel_audience(self) -> Iterator[Thread]:
@@ -611,8 +610,7 @@ class RegistryDocument(RegistryPresence):
         if not turn.may_release(canonical_lease):
             return False, NoFinishedTurn()
         attested = canonical_lease.can_attest(self.claims.generations[name])
-        attested = attested and turn.claimed_generation is not None
-        attested = attested and self.status(name).active
+        attested = attested and turn.claimed_generation is not None and self.status(name).active
         keeps_resume = turn.phase.keeps_project_resume
         record.without_claim()
         self.threads[name] = replace(
