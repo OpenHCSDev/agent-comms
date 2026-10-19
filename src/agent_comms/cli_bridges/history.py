@@ -129,7 +129,7 @@ class JsonLines:
     # What decoding remembers between records (open tool calls, the current turn).
     state: ClassVar[type]
 
-    def decode_line(self, raw: bytes):
+    def decode_line(self, raw: bytes, position: int):
         return self.records.validate_json(raw)
 
     def start_state(self):
@@ -146,7 +146,7 @@ class JsonLines:
         """A line that is not JSON is the harness's damage (a killed writer, two writers on one
         line) and is left out with a notice; JSON this decoder does not know is our gap and fails."""
         try:
-            record = self.decode_line(raw)
+            record = self.decode_line(raw, offset)
         except ValueError:
             try:
                 json.loads(raw)
@@ -157,9 +157,9 @@ class JsonLines:
         yield from self.record_updates(record, state, offset, raw)
 
     def earlier_request(self, stream: BinaryIO, start: int) -> str:
-        for _, raw in self.reverse_lines(stream, start):
+        for offset, raw in self.reverse_lines(stream, start):
             try:
-                record = self.decode_line(raw)
+                record = self.decode_line(raw, offset)
             except ValueError:
                 continue
             if text := record.request():
@@ -169,7 +169,7 @@ class JsonLines:
     def history_start(self, stream: BinaryIO, boundary: int) -> int:
         for offset, raw in self.reverse_lines(stream, boundary):
             try:
-                record = self.decode_line(raw)
+                record = self.decode_line(raw, offset)
             except ValueError:
                 continue  # Decoded again, with its notice or failure, when read forward.
             if record.begins_history():

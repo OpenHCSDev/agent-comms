@@ -525,3 +525,33 @@ def test_core_writes_outside_a_watch_are_refused_while_draining(tmp_path: Path, 
     assert written() == before
     gate.clear(hold)
     assert cli('send', '--from', 'a', '--to', 'b', '--body', 'hi')[0] == 0
+
+
+async def test_bus_waits_before_mutating_a_transcript_batch(tmp_path: Path) -> None:
+    from functools import partial
+    from agent_comms.activity import ActivityState
+    from agent_comms.cli_bridges.shared import AppendDraftItem, StartedItem, TextDraft, ThreadOutput
+    from agent_comms.maintenance_barrier import MaintenanceOperator
+    from agent_comms.recorded_time import RecordedEventTime
+    from agent_comms.transcript_events import AssistantTranscript
+
+    comms = Comms(tmp_path)
+    comms.registry.declare(comms.registry.new_thread('cli', frozenset(), str(tmp_path)))
+    output = ThreadOutput(comms.transcripts.external('cli'), comms.agents)
+    updates = [StartedItem('turn', 'item', ActivityState.WORKING, 'Replying',
+                          TextDraft.from_parts(AssistantTranscript, ('prefix',), RecordedEventTime(1.))),
+               AppendDraftItem('turn', 'item', ' once')]
+    barrier = MaintenanceBarrier(comms.registry.store.path)
+    hold = barrier.begin(MaintenanceOperator('batch-check'))
+    pending = asyncio.create_task(comms.bus.when_open(partial(output.publish_batch, updates)))
+    try:
+        with pytest.raises(TimeoutError):
+            async with asyncio.timeout(.05):
+                await asyncio.shield(pending)
+        assert output.drafts == {}
+        assert not output.transcript.path.exists()
+    finally:
+        barrier.clear(hold)
+    await asyncio.wait_for(pending, 3)
+    with output.transcript.reading() as source:
+        assert source.current_draft().external_row().events == (AssistantTranscript('prefix once', timestamp=1.),)

@@ -21,6 +21,7 @@ from .importing import ImportedSessionMetadata
 
 @dataclass(frozen=True)
 class TranscriptProjection:
+    position: int = field(kw_only=True)
     routing: TurnRouting | None = None
     input_display: InputDisplay | None = None
 
@@ -458,7 +459,7 @@ class CompactionEntry(NativeEntry):
 
     def _events(self, context: TranscriptProjection) -> list[TranscriptEvent]:
         text = self.summary.strip()
-        return [NoticeTranscript(f"## Context compacted\n\n{text}")] if text else []
+        return [NoticeTranscript(f"## Context compacted\n\n{text}", position=context.position)] if text else []
 
 
 @dataclass(frozen=True, kw_only=True)
