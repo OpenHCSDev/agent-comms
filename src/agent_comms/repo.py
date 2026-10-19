@@ -1,4 +1,5 @@
 """Repository facts shared by branch readers and commander configuration."""
+
 from __future__ import annotations
 
 import subprocess
@@ -14,7 +15,7 @@ class Repo(BaseModel):
 
     checkout: Path
     github: str
-    source: str = 'src'
+    source: str = "src"
 
     def contains(self, sha: str) -> bool:
         """Only a successful ancestry proof in this installed checkout permits closure."""
@@ -28,7 +29,11 @@ class Repo(BaseModel):
     @classmethod
     def of(cls, checkout: Path) -> Repo:
         """Its GitHub name comes from the checkout's own origin remote."""
-        url = subprocess.run(['git', '-C', str(checkout), 'remote', 'get-url', 'origin'],
-                             capture_output=True, text=True, check=True).stdout.strip()
-        github = url.removesuffix('.git').replace(':', '/').split('/')[-2:]
-        return cls(checkout=checkout.resolve(), github='/'.join(github))
+        url = subprocess.run(
+            ["git", "-C", str(checkout), "remote", "get-url", "origin"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+        github = url.removesuffix(".git").replace(":", "/").split("/")[-2:]
+        return cls(checkout=checkout.resolve(), github="/".join(github))
