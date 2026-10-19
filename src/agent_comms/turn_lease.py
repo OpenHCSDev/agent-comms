@@ -158,6 +158,24 @@ class TurnDeclaration(SubclassUnion, affix=""):
     @abstractmethod
     def observed_task_turn(self, identity: TurnIdentity, turn: TurnId, thread: Thread) -> bool: ...
 
+    @abstractmethod
+    def selection_matches(self, actual, expected) -> bool: ...
+
+    @abstractmethod
+    def answered_by(self, messaging, owner, target): ...
+
+    @abstractmethod
+    async def observe_compaction(self, runner, session_id, owner, event): ...
+
+    @abstractmethod
+    async def cancel_turn(self, runner, session_id, owner): ...
+
+    @abstractmethod
+    def report_wait_turn(self): ...
+
+    @abstractmethod
+    def matches_report(self, turn_id: str, generation: int) -> bool: ...
+
 
 class IdleTurn(TurnDeclaration, declared_name=None):
     """Idle behavior is shared by an empty owner and a recorded failure."""
