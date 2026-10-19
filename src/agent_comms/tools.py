@@ -34,7 +34,6 @@ from .launch_runtime import LaunchRuntime
 from .goal_actions import (
     ActiveGoalAction,
     CreateProblemGoalAction,
-    DeliveredOrderGoalAction,
     EditGoalAction,
     GoalAction,
     GoalPrecondition,
@@ -886,23 +885,23 @@ class CommsTodoCreateTool(CommsOrderTool):
 @dataclass(frozen=True, kw_only=True)
 class CommsOrderDoneTool(ThreadToolRequest):
     label = "Check delivered order"
-    description = "Verify the order's check on its clean delivered commit before completing its Goal."
+    description = "Verify and deliver an open order by its own ID; the unit's Goal is unchanged."
     problem: str = tool_field("Problem ID")
+    order_id: str = tool_field("Exact open order ID")
     delivery: OrderDelivery = tool_field("A clean commit delivery or an operation verified by the order's check")
     claims: tuple[ProgressClaim, ...] = tool_field(
         "Merged, installed or working claims, each with the artifact Core verifies in the order's "
         "checkout; at least one")
 
-    def apply(self, comms: Comms, caller: ThreadCaller) -> GoalRead:
+    def apply(self, comms: Comms, caller: ThreadCaller) -> TodoChanged:
         ProgressClaim.require_claimed(self.claims, "delivered")
         todo = comms.goals.todos.get(self.problem)
         ProgressClaim.require_all(self.claims, comms, Path(todo.order.check.directory))
         todo.require_commander(comms.registry.require(caller.name).incarnation)
-        assignment = todo.assignment
-        goal = comms.goals.update_goal(assignment.owner, DeliveredOrderGoalAction(
-            expect=GoalPrecondition(goal_id=assignment.generation), problem=self.problem,
-            operation=DeliverTodo(todo.revision, comms.registry.require(caller.name).incarnation, self.delivery)))
-        return GoalRead(goal)
+        changed = comms.goals.change_problem(self.problem, DeliverTodo(
+            todo.revision, comms.registry.require(caller.name).incarnation,
+            self.delivery, self.order_id), caller.name)
+        return TodoChanged(changed, changed.strike_count)
 
 
 @dataclass(frozen=True, kw_only=True)
